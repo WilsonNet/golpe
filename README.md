@@ -12,6 +12,7 @@ netcode.
 
 | Doc | What's in it |
 |---|---|
+| [Specs](specs/README.md) | **Source of truth for intended behaviour** — movement, combat, arena, netcode. |
 | [Running the game](docs/running-the-game.md) | Every way to launch it: player vs AI, AI vs AI, player vs player, online AI vs AI. Dev servers, controls, URL parameters, debug hooks, troubleshooting. |
 | [AGENTS.md](AGENTS.md) | Architecture, invariants, physics model, netcode rules, and the skill index. Also loaded as `CLAUDE.md`. |
 | [Feedback loop](.agents/skills/feedback-loop/SKILL.md) | The physics diagnostic: how to measure a bug before fixing it, and the catalogue of root causes already found. |

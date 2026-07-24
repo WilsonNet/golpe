@@ -53,7 +53,19 @@ canonical run. See "Online first" below.
 - `server/` — Geckos.io authoritative server; `server/physics.ts` re-exports `src/game/simulation/Physics`
 - `scripts/diagnose.mjs` — Playwright feedback-loop harness; `scripts/dev-herdr.mjs` — herdr dev-server workspace
 - `docs/running-the-game.md` — every way to launch the game (indexed from README.md)
-- `specs/`, `public/assets/`
+- `specs/` — **the source of truth for intended behaviour** (movement, combat, arena, netcode)
+- `public/assets/`
+
+## Specs are the source of truth
+
+`specs/` says what the game *should* do; `src/` is only how it currently does it.
+Code gets rewritten — intent stated in English survives. **Change behaviour,
+change the spec, in the same commit**, and read the relevant spec before
+implementing. Tuning a constant counts as changing behaviour.
+
+- [`specs/movement.md`](specs/movement.md) · [`specs/combat.md`](specs/combat.md) ·
+  [`specs/arena.md`](specs/arena.md) · [`specs/netcode.md`](specs/netcode.md)
+- Load the `specs` skill for how to write and verify one.
 
 ## Invariants
 These are the rules that were violated by real bugs. Breaking one reintroduces a bug that took measurement to find.
@@ -223,6 +235,7 @@ Keep this list in sync — the knowledge-sharpener skill verifies it.
 
 - **`feedback-loop`** — Diagnosing physics jitter, network desync, or gameplay bugs in Vento Áureo
 - **`herdr-dev-workspace`** — Starting, inspecting or stopping the dev servers (Vite :8080, Geckos :9208) in visible herdr panes instead of background processes.
+- **`specs`** — Keeping `specs/` authoritative: intent lives in English because code is volatile. Read before implementing, update in the same commit as any behaviour change.
 - **`knowledge-sharpener`** — Run at the END of a substantial session: fold what was learned into AGENTS.md and the skills, and verify the skill index.
 
 ### Phaser 4 reference
