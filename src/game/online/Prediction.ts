@@ -1,0 +1,155 @@
+/**
+ * Client-side prediction with server reconciliation.
+ *
+ * The local player is simulated immediately on input so the game feels
+ * lag-free. When an authoritative snapshot arrives it is not blended in
+ * blindly — the state is rewound to what the server said and every input the
+ * server has not acknowledged yet is replayed on top. Because Physics.ts is
+ * deterministic, a correct prediction replays to exactly where the client
+ * already was and nothing moves at all.
+ */
+
+import {
+	copyPlayerState,
+	createPlayerState,
+	type PlayerIntent,
+	type PlayerPosition,
+	tickPlayer,
+} from "../simulation/Physics";
+
+interface PendingInput {
+	seq: number;
+	intent: PlayerIntent;
+}
+
+/**
+ * Errors below this are treated as float noise and ignored, so we never
+ * re-render a "correction" that is smaller than a pixel.
+ */
+const NEGLIGIBLE_ERROR_PX = 0.01;
+
+/** Safety valve: never let unacknowledged input grow without bound. */
+const MAX_PENDING_INPUTS = 180;
+
+export interface ReconcileResult {
+	/** Distance between where the client predicted and where it ended up. */
+	errorPx: number;
+	/** Inputs replayed on top of the authoritative state. */
+	replayed: number;
+	/** True when the error was large enough to be a visible pop. */
+	corrected: boolean;
+}
+
+export class PredictedPlayer {
+	/** The state the game renders and reads from. */
+	state: PlayerPosition;
+
+	private pending: PendingInput[] = [];
+	private nextSeq = 1;
+
+	constructor(x: number, y: number) {
+		this.state = createPlayerState(x, y);
+	}
+
+	get pendingCount(): number {
+		return this.pending.length;
+	}
+
+	/** Reset prediction entirely — used on fight resets and (re)spawns. */
+	reset(x: number, y: number) {
+		this.state = createPlayerState(x, y);
+		this.pending.length = 0;
+	}
+
+	/**
+	 * Advance one fixed step locally and remember the input so it can be
+	 * replayed. Returns the sequence number to send to the server.
+	 */
+	step(intent: PlayerIntent, dt: number): number {
+		const seq = this.nextSeq++;
+		this.state = tickPlayer(this.state, intent, dt);
+		this.pending.push({ seq, intent: { ...intent } });
+		if (this.pending.length > MAX_PENDING_INPUTS) {
+			this.pending.splice(0, this.pending.length - MAX_PENDING_INPUTS);
+		}
+		return seq;
+	}
+
+	/**
+	 * Fold in an authoritative snapshot: drop acknowledged inputs, rewind to the
+	 * server state, then replay whatever the server has not seen yet.
+	 */
+	reconcile(
+		authoritative: PlayerPosition,
+		lastSeq: number,
+		dt: number,
+	): ReconcileResult {
+		const predictedX = this.state.x;
+		const predictedY = this.state.y;
+
+		while (this.pending.length > 0 && this.pending[0].seq <= lastSeq) {
+			this.pending.shift();
+		}
+
+		const rewound = copyPlayerState(authoritative, { ...this.state });
+		let replayed = rewound;
+		for (const p of this.pending) {
+			replayed = tickPlayer(replayed, p.intent, dt);
+		}
+		this.state = replayed;
+
+		const dx = this.state.x - predictedX;
+		const dy = this.state.y - predictedY;
+		const errorPx = Math.sqrt(dx * dx + dy * dy);
+
+		return {
+			errorPx,
+			replayed: this.pending.length,
+			corrected: errorPx > NEGLIGIBLE_ERROR_PX,
+		};
+	}
+}
+
+/**
+ * Visual smoothing for the residual error a reconciliation leaves behind.
+ *
+ * The simulation snaps to the authoritative answer immediately (so gameplay
+ * stays correct) while the sprite is drawn at an offset that decays to zero
+ * over a few frames, turning a pop into a glide. Errors past `snapThreshold`
+ * are real teleports (respawns) and are shown instantly.
+ */
+export class RenderSmoother {
+	private offsetX = 0;
+	private offsetY = 0;
+
+	constructor(
+		private readonly halfLifeSec = 0.06,
+		private readonly snapThresholdPx = 100,
+	) {}
+
+	/** Absorb a correction of (dx, dy) that the simulation just applied. */
+	absorb(dx: number, dy: number) {
+		if (Math.hypot(dx, dy) > this.snapThresholdPx) {
+			this.offsetX = 0;
+			this.offsetY = 0;
+			return;
+		}
+		this.offsetX -= dx;
+		this.offsetY -= dy;
+	}
+
+	/** Decay the offset and return where the sprite should actually be drawn. */
+	apply(x: number, y: number, dtSec: number): { x: number; y: number } {
+		const keep = 0.5 ** (dtSec / this.halfLifeSec);
+		this.offsetX *= keep;
+		this.offsetY *= keep;
+		if (Math.abs(this.offsetX) < 0.05) this.offsetX = 0;
+		if (Math.abs(this.offsetY) < 0.05) this.offsetY = 0;
+		return { x: x + this.offsetX, y: y + this.offsetY };
+	}
+
+	reset() {
+		this.offsetX = 0;
+		this.offsetY = 0;
+	}
+}

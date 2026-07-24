@@ -13,12 +13,16 @@ export default class AIEnemy extends Phaser.GameObjects.Sprite {
 	private _hp = 100;
 	lastFacingDirection = 1;
 	lastAttackTime = 0;
-	private dodgeTimer = 0;
-	private dodgeDirection = 0;
 	grounded = false;
 	lastAIOutput: AIOutput = {
-		moveLeft: false, moveRight: false, jump: false, attack: false,
-		aimAngle: 0, evadeActive: false, switchToMelee: false, switchToRanged: true,
+		moveLeft: false,
+		moveRight: false,
+		jump: false,
+		attack: false,
+		aimAngle: 0,
+		evadeActive: false,
+		switchToMelee: false,
+		switchToRanged: true,
 	};
 
 	public get hp() {
@@ -99,7 +103,6 @@ export default class AIEnemy extends Phaser.GameObjects.Sprite {
 		}
 
 		this.melee?.updatePosition(this.x, this.y);
-		this.dodgeTimer -= delta;
 
 		const dx = playerX - this.x;
 		const dy = playerY - this.y;
@@ -120,22 +123,12 @@ export default class AIEnemy extends Phaser.GameObjects.Sprite {
 			enemyHP: playerHP,
 		};
 
-		if (this.dodgeTimer > 0) {
-			this.lastFacingDirection = this.dodgeDirection;
-			this.anims.play(this.dodgeDirection < 0 ? "left" : "right", true);
-			return;
-		}
-
+		// The brain runs every frame. It used to be skipped during a dodge, which
+		// froze `lastAIOutput` and left the scene driving physics from stale
+		// intent — evade now flows through the same movement path as everything
+		// else, so there is only one way a fighter can move.
 		const output = this.brain.decide(input, time, delta);
 		this.lastAIOutput = output;
-
-		if (output.evadeActive) {
-			this.dodgeTimer = 200 + Math.random() * 100;
-			this.dodgeDirection = output.moveLeft ? -1 : 1;
-			this.lastFacingDirection = this.dodgeDirection;
-			this.anims.play(this.dodgeDirection < 0 ? "left" : "right", true);
-			return;
-		}
 
 		if (output.moveLeft && !output.moveRight) {
 			this.lastFacingDirection = -1;
@@ -147,14 +140,12 @@ export default class AIEnemy extends Phaser.GameObjects.Sprite {
 			if (this.grounded) this.anims.play("turn");
 		}
 
-		if (output.attack && time - this.lastAttackTime > 250) {
+		// Ranged fire is owned by the scene's BulletSystem, which is the only
+		// thing that actually simulates and resolves bullets. Firing here too
+		// used to spawn a second, unsimulated sprite that never moved.
+		if (output.attack && distance < 100 && time - this.lastAttackTime > 250) {
 			this.lastAttackTime = time;
-			const isMelee = distance < 100;
-			if (isMelee) {
-				this.meleeAttack();
-			} else {
-				this.bullets.fireBullet(this.x, this.y, output.aimAngle);
-			}
+			this.meleeAttack();
 		}
 	}
 

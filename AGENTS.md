@@ -13,135 +13,214 @@ skill({ name: "feedback-loop" })
 ```
 
 Key one-shot workflow:
-1. Run Playwright → __physicsDiagnostic() → capture report
-2. Analyze jitterEvents[], reconciliationSummary[], verdict
-3. Fix code, verify compilation with `tsc --noEmit` and `vite build`
-4. Re-run diagnostic — confirm verdict goes from FAIL to PASS
-5. Run 3 consecutive tests for stability
-6. Update AGENTS.md with findings
+1. `node scripts/diagnose.mjs` → capture the baseline report
+2. Analyse `jitterEvents[]`, `collisionSummary`, `movementSummary`, `reconciliationSummary`, `verdict`
+3. Fix code; verify with `tsc --noEmit`, `npx vitest run`, `vite build`
+4. Re-run the diagnostic — confirm FAIL → PASS on the metric you targeted
+5. Run 3 consecutive tests for stability (`--runs=3`)
+6. Run the knowledge-sharpener skill to fold findings back into AGENTS.md
+
+**If the loop cannot measure the thing you want to fix, extend the diagnostic first.**
+Jitter alone could not see moon-gravity jumps, players walking through walls, or an
+AI wedged in a corner — `collisionSummary` and `movementSummary` exist because of that.
 
 ## Tech Stack
-- Phaser 4.1.0 (game framework)
-- React 19 (UI overlay)
-- Vite 6 (bundler)
-- TypeScript 5.7 (strict mode)
-- Arcade Physics
+- Phaser 4.1.0 (rendering, input, scenes)
+- React 19 (UI overlay), Vite 6, TypeScript 5.7 (strict)
+- Geckos.io (WebRTC) for the authoritative server
+- Vitest for simulation unit tests; Playwright for the feedback loop
+- **Custom AABB physics in `src/game/simulation/` — Arcade Physics is not used for gameplay**
 
 ## Architecture
-- `src/game/` — all Phaser game code
-  - `scenes/` — Phaser scenes (Boot, Game)
-  - `characters/` — Player, AIEnemy, EnemyBrain
-  - `weapons/` — weapon behavior
-  - `skills/` — Bullets, skills
-  - `anims/` — animation definitions
-  - `online/` — Geckos.io client (OnlineManager, types)
-  - `EventBus.ts` — cross-framework events (Phaser → React)
-  - `main.ts` — Phaser 4 game config
-- `server/` — Geckos.io authoritative game server (physics, rooms)
-- `src/App.tsx` — React root with bullet count counter
-- `specs/` — game design documentation (combat, movement mechanics)
-- `public/assets/` — static game assets
+- `src/game/`
+  - `simulation/` — **deterministic, engine-free gameplay code shared with the server**
+    - `Arena.ts` — world bounds, platform rects, rect maths, line-of-sight, `penetrationDepth`, `narrowGaps`
+    - `Collision.ts` — swept axis-separated AABB (`moveAndCollide`, `probeWall`, `resolveOverlap`)
+    - `Physics.ts` — tuning constants, `PlayerPosition`, `tickPlayer`, bullets
+  - `scenes/` — Phaser scenes (Boot, Preloader, Game)
+  - `characters/` — Player, AIEnemy, EnemyBrain, AIConfig
+  - `combat/BulletSystem.ts` — the only simulated source of bullets offline
+  - `online/` — `OnlineManager` (channel), `OnlineSession` (owns netcode), `Prediction.ts`, `Interpolation.ts`, `types.ts`
+  - `render/` — `ArenaRenderer.ts` (draws from collider data), `SpritePool.ts`
+  - `diagnostics/PhysicsDiagnostics.ts` — the measurement half of the feedback loop
+  - `EventBus.ts` — Phaser → React events
+- `server/` — Geckos.io authoritative server; `server/physics.ts` re-exports `src/game/simulation/Physics`
+- `scripts/diagnose.mjs` — Playwright feedback-loop harness
+- `specs/`, `public/assets/`
 
-## Important Rules
-- Input handling is in `Game.ts` scene, NOT in `Player.ts` (prevents duplicate listeners from multiple player instances)
-- AI enemy (`AIEnemy.ts`) is controlled by `EnemyBrain.ts` state machine; configurable from React via `AIConfig.ts`
-- Only main player responds to `pointerdown`; AI enemy is AI-controlled
-- `EventBus` is used for Phaser→React communication (e.g. `bullet-fired`, `enemy-hp-changed` events)
-- Phaser 4 API differences from v3: use `color` not `fill` in TextStyle, `currentAnim.key` not `getCurrentKey()`, gravity requires `{x, y}` object
-- Build: `npm run dev` (Vite, port 8080), `tsc --noEmit` for type checking, `vite build` for production
-- Dev server runs in tmux session `vento-aureo-server` (`tmux attach -t vento-aureo-server` to see logs)
-- Server: `npm run dev:server` (Geckos.io, port 9208), or `npm run dev:all` for both Vite + server
-- Online mode: `http://localhost:8080/?online=true` — open in two tabs to match
-	- Client-side prediction: local physics runs on input immediately, player sprite moves responsively
-	- Server reconciliation: gentle position correction (15% lerp) per snapshot prevents drift
-	- Remote player interpolation: lerps towards target position at 12x speed for smooth 20Hz→60fps movement
-	- `pointerdown` is guarded to prevent local bullet creation in online mode
-	- `match` event only fires when both players have joined (playerCount >= 2), broadcast to all in room
-	- Bullet sprite pool (lazy-grown, recycled via `Phaser.GameObjects.Sprite.active`) replaces unbounded sprite creation
-- AI debug mode: add `&ai=true` to make the local player AI-controlled (e.g. `?online=true&ai=true`)
-	- Creates `EnemyBrain` for the local player; generates AI inputs instead of keyboard inputs
-	- Keep body enabled so AI can detect `touching.down` for jump decisions
-	- Use both tabs with `&ai=true` for AI vs AI debugging in online mode
-- Online match-end: when a player reaches 0 HP, server waits 1.5s then resets both to 100 HP at start positions (clears bullets). Client applies death alpha (0.3) to both sprites when HP <= 0.
-- Game tick bug fix: server loop now passes absolute `performance.now()` timestamps to `GameRoom.tick()` (was passing deltas, causing physics to never advance)
-- Always run `tsc --noEmit` and `vite build` after making changes to ensure type safety
-- Wall jump: trigger by pressing jump (W/up) while airborne and touching a platform side
-  - Wall jump lockout: 700ms (horizontal input ignored during lockout)
-  - Launches away from wall: 100 px/s horizontal, -100 px/s vertical
-  - Priority: ground jump > wall jump (ground jump only when grounded)
-  - Platform side tolerance: 4px overlap detection
-  - `PlayerPosition.wallTouch` tracks "left"/"right" wall contact; `wallJumpTimer` counts down lockout
-  - AI enemies use `touchingLeft`/`touchingRight` perception (EnemyBrain line 228-234) for wall jump decision
-  - Shared in `Physics.ts`: same physics on client and server
-- AI bullet hit and enemy collision: in `updateBullets()`, the handlers `onPlayerBulletHitEnemy`/`onEnemyBulletHitPlayer` take `LocalBullet` objects (not index), sprite lifecycle managed in `updateBullets()` via `setVisible`/`splice`
+## Invariants
+These are the rules that were violated by real bugs. Breaking one reintroduces a bug that took measurement to find.
+
+- **One simulation.** `src/game/simulation/` must never import Phaser, touch the DOM, or read wall-clock time. Client and server run the *same* `tickPlayer`; any divergence becomes rubber-banding.
+- **Draw from the collider data.** `ArenaRenderer.drawArena` derives every platform sprite from `platforms`. Hand-placing sprites is how visuals and colliders silently disagreed (a 400px image for a 100px collider).
+- **Bodies are top-left, sprites are centre-origin.** Always position sprites via `syncSpriteToBody`. Assigning body coords straight to a sprite draws it half a body off.
+- **One source of bullets.** The scene's `BulletSystem` (offline) or the server (online). `Player`/`AIEnemy` must not spawn their own ranged sprites — those were never simulated and froze on screen.
+- **Never simulate a tick the client did not send.** See "Netcode" below.
+- **No arena gap narrower than `PLAYER_WIDTH`.** Enforced by a test via `narrowGaps()`; a narrow gap under an overhang pins the AI in place.
 
 ## Physics Model
-- **Fixed timestep accumulator** (`PHYSICS_DT = 1/60`): client physics runs at exactly 60Hz regardless of display FPS, matching the server's fixed-step physics
-- `physicsAccumulator` in `Game.ts` accumulates real frame dt and runs `tickPlayer()`/`tickBullet()` in fixed 16.67ms steps (max 5 steps per frame to prevent spiral of death)
-- Server reconciliation: snaps directly when error > 100px (fight resets, large desyncs), otherwise 15% lerp per 20Hz snapshot
-- Remote interpolation: frame-rate-independent lerp via `friLerp()` function using `1 - pow(1-factor, dtSec*60)`
-- AI evade physics unified with `tickPlayer()` using GRAVITY constant
+The curve is designed jump-first: pick the height a jump must clear, then solve for velocity. **Changing gravity or jump velocity changes level reachability** — re-check `Arena.ts` and the reachability tests.
+
+| Constant | Value | Note |
+|---|---|---|
+| `GRAVITY` | 1800 | was 300 — a 184px, 2.2s moon jump |
+| `FALL_GRAVITY_MULTIPLIER` | 1.35 | heavier falling = platformer "snap" |
+| `JUMP_VELOCITY` | -700 | `JUMP_HEIGHT_PX` = 136px, ~0.7s airtime |
+| `JUMP_CUT_MULTIPLIER` | 0.45 | releasing mid-rise cuts the arc |
+| `COYOTE_TIME_MS` / `JUMP_BUFFER_MS` | 100 / 120 | forgiveness both sides of a ledge |
+| `PLAYER_WALK_SPEED` | 220 | with accel/friction, not instant velocity |
+| `WALL_JUMP_HORIZONTAL` / `_VERTICAL` / `_LOCKOUT` | 230 / -640 / 140ms | modest push + short lockout so a flat wall stays climbable |
+
+- **Fixed timestep**: `PHYSICS_DT = 1/60`, max 5 steps/frame, on both sides.
+- **Collision**: `moveAndCollide` resolves X then Y with sub-stepping capped at 12px, so nothing tunnels even at dash speed (1000 px/s) or 20fps.
+- **Jump is edge-triggered.** `tickPlayer` starts a jump only on a press edge (`up && !jumpHeld`). Anything driving it must release between jumps — that is why `EnemyBrain` holds jump for 240ms then forces a 60ms release. Emitting `jump` on scattered single frames only ever produces a minimum-height hop.
+
+## Netcode
+- **Input sequencing.** Every fixed step the client sends `{seq, ...intent}`. The server echoes `lastSeq` with the full `PlayerPosition`.
+- **Reconciliation is rewind + replay**, not a blend. `PredictedPlayer.reconcile` drops acknowledged inputs, rewinds to the authoritative state, and replays the rest. Because the sim is deterministic, a correct prediction replays to exactly where it already was — measured error is **0.00px**. The old 15% blind lerp produced a permanent ~14px standing error.
+- **Never simulate a tick the client did not send.** When the server's input queue starves it freezes that player for up to `MAX_STARVED_TICKS` (6) instead of repeating input. Each invented tick is a permanent error the client cannot replay away (~8px per tick while falling, ~24px per snapshot).
+- **The server keeps the whole `PlayerPosition`.** It used to rebuild it each tick with `wallTouch: "none", wallJumpTimer: 0`, so the server could never wall jump while the client could.
+- **Remote entities are interpolated, never predicted.** 150ms delay (3 snapshot intervals at 20Hz); 2 intervals emptied the buffer on a single dropped datagram and the remote teleported ~100px.
+- **Respawns are announced, not inferred.** The server broadcasts `round-reset`; the client drops all interpolation history. Blending across a respawn draws the remote sliding through the arena.
+- Interpolated positions are depenetrated with `resolveOverlap` before drawing — a straight line between two legal snapshots can still clip a corner.
+
+## Important Rules
+- Input handling lives in the `Game.ts` scene, not `Player.ts` (avoids duplicate listeners).
+- `EnemyBrain.ts` drives both AI fighters; tune via `AIConfig.ts`.
+- `EventBus` carries Phaser → React events (`bullet-fired`, `enemy-hp-changed`).
+- Phaser 4 vs 3: `color` not `fill` in TextStyle, `currentAnim.key` not `getCurrentKey()`.
+- After any change: `npx tsc --noEmit`, `npx vitest run`, `npx vite build`.
+- Restart `npm run dev:server` after touching `server/` or `src/game/simulation/` — tsx does not hot-reload.
+- Ports: Vite 8080, Geckos 9208. `npm run dev:all` runs both.
+- Online: `http://localhost:8080/?online=true`, two tabs. Add `&ai=true` for AI-vs-AI online.
+- Online match end: at 0 HP the server waits 1.5s, resets both fighters, and broadcasts `round-reset`.
+- Wall jump: press jump while airborne with `wallTouch !== "none"`. Ground jump wins when grounded. World edges are wall-jumpable; chained wall jumps can climb a flat wall.
 
 ## Physics Diagnostic Tool
 
-### Console Commands (open F12 DevTools)
-- `window.__toggleAIVsAI()` — toggle AI vs AI mode (both fighters AI-controlled)
-- `window.__gameState()` — print current state: HP, AI states, mode flag
-- `window.__physicsDiagnostic(durationMs=5000)` — collects frame data for N ms, outputs JSON report
-- Press **P** key to toggle AI vs AI mode in-game
+### Console commands (F12)
+- `window.__physicsDiagnostic(durationMs = 5000)` — collect frames, print a JSON report
+- `window.__gameState()` — HP, AI states, and full `playerPhys` / `enemyPhys`
+- `window.__toggleAIVsAI()` — or press **P** in-game
 
-### `__physicsDiagnostic()` Output Format
-The function prints `__DIAGNOSTIC_RESULT__{...json...}__END__` to console. Report structure:
-```json
-{
-  "mode": "offline|online",
-  "totalFrames": 425,
-  "fpsStats": { "minFps": 85, "maxFps": 85, "avgFps": 85, "avgDtMs": 11.77, "dtStdDevMs": 0.01 },
-  "physicsStepDistribution": { "zeroStepFrames": 125, "oneStepFrames": 300, "pctZeroStep": 29 },
-  "jitterEvents": [{"frame": 100, "type": "player_x", "delta": 47.13, "severity": 1.35}],
-  "jitterSummary": { "total": 0, "avgSeverity": 0, "maxSeverity": 0, "byType": {} },
-  "reconciliationEvents": [{"frame": 0, "serverX": 410, "clientX": 405, "correction": 5.9}],
-  "reconciliationSummary": { "totalCorrections": 125, "avgErrorPx": 33, "maxErrorPx": 343 },
-  "verdict": "PASS: No jitter detected"
-}
+### Harness (preferred)
+```bash
+npm run dev:server &          # :9208 — REQUIRED for online runs
+npm run dev &                 # :8080
+node scripts/diagnose.mjs                       # offline + online, 8s each
+node scripts/diagnose.mjs --mode=online --runs=3
+node scripts/probe-online.mjs                   # dump one online client's console
 ```
 
-### Using the Diagnostic with Playwright
-```javascript
-// 1. Navigate to game
-await page.goto('http://localhost:8080');
-// 2. Enable AI vs AI mode for automatic movement
-await page.keyboard.press('p');
-await page.waitForTimeout(2000);
-// 3. Start diagnostic
-await page.evaluate(() => window.__physicsDiagnostic(5000));
-// 4. Wait for completion, capture result
-await page.waitForTimeout(6000);
-const msgs = page._console; // collect log messages
-// 5. Parse the __DIAGNOSTIC_RESULT__ line for structured analysis
-// verdict === "PASS" means no jitter detected
+### Reading the report
+`__DIAGNOSTIC_RESULT__{...}__END__` on one console line.
+
+| Field | Meaning |
+|---|---|
+| `verdict` | `PASS` only when there are **no jitter events and no penetrations** |
+| `collisionSummary.penetrationFrames` | frames a body was inside solid geometry — **must be 0** |
+| `movementSummary` | `jumps`, `wallJumps`, `pctAirborne`, `peakRisePx` — is the fighter using the arena? |
+| `reconciliationSummary.avgErrorPx` | client/server disagreement; **0.00 is achievable and expected** |
+| `reconciliationSummary.visibleCorrections` | corrections > 1px; only respawns should appear |
+| `playerMovement.xRange/yRange` | a tiny range means the AI is stuck, even when the verdict says PASS |
+
+Jitter thresholds: `player_x` 35px, `player_y` 25px, camera 15px. Announced
+teleports suppress checking for 4 frames.
+
+### Traps that produce false results
+- **A dead game server reads as PASS.** No snapshots means no reconciliation and
+  no jitter. `scripts/diagnose.mjs` now preflights `:9208` and marks a run
+  `INVALID: no server snapshots received`. Never trust an online run without a
+  `reconciliationSummary`.
+- **`pgrep -f "tsx server/index.ts"` matches its own shell.** Check the port
+  instead: `curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:9208/.wrtc/v2/connections`.
+- **`verdict: PASS` is necessary, not sufficient.** Read `xRange`/`yRange` and
+  `movementSummary` too — a fighter wedged in a corner is perfectly jitter-free.
+- Restart the server after editing anything under `server/` or `simulation/`; tsx does not hot-reload.
+
+### AI vs AI mode
+Both fighters run an `EnemyBrain`; on a KO both reset after 2s (1.5s online).
+Logs: `[FIGHT]` hits and KOs, `=== FIGHT RESET ===`, `[ONLINE] round reset`.
+Online damage is applied server-side and is **not** logged as `[FIGHT]` — use the
+HP trace from `__gameState()` to tell whether an online fight is really happening.
+
+## Skill Index
+
+Every skill lives in `.agents/skills/<name>/SKILL.md` and is loaded with `skill({ name: "<name>" })`.
+Keep this list in sync — the knowledge-sharpener skill verifies it.
+
+### Project
+
+- **`feedback-loop`** — Diagnosing physics jitter, network desync, or gameplay bugs in Vento Ãureo
+- **`knowledge-sharpener`** — Run at the END of a substantial session: fold what was learned into AGENTS.md and the skills, and verify the skill index.
+
+### Phaser 4 reference
+
+- `actions-and-utilities` — Working with Phaser 4 utility functions, actions, alignment, grid layout, or batch operations on game...
+- `animations` — Creating or controlling sprite animations in Phaser 4
+- `audio-and-sound` — Adding audio or sound to a Phaser 4 game
+- `cameras` — Working with cameras in Phaser 4
+- `curves-and-paths` — Working with curves and paths in Phaser 4
+- `data-manager` — Using the Phaser 4 DataManager to store custom key-value data on game objects, listen for data change...
+- `events-system` — Working with the Phaser 4 event system
+- `filters-and-postfx` — Applying visual filters or post-processing effects in Phaser 4
+- `game-object-components` — Working with Phaser 4 game object components and the mixin system
+- `game-setup-and-config` — Creating a new Phaser 4 game instance or configuring GameConfig options
+- `geometry-and-math` — Using Phaser 4 math and geometry utilities
+- `graphics-and-shapes` — Drawing shapes and graphics in Phaser 4
+- `groups-and-containers` — Using Groups or Containers in Phaser 4
+- `input-keyboard-mouse-touch` — Handling user input in Phaser 4
+- `loading-assets` — Loading assets in Phaser 4
+- `particles` — Creating particle effects in Phaser 4
+- `physics-arcade` — Using Arcade Physics in Phaser 4
+- `physics-matter` — Using Matter.js physics in Phaser 4
+- `render-textures` — Using RenderTexture or DynamicTexture in Phaser 4
+- `scale-and-responsive` — Making a Phaser 4 game responsive or handling display scaling
+- `scenes` — Working with Phaser 4 scenes
+- `sprites-and-images` — Creating Sprites or Images in Phaser 4
+- `text-and-bitmaptext` — Displaying text in Phaser 4
+- `tilemaps` — Working with tilemaps in Phaser 4
+- `time-and-timers` — Using timers and time-based events in Phaser 4
+- `tweens` — Animating properties over time in Phaser 4
+- `v3-to-v4-migration` — Migrating a Phaser 3 project to Phaser 4, or when a user asks about breaking changes, API differences,...
+- `v4-new-features` — Learning about new features, game objects, components, and rendering capabilities added in Phaser 4
+
+## Agent Config Layout (write once, run everywhere)
+
+One source of truth, symlinks for every other tool's convention. Supported tools: **OpenCode** and **Claude Code**.
+
+```
+AGENTS.md                     # source of truth for project instructions
+CLAUDE.md         -> AGENTS.md          (symlink)
+.agents/skills/<name>/SKILL.md          # source of truth for all skills
+.claude/skills    -> ../.agents/skills  (symlink, whole directory)
 ```
 
-### Jitter Thresholds
-- player_x: 35px (covers 30fps dash x2)
-- player_y: 25px (covers 30fps falling x2)
-- camera: 15px
-- Fight reset teleports (>100px error) snap client directly; skip-jitter flag prevents double-counting
+Why this works:
+- **OpenCode** reads `AGENTS.md` natively and discovers skills in `.agents/skills/`, `.claude/skills/`, and `.opencode/skills/` — so it needs no symlink at all.
+- **Claude Code** reads `CLAUDE.md` and only discovers project skills in `.claude/skills/` — both are satisfied by the symlinks above.
+- The `.claude/skills` symlink points at the *directory*, not individual skills, so a new skill added to `.agents/skills/` shows up in both tools with **zero** extra setup.
 
-### AI vs AI Mode
-When enabled, the player character is also AI-controlled via a second `EnemyBrain`.
-Both AIs fight each other. When one reaches 0 HP, both reset to 100 HP after 1.5s.
-Console logs all fight events:
-- `[FIGHT]` — bullet hit, HP change
-- `[STATE]` — AI state transitions  
-- `=== AI VS AI MODE [ENABLED|DISABLED] ===` — mode toggles
+### Rules
+- **Never** edit `CLAUDE.md` or anything under `.claude/skills/` — they are symlinks. Edit `AGENTS.md` and `.agents/skills/` instead.
+- **Never** create a real `CLAUDE.md` file or a real `.claude/skills/` directory; that forks the knowledge and the two tools drift apart.
+- New skill = new folder `.agents/skills/<kebab-name>/SKILL.md`. Nothing else to wire up.
+- Symlinks are committed to git (git stores them as symlinks), so a fresh clone works in both tools immediately.
 
-### Console Log Output
-- `[FIGHT] Player bullet hit enemy! Enemy HP: 90`
-- `[FIGHT] Enemy defeated!`
-- `[STATE] Player: ATTACK | Enemy: EVADE | HP 70 vs 50`
+### SKILL.md frontmatter (must satisfy both tools)
+```yaml
+---
+name: kebab-case-name        # required, must equal the folder name, ^[a-z0-9]+(-[a-z0-9]+)*$
+description: One line...     # required, when to use the skill + trigger keywords
+---
+```
+Keep frontmatter to the fields both tools understand. Avoid tool-specific keys such as `compatibility:` (OpenCode-only) — they make a skill read as single-tool.
 
-## Skill Reference
-The complete diagnostic workflow, Playwright test patterns, calibration scripts, and jitter source catalog live in the agent skill:
-- `.agents/skills/feedback-loop/SKILL.md`
-- Load with: `skill({ name: "feedback-loop" })`
+### Recreating the symlinks
+```bash
+ln -sfn AGENTS.md CLAUDE.md
+mkdir -p .claude && ln -sfn ../.agents/skills .claude/skills
+```
+
+### Adding a third tool later
+Point its expected path at the same source, e.g. Cursor: `ln -sfn ../.agents/skills .cursor/skills`. Do not copy files.

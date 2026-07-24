@@ -1,32 +1,100 @@
-export const GRAVITY = 300;
-export const PLAYER_WALK_SPEED = 160;
-export const JUMP_VELOCITY = -330;
+/**
+ * Deterministic gameplay simulation, shared verbatim by client and server.
+ *
+ * Nothing in here may touch Phaser, the DOM or wall-clock time: given the same
+ * state, input and dt, both sides must produce bit-identical results. That is
+ * what makes client-side prediction reconcile instead of rubber-band.
+ */
+
+import {
+	PLAYER_HEIGHT,
+	PLAYER_WIDTH,
+	pointInAnyPlatform,
+	type Rect,
+} from "./Arena";
+import {
+	type MovingBox,
+	moveAndCollide,
+	probeWall,
+	type WallSide,
+} from "./Collision";
+
+export type { Rect } from "./Arena";
+export {
+	hasLineOfSight,
+	PLAYER_HEIGHT,
+	PLAYER_WIDTH,
+	penetrationDepth,
+	platforms,
+	playerBox,
+	rectsOverlap,
+	WORLD_BOTTOM,
+	WORLD_LEFT,
+	WORLD_RIGHT,
+	WORLD_TOP,
+} from "./Arena";
+export type { WallSide } from "./Collision";
+
+/** @deprecated use `Rect` — kept so existing imports keep compiling. */
+export type Platform = Rect;
+
+// ---------------------------------------------------------------------------
+// Movement tuning
+//
+// The curve is built jump-first: pick the height a jump must clear, then solve
+// for the velocity. Every ledge in Arena.ts sits within JUMP_HEIGHT_PX of the
+// surface below it, so changing these constants changes level reachability —
+// re-check Arena.ts if you touch them.
+// ---------------------------------------------------------------------------
+
+export const GRAVITY = 1800;
+/** Falling is heavier than rising: the classic platformer "snap". */
+export const FALL_GRAVITY_MULTIPLIER = 1.35;
+export const MAX_FALL_SPEED = 950;
+
+export const JUMP_VELOCITY = -700;
+/** Peak rise of a full jump: v² / 2g = 136px. */
+export const JUMP_HEIGHT_PX = (JUMP_VELOCITY * JUMP_VELOCITY) / (2 * GRAVITY);
+/** Releasing jump mid-rise cuts the arc, giving analogue jump height. */
+export const JUMP_CUT_MULTIPLIER = 0.45;
+/** Grace period to still jump just after walking off a ledge. */
+export const COYOTE_TIME_MS = 100;
+/** Grace period for a jump pressed just before landing. */
+export const JUMP_BUFFER_MS = 120;
+
+export const PLAYER_WALK_SPEED = 220;
+export const GROUND_ACCEL = 2600;
+export const AIR_ACCEL = 1800;
+export const GROUND_FRICTION = 2600;
+export const AIR_FRICTION = 500;
+
+export const WALL_SLIDE_SPEED = 160;
+export const WALL_JUMP_HORIZONTAL = 230;
+export const WALL_JUMP_VERTICAL = -640;
+/**
+ * Steering is ignored for this long after a wall jump so the launch actually
+ * carries you off the wall. Long lockouts feel like losing the controller, and
+ * too much horizontal push makes a wall unclimbable — keep both modest so
+ * repeated wall jumps can gain height on a single flat wall.
+ */
+export const WALL_JUMP_LOCKOUT = 140;
+/** Wall contact lingers briefly so a wall jump does not need frame-perfect timing. */
+export const WALL_COYOTE_MS = 100;
+
 export const BULLET_SPEED = 600;
-export const WORLD_LEFT = 0;
-export const WORLD_RIGHT = 800;
-export const WORLD_TOP = 0;
-export const WORLD_BOTTOM = 600;
-export const ATTACK_COOLDOWN = 250;
 export const BULLET_DAMAGE = 10;
-export const PLAYER_WIDTH = 32;
-export const PLAYER_HEIGHT = 48;
-export const WALL_JUMP_HORIZONTAL = 100;
-export const WALL_JUMP_VERTICAL = -100;
-export const WALL_JUMP_LOCKOUT = 700;
+export const ATTACK_COOLDOWN = 250;
 
-export interface Platform {
-	x: number;
-	y: number;
-	w: number;
-	h: number;
+// ---------------------------------------------------------------------------
+// Player state
+// ---------------------------------------------------------------------------
+
+export interface PlayerIntent {
+	left: boolean;
+	right: boolean;
+	/** Jump, held. Held-ness drives variable jump height, so pass the raw key state. */
+	up: boolean;
 }
-
-export const platforms: Platform[] = [
-	{ x: 0, y: 568, w: 800, h: 32 },
-	{ x: 40, y: 250, w: 100, h: 32 },
-	{ x: 700, y: 220, w: 100, h: 32 },
-	{ x: 550, y: 400, w: 100, h: 32 },
-];
 
 export interface PlayerPosition {
 	x: number;
@@ -34,135 +102,176 @@ export interface PlayerPosition {
 	vx: number;
 	vy: number;
 	grounded: boolean;
-	wallTouch: "none" | "left" | "right";
+	/** Which side of the player a wall is on — the side a wall jump pushes away from. */
+	wallTouch: WallSide;
+	/** ms of steering lockout remaining after a wall jump. */
 	wallJumpTimer: number;
+	/** ms of ledge-forgiveness remaining. */
+	coyoteTimer: number;
+	/** ms remaining on a jump press that has not been consumed yet. */
+	jumpBufferTimer: number;
+	/** ms of wall-contact forgiveness remaining. */
+	wallCoyoteTimer: number;
+	/** Mid-rise of a jump that can still be cut short by releasing the button. */
+	jumping: boolean;
+	/** Jump button state last tick, for press-edge detection. */
+	jumpHeld: boolean;
 }
 
+export function createPlayerState(x: number, y: number): PlayerPosition {
+	return {
+		x,
+		y,
+		vx: 0,
+		vy: 0,
+		grounded: false,
+		wallTouch: "none",
+		wallJumpTimer: 0,
+		coyoteTimer: 0,
+		jumpBufferTimer: 0,
+		wallCoyoteTimer: 0,
+		jumping: false,
+		jumpHeld: false,
+	};
+}
+
+/** Copy state into `target` without reallocating — used on the netcode hot path. */
+export function copyPlayerState(
+	source: PlayerPosition,
+	target: PlayerPosition,
+): PlayerPosition {
+	target.x = source.x;
+	target.y = source.y;
+	target.vx = source.vx;
+	target.vy = source.vy;
+	target.grounded = source.grounded;
+	target.wallTouch = source.wallTouch;
+	target.wallJumpTimer = source.wallJumpTimer;
+	target.coyoteTimer = source.coyoteTimer;
+	target.jumpBufferTimer = source.jumpBufferTimer;
+	target.wallCoyoteTimer = source.wallCoyoteTimer;
+	target.jumping = source.jumping;
+	target.jumpHeld = source.jumpHeld;
+	return target;
+}
+
+/** Move `value` toward `target` by at most `maxDelta`. */
+function approach(value: number, target: number, maxDelta: number): number {
+	if (value < target) return Math.min(value + maxDelta, target);
+	if (value > target) return Math.max(value - maxDelta, target);
+	return target;
+}
+
+function decay(timerMs: number, dt: number): number {
+	return Math.max(0, timerMs - dt * 1000);
+}
+
+/**
+ * Advance one player by exactly `dt` seconds. Pure: returns new state.
+ *
+ * Order matters — timers, then intent, then jump, then gravity, then a single
+ * collision-resolved move. Resolving movement exactly once per tick is what
+ * keeps contact flags and positions consistent between client and server.
+ */
 export function tickPlayer(
 	pos: PlayerPosition,
-	input: { left: boolean; right: boolean; up: boolean },
+	input: PlayerIntent,
 	dt: number,
 ): PlayerPosition {
-	let { x, y, vx, vy, grounded, wallTouch, wallJumpTimer } = pos;
+	const s: PlayerPosition = { ...pos };
 
-	vy += GRAVITY * dt;
+	s.wallJumpTimer = decay(s.wallJumpTimer, dt);
+	s.coyoteTimer = decay(s.coyoteTimer, dt);
+	s.jumpBufferTimer = decay(s.jumpBufferTimer, dt);
+	s.wallCoyoteTimer = decay(s.wallCoyoteTimer, dt);
 
-	if (wallJumpTimer > 0) {
-		wallJumpTimer = Math.max(0, wallJumpTimer - dt * 1000);
-		vx *= 0.85;
+	if (input.up && !s.jumpHeld) {
+		s.jumpBufferTimer = JUMP_BUFFER_MS;
+	}
+
+	// ---- horizontal intent ----
+	const dir = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+	const steerable = s.wallJumpTimer <= 0;
+	if (steerable && dir !== 0) {
+		const accel = s.grounded ? GROUND_ACCEL : AIR_ACCEL;
+		s.vx = approach(s.vx, dir * PLAYER_WALK_SPEED, accel * dt);
 	} else {
-		if (input.left) vx = -PLAYER_WALK_SPEED;
-		else if (input.right) vx = PLAYER_WALK_SPEED;
-		else vx *= 0.85;
+		const friction = s.grounded ? GROUND_FRICTION : AIR_FRICTION;
+		s.vx = approach(s.vx, 0, friction * dt);
 	}
 
-	const wantsJump = input.up;
-	let performedGroundJump = false;
-
-	if (wantsJump && grounded) {
-		vy = JUMP_VELOCITY;
-		grounded = false;
-		performedGroundJump = true;
-	}
-
-	x += vx * dt;
-	y += vy * dt;
-
-	if (x < WORLD_LEFT) x = WORLD_LEFT;
-	if (x + PLAYER_WIDTH > WORLD_RIGHT) x = WORLD_RIGHT - PLAYER_WIDTH;
-
-	grounded = false;
-	wallTouch = "none";
-	for (const p of platforms) {
-		if (
-			x + PLAYER_WIDTH > p.x &&
-			x < p.x + p.w &&
-			vy >= 0 &&
-			y + PLAYER_HEIGHT <= p.y + 8 &&
-			y + PLAYER_HEIGHT + vy * dt >= p.y
-		) {
-			y = p.y - PLAYER_HEIGHT;
-			vy = 0;
-			grounded = true;
-		}
-
-		if (!grounded && !performedGroundJump) {
-			if (
-				y + PLAYER_HEIGHT > p.y &&
-				y < p.y + p.h
-			) {
-				if (vx > 0 && x + PLAYER_WIDTH > p.x - 4 && x < p.x + 4) {
-					x = p.x - PLAYER_WIDTH;
-					vx = 0;
-					wallTouch = "right";
-				} else if (vx < 0 && x < p.x + p.w + 4 && x + PLAYER_WIDTH > p.x + p.w - 4) {
-					const wallX = p.x + p.w;
-					if (wallX + PLAYER_WIDTH <= WORLD_RIGHT && wallX >= WORLD_LEFT) {
-						x = wallX;
-						vx = 0;
-						wallTouch = "left";
-					}
-				}
-			}
+	// ---- jump (ground jump wins over wall jump) ----
+	if (s.jumpBufferTimer > 0) {
+		if (s.grounded || s.coyoteTimer > 0) {
+			s.vy = JUMP_VELOCITY;
+			s.grounded = false;
+			s.coyoteTimer = 0;
+			s.jumpBufferTimer = 0;
+			s.jumping = true;
+		} else if (s.wallTouch !== "none" && s.wallJumpTimer <= 0) {
+			const away = s.wallTouch === "left" ? 1 : -1;
+			s.vx = away * WALL_JUMP_HORIZONTAL;
+			s.vy = WALL_JUMP_VERTICAL;
+			s.wallTouch = "none";
+			s.wallCoyoteTimer = 0;
+			s.wallJumpTimer = WALL_JUMP_LOCKOUT;
+			s.jumpBufferTimer = 0;
+			s.jumping = true;
 		}
 	}
 
-	if (!grounded && wallTouch === "none") {
-		for (const p of platforms) {
-			const insideLeft = x + PLAYER_WIDTH > p.x + 4;
-			const insideRight = x < p.x + p.w - 4;
-			const insideTop = y + PLAYER_HEIGHT > p.y + 4;
-			const insideBottom = y < p.y + p.h - 4;
-			if (insideLeft && insideRight && insideTop && insideBottom) {
-				const dLeft = x - p.x + PLAYER_WIDTH;
-				const dRight = p.x + p.w - x;
-				const dTop = y - p.y + PLAYER_HEIGHT;
-				const dBot = p.y + p.h - y;
-				const minD = Math.min(dLeft, dRight, dTop, dBot);
-				if (minD === dLeft) {
-					x = p.x - PLAYER_WIDTH;
-					vx = 0;
-				} else if (minD === dRight) {
-					const nx = p.x + p.w;
-					if (nx + PLAYER_WIDTH <= WORLD_RIGHT && nx >= WORLD_LEFT) {
-						x = nx;
-					} else {
-						x = p.x - PLAYER_WIDTH;
-					}
-					vx = 0;
-				} else if (minD === dTop) {
-					y = p.y - PLAYER_HEIGHT;
-					vy = 0;
-					grounded = true;
-				} else {
-					y = p.y + p.h;
-					vy = 0;
-				}
-				break;
-			}
-		}
+	// ---- variable jump height ----
+	if (s.jumping && !input.up && s.vy < 0) {
+		s.vy *= JUMP_CUT_MULTIPLIER;
+		s.jumping = false;
+	}
+	if (s.vy >= 0) s.jumping = false;
+
+	// ---- gravity ----
+	s.vy += (s.vy > 0 ? GRAVITY * FALL_GRAVITY_MULTIPLIER : GRAVITY) * dt;
+
+	const pressingIntoWall =
+		(dir < 0 && s.wallTouch === "left") || (dir > 0 && s.wallTouch === "right");
+	if (!s.grounded && pressingIntoWall && s.vy > WALL_SLIDE_SPEED) {
+		s.vy = WALL_SLIDE_SPEED;
+	}
+	if (s.vy > MAX_FALL_SPEED) s.vy = MAX_FALL_SPEED;
+
+	// ---- one collision-resolved move ----
+	const box: MovingBox = { x: s.x, y: s.y, w: PLAYER_WIDTH, h: PLAYER_HEIGHT };
+	const contacts = moveAndCollide(box, s.vx * dt, s.vy * dt);
+	s.x = box.x;
+	s.y = box.y;
+
+	if (contacts.wall !== "none") s.vx = 0;
+	if (contacts.grounded) s.vy = 0;
+	if (contacts.ceiling && s.vy < 0) s.vy = 0;
+
+	s.grounded = contacts.grounded;
+	if (s.grounded) {
+		s.coyoteTimer = COYOTE_TIME_MS;
+		s.jumping = false;
 	}
 
-	if (wantsJump && !grounded && wallTouch !== "none" && wallJumpTimer <= 0) {
-		const dir = wallTouch === "left" ? 1 : -1;
-		vx = dir * WALL_JUMP_HORIZONTAL;
-		vy = WALL_JUMP_VERTICAL;
-		wallTouch = "none";
-		wallJumpTimer = WALL_JUMP_LOCKOUT;
+	const wall = contacts.wall !== "none" ? contacts.wall : probeWall(box);
+	if (wall !== "none") {
+		s.wallTouch = wall;
+		s.wallCoyoteTimer = WALL_COYOTE_MS;
+	} else if (s.wallCoyoteTimer <= 0) {
+		s.wallTouch = "none";
 	}
 
-	if (y + PLAYER_HEIGHT > WORLD_BOTTOM) {
-		y = WORLD_BOTTOM - PLAYER_HEIGHT;
-		vy = 0;
-		grounded = true;
-	}
-
-	return { x, y, vx, vy, grounded, wallTouch, wallJumpTimer };
+	s.jumpHeld = input.up;
+	return s;
 }
 
 export function canFire(lastAttackTime: number, now: number): boolean {
 	return now - lastAttackTime >= ATTACK_COOLDOWN;
 }
+
+// ---------------------------------------------------------------------------
+// Bullets
+// ---------------------------------------------------------------------------
 
 export interface BulletState {
 	id: number;
@@ -197,10 +306,5 @@ export function bulletHitsPlayer(
 }
 
 export function bulletHitsPlatform(b: BulletState): boolean {
-	for (const p of platforms) {
-		if (b.x > p.x && b.x < p.x + p.w && b.y > p.y && b.y < p.y + p.h) {
-			return true;
-		}
-	}
-	return false;
+	return pointInAnyPlatform(b.x, b.y);
 }

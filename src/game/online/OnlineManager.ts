@@ -3,11 +3,13 @@ import type { GameSnapshot, MatchMessage, PlayerInput } from "./types";
 
 export type OnlineStateHandler = (state: GameSnapshot) => void;
 export type OnlineStatusHandler = (status: string) => void;
+export type OnlineResetHandler = () => void;
 
 export class OnlineManager {
 	private channel: ReturnType<typeof geckos> | null = null;
 	private onState: OnlineStateHandler | null = null;
 	private onStatus: OnlineStatusHandler | null = null;
+	private onRoundReset: OnlineResetHandler | null = null;
 	private _connected = false;
 	private _matched = false;
 	private _myId = "";
@@ -29,9 +31,14 @@ export class OnlineManager {
 		return this._myId;
 	}
 
-	connect(onState: OnlineStateHandler, onStatus: OnlineStatusHandler) {
+	connect(
+		onState: OnlineStateHandler,
+		onStatus: OnlineStatusHandler,
+		onRoundReset?: OnlineResetHandler,
+	) {
 		this.onState = onState;
 		this.onStatus = onStatus;
+		this.onRoundReset = onRoundReset ?? null;
 		const channel = geckos({ url: this.serverUrl, port: this.serverPort });
 		this.channel = channel;
 
@@ -55,6 +62,10 @@ export class OnlineManager {
 		this.channel.on("state", (data: unknown) => {
 			const snap = data as GameSnapshot;
 			this.onState?.(snap);
+		});
+
+		this.channel.on("round-reset", () => {
+			this.onRoundReset?.();
 		});
 
 		this.channel.onDisconnect(() => {
