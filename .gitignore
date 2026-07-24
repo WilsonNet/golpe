@@ -25,3 +25,6 @@ dist-ssr
 .parcel-cache/
 .playwright-mcp/
 home/
+
+# herdr dev-workspace state (pane ids are machine-local)
+.herdr/

@@ -1,4 +1,41 @@
+# Vento Áureo
+
+A 2D arena fighter built on Phaser 4 + React, with a custom deterministic AABB
+physics simulation shared verbatim between the client and an authoritative
+Geckos.io server.
+
+## Documentation
+
+| Doc | What's in it |
+|---|---|
+| [Running the game](docs/running-the-game.md) | Every way to launch it: player vs AI, AI vs AI, player vs player, online AI vs AI. Dev servers, controls, URL parameters, debug hooks, troubleshooting. |
+| [AGENTS.md](AGENTS.md) | Architecture, invariants, physics model, netcode rules, and the skill index. Also loaded as `CLAUDE.md`. |
+| [Feedback loop](.agents/skills/feedback-loop/SKILL.md) | The physics diagnostic: how to measure a bug before fixing it, and the catalogue of root causes already found. |
+| [Herdr dev workspace](.agents/skills/herdr-dev-workspace/SKILL.md) | Running the dev servers in visible herdr panes instead of background processes. |
+| [Knowledge sharpener](.agents/skills/knowledge-sharpener/SKILL.md) | End-of-session routine for folding what was learned back into the docs. |
+
+## Quick start
+
+```bash
+npm install
+npm run dev:herdr      # or: npm run dev:all
+
+# then open one of:
+#   http://localhost:8080/                        player vs AI
+#   http://localhost:8080/?ai=true                AI vs AI
+#   http://localhost:8080/?online=true            player vs player (two tabs)
+#   http://localhost:8080/?online=true&ai=true    AI vs AI online (two tabs)
+```
+
+Verify a change with `npx tsc --noEmit`, `npx vitest run`, `npx vite build`, and
+`npm run diagnose` for anything touching physics or netcode.
+
+---
+
 # Phaser React TypeScript Template
+
+> The remainder of this file is the upstream Phaser template README, kept for
+> reference on the React/Vite bridge and build tooling.
 
 This is a Phaser project template that uses the React framework and Vite for bundling. It includes a bridge for React to Phaser game communication, hot-reloading for quick development workflow and scripts to generate production-ready builds.
 

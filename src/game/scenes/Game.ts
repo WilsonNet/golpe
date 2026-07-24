@@ -115,7 +115,14 @@ export default class Game extends Phaser.Scene {
 		const params = new URLSearchParams(window.location.search);
 		this.onlineMode = params.get("online") === "true";
 		this.onlineAIMode = params.get("ai") === "true";
-		if (this.onlineMode) this.initOnlineMode();
+		if (this.onlineMode) {
+			this.initOnlineMode();
+		} else if (this.onlineAIMode) {
+			// `?ai=true` means the same thing offline as online: the local fighter
+			// is AI-driven. Without this, offline AI-vs-AI was only reachable by
+			// pressing P, so it could not be linked to or launched by a harness.
+			this.toggleAIVsAI();
+		}
 	}
 
 	private bindInput() {

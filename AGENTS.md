@@ -45,7 +45,8 @@ AI wedged in a corner — `collisionSummary` and `movementSummary` exist because
   - `diagnostics/PhysicsDiagnostics.ts` — the measurement half of the feedback loop
   - `EventBus.ts` — Phaser → React events
 - `server/` — Geckos.io authoritative server; `server/physics.ts` re-exports `src/game/simulation/Physics`
-- `scripts/diagnose.mjs` — Playwright feedback-loop harness
+- `scripts/diagnose.mjs` — Playwright feedback-loop harness; `scripts/dev-herdr.mjs` — herdr dev-server workspace
+- `docs/running-the-game.md` — every way to launch the game (indexed from README.md)
 - `specs/`, `public/assets/`
 
 ## Invariants
@@ -91,8 +92,15 @@ The curve is designed jump-first: pick the height a jump must clear, then solve 
 - Phaser 4 vs 3: `color` not `fill` in TextStyle, `currentAnim.key` not `getCurrentKey()`.
 - After any change: `npx tsc --noEmit`, `npx vitest run`, `npx vite build`.
 - Restart `npm run dev:server` after touching `server/` or `src/game/simulation/` — tsx does not hot-reload.
-- Ports: Vite 8080, Geckos 9208. `npm run dev:all` runs both.
-- Online: `http://localhost:8080/?online=true`, two tabs. Add `&ai=true` for AI-vs-AI online.
+- Ports: Vite 8080, Geckos 9208. **Prefer `npm run dev:herdr`** — it runs both in visible
+  herdr panes and waits for the ports, so a dead server is obvious. `npm run dev:all`
+  also works. Do not background them with `&`: a detached server is invisible when it
+  dies, and `pgrep -f "tsx server/index.ts"` matches its own shell command line.
+  Read output with `npm run dev:herdr:logs`. See the `herdr-dev-workspace` skill.
+- Four run modes, all one build (see `docs/running-the-game.md`):
+  `/` player vs AI · `/?ai=true` AI vs AI · `/?online=true` PvP (two tabs) ·
+  `/?online=true&ai=true` AI vs AI online. `?ai=true` means the same thing on both
+  sides of the online split: the local fighter is AI-driven.
 - Online match end: at 0 HP the server waits 1.5s, resets both fighters, and broadcasts `round-reset`.
 - Wall jump: press jump while airborne with `wallTouch !== "none"`. Ground jump wins when grounded. World edges are wall-jumpable; chained wall jumps can climb a flat wall.
 
@@ -152,6 +160,7 @@ Keep this list in sync — the knowledge-sharpener skill verifies it.
 ### Project
 
 - **`feedback-loop`** — Diagnosing physics jitter, network desync, or gameplay bugs in Vento Ãureo
+- **`herdr-dev-workspace`** — Starting, inspecting or stopping the dev servers (Vite :8080, Geckos :9208) in visible herdr panes instead of background processes.
 - **`knowledge-sharpener`** — Run at the END of a substantial session: fold what was learned into AGENTS.md and the skills, and verify the skill index.
 
 ### Phaser 4 reference

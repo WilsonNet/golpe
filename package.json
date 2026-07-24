@@ -29,7 +29,12 @@
     "format": "biome format --write src",
     "dev:server": "tsx server/index.ts",
     "dev:all": "concurrently \"npm run dev\" \"npm run dev:server\"",
-    "test": "vitest run"
+    "test": "vitest run",
+    "dev:herdr": "node scripts/dev-herdr.mjs up",
+    "dev:herdr:down": "node scripts/dev-herdr.mjs down",
+    "dev:herdr:status": "node scripts/dev-herdr.mjs status",
+    "dev:herdr:logs": "node scripts/dev-herdr.mjs logs",
+    "diagnose": "node scripts/diagnose.mjs"
   },
   "dependencies": {
     "@geckos.io/client": "^3.1.0",
