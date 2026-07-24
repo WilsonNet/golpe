@@ -1,6 +1,6 @@
-import Phaser from "phaser";
-import { BULLET_SPEED } from "../simulation/Physics";
+import type Phaser from "phaser";
 import { EventBus } from "../EventBus";
+import { BULLET_SPEED } from "../simulation/Physics";
 
 export interface BulletData {
 	sprite: Phaser.GameObjects.Sprite;

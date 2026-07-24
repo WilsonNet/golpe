@@ -1,17 +1,30 @@
 ---
 name: feedback-loop
-description: "CRITICAL: Use this skill when diagnosing physics jitter, network desync, or gameplay bugs in Vento Ãureo. Covers the __physicsDiagnostic() tool, Playwright test workflow, reading diagnostic JSON reports, fixed-timestep model, reconciliation snap logic, jitter thresholds, and the one-shot feedback loop pattern. Triggers on: jitter, diagnostic, physics bug, desync, reconciliation, teleport, rubber-banding, stutter, framerate issue, Playwright test, feedback loop."
+description: "CRITICAL: Use this skill when diagnosing physics jitter, network desync, projectile/bullet trajectory problems, or gameplay bugs in Vento Áureo. The canonical test is ONLINE AI vs AI — this game is online first. Covers the __physicsDiagnostic() tool, Playwright test workflow, reading diagnostic JSON reports, fixed-timestep model, reconciliation snap logic, jitter thresholds, and the one-shot feedback loop pattern. Triggers on: jitter, diagnostic, physics bug, desync, reconciliation, teleport, rubber-banding, stutter, framerate issue, Playwright test, feedback loop."
 license: MIT
-compatibility: opencode
 ---
 
 # Physics Diagnostic & Feedback Loop
 
 **This is the most important part of the project.** Every fix must be verified through the feedback loop below. Do NOT guess at code changes without running the diagnostic first and after to confirm the fix.
 
-## Build Missing Tools First
+## Rule 0: If there is no instrumentation to measure it, build the instrumentation
 
 If the feedback loop is incomplete — missing diagnostic functions, missing Playwright scripts, missing console logging, missing any measurable output — **stop and build the missing tool before attempting any fix.**
+
+This is the first step of the loop, not a preliminary to it. Every metric in the
+report exists because a real bug was invisible without it:
+
+| Metric | The bug it was built to see |
+|---|---|
+| `collisionSummary` | players walking through platforms while the verdict said PASS |
+| `movementSummary` | a 184px / 2.2s moon jump, and an AI wedged in a 36px pocket |
+| `bulletSummary` | projectiles stuttering, stalling and jumping between sprites |
+| `reconciliationSummary` | a permanent ~14px client/server standing error |
+
+A metric that cannot fail is worthless. Before trusting a green run, confirm the
+instrument discriminates — the projectile metrics were only believable because
+they first reported `3 jumps, 6 stalls`, then `5 jumps`, and only then zero.
 
 The rule: **if you can't measure it, you can't fix it.** Never proceed with a physics fix if:
 - There is no `window.__physicsDiagnostic()` (or equivalent) producing structured data
@@ -20,6 +33,29 @@ The rule: **if you can't measure it, you can't fix it.** Never proceed with a ph
 - The game cannot run autonomously (AI vs AI mode, automated input)
 
 In those cases, your first task is to **build the measurement tool**, then run it to get a baseline, then fix, then re-measure. A half-measure with no feedback loop is worse than no fix at all — it wastes time and creates false confidence.
+
+## Test online, in AI vs AI
+
+**This game is online first.** Every match — including single player — runs
+through the authoritative server, so the netcode is exercised whenever anyone
+plays. Testing must follow the same rule.
+
+```bash
+node scripts/diagnose.mjs --mode=online --runs=3   # the canonical run
+```
+
+- **Online AI vs AI is the reference mode.** Two AI fighters over the real
+  server exercise prediction, reconciliation, remote interpolation, projectile
+  rendering and the arena at once, with no human needed.
+- **An offline PASS proves almost nothing.** It bypasses prediction,
+  reconciliation and server-owned bullets — precisely where the bugs have been.
+  `--mode=offline` is only useful for isolating pure-simulation behaviour, and
+  unit tests do that better and faster.
+- **Single player is not a separate path.** With no `?online=true` the server
+  fills the second slot with a bot, so a solo match is a real online match. That
+  is deliberate: it means playing the game is dogfooding the netcode.
+- `?offline=true` exists only for working without a server. Never diagnose it and
+  conclude anything about the netcode.
 
 ## Architecture Overview
 
@@ -37,12 +73,21 @@ The game has a Physics Diagnostic Tool that emits structured JSON reports. These
 
 ## Physics Model
 
-- **Fixed timestep accumulator** (`src/game/scenes/Game.ts`): `PHYSICS_DT = 1/60`. Accumulates real frame dt and runs `tickPlayer()` / `tickBullet()` in fixed 16.67ms steps. Max 5 steps per frame to prevent spiral of death.
-- **Server reconciliation** (`applySnapshot` in `Game.ts`): snaps directly when error > 100px (fight resets, large desyncs); otherwise 15% lerp per 20Hz snapshot.
-- **Remote interpolation** (`updateRemoteInterpolation`): frame-rate-independent lerp via `friLerp()` using `1 - Math.pow(1 - factor, dtSec * 60)`.
-- **AI evade physics**: unified with `tickPlayer()` using shared GRAVITY constant (`src/game/simulation/Physics.ts`).
-- **Shared physics**: `src/game/simulation/Physics.ts` is used identically by both client and server. No divergence.
-- **Server**: `server/GameRoom.ts` uses `TICK_RATE = 1000/60` and `BROADCAST_RATE = 1000/20`.
+All gameplay simulation lives in `src/game/simulation/`, imported unchanged by the
+server via `server/physics.ts`. It must stay free of Phaser, the DOM and wall-clock
+time — determinism is what makes prediction reconcile instead of rubber-band.
+
+- `Arena.ts` — world bounds, `platforms`, rect maths, `hasLineOfSight`, `penetrationDepth`, `narrowGaps`
+- `Collision.ts` — `moveAndCollide` (swept, axis-separated, 12px sub-steps), `probeWall`, `resolveOverlap`
+- `Physics.ts` — tuning constants, `PlayerPosition`, `createPlayerState`, `tickPlayer`, bullets
+
+Fixed timestep `PHYSICS_DT = 1/60` with a max of 5 steps per frame, on both sides.
+Jump is **edge-triggered** (`up && !jumpHeld`), so anything driving it must release
+between jumps.
+
+Netcode: input sequencing + rewind-and-replay reconciliation, a starvation freeze on
+the server, 150ms remote interpolation delay, and an explicit `round-reset` broadcast.
+See the Netcode section of AGENTS.md for the reasoning behind each.
 
 ## Diagnostic Tool: `window.__physicsDiagnostic(durationMs)`
 
@@ -128,7 +173,7 @@ Added to `Game.ts` create() alongside `__toggleAIVsAI` and `__gameState`. The fu
 | `reconciliationSummary` | Aggregated reconciliation stats. `avgErrorPx` shows typical server-client divergence. `maxErrorPx` shows worst-case. `cumulativeDriftPx` is sum of all corrections. |
 | `verdict` | `"PASS"` if zero jitter events. `"FAIL: N jitter events detected"` otherwise. |
 
-### Jitter Thresholds (in `Game.ts` constants)
+### Jitter Thresholds (derived, in `PhysicsDiagnostics.ts`)
 
 | Constant | Value | Rationale |
 |----------|-------|-----------|
@@ -149,106 +194,99 @@ max_y = GRAVITY * 2 * PHYSICS_DT * 2 # 20px (2 steps falling at 30fps)
 
 Fight reset teleports are excluded from jitter detection via `_diagSkipJitter = true` flag set in `resetFight()`. Online server reconciliation snapshots with error >100px snap directly (no lerp), which may cause a single-frame jitter event at the reset boundary. This is intentional.
 
-## Playwright Test Workflow
+## Running the Loop
 
-### Setup
-```javascript
-// Start servers (already running in tmux session "vento-aureo-server")
-// Vite on port 8080, Geckos.io on port 9208
+Use the harness — it handles two-tab matchmaking, console scraping, server
+preflight and the digest.
 
-// Navigate to game
-await page.goto('http://localhost:8080');
-await page.waitForTimeout(1000);
+```bash
+npm run dev:server &   # :9208 — REQUIRED for online runs
+npm run dev &          # :8080
+
+node scripts/diagnose.mjs                          # offline + online, 8s each
+node scripts/diagnose.mjs --mode=offline
+node scripts/diagnose.mjs --mode=online --runs=3   # stability check
+node scripts/probe-online.mjs                      # raw console when a run looks wrong
 ```
 
-### Offline AI-vs-AI Test
-```javascript
-// Enable AI vs AI mode (both fighters AI-controlled)
-await page.keyboard.press('p');
-await page.waitForTimeout(2000);
+The report line is parsed with:
 
-// Start diagnostic
-const result = await page.evaluate(() => window.__physicsDiagnostic(5000));
-// => "DIAGNOSTIC_STARTED: 5000ms"
-
-// Wait for completion
-await page.waitForTimeout(6000);
-
-// Read diagnostic JSON from console
-const msgs = await page.evaluate(() => {
-    // Collect all console entries
-    return window.__consoleLogs || [];
-});
-// Parse: JSON.parse(msg.split('__DIAGNOSTIC_RESULT__')[1].split('__END__')[0])
+```js
+/__DIAGNOSTIC_RESULT__(\{.*?\})__END__/s
 ```
 
-### Online AI-vs-AI Test
-```javascript
-// Open two tabs with AI online mode
-await page.goto('http://localhost:8080/?online=true&ai=true');
-// Open second tab
-const page2 = await context.newPage();
-await page2.goto('http://localhost:8080/?online=true&ai=true');
+Unit tests are the fast inner loop — prefer them for anything about collision,
+jump feel or arena layout, and reserve the browser for netcode and integration:
 
-// Wait for match
-await page.waitForTimeout(3000);
-
-// Verify match via console messages: "[ONLINE] Matched in room room-N!"
-await page.evaluate(() => window.__physicsDiagnostic(8000));
-await page.waitForTimeout(10000);
+```bash
+npx vitest run src/game/simulation/Physics.test.ts
 ```
 
-### Parsing the Diagnostic Report
+### Verdict interpretation
 
-Regex to extract the JSON from console:
-```javascript
-/__DIAGNOSTIC_RESULT__(\{.+\})__END__/
-```
+| Signal | Meaning |
+|---|---|
+| `verdict: PASS` | No jitter events **and** no penetrations |
+| `collisionSummary.penetrationFrames > 0` | A body was inside geometry — collision regression |
+| `reconciliationSummary.avgErrorPx > 0` | Client/server divergence; 0.00 is achievable |
+| `visibleCorrections` beyond ~1 per round | Something other than respawn is correcting |
+| `movementSummary.jumps == 0` | The fighter is not moving — check the arena and AI |
+| `bulletSummary.teleportFrames`/`frozenFrames` | Projectile jumped or stalled; both must be 0 |
+| `bulletSummary.maxPathDeviationPx > 0` | A "straight" bullet path bent — sprite identity churn |
+| `bulletSummary.maxStepRatio` | Worst step vs expected; 1.0 is ideal, healthy is ~1.2 |
+| `bulletSummary.avgStepCv` | Step-length evenness; 0 is perfect, healthy is ~0.05 |
+| tiny `xRange`/`yRange` | Stuck fighter, regardless of verdict |
 
-Python parsing:
-```python
-import json, re
-match = re.search(r'__DIAGNOSTIC_RESULT__(\{.*?\})__END__', console_str, re.DOTALL)
-if match:
-    report = json.loads(match.group(1))
-```
+## Known Root Causes (all fixed — do not reintroduce)
 
-### Verdict Interpretation
+Each of these was found by measurement, not by reading code.
 
-| Verdict | Meaning | Action |
-|---------|---------|--------|
-| `"PASS: No jitter detected"` | No frame-to-frame position anomalies. Physics is smooth. | Accept the fix. |
-| `"FAIL: N jitter events detected"` | N frames had position jumps exceeding physics limits. | Analyze `jitterEvents[]` to identify the cause. |
-| `jitterSummary.total === 0, verdict PASS` | Clean bill of health. | Run 3 consecutive 8s tests to confirm stability. |
-| `jitterSummary.total > 0, type: player_x` | Jitter in local player horizontal position. Could be reconciliation or physics issue. | Cross-reference with `reconciliationEvents[]` at matching frames. |
-| `reconciliationSummary.maxErrorPx > 100` | Large server-client discrepancy. Fight reset or severe desync. | Check if snap logic is working (>100px should snap directly). |
+| # | Symptom | Root cause | Fix |
+|---|---|---|---|
+| 1 | Players walk through platforms | Side collision was gated on `!grounded`, so a walking player was never blocked | Single `moveAndCollide` pass; contacts are valid grounded or not |
+| 2 | Floaty, unfun jump (184px / 2.2s) | `GRAVITY = 300` with `JUMP_VELOCITY = -330` | Jump-first tuning: 1800 / -700 → 136px / ~0.7s |
+| 3 | Visuals disagree with colliders | Platform sprites hand-placed; a 400px image drew a 100px collider | `ArenaRenderer.drawArena` derives sprites from `platforms` |
+| 4 | Sprites half a body off | Body coords (top-left) assigned to centre-origin sprites | `syncSpriteToBody` everywhere |
+| 5 | Constant ~14px online desync, 1790px cumulative drift | Blind 15% lerp per snapshot; predicted inputs were never replayed | Input `seq` + rewind-to-authoritative + replay unacked → **0.00px error** |
+| 6 | Server could never wall jump | `GameRoom` rebuilt `PlayerPosition` each tick with `wallTouch: "none"` | Store the full state per player |
+| 7 | ~24px correction every snapshot, player never landed | Server repeated the last input when its queue starved, simulating ticks the client never did | Freeze the player for up to 6 starved ticks instead |
+| 8 | Remote player teleports ~100px | Interpolation delay of 2 snapshot intervals emptied on one dropped datagram | 150ms (3 intervals) + ease toward target |
+| 9 | Remote clips through platforms | Interpolated paths are not simulated and cut corners | `resolveOverlap` before drawing |
+| 10 | AI could only ever short-hop | `EnemyBrain` emitted `jump` on scattered single frames; jump height is analogue | Hold 240ms, then force a 60ms release for the next press edge |
+| 11 | AI wedged in a 36px box, never fought | A 30px arena gap under an overhang, narrower than `PLAYER_WIDTH` | Move the pillars; `narrowGaps()` invariant test |
+| 12 | Phantom frozen bullets | `Player`/`AIEnemy` spawned their own sprites that nothing simulated | Only `BulletSystem` (offline) or the server (online) spawns bullets |
+| 13 | Projectile sprite jumps between bullets | Sprites indexed by snapshot array position; the server `splice`s dead bullets so indices shift | Key sprites by bullet id |
+| 14 | Projectiles laggy and stuttering | Bullets interpolated 150ms in the past, mixed with a dead-reckon fallback computed at a different time base (~90px jump when crossing between them) | Dead-reckon only — bullets are ballistic and closed-form |
+| 15 | Projectile sawtooth (jump every 50ms, stall between) | Position re-derived from the newest snapshot each frame, so each snapshot moved the extrapolation base | Anchor once on first sight, then fly off the local clock |
+| 16 | Projectiles blink and reappear past a wall | Occluded bullets were hidden but allowed back when they cleared the geometry | Occlusion retires a bullet permanently |
+| 17 | Server crashed: "EnemyBrain is not a constructor" | A default export resolves to the module *namespace* under the server's ESM/CJS interop (`typeof` was `object`, keys `AIState,default`) | Named exports for everything `server/` imports |
+| 18 | Intermittent `player_y` jitter on a healthy build | The 25px threshold was calibrated for `GRAVITY = 300`; at `MAX_FALL_SPEED = 950` a legal 30fps fall is 31.7px | Derive thresholds from the constants and the frame's dt |
 
-## Known Jitter Sources & Fixes
+## False PASS traps
 
-### 1. Variable Frame-rate Physics (FIXED)
-**Root cause**: Client used variable `dtSec` for physics while server used fixed 1/60s. Different Euler integration trajectories.
-**Fix**: Fixed-timestep accumulator (`physicsAccumulator`) in `Game.ts`. Runs `tickPlayer`/`tickBullet` at fixed 1/60s intervals.
-**Verification**: `physicsStepDistribution.pctZeroStep` shows 29% at 85fps (expected), 0% at 60fps (perfect). No jitter events during normal gameplay.
+A green verdict is necessary, not sufficient. These all produced convincing lies:
 
-### 2. Slow Reconciliation Lerp (FIXED)
-**Root cause**: 15% lerp at 20Hz takes ~1s to converge a 100px error.
-**Fix**: Snap directly when error > 100px (fight resets, large desyncs). 15% lerp for normal <100px corrections.
-**Verification**: `reconciliationSummary.maxErrorPx` now shows instant correction for reset events instead of gradual rubber-banding over 30 frames.
-
-### 3. Frame-rate Dependent Interpolation (FIXED)
-**Root cause**: `lerpSpeed * dtSec` produces different results at different framerates.
-**Fix**: `friLerp()` uses `1 - Math.pow(1 - factor, dtSec * 60)` for frame-rate-independent exponential smoothing.
-**Verification**: Remote player position converges at same rate regardless of framerate.
-
-### 4. AI Evade Separate Physics Path (FIXED)
-**Root cause**: AI evade used hardcoded `GRAVITY = 300` and manual position integration, diverging from `tickPlayer()`.
-**Fix**: Uses `tickPlayer()` + shared `GRAVITY` constant from `Physics.ts`. Evade speed set via `vx = dir * 300`.
-**Verification**: Enemy position in diagnostic shows consistent physics between evade and normal states.
-
-### 5. Fight Reset Teleport (KNOWN, INTENTIONAL)
-**Root cause**: Server resets both players to start positions (700, 500) after a kill. Client sees 300-400px discrepancy.
-**Behavior**: Client snaps directly to server position (error > 100px). Creates 1-frame teleport jitter event. This is visible but cannot be smoothly interpolated (teleports through walls are worse).
-**Verification**: Single-frame jitter event at reset boundary, not a 30-frame rubber band.
+- **Dead game server.** No snapshots → no reconciliation → no jitter → `PASS`.
+  `scripts/diagnose.mjs` preflights `:9208` and marks such runs
+  `INVALID: no server snapshots received`. Never trust an online report with no
+  `reconciliationSummary`.
+- **`pgrep -f "tsx server/index.ts"` matches its own shell command line.** Check the
+  port instead:
+  `curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:9208/.wrtc/v2/connections`
+- **A stuck fighter is perfectly smooth.** Always read `playerMovement.xRange/yRange`
+  and `movementSummary` alongside the verdict.
+- **Stale server.** tsx does not hot-reload; restart after editing `server/` or
+  `simulation/`. `npm run dev:herdr` restarts both and waits for the ports.
+- **An offline PASS is not evidence.** Offline skips prediction, reconciliation
+  and server-owned bullets. Only `--mode=online` exercises them.
+- **A metric that has never failed is not a measurement.** Confirm a new
+  instrument can go red before believing it when it is green.
+- **Thresholds rot.** A limit calibrated against old constants will either miss
+  real defects or flag correct behaviour. Derive limits from the simulation
+  constants and the frame's own dt so they track the physics automatically.
+- **Idle fighters look healthy.** Playwright never presses a key, so a
+  human-controlled fighter is motionless by definition. Assert damage only in AI
+  modes; elsewhere assert the opponent exists and moves (`scripts/verify-modes.mjs`).
 
 ## Python Physics Analysis Script
 
@@ -286,11 +324,15 @@ for fps in [30, 60, 85, 120]:
 
 | File | Purpose |
 |------|---------|
-| `src/game/scenes/Game.ts` | All diagnostic collection + physics fixes. Lines: `PHYSICS_DT`, `_diag*` fields, `startDiagnostic()`, `finishDiagnostic()`, `recordDiagnosticFrame()`, `applySnapshot()` reconciliation, `fixedPhysicsStep()`, `friLerp()`. |
-| `src/game/simulation/Physics.ts` | Shared physics constants and functions. `GRAVITY`, `PLAYER_WALK_SPEED`, `tickPlayer()`, `tickBullet()`. |
-| `server/GameRoom.ts` | Server-side fixed-step physics. `TICK_RATE = 1000/60`, `BROADCAST_RATE = 1000/20`. |
-| `AGENTS.md` | Project documentation with physics model and diagnostic instructions. |
-| `.agents/skills/feedback-loop/SKILL.md` | **This file.** The LLM's guide to running diagnostics and interpreting results. |
+| `scripts/diagnose.mjs` | Playwright harness: drives both modes, preflights the server, prints a digest |
+| `scripts/probe-online.mjs` | Dumps one online client's console + `__gameState()` when something is off |
+| `scripts/verify-modes.mjs` | Smoke-checks every launch mode: connects, matches, fights |
+| `scripts/dev-herdr.mjs` | Dev servers in visible herdr panes, with real port readiness |
+| `src/game/diagnostics/PhysicsDiagnostics.ts` | Collection and report generation |
+| `src/game/simulation/` | The code under test — `Arena`, `Collision`, `Physics` |
+| `src/game/simulation/Physics.test.ts` | 40 unit tests: feel, collision, arena invariants, determinism |
+| `server/GameRoom.ts` | Authoritative simulation, input queue, `round-reset` |
+| `AGENTS.md` | Invariants, physics model, netcode rules |
 
 ## How to One-Shot a Physics Fix
 

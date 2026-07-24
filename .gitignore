@@ -25,3 +25,9 @@ dist-ssr
 .parcel-cache/
 .playwright-mcp/
 home/
+
+# herdr dev-workspace state (pane ids are machine-local)
+.herdr/
+
+# Ad-hoc AI fight log dumps
+fight-logs*.txt

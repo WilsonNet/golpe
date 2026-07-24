@@ -1,0 +1,367 @@
+import type Phaser from "phaser";
+import type { BulletSample } from "../diagnostics/PhysicsDiagnostics";
+import { syncSpriteToBody } from "../render/ArenaRenderer";
+import { SpritePool } from "../render/SpritePool";
+import { pointInAnyPlatform } from "../simulation/Arena";
+import { resolveOverlap } from "../simulation/Collision";
+import {
+	isBulletOutOfBounds,
+	PLAYER_HEIGHT,
+	PLAYER_WIDTH,
+	type PlayerIntent,
+} from "../simulation/Physics";
+import { friLerp, RemoteInterpolator, ServerClock } from "./Interpolation";
+import { OnlineManager } from "./OnlineManager";
+import { PredictedPlayer, RenderSmoother } from "./Prediction";
+import type { GameSnapshot } from "./types";
+
+/** Beyond this, a remote position change is a teleport, not movement. */
+const REMOTE_SNAP_PX = 100;
+
+/** Cap on ballistic extrapolation, so a bad clock estimate cannot fling a bullet. */
+const MAX_EXTRAPOLATION_MS = 250;
+
+export interface OnlineCallbacks {
+	onStatus: (msg: string) => void;
+	onLocalHp: (hp: number) => void;
+	onRemoteHp: (hp: number) => void;
+	/** Reconciliation result, for the diagnostic. */
+	onReconcile: (errorPx: number, replayed: number) => void;
+	/** A discontinuity that is expected — respawns — so it is not counted as jitter. */
+	onTeleport: () => void;
+}
+
+/**
+ * Owns everything networked: the channel, the predicted local player, the
+ * interpolated remote player, and server-owned bullets.
+ *
+ * The scene talks to this in terms of intent, not packets.
+ */
+export class OnlineSession {
+	readonly manager: OnlineManager;
+	readonly predicted: PredictedPlayer;
+
+	private readonly remote = new RemoteInterpolator();
+	private readonly clock = new ServerClock();
+	private readonly smoother = new RenderSmoother();
+	private readonly bulletPool: SpritePool;
+	/** Ballistic anchor per bullet: position and velocity at a known local time. */
+	private readonly bulletFlights = new Map<
+		number,
+		{ x0: number; y0: number; vx: number; vy: number; t0: number }
+	>();
+	/** Bullets already known to have hit geometry; never drawn again. */
+	private readonly bulletDead = new Set<number>();
+	/** Bullet id -> sprite, so a sprite never changes which bullet it represents. */
+	private readonly bulletSprites = new Map<number, Phaser.GameObjects.Sprite>();
+	/** Where projectiles were drawn this frame, for the diagnostic. */
+	private readonly renderedBullets: BulletSample[] = [];
+
+	private remoteSprite?: Phaser.GameObjects.Sprite;
+	private remoteBody?: { x: number; y: number };
+	private latestSnapshot?: GameSnapshot;
+
+	private _localHp = 100;
+	private _remoteHp = 100;
+	private _remoteFacing = 1;
+	private _matched = false;
+
+	constructor(
+		private readonly scene: Phaser.Scene,
+		private readonly startX: number,
+		private readonly startY: number,
+		private readonly callbacks: OnlineCallbacks,
+	) {
+		this.predicted = new PredictedPlayer(startX, startY);
+		this.bulletPool = new SpritePool(scene, "fireball");
+		this.manager = new OnlineManager(
+			`${location.protocol}//${location.hostname}`,
+			9208,
+		);
+	}
+
+	get connected(): boolean {
+		return this.manager.connected;
+	}
+
+	get matched(): boolean {
+		return this._matched;
+	}
+
+	get localHp(): number {
+		return this._localHp;
+	}
+
+	get remoteHp(): number {
+		return this._remoteHp;
+	}
+
+	get remoteFacing(): number {
+		return this._remoteFacing;
+	}
+
+	/**
+	 * Remote fighter position in *body* space (AABB top-left), matching what
+	 * the simulation uses. Reading it off the sprite instead would be in
+	 * centre-origin space and silently off by half a body.
+	 */
+	get remotePosition(): { x: number; y: number } | null {
+		return this.remoteBody ? { ...this.remoteBody } : null;
+	}
+
+	connect(solo = false) {
+		this.manager.connect(
+			(snap) => this.onSnapshot(snap),
+			(msg) => this.callbacks.onStatus(msg),
+			() => this.onRoundReset(),
+			solo,
+		);
+	}
+
+	/**
+	 * The server has respawned both fighters. Drop all interpolation history —
+	 * blending across a respawn would draw the remote sliding through the arena
+	 * instead of reappearing at its start position.
+	 */
+	private onRoundReset() {
+		this.remote.reset();
+		this.smoother.reset();
+		this.bulletPool.releaseAll();
+		this.bulletSprites.clear();
+		this.bulletFlights.clear();
+		this.bulletDead.clear();
+		this.remoteBody = undefined;
+		this.callbacks.onTeleport();
+		console.log("[ONLINE] round reset");
+	}
+
+	disconnect() {
+		this.manager.disconnect();
+	}
+
+	/**
+	 * Advance one fixed physics step: predict locally and ship the input.
+	 * Called once per PHYSICS_DT so the client and server consume input at the
+	 * same rate.
+	 */
+	fixedStep(
+		intent: PlayerIntent,
+		attack: boolean,
+		aimAngle: number,
+		dt: number,
+	) {
+		const seq = this.predicted.step(intent, dt);
+		this.manager.sendInput({
+			seq,
+			left: intent.left,
+			right: intent.right,
+			up: intent.up,
+			attack,
+			aimAngle,
+		});
+	}
+
+	/** Per-frame presentation update: remote interpolation and bullets. */
+	render(dtSec: number): { x: number; y: number } {
+		const serverNow = this.clock.now(Date.now());
+
+		const remotePos = this.remote.sample(serverNow);
+		if (remotePos) {
+			// Ease toward the sampled point rather than assigning it. When the
+			// snapshot buffer runs dry the sampler clamps to its newest sample,
+			// which as a hard assignment reads as a teleport.
+			//
+			// A genuine teleport (round respawn) must still snap: easing across
+			// 600px turns one honest jump into a long smear of fake motion.
+			const jumped =
+				this.remoteBody &&
+				Math.hypot(
+					remotePos.x - this.remoteBody.x,
+					remotePos.y - this.remoteBody.y,
+				) > REMOTE_SNAP_PX;
+
+			if (!this.remoteBody || jumped) {
+				if (jumped) {
+					this.remote.reset();
+					this.callbacks.onTeleport();
+				}
+				this.remoteBody = { ...remotePos };
+			} else {
+				this.remoteBody.x = friLerp(this.remoteBody.x, remotePos.x, 0.5, dtSec);
+				this.remoteBody.y = friLerp(this.remoteBody.y, remotePos.y, 0.5, dtSec);
+			}
+
+			// An interpolated path is not simulated, so it can clip a corner that
+			// neither endpoint touches. Push it back out before drawing.
+			const box = {
+				x: this.remoteBody.x,
+				y: this.remoteBody.y,
+				w: PLAYER_WIDTH,
+				h: PLAYER_HEIGHT,
+			};
+			if (resolveOverlap(box)) {
+				this.remoteBody.x = box.x;
+				this.remoteBody.y = box.y;
+			}
+
+			if (!this.remoteSprite) {
+				this.remoteSprite = this.scene.add.sprite(0, 0, "dude");
+				this.remoteSprite.setOrigin(0.5);
+			}
+			syncSpriteToBody(this.remoteSprite, this.remoteBody.x, this.remoteBody.y);
+		}
+
+		this.renderBullets(serverNow);
+
+		return this.smoother.apply(
+			this.predicted.state.x,
+			this.predicted.state.y,
+			dtSec,
+		);
+	}
+
+	/**
+	 * Draw projectiles by dead reckoning, not interpolation.
+	 *
+	 * A bullet flies at a constant velocity with no gravity and no collision
+	 * response, so its position is a closed-form function of time: extrapolating
+	 * from the last snapshot is *exact*, and it renders the bullet at the
+	 * present instant instead of 150ms in the past. Interpolating them was
+	 * strictly worse — it added latency to something that needs to feel sharp,
+	 * and mixing an interpolated sample (rendered at now-150ms) with a
+	 * dead-reckoned fallback (rendered at now) made the sprite jump ~90px
+	 * whenever a bullet crossed from one path to the other.
+	 *
+	 * Sprites are keyed by bullet id. Indexing by position in the snapshot array
+	 * meant a sprite jumped to a completely different bullet every time the
+	 * server spliced a dead one out.
+	 */
+	private renderBullets(serverNow: number) {
+		const snap = this.latestSnapshot;
+		if (!snap) return;
+
+		this.renderedBullets.length = 0;
+		const live = new Set<number>();
+		const now = performance.now();
+
+		for (const b of snap.bullets) {
+			live.add(b.id);
+			if (this.bulletDead.has(b.id)) continue;
+
+			// Anchor once, on first sight, then fly the bullet purely off the local
+			// clock. Re-deriving the position from the newest snapshot every frame
+			// looks correct but is not: each arriving snapshot moves the
+			// extrapolation base, so any error in the clock estimate shows up as a
+			// sawtooth — a small jump forward every 50ms and a stall in between.
+			let flight = this.bulletFlights.get(b.id);
+			if (!flight) {
+				const ageSec =
+					Math.min(Math.max(serverNow - snap.t, 0), MAX_EXTRAPOLATION_MS) /
+					1000;
+				flight = {
+					x0: b.x + b.vx * ageSec,
+					y0: b.y + b.vy * ageSec,
+					vx: b.vx,
+					vy: b.vy,
+					t0: now,
+				};
+				this.bulletFlights.set(b.id, flight);
+			}
+
+			const t = (now - flight.t0) / 1000;
+			const x = flight.x0 + flight.vx * t;
+			const y = flight.y0 + flight.vy * t;
+
+			// The server has almost certainly already destroyed a bullet that has
+			// reached geometry; retire it now rather than flying it through a wall
+			// for the rest of the snapshot interval. This is permanent: letting it
+			// reappear past the platform made the sprite blink and jump.
+			if (pointInAnyPlatform(x, y) || isBulletOutOfBounds({ ...b, x, y })) {
+				this.bulletDead.add(b.id);
+				const stale = this.bulletSprites.get(b.id);
+				if (stale) {
+					this.bulletPool.release(stale);
+					this.bulletSprites.delete(b.id);
+				}
+				continue;
+			}
+
+			let sprite = this.bulletSprites.get(b.id);
+			if (!sprite) {
+				sprite = this.bulletPool.acquire();
+				this.bulletSprites.set(b.id, sprite);
+			}
+			sprite.setPosition(x, y);
+			this.renderedBullets.push({ id: b.id, x, y });
+		}
+
+		for (const [id, sprite] of this.bulletSprites) {
+			if (live.has(id)) continue;
+			this.bulletPool.release(sprite);
+			this.bulletSprites.delete(id);
+		}
+		for (const id of this.bulletFlights.keys()) {
+			if (!live.has(id)) this.bulletFlights.delete(id);
+		}
+		for (const id of this.bulletDead) {
+			if (!live.has(id)) this.bulletDead.delete(id);
+		}
+	}
+
+	private onSnapshot(snap: GameSnapshot) {
+		this.latestSnapshot = snap;
+		this.clock.observe(snap.t, Date.now());
+
+		for (const p of snap.players) {
+			if (p.id === this.manager.myId) {
+				this._localHp = p.hp;
+				this.callbacks.onLocalHp(p.hp);
+
+				const before = { x: this.predicted.state.x, y: this.predicted.state.y };
+				const result = this.predicted.reconcile(p.state, p.lastSeq, 1 / 60);
+				this.smoother.absorb(
+					this.predicted.state.x - before.x,
+					this.predicted.state.y - before.y,
+				);
+				this.callbacks.onReconcile(result.errorPx, result.replayed);
+			} else {
+				this._remoteHp = p.hp;
+				this._remoteFacing = p.facingDir;
+				this.callbacks.onRemoteHp(p.hp);
+				this.remote.push(snap.t, p.state.x, p.state.y);
+			}
+		}
+
+		if (!this._matched && snap.players.length >= 2) {
+			this._matched = true;
+			this.callbacks.onStatus("");
+		}
+	}
+
+	/** Projectiles as drawn this frame, for the diagnostic. */
+	get bullets(): readonly BulletSample[] {
+		return this.renderedBullets;
+	}
+
+	/** Alpha for a fighter sprite — dead fighters fade out. */
+	applyDeathAlpha(localSprite: Phaser.GameObjects.Sprite) {
+		localSprite.setAlpha(this._localHp <= 0 ? 0.3 : 1);
+		this.remoteSprite?.setAlpha(this._remoteHp <= 0 ? 0.3 : 1);
+	}
+
+	playRemoteAnim() {
+		if (!this.remoteSprite) return;
+		const key = this._remoteFacing < 0 ? "left" : "right";
+		if (this.remoteSprite.anims.currentAnim?.key !== key) {
+			this.remoteSprite.anims.play(key, true);
+		}
+	}
+
+	/** Full local reset, e.g. after a round ends. */
+	reset() {
+		this.predicted.reset(this.startX, this.startY);
+		this.remote.reset();
+		this.smoother.reset();
+		this.bulletPool.releaseAll();
+	}
+}

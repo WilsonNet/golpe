@@ -1,6 +1,5 @@
 import Phaser from "phaser";
 import { ATTACK_COOLDOWN } from "../constants";
-import { BULLET_SPEED } from "../simulation/Physics";
 import Bullets from "../skills/Bullets";
 import Melee from "../weapons/Melee";
 import type { AIOutput } from "./EnemyBrain";
@@ -64,7 +63,8 @@ export default class Player extends Phaser.GameObjects.Sprite {
 		} else {
 			canDouble = false;
 		}
-		if (canDouble) console.table({ hayai: "早い", deltaTime, currentTime, lastTime });
+		if (canDouble)
+			console.table({ hayai: "早い", deltaTime, currentTime, lastTime });
 		eligibilityState[keyCode] = {
 			canDouble: !canDouble,
 			lastTime: currentTime,
@@ -82,9 +82,9 @@ export default class Player extends Phaser.GameObjects.Sprite {
 
 	performAIAttack(angle: number) {
 		this.mouseAngle = angle;
-		if (this.stanceState === StanceState.RANGED) {
-			this.bullets.fireBullet(this.x, this.y, angle);
-		} else {
+		// Ranged shots are spawned by the scene's BulletSystem so there is a
+		// single simulated source of bullets; only melee is local.
+		if (this.stanceState === StanceState.MELEE) {
 			this.meleeAttack(this.scene);
 		}
 	}
@@ -126,8 +126,7 @@ export default class Player extends Phaser.GameObjects.Sprite {
 				}
 				break;
 			case StanceState.RANGED:
-				this.lastAttackTime = now;
-				this.bullets.fireBullet(this.x, this.y, this.mouseAngle);
+				// Ranged fire is spawned by the scene's BulletSystem.
 				break;
 		}
 	}
@@ -191,12 +190,12 @@ export default class Player extends Phaser.GameObjects.Sprite {
 
 	update(
 		t: number,
-		dt: number,
+		_dt: number,
 		cursors: Record<string, Phaser.Input.Keyboard.Key>,
 	) {
 		this.melee?.updatePosition(this.x, this.y);
 		if (this.aiOverrideInput) {
-			this.updateAI(t, dt);
+			this.updateAI();
 			return;
 		}
 		if (this.movementState !== MovementState.NATURAL) return;
@@ -234,7 +233,7 @@ export default class Player extends Phaser.GameObjects.Sprite {
 		}
 	}
 
-	private updateAI(t: number, dt: number) {
+	private updateAI() {
 		const input = this.aiOverrideInput!;
 		this.melee?.updatePosition(this.x, this.y);
 		if (this.movementState !== MovementState.NATURAL) return;

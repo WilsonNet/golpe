@@ -3,11 +3,13 @@ import type { GameSnapshot, MatchMessage, PlayerInput } from "./types";
 
 export type OnlineStateHandler = (state: GameSnapshot) => void;
 export type OnlineStatusHandler = (status: string) => void;
+export type OnlineResetHandler = () => void;
 
 export class OnlineManager {
 	private channel: ReturnType<typeof geckos> | null = null;
 	private onState: OnlineStateHandler | null = null;
 	private onStatus: OnlineStatusHandler | null = null;
+	private onRoundReset: OnlineResetHandler | null = null;
 	private _connected = false;
 	private _matched = false;
 	private _myId = "";
@@ -29,9 +31,16 @@ export class OnlineManager {
 		return this._myId;
 	}
 
-	connect(onState: OnlineStateHandler, onStatus: OnlineStatusHandler) {
+	connect(
+		onState: OnlineStateHandler,
+		onStatus: OnlineStatusHandler,
+		onRoundReset?: OnlineResetHandler,
+		/** Solo: play this room against a server-hosted bot instead of waiting for a human. */
+		solo = false,
+	) {
 		this.onState = onState;
 		this.onStatus = onStatus;
+		this.onRoundReset = onRoundReset ?? null;
 		const channel = geckos({ url: this.serverUrl, port: this.serverPort });
 		this.channel = channel;
 
@@ -43,7 +52,13 @@ export class OnlineManager {
 			}
 			this._connected = true;
 			this._myId = channel.id as string;
-			this.onStatus?.("Connected — waiting for opponent...");
+			// The server holds placement until it knows which kind of match we want.
+			channel.emit("join", { solo });
+			this.onStatus?.(
+				solo
+					? "Connected — starting match..."
+					: "Connected — waiting for opponent...",
+			);
 		});
 
 		this.channel.on("match", (data: unknown) => {
@@ -55,6 +70,10 @@ export class OnlineManager {
 		this.channel.on("state", (data: unknown) => {
 			const snap = data as GameSnapshot;
 			this.onState?.(snap);
+		});
+
+		this.channel.on("round-reset", () => {
+			this.onRoundReset?.();
 		});
 
 		this.channel.onDisconnect(() => {

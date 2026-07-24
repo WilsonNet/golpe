@@ -34,7 +34,27 @@ export interface AIOutput {
 	switchToRanged: boolean;
 }
 
-export default class EnemyBrain {
+/**
+ * How long the AI holds the jump button once it decides to jump.
+ *
+ * Jump height is analogue — releasing early cuts the arc — so an AI that
+ * emits `jump` on scattered single frames can only ever produce a minimum-height
+ * hop and can never reach the upper ledges. Holding commits to a real jump.
+ */
+const JUMP_HOLD_MS = 240;
+/**
+ * Forced release afterwards. `tickPlayer` only starts a jump on a press *edge*,
+ * so without a gap the AI would hold the button forever and never jump again.
+ */
+const JUMP_RELEASE_MS = 60;
+
+/**
+ * Named export matters: this class is imported by the server too, and a
+ * default export resolves to the module namespace object rather than the class
+ * under the server's ESM/CJS interop. Everything shared with `server/` must be
+ * a named export.
+ */
+export class EnemyBrain {
 	private config: AIConfig;
 	private state: AIState = AIState.IDLE;
 	private decisionCooldown = 0;
@@ -43,7 +63,8 @@ export default class EnemyBrain {
 	private stuckCheckX = 0;
 	private stuckCheckY = 0;
 	private stuckCount = 0;
-	private evadeTimer = 0;
+	private jumpHoldTimer = 0;
+	private jumpReleaseTimer = 0;
 
 	constructor(config: AIConfig) {
 		this.config = config;
@@ -65,14 +86,36 @@ export default class EnemyBrain {
 		this.stuckCheckX = 0;
 		this.stuckCheckY = 0;
 		this.stuckCount = 0;
-		this.evadeTimer = 0;
+		this.jumpHoldTimer = 0;
+		this.jumpReleaseTimer = 0;
 	}
 
 	getCurrentState(): AIState {
 		return this.state;
 	}
 
-	decide(input: AIInput, time: number, delta: number): AIOutput {
+	/**
+	 * Convert a per-frame "I want to jump" impulse into a held-then-released
+	 * button press that the physics can read as a real jump.
+	 */
+	private resolveJump(wantsJump: boolean, delta: number): boolean {
+		if (this.jumpHoldTimer > 0) {
+			this.jumpHoldTimer -= delta;
+			if (this.jumpHoldTimer <= 0) this.jumpReleaseTimer = JUMP_RELEASE_MS;
+			return true;
+		}
+		if (this.jumpReleaseTimer > 0) {
+			this.jumpReleaseTimer -= delta;
+			return false;
+		}
+		if (wantsJump) {
+			this.jumpHoldTimer = JUMP_HOLD_MS;
+			return true;
+		}
+		return false;
+	}
+
+	decide(input: AIInput, _time: number, delta: number): AIOutput {
 		this.decisionCooldown -= delta;
 		this.stateTimer += delta;
 		this.trackStuck(input, delta);
@@ -114,7 +157,9 @@ export default class EnemyBrain {
 			this.stuckCount = 0;
 		}
 
-		return this.executeState(input, isLowHP, isEnemyLow);
+		const output = this.executeState(input, isLowHP, isEnemyLow);
+		output.jump = this.resolveJump(output.jump, delta);
+		return output;
 	}
 
 	private trackStuck(input: AIInput, delta: number) {
@@ -294,6 +339,17 @@ export default class EnemyBrain {
 				break;
 		}
 
+		// Walking into a wall gets you nowhere: climb it. This is what turns an
+		// obstacle into a route instead of somewhere the AI grinds to a halt.
+		const blockedAhead =
+			(output.moveRight && input.touchingRight) ||
+			(output.moveLeft && input.touchingLeft);
+		if (blockedAhead && (input.touchingDown || this.jumpHoldTimer > 0)) {
+			output.jump = true;
+		}
+
 		return output;
 	}
 }
+
+export default EnemyBrain;
