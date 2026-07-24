@@ -1,4 +1,6 @@
 import type { ServerChannel } from "@geckos.io/server";
+import type { AIConfig } from "../src/game/characters/AIConfig.js";
+import { EnemyBrain } from "../src/game/characters/EnemyBrain.js";
 import {
 	BULLET_DAMAGE,
 	BULLET_SPEED,
@@ -7,6 +9,7 @@ import {
 	bulletHitsPlayer,
 	canFire,
 	createPlayerState,
+	hasLineOfSight,
 	isBulletOutOfBounds,
 	PLAYER_HEIGHT,
 	PLAYER_WIDTH,
@@ -23,7 +26,10 @@ export interface PlayerInput extends PlayerIntent {
 }
 
 interface ConnectedPlayer {
-	channel: ServerChannel;
+	/** null for a server-hosted bot, which has no network channel. */
+	channel: ServerChannel | null;
+	/** Set only for bots: the fighter logic driving this player. */
+	brain: EnemyBrain | null;
 	/** Full simulation state — never rebuilt per tick, or wall state is lost. */
 	state: PlayerPosition;
 	hp: number;
@@ -70,6 +76,17 @@ const RESET_DELAY_MS = 1500;
  */
 const MAX_QUEUED_INPUTS = 10;
 
+/** Randomised bot personality, so a solo match is not the same fight every time. */
+function botConfig(): AIConfig {
+	return {
+		skillLevel: 4 + Math.floor(Math.random() * 4),
+		reactionTime: 150 + Math.floor(Math.random() * 250),
+		accuracy: 0.45 + Math.random() * 0.4,
+		aggressiveness: 0.35 + Math.random() * 0.45,
+		dodgeChance: 0.2 + Math.random() * 0.4,
+	};
+}
+
 /**
  * How long a player may be frozen waiting for input before the server gives up
  * and repeats their last intent.
@@ -113,6 +130,11 @@ export class GameRoom {
 		return this.channelIds.length;
 	}
 
+	/** Humans only — a room of nothing but bots should be reaped. */
+	get humanCount(): number {
+		return [...this.players.values()].filter((p) => p.channel !== null).length;
+	}
+
 	get isFull(): boolean {
 		return this.channelIds.length >= MAX_PLAYERS;
 	}
@@ -125,6 +147,7 @@ export class GameRoom {
 		this.channelIds.push(id);
 		this.players.set(id, {
 			channel,
+			brain: null,
 			state: createPlayerState(isFirst ? START_X_A : START_X_B, START_Y),
 			hp: 100,
 			facingDir: isFirst ? 1 : -1,
@@ -158,9 +181,82 @@ export class GameRoom {
 		return true;
 	}
 
+	/**
+	 * Fill a slot with a server-hosted bot.
+	 *
+	 * The bot is an ordinary player from the simulation's point of view — same
+	 * state, same tickPlayer, same bullets. Only its input source differs, so a
+	 * solo match exercises the entire netcode path instead of bypassing it.
+	 */
+	addBot(): boolean {
+		if (this.isFull) return false;
+
+		const isFirst = this.channelIds.length === 0;
+		const id = `bot-${this.id}-${this.channelIds.length}`;
+		this.channelIds.push(id);
+		this.players.set(id, {
+			channel: null,
+			brain: new EnemyBrain(botConfig()),
+			state: createPlayerState(isFirst ? START_X_A : START_X_B, START_Y),
+			hp: 100,
+			facingDir: isFirst ? 1 : -1,
+			lastAttackTime: 0,
+			queue: [],
+			lastInput: idleInput(),
+			lastSeq: 0,
+			starvedTicks: 0,
+		});
+		return true;
+	}
+
+	get hasBot(): boolean {
+		return [...this.players.values()].some((p) => p.brain !== null);
+	}
+
+	/** Ask the bot's brain what it wants to do this tick. */
+	private botInput(bot: ConnectedPlayer, dtMs: number, now: number): PlayerInput {
+		const foe = [...this.players.values()].find((p) => p !== bot);
+		if (!foe || !bot.brain) return idleInput();
+
+		const dx = foe.state.x - bot.state.x;
+		const dy = foe.state.y - bot.state.y;
+		const out = bot.brain.decide(
+			{
+				playerX: foe.state.x,
+				playerY: foe.state.y,
+				selfX: bot.state.x,
+				selfY: bot.state.y,
+				distanceToPlayer: Math.hypot(dx, dy),
+				playerFacingDirection: foe.facingDir,
+				touchingDown: bot.state.grounded,
+				touchingLeft: bot.state.wallTouch === "left",
+				touchingRight: bot.state.wallTouch === "right",
+				hasLineOfSight: hasLineOfSight(
+					bot.state.x,
+					bot.state.y,
+					foe.state.x,
+					foe.state.y,
+				),
+				selfHP: bot.hp,
+				enemyHP: foe.hp,
+			},
+			now,
+			dtMs,
+		);
+
+		return {
+			seq: 0,
+			left: out.moveLeft,
+			right: out.moveRight,
+			up: out.jump,
+			attack: out.attack,
+			aimAngle: out.aimAngle,
+		};
+	}
+
 	private removePlayer(id: string) {
 		const player = this.players.get(id);
-		player?.channel.leave();
+		player?.channel?.leave();
 		this.players.delete(id);
 		this.channelIds = this.channelIds.filter((c) => c !== id);
 	}
@@ -239,7 +335,9 @@ export class GameRoom {
 
 	private fixedTick(dt: number, now: number) {
 		for (const [id, player] of this.players) {
-			const input = this.consumeInput(player);
+			const input = player.brain
+				? this.botInput(player, dt * 1000, now)
+				: this.consumeInput(player);
 			if (!input) continue;
 
 			player.state = tickPlayer(player.state, input, dt);
@@ -305,6 +403,7 @@ export class GameRoom {
 			p.facingDir = i === 0 ? 1 : -1;
 			p.lastAttackTime = 0;
 			p.queue.length = 0;
+			if (p.brain) p.brain = new EnemyBrain(botConfig());
 		});
 		this.bullets = [];
 		this.resetTimer = -1;
@@ -316,14 +415,14 @@ export class GameRoom {
 
 	broadcast(event: string, data: object) {
 		for (const player of this.players.values()) {
-			player.channel.emit(event, data);
+			player.channel?.emit(event, data);
 		}
 	}
 
 	private broadcastState() {
 		const snap = this.snapshot;
 		for (const player of this.players.values()) {
-			player.channel.emit("state", snap);
+			player.channel?.emit("state", snap);
 		}
 	}
 }

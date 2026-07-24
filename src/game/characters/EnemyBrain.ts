@@ -48,7 +48,13 @@ const JUMP_HOLD_MS = 240;
  */
 const JUMP_RELEASE_MS = 60;
 
-export default class EnemyBrain {
+/**
+ * Named export matters: this class is imported by the server too, and a
+ * default export resolves to the module namespace object rather than the class
+ * under the server's ESM/CJS interop. Everything shared with `server/` must be
+ * a named export.
+ */
+export class EnemyBrain {
 	private config: AIConfig;
 	private state: AIState = AIState.IDLE;
 	private decisionCooldown = 0;
@@ -57,7 +63,6 @@ export default class EnemyBrain {
 	private stuckCheckX = 0;
 	private stuckCheckY = 0;
 	private stuckCount = 0;
-	private evadeTimer = 0;
 	private jumpHoldTimer = 0;
 	private jumpReleaseTimer = 0;
 
@@ -81,7 +86,6 @@ export default class EnemyBrain {
 		this.stuckCheckX = 0;
 		this.stuckCheckY = 0;
 		this.stuckCount = 0;
-		this.evadeTimer = 0;
 		this.jumpHoldTimer = 0;
 		this.jumpReleaseTimer = 0;
 	}
@@ -347,3 +351,5 @@ export default class EnemyBrain {
 		return output;
 	}
 }
+
+export default EnemyBrain;

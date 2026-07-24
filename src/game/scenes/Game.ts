@@ -62,8 +62,15 @@ export default class Game extends Phaser.Scene {
 	private playerBrain?: EnemyBrain;
 	private resetScheduled = false;
 
-	private onlineMode = false;
+	/**
+	 * The game is online-first: every match runs through the authoritative
+	 * server, including single-player. Playing it is dogfooding the netcode.
+	 */
+	private onlineMode = true;
+	/** The local fighter is AI-driven (`?ai=true`), online or not. */
 	private onlineAIMode = false;
+	/** Solo: the server fills the other slot with a bot instead of a human. */
+	private soloMatch = true;
 	private online?: OnlineSession;
 
 	private physicsAccumulator = 0;
@@ -113,14 +120,17 @@ export default class Game extends Phaser.Scene {
 		EventBus.emit("current-scene-ready", this);
 
 		const params = new URLSearchParams(window.location.search);
-		this.onlineMode = params.get("online") === "true";
 		this.onlineAIMode = params.get("ai") === "true";
+		// `?online=true` asks for a human opponent; otherwise the server supplies
+		// a bot. Either way the match is served, predicted and reconciled.
+		this.soloMatch = params.get("online") !== "true";
+		// `?offline=true` is an escape hatch for working without a game server.
+		// It is not the supported path — it bypasses the netcode entirely.
+		this.onlineMode = params.get("offline") !== "true";
+
 		if (this.onlineMode) {
 			this.initOnlineMode();
 		} else if (this.onlineAIMode) {
-			// `?ai=true` means the same thing offline as online: the local fighter
-			// is AI-driven. Without this, offline AI-vs-AI was only reachable by
-			// pressing P, so it could not be linked to or launched by a harness.
 			this.toggleAIVsAI();
 		}
 	}
@@ -154,12 +164,20 @@ export default class Game extends Phaser.Scene {
 			aiVsAIMode: this.aiVsAIMode,
 			onlineMode: this.onlineMode,
 			onlineAIMode: this.onlineAIMode,
+			soloMatch: this.soloMatch,
 			playerHP: this.player?.hp,
 			enemyHP: this.onlineMode ? this.online?.remoteHp : this.aiEnemy?.hp,
 			playerState: this.playerBrain?.getCurrentState(),
 			enemyState: this.aiEnemy?.getCurrentAIState(),
 			playerPhys: this.playerPhys,
 			enemyPhys: this.enemyPhys,
+			/** Opponent position in body space — server-driven when online. */
+			remote: this.onlineMode
+				? this.online?.remotePosition
+				: { x: this.enemyPhys.x, y: this.enemyPhys.y },
+			bulletCount: this.onlineMode
+				? (this.online?.bullets.length ?? 0)
+				: this.bullets.count,
 		});
 		win.__physicsDiagnostic = (durationMs = 5000) =>
 			this.diagnostics.start(durationMs);
@@ -189,7 +207,7 @@ export default class Game extends Phaser.Scene {
 			},
 			onTeleport: () => this.diagnostics.markTeleport(),
 		});
-		this.online.connect();
+		this.online.connect(this.soloMatch);
 
 		// The AI enemy is server-driven in online mode.
 		this.aiEnemy?.setVisible(false);
@@ -223,6 +241,9 @@ export default class Game extends Phaser.Scene {
 				enemy: this.onlineMode
 					? (this.online?.remotePosition ?? null)
 					: { x: this.enemyPhys.x, y: this.enemyPhys.y },
+				bullets: this.onlineMode
+					? [...(this.online?.bullets ?? [])]
+					: this.bullets.snapshot(),
 				cameraX: this.cameras.main.scrollX,
 				cameraY: this.cameras.main.scrollY,
 			});

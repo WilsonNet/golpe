@@ -5,10 +5,11 @@ Every way to launch Vento Áureo, and what each one is for.
 - [Prerequisites](#prerequisites)
 - [Starting the dev servers](#starting-the-dev-servers)
 - [Game modes](#game-modes)
-  - [Player vs AI](#1-player-vs-ai-offline)
-  - [AI vs AI](#2-ai-vs-ai-offline)
-  - [Player vs Player](#3-player-vs-player-online)
-  - [AI vs AI online](#4-ai-vs-ai-online)
+  - [Player vs AI (solo)](#1-player-vs-ai-solo)
+  - [AI vs AI](#2-ai-vs-ai)
+  - [Player vs Player](#3-player-vs-player)
+  - [AI vs AI across two clients](#4-ai-vs-ai-across-two-clients)
+  - [Offline escape hatch](#5-offline-escape-hatch)
 - [Controls](#controls)
 - [URL parameters](#url-parameters)
 - [Debug console hooks](#debug-console-hooks)
@@ -28,7 +29,7 @@ Node.js is required. Two ports are used:
 | Port | Process | Needed for |
 |---|---|---|
 | 8080 | Vite dev server | everything |
-| 9208 | Geckos.io game server | online modes only |
+| 9208 | Geckos.io game server | every mode except `?offline=true` |
 
 ---
 
@@ -54,7 +55,7 @@ for the full model and the socket-API gotchas.
 
 ```bash
 npm run dev:all      # both servers, interleaved in one terminal via concurrently
-npm run dev          # Vite only  — enough for the offline modes
+npm run dev          # Vite only  — enough for ?offline=true
 npm run dev:server   # game server only
 ```
 
@@ -70,73 +71,86 @@ Restart the game server after editing anything in `server/` or
 
 ## Game modes
 
-All four are the same build, selected by URL.
+**This game is online first.** Every mode below except the escape hatch runs
+through the authoritative server — including single player, where the server
+fills the other slot with a bot. Playing the game is dogfooding the netcode.
 
-| Mode | URL | Servers needed |
+All are the same build, selected by URL. The game server on :9208 is required
+for everything except `?offline=true`.
+
+| Mode | URL | Tabs |
 |---|---|---|
-| Player vs AI | `http://localhost:8080/` | Vite |
-| AI vs AI | `http://localhost:8080/?ai=true` | Vite |
-| Player vs Player | `http://localhost:8080/?online=true` ×2 tabs | Vite + game server |
-| AI vs AI (online) | `http://localhost:8080/?online=true&ai=true` ×2 tabs | Vite + game server |
+| Player vs AI (solo) | `http://localhost:8080/` | 1 |
+| AI vs AI | `http://localhost:8080/?ai=true` | 1 |
+| Player vs Player | `http://localhost:8080/?online=true` | 2 |
+| AI vs AI, two clients | `http://localhost:8080/?online=true&ai=true` | 2 |
+| Offline escape hatch | `http://localhost:8080/?offline=true` | 1 |
 
-### 1. Player vs AI (offline)
+`?ai=true` makes *your* fighter AI-driven. `?online=true` asks for a human
+opponent; without it the server supplies a bot.
+
+### 1. Player vs AI (solo)
 
 ```
 http://localhost:8080/
 ```
 
-The default. You control the left fighter with the keyboard and mouse; the right
-fighter is driven by `EnemyBrain`. Everything is simulated locally — no game
-server required.
+The default. You control the left fighter; the right one is a **server-hosted
+bot** running the same `EnemyBrain`. This is a real online match — same rooms,
+same authoritative tick, same prediction and reconciliation as PvP — so playing
+solo exercises the whole netcode path.
 
-### 2. AI vs AI (offline)
+### 2. AI vs AI
 
 ```
 http://localhost:8080/?ai=true
 ```
 
-Both fighters are driven by independent `EnemyBrain` instances with randomised
-configs, so each round plays differently. Press **P** at any time to toggle the
-mode on or off, or call `window.__toggleAIVsAI()`.
+Your fighter is AI-driven and the opponent is a server bot, so you get a full
+AI vs AI match **in a single tab**. Both brains use randomised configs, so each
+round plays differently. Press **P** to toggle your own fighter's AI, or call
+`window.__toggleAIVsAI()`.
 
-On a KO both fighters reset to 100 HP after 2 seconds. The console logs
-`[FIGHT]` for hits and KOs and `=== FIGHT RESET ===` between rounds.
-
-This is the mode the physics harness drives, because it exercises the arena
-without a human at the keyboard.
-
-### 3. Player vs Player (online)
+### 3. Player vs Player
 
 ```
 http://localhost:8080/?online=true      # open in two tabs or two browsers
 ```
 
-Needs the game server on :9208. The first two clients to connect are matched
-into a room; you'll see `[ONLINE] Matched in room room-N!` in the console and
-the "Connecting..." overlay clears once both are present.
+Waits for a second human rather than spawning a bot. You'll see
+`[ONLINE] Matched in room room-N!` and the "Connecting..." overlay clears once
+both are present.
 
-The server is authoritative. Your own fighter is predicted locally and
-reconciled by rewind-and-replay, so it responds instantly; the opponent is
-interpolated 150ms in the past for smoothness. Measured client/server
-disagreement is 0.00px.
+Your fighter is predicted locally and reconciled by rewind-and-replay, so it
+responds instantly; the opponent is interpolated 150ms in the past for
+smoothness. Measured client/server disagreement is 0.00px. At 0 HP the server
+waits 1.5s, resets both fighters and broadcasts `round-reset`.
 
-At 0 HP the server waits 1.5s, resets both fighters and broadcasts
-`round-reset`.
+> Local same-keyboard hotseat is **not** supported — PvP is online only. Two
+> tabs on one machine is fine for testing.
 
-> Local same-keyboard hotseat is **not** supported — player vs player is online
-> only. Two tabs on one machine works fine for testing.
-
-### 4. AI vs AI (online)
+### 4. AI vs AI across two clients
 
 ```
 http://localhost:8080/?online=true&ai=true    # two tabs
 ```
 
-Same netcode as PvP, but each client's fighter is AI-driven. This is how the
-online half of the feedback loop runs unattended.
+Two real clients, each with an AI fighter. **This is the canonical mode for the
+physics harness** — it exercises prediction, reconciliation, interpolation and
+projectile rendering across two connections at once.
 
-Online damage is applied server-side and is **not** logged as `[FIGHT]` — read
-HP from `window.__gameState()` to confirm a fight is really happening.
+### 5. Offline escape hatch
+
+```
+http://localhost:8080/?offline=true&ai=true
+```
+
+Bypasses the server entirely, for working without one. **Not a supported mode**:
+it skips prediction, reconciliation and server-owned bullets, so a clean result
+here says nothing about the netcode.
+
+> Online damage is applied server-side and is **not** logged as `[FIGHT]` — read
+> HP from `window.__gameState()` to confirm a fight is really happening.
 
 ---
 
@@ -164,8 +178,10 @@ climbed with chained wall jumps.
 
 | Parameter | Effect |
 |---|---|
-| `?online=true` | Connect to the game server and use the authoritative netcode |
-| `?ai=true` | Make the local fighter AI-driven (works online **and** offline) |
+| *(none)* | Solo match against a server-hosted bot |
+| `?online=true` | Wait for a human opponent instead of a bot |
+| `?ai=true` | Make **your** fighter AI-driven |
+| `?offline=true` | Escape hatch: no server, no netcode (unsupported) |
 
 ---
 
@@ -187,15 +203,20 @@ The feedback-loop harness drives real browsers, handles two-tab matchmaking and
 prints a digest:
 
 ```bash
+node scripts/diagnose.mjs --mode=online --runs=3  # the canonical run
 npm run diagnose                                  # offline + online, 8s each
-node scripts/diagnose.mjs --mode=online --runs=3  # stability check
+node scripts/verify-modes.mjs                     # smoke-check every launch mode
 node scripts/probe-online.mjs                     # raw console from one online client
 ```
+
+Diagnose **online**. An offline PASS skips prediction, reconciliation and
+server-owned bullets, which is where the bugs have been.
 
 A run is only healthy when `verdict` is `PASS` **and**
 `collisionSummary.penetrationFrames` is 0. Also glance at `movementSummary` and
 `playerMovement.xRange/yRange` — a fighter wedged in a corner is perfectly
-jitter-free. See [the feedback-loop skill](../.agents/skills/feedback-loop/SKILL.md).
+jitter-free — and `bulletSummary`, where `teleportFrames`/`frozenFrames` must be
+0 and `maxStepRatio` should sit near 1.0. See [the feedback-loop skill](../.agents/skills/feedback-loop/SKILL.md).
 
 Unit tests are the faster inner loop for anything about collision, jump feel or
 arena layout:

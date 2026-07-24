@@ -4,6 +4,10 @@ A 2D arena fighter built on Phaser 4 + React, with a custom deterministic AABB
 physics simulation shared verbatim between the client and an authoritative
 Geckos.io server.
 
+**Online first:** every match runs through the server, including single player —
+the server fills the other slot with a bot. Playing the game is dogfooding the
+netcode.
+
 ## Documentation
 
 | Doc | What's in it |
@@ -20,11 +24,12 @@ Geckos.io server.
 npm install
 npm run dev:herdr      # or: npm run dev:all
 
-# then open one of:
-#   http://localhost:8080/                        player vs AI
-#   http://localhost:8080/?ai=true                AI vs AI
+# then open one of (all served by the authoritative server):
+#   http://localhost:8080/                        solo vs server bot
+#   http://localhost:8080/?ai=true                AI vs AI, one tab
 #   http://localhost:8080/?online=true            player vs player (two tabs)
-#   http://localhost:8080/?online=true&ai=true    AI vs AI online (two tabs)
+#   http://localhost:8080/?online=true&ai=true    AI vs AI, two clients
+#   http://localhost:8080/?offline=true           escape hatch, no server
 ```
 
 Verify a change with `npx tsc --noEmit`, `npx vitest run`, `npx vite build`, and

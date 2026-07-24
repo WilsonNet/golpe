@@ -1,4 +1,5 @@
 import type Phaser from "phaser";
+import type { BulletSample } from "../diagnostics/PhysicsDiagnostics";
 import { SpritePool } from "../render/SpritePool";
 import {
 	BULLET_SPEED,
@@ -43,6 +44,11 @@ export class BulletSystem {
 
 	get count(): number {
 		return this.bullets.length;
+	}
+
+	/** Projectiles as drawn, keyed by stable id, for the diagnostic. */
+	snapshot(): BulletSample[] {
+		return this.bullets.map((b) => ({ id: b.id, x: b.x, y: b.y }));
 	}
 
 	fire(x: number, y: number, angle: number, owner: BulletOwner) {

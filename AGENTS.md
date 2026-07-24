@@ -20,9 +20,15 @@ Key one-shot workflow:
 5. Run 3 consecutive tests for stability (`--runs=3`)
 6. Run the knowledge-sharpener skill to fold findings back into AGENTS.md
 
-**If the loop cannot measure the thing you want to fix, extend the diagnostic first.**
-Jitter alone could not see moon-gravity jumps, players walking through walls, or an
-AI wedged in a corner — `collisionSummary` and `movementSummary` exist because of that.
+**If there is no instrumentation to measure it, build the instrumentation.**
+This is the first step of the loop, not an optional one. Jitter alone could not see
+moon-gravity jumps, players walking through walls, an AI wedged in a corner, or
+stuttering projectiles — `collisionSummary`, `movementSummary` and `bulletSummary`
+each exist because a bug was invisible until the measurement was built. A fix
+applied without a metric that moves is a guess.
+
+**Test online, in AI vs AI.** `node scripts/diagnose.mjs --mode=online` is the
+canonical run. See "Online first" below.
 
 ## Tech Stack
 - Phaser 4.1.0 (rendering, input, scenes)
@@ -57,6 +63,12 @@ These are the rules that were violated by real bugs. Breaking one reintroduces a
 - **Bodies are top-left, sprites are centre-origin.** Always position sprites via `syncSpriteToBody`. Assigning body coords straight to a sprite draws it half a body off.
 - **One source of bullets.** The scene's `BulletSystem` (offline) or the server (online). `Player`/`AIEnemy` must not spawn their own ranged sprites — those were never simulated and froze on screen.
 - **Never simulate a tick the client did not send.** See "Netcode" below.
+- **Named exports for anything `server/` imports.** A default export resolves to
+  the *module namespace object* under the server's ESM/CJS interop — `typeof
+  EnemyBrain` was `object` with keys `AIState,default`, so `new EnemyBrain()`
+  threw "not a constructor" inside a native geckos callback and killed the
+  process. `Physics.ts` only ever worked because it uses named exports.
+- **Projectiles are dead-reckoned, never interpolated.** See "Projectiles" below.
 - **No arena gap narrower than `PLAYER_WIDTH`.** Enforced by a test via `narrowGaps()`; a narrow gap under an overhang pins the AI in place.
 
 ## Physics Model
@@ -76,6 +88,26 @@ The curve is designed jump-first: pick the height a jump must clear, then solve 
 - **Collision**: `moveAndCollide` resolves X then Y with sub-stepping capped at 12px, so nothing tunnels even at dash speed (1000 px/s) or 20fps.
 - **Jump is edge-triggered.** `tickPlayer` starts a jump only on a press edge (`up && !jumpHeld`). Anything driving it must release between jumps — that is why `EnemyBrain` holds jump for 240ms then forces a 60ms release. Emitting `jump` on scattered single frames only ever produces a minimum-height hop.
 
+## Projectiles
+
+A bullet flies at constant velocity, with no gravity and no collision response,
+so its position is a closed-form function of time. That makes every technique
+used for players wrong for bullets.
+
+- **Dead-reckon, never interpolate.** Interpolation renders a bullet 150ms in the
+  past — latency added to the thing that most needs to feel sharp.
+- **Anchor once, then fly off the local clock.** Re-deriving position from the
+  newest snapshot each frame looks right but is a sawtooth: every arriving
+  snapshot moves the extrapolation base, giving a jump forward every 50ms and a
+  stall between (measured: `maxStepRatio` 3.79, 5 jumps + 6 stalls per 8s).
+- **Key sprites by bullet id.** The server `splice`s dead bullets, so a sprite
+  indexed by array position jumps to an entirely different bullet mid-flight.
+- **Occlusion is permanent.** When an extrapolated bullet reaches geometry the
+  server has already destroyed it; retire the sprite for good. Letting it
+  reappear past the platform made bullets blink and register as jumps.
+- Verified: `teleportFrames` 0, `frozenFrames` 0, `maxPathDeviationPx` 0,
+  `maxStepRatio` ~1.2 (1.0 ideal), `avgStepCv` ~0.05.
+
 ## Netcode
 - **Input sequencing.** Every fixed step the client sends `{seq, ...intent}`. The server echoes `lastSeq` with the full `PlayerPosition`.
 - **Reconciliation is rewind + replay**, not a blend. `PredictedPlayer.reconcile` drops acknowledged inputs, rewinds to the authoritative state, and replays the rest. Because the sim is deterministic, a correct prediction replays to exactly where it already was — measured error is **0.00px**. The old 15% blind lerp produced a permanent ~14px standing error.
@@ -84,6 +116,27 @@ The curve is designed jump-first: pick the height a jump must clear, then solve 
 - **Remote entities are interpolated, never predicted.** 150ms delay (3 snapshot intervals at 20Hz); 2 intervals emptied the buffer on a single dropped datagram and the remote teleported ~100px.
 - **Respawns are announced, not inferred.** The server broadcasts `round-reset`; the client drops all interpolation history. Blending across a respawn draws the remote sliding through the arena.
 - Interpolated positions are depenetrated with `resolveOverlap` before drawing — a straight line between two legal snapshots can still clip a corner.
+
+## Online First
+
+Every match runs through the authoritative server, including single player.
+Playing the game *is* dogfooding the netcode — there is no second, easier code
+path that only single-player uses, so netcode bugs surface immediately instead of
+waiting for someone to open two tabs.
+
+- **Solo is a real online match.** With no `?online=true`, the client sends
+  `join {solo:true}` and the server fills the other slot with a **server-hosted
+  bot** driven by the same `EnemyBrain`. Same rooms, same authoritative tick,
+  same prediction and reconciliation as PvP.
+- **The server places nobody until it hears `join`** (1.5s grace, then it assumes
+  human matchmaking), because placement depends on which kind of match is wanted.
+- **A bot is an ordinary player** to the simulation: same `PlayerPosition`, same
+  `tickPlayer`, same bullets. Only its input source differs — it never starves,
+  so `consumeInput` is bypassed for bots.
+- **`?offline=true` is an escape hatch**, not a supported mode. It bypasses the
+  netcode entirely; use it only when no server is available.
+- **Always diagnose online.** An offline PASS says nothing about prediction,
+  reconciliation or projectile rendering, which is where the real bugs live.
 
 ## Important Rules
 - Input handling lives in the `Game.ts` scene, not `Player.ts` (avoids duplicate listeners).
@@ -97,10 +150,11 @@ The curve is designed jump-first: pick the height a jump must clear, then solve 
   also works. Do not background them with `&`: a detached server is invisible when it
   dies, and `pgrep -f "tsx server/index.ts"` matches its own shell command line.
   Read output with `npm run dev:herdr:logs`. See the `herdr-dev-workspace` skill.
-- Four run modes, all one build (see `docs/running-the-game.md`):
-  `/` player vs AI · `/?ai=true` AI vs AI · `/?online=true` PvP (two tabs) ·
-  `/?online=true&ai=true` AI vs AI online. `?ai=true` means the same thing on both
-  sides of the online split: the local fighter is AI-driven.
+- Run modes, all one build and all online unless stated (see `docs/running-the-game.md`):
+  `/` solo vs server bot · `/?ai=true` AI vs AI in **one tab** · `/?online=true` PvP
+  (two tabs) · `/?online=true&ai=true` AI vs AI across two tabs (the harness path) ·
+  `/?offline=true` escape hatch, no server. `?ai=true` makes the *local* fighter
+  AI-driven; the server decides what fills the other slot.
 - Online match end: at 0 HP the server waits 1.5s, resets both fighters, and broadcasts `round-reset`.
 - Wall jump: press jump while airborne with `wallTouch !== "none"`. Ground jump wins when grounded. World edges are wall-jumpable; chained wall jumps can climb a flat wall.
 
@@ -118,6 +172,7 @@ npm run dev &                 # :8080
 node scripts/diagnose.mjs                       # offline + online, 8s each
 node scripts/diagnose.mjs --mode=online --runs=3
 node scripts/probe-online.mjs                   # dump one online client's console
+node scripts/verify-modes.mjs                   # smoke-check every launch mode
 ```
 
 ### Reading the report
@@ -129,11 +184,18 @@ node scripts/probe-online.mjs                   # dump one online client's conso
 | `collisionSummary.penetrationFrames` | frames a body was inside solid geometry — **must be 0** |
 | `movementSummary` | `jumps`, `wallJumps`, `pctAirborne`, `peakRisePx` — is the fighter using the arena? |
 | `reconciliationSummary.avgErrorPx` | client/server disagreement; **0.00 is achievable and expected** |
+| `bulletSummary.teleportFrames` / `frozenFrames` | projectile jumps and stalls — **must be 0** |
+| `bulletSummary.maxPathDeviationPx` | bend in a straight path; >0 means a sprite was reassigned |
+| `bulletSummary.maxStepRatio` / `avgStepCv` | step vs expected (1.0 ideal) and evenness (0 ideal) |
 | `reconciliationSummary.visibleCorrections` | corrections > 1px; only respawns should appear |
 | `playerMovement.xRange/yRange` | a tiny range means the AI is stuck, even when the verdict says PASS |
 
-Jitter thresholds: `player_x` 35px, `player_y` 25px, camera 15px. Announced
-teleports suppress checking for 4 frames.
+Jitter thresholds are **derived from the physics constants and the frame's own
+dt** (`speed x dt x 1.6`, floored at 35/25/15px), not hardcoded. The old fixed
+25px `player_y` was calibrated against `GRAVITY = 300`; once `MAX_FALL_SPEED`
+became 950 a single 30fps frame legitimately moved 31.7px and the metric started
+reporting correct physics as a defect. Announced teleports suppress checking for
+4 frames.
 
 ### Traps that produce false results
 - **A dead game server reads as PASS.** No snapshots means no reconciliation and
@@ -159,7 +221,7 @@ Keep this list in sync — the knowledge-sharpener skill verifies it.
 
 ### Project
 
-- **`feedback-loop`** — Diagnosing physics jitter, network desync, or gameplay bugs in Vento Ãureo
+- **`feedback-loop`** — Diagnosing physics jitter, network desync, or gameplay bugs in Vento Áureo
 - **`herdr-dev-workspace`** — Starting, inspecting or stopping the dev servers (Vite :8080, Geckos :9208) in visible herdr panes instead of background processes.
 - **`knowledge-sharpener`** — Run at the END of a substantial session: fold what was learned into AGENTS.md and the skills, and verify the skill index.
 

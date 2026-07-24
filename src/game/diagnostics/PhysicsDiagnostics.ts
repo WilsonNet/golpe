@@ -10,11 +10,45 @@
  */
 
 import { penetrationDepth } from "../simulation/Arena";
-import type { PlayerPosition } from "../simulation/Physics";
+import {
+	BULLET_SPEED,
+	MAX_FALL_SPEED,
+	type PlayerPosition,
+} from "../simulation/Physics";
 
+/**
+ * Jitter thresholds are derived from the simulation constants and the *actual*
+ * frame dt, not hardcoded.
+ *
+ * Fixed numbers rot: 25px for player_y was calibrated against GRAVITY = 300 and
+ * kept flagging perfectly legal falls once MAX_FALL_SPEED became 950 (a single
+ * 30fps frame legitimately moves 31.7px). A threshold that reports correct
+ * physics as a defect trains you to ignore the metric.
+ *
+ * The question the metric should ask is "did this move further than physics
+ * permits in this much time", so the bound is speed x dt with headroom.
+ */
+const JITTER_SAFETY = 1.6;
+/** Floors, so a very short frame cannot produce a hair-trigger threshold. */
 export const DIAG_JITTER_X = 35;
 export const DIAG_JITTER_Y = 25;
 export const DIAG_JITTER_CAM = 15;
+/** Fastest an actor can move horizontally: a dash. */
+const MAX_DASH_SPEED = 1000;
+
+function jitterLimitX(dtMs: number): number {
+	return Math.max(
+		DIAG_JITTER_X,
+		MAX_DASH_SPEED * (dtMs / 1000) * JITTER_SAFETY,
+	);
+}
+
+function jitterLimitY(dtMs: number): number {
+	return Math.max(
+		DIAG_JITTER_Y,
+		MAX_FALL_SPEED * (dtMs / 1000) * JITTER_SAFETY,
+	);
+}
 
 /** Anything deeper than this is a genuine collision failure, not float noise. */
 const PENETRATION_TOLERANCE_PX = 0.5;
@@ -59,15 +93,49 @@ interface PenetrationEvent {
 	y: number;
 }
 
+/** A projectile as it is actually being drawn this frame. */
+export interface BulletSample {
+	id: number;
+	x: number;
+	y: number;
+}
+
 export interface DiagnosticSample {
 	t: number;
 	dt: number;
 	physicsSteps: number;
 	player: PlayerPosition;
 	enemy: { x: number; y: number } | null;
+	/** Rendered projectiles, keyed by stable id. */
+	bullets?: BulletSample[];
 	cameraX: number;
 	cameraY: number;
 }
+
+interface BulletTrack {
+	id: number;
+	points: { x: number; y: number; t: number }[];
+	steps: number[];
+	/** Per-frame ratio of actual step to the step physics says to expect. */
+	stepRatios: number[];
+	teleports: number;
+	frozen: number;
+}
+
+/**
+ * Projectile thresholds.
+ *
+ * Bullets travel at a constant BULLET_SPEED in a straight line with no gravity,
+ * so their motion is fully determined. Any deviation is a rendering defect, not
+ * physics: a step far from the expected one means a jump or a stall, and any
+ * bend in the path means the sprite was reassigned to a different bullet.
+ */
+const BULLET_TELEPORT_RATIO = 2.5;
+const BULLET_FROZEN_RATIO = 0.15;
+/** Max perpendicular deviation from a straight path before it counts as a bend. */
+const BULLET_PATH_TOLERANCE_PX = 2;
+/** Ignore tracks too short to say anything. */
+const BULLET_MIN_POINTS = 4;
 
 function stats(values: number[]) {
 	if (values.length === 0) return { min: 0, max: 0, avg: 0, stdDev: 0 };
@@ -99,6 +167,9 @@ export class PhysicsDiagnostics {
 	private prev = { px: 0, py: 0, ex: 0, ey: 0, cx: 0, cy: 0 };
 	private skipJitterFrames = 0;
 
+	/** Projectile tracks, keyed by bullet id. */
+	private bulletTracks = new Map<number, BulletTrack>();
+
 	/** Movement-feel counters. */
 	private jumps = 0;
 	private wallJumps = 0;
@@ -123,6 +194,7 @@ export class PhysicsDiagnostics {
 		this.jitter = [];
 		this.recon = [];
 		this.penetrations = [];
+		this.bulletTracks.clear();
 		this.skipJitterFrames = 1;
 		this.jumps = 0;
 		this.wallJumps = 0;
@@ -205,6 +277,7 @@ export class PhysicsDiagnostics {
 		}
 
 		this.trackMovement(p);
+		this.trackBullets(sample);
 
 		if (this.skipJitterFrames > 0) {
 			this.skipJitterFrames--;
@@ -212,16 +285,148 @@ export class PhysicsDiagnostics {
 			return;
 		}
 
-		this.checkJitter("player_x", frame.playerX, this.prev.px, DIAG_JITTER_X);
-		this.checkJitter("player_y", frame.playerY, this.prev.py, DIAG_JITTER_Y);
+		const limitX = jitterLimitX(sample.dt);
+		const limitY = jitterLimitY(sample.dt);
+
+		this.checkJitter("player_x", frame.playerX, this.prev.px, limitX);
+		this.checkJitter("player_y", frame.playerY, this.prev.py, limitY);
 		if (sample.enemy) {
-			this.checkJitter("enemy_x", frame.enemyX, this.prev.ex, DIAG_JITTER_X);
-			this.checkJitter("enemy_y", frame.enemyY, this.prev.ey, DIAG_JITTER_Y);
+			this.checkJitter("enemy_x", frame.enemyX, this.prev.ex, limitX);
+			this.checkJitter("enemy_y", frame.enemyY, this.prev.ey, limitY);
 		}
 		this.checkJitter("camera_x", frame.cameraX, this.prev.cx, DIAG_JITTER_CAM);
 		this.checkJitter("camera_y", frame.cameraY, this.prev.cy, DIAG_JITTER_CAM);
 
 		this.snapshotPrev(frame);
+	}
+
+	/**
+	 * Record where each projectile was drawn.
+	 *
+	 * Tracks are keyed by the bullet's own id, not by draw order — the whole
+	 * point is to catch a sprite being reassigned between bullets, which an
+	 * index-keyed view cannot see.
+	 */
+	private trackBullets(sample: DiagnosticSample) {
+		if (!sample.bullets) return;
+
+		const expectedStep = BULLET_SPEED * (sample.dt / 1000);
+
+		for (const b of sample.bullets) {
+			let track = this.bulletTracks.get(b.id);
+			if (!track) {
+				track = {
+					id: b.id,
+					points: [],
+					steps: [],
+					stepRatios: [],
+					teleports: 0,
+					frozen: 0,
+				};
+				this.bulletTracks.set(b.id, track);
+			}
+
+			const last = track.points[track.points.length - 1];
+			if (last) {
+				const step = Math.hypot(b.x - last.x, b.y - last.y);
+				track.steps.push(step);
+				if (expectedStep > 0) {
+					const ratio = step / expectedStep;
+					track.stepRatios.push(ratio);
+					if (ratio > BULLET_TELEPORT_RATIO) track.teleports++;
+					else if (ratio < BULLET_FROZEN_RATIO) track.frozen++;
+				}
+			}
+			track.points.push({ x: b.x, y: b.y, t: sample.t });
+		}
+	}
+
+	/**
+	 * Largest perpendicular distance from the straight line joining a track's
+	 * endpoints. A constant-velocity projectile should be ~0; anything larger
+	 * means the sprite was drawn somewhere it never flew.
+	 */
+	private static pathDeviation(track: BulletTrack): number {
+		const pts = track.points;
+		if (pts.length < 3) return 0;
+		const a = pts[0];
+		const b = pts[pts.length - 1];
+		const dx = b.x - a.x;
+		const dy = b.y - a.y;
+		const len = Math.hypot(dx, dy);
+		if (len < 1e-6) return 0;
+
+		let worst = 0;
+		for (let i = 1; i < pts.length - 1; i++) {
+			const p = pts[i];
+			const dist = Math.abs(dy * p.x - dx * p.y + b.x * a.y - b.y * a.x) / len;
+			worst = Math.max(worst, dist);
+		}
+		return worst;
+	}
+
+	private summariseBullets() {
+		const tracks = [...this.bulletTracks.values()].filter(
+			(t) => t.points.length >= BULLET_MIN_POINTS,
+		);
+		if (tracks.length === 0) return undefined;
+
+		let teleports = 0;
+		let frozen = 0;
+		let maxDeviation = 0;
+		let maxStepRatio = 0;
+		const cvs: number[] = [];
+		const worst: object[] = [];
+
+		for (const t of tracks) {
+			teleports += t.teleports;
+			frozen += t.frozen;
+
+			const deviation = PhysicsDiagnostics.pathDeviation(t);
+			maxDeviation = Math.max(maxDeviation, deviation);
+			maxStepRatio = Math.max(maxStepRatio, ...t.stepRatios);
+
+			// Coefficient of variation of step length: how *even* the motion is.
+			// A perfectly smooth projectile is ~0; stutter pushes it up.
+			const mean = t.steps.reduce((a, b) => a + b, 0) / (t.steps.length || 1);
+			if (mean > 0) {
+				const variance =
+					t.steps.reduce((s, v) => s + (v - mean) ** 2, 0) / t.steps.length;
+				cvs.push(Math.sqrt(variance) / mean);
+			}
+
+			if (
+				t.teleports > 0 ||
+				t.frozen > 0 ||
+				deviation > BULLET_PATH_TOLERANCE_PX
+			) {
+				worst.push({
+					id: t.id,
+					frames: t.points.length,
+					teleports: t.teleports,
+					frozen: t.frozen,
+					deviationPx: round(deviation),
+					maxStepPx: round(Math.max(...t.steps)),
+				});
+			}
+		}
+
+		const avgCv = cvs.length ? cvs.reduce((a, b) => a + b, 0) / cvs.length : 0;
+
+		return {
+			tracked: tracks.length,
+			/** Frames a projectile jumped further than physics allows. */
+			teleportFrames: teleports,
+			/** Frames a projectile stalled mid-flight. */
+			frozenFrames: frozen,
+			/** Worst bend in a supposedly straight path. */
+			maxPathDeviationPx: round(maxDeviation),
+			/** Worst single step, as a multiple of the expected step. */
+			maxStepRatio: round(maxStepRatio),
+			/** Step-length variation; 0 is perfectly even motion. */
+			avgStepCv: round(avgCv, 3),
+			offenders: worst.slice(0, 8),
+		};
 	}
 
 	private trackMovement(p: PlayerPosition) {
@@ -302,12 +507,24 @@ export class PhysicsDiagnostics {
 		const reconErrors = this.recon.map((r) => r.errorPx);
 		const totalFrames = frames.length;
 
+		const bulletSummary = this.summariseBullets();
+
 		const failures: string[] = [];
 		if (this.jitter.length > 0) {
 			failures.push(`${this.jitter.length} jitter events`);
 		}
 		if (this.penetrations.length > 0) {
 			failures.push(`${this.penetrations.length} collision penetrations`);
+		}
+		if (bulletSummary) {
+			const b = bulletSummary;
+			if (b.teleportFrames > 0)
+				failures.push(`${b.teleportFrames} projectile jumps`);
+			if (b.frozenFrames > 0)
+				failures.push(`${b.frozenFrames} projectile stalls`);
+			if (b.maxPathDeviationPx > BULLET_PATH_TOLERANCE_PX) {
+				failures.push(`projectile path bent ${b.maxPathDeviationPx}px`);
+			}
 		}
 
 		return {
@@ -354,6 +571,8 @@ export class PhysicsDiagnostics {
 				),
 			},
 			penetrationEvents: this.penetrations.slice(0, 20),
+			/** Projectile trajectory quality. Bullets are ballistic, so all zeroes is achievable. */
+			bulletSummary,
 			jitterEvents: this.jitter,
 			jitterSummary: {
 				total: this.jitter.length,

@@ -35,6 +35,8 @@ export class OnlineManager {
 		onState: OnlineStateHandler,
 		onStatus: OnlineStatusHandler,
 		onRoundReset?: OnlineResetHandler,
+		/** Solo: play this room against a server-hosted bot instead of waiting for a human. */
+		solo = false,
 	) {
 		this.onState = onState;
 		this.onStatus = onStatus;
@@ -50,7 +52,13 @@ export class OnlineManager {
 			}
 			this._connected = true;
 			this._myId = channel.id as string;
-			this.onStatus?.("Connected — waiting for opponent...");
+			// The server holds placement until it knows which kind of match we want.
+			channel.emit("join", { solo });
+			this.onStatus?.(
+				solo
+					? "Connected — starting match..."
+					: "Connected — waiting for opponent...",
+			);
 		});
 
 		this.channel.on("match", (data: unknown) => {
