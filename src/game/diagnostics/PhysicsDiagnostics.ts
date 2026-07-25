@@ -13,6 +13,11 @@ import { penetrationDepth } from "../simulation/Arena";
 import {
 	BULLET_SPEED,
 	MAX_FALL_SPEED,
+	type MeleeAction,
+	type MeleeMove,
+	type MeleeOutcome,
+	MOVES,
+	moveDuration,
 	type PlayerPosition,
 } from "../simulation/Physics";
 
@@ -106,6 +111,14 @@ export interface DiagnosticSample {
 	physicsSteps: number;
 	player: PlayerPosition;
 	enemy: { x: number; y: number } | null;
+	/**
+	 * The opponent's full simulation state, when it is known.
+	 *
+	 * Sword combat is a two-sided conversation, so watching only the local
+	 * fighter would miss half of every exchange — including every block and
+	 * parry the local player is on the wrong end of.
+	 */
+	enemyState?: PlayerPosition | null;
 	/** Rendered projectiles, keyed by stable id. */
 	bullets?: BulletSample[];
 	cameraX: number;
@@ -136,6 +149,55 @@ const BULLET_FROZEN_RATIO = 0.15;
 const BULLET_PATH_TOLERANCE_PX = 2;
 /** Ignore tracks too short to say anything. */
 const BULLET_MIN_POINTS = 4;
+
+/**
+ * Melee measurement thresholds.
+ *
+ * The frame data in `MOVES` is a contract: a move's phases last exactly as long
+ * as the table says. `FRAME_TOLERANCE_MS` is one physics tick of slack, since a
+ * move can only ever end on a tick boundary — anything beyond that is a state
+ * machine that has stopped obeying its own table.
+ */
+const FRAME_TOLERANCE_MS = 1000 / 60 + 1;
+/**
+ * The same contract, judged against a fighter seen only through 20Hz snapshots.
+ *
+ * A remote's `meleeTimer` advances in ~50ms jumps, so a move that ends normally
+ * between two snapshots is last observed up to a snapshot short of its declared
+ * total — which reads as an early cancel and, on an uncancellable move, as a
+ * frame data violation that never happened. The metric has to know the
+ * resolution of what it is watching, or it reports the network as a bug.
+ */
+const SNAPSHOT_TOLERANCE_MS = 1000 / 20 + FRAME_TOLERANCE_MS;
+/**
+ * How soon a cancelled slash must be followed by another to count as a
+ * butterfly, rather than two unrelated swings that happened to be close.
+ */
+const BUTTERFLY_WINDOW_MS = 260;
+
+/** Per-fighter melee tracking. Two of these: the local fighter and the remote. */
+interface MeleeTrack {
+	lastAction: MeleeAction;
+	lastTimer: number;
+	wasBlocking: boolean;
+	wasStunned: boolean;
+	wasMassiveReady: boolean;
+	/** ms since a slash was cancelled short, for butterfly chaining. */
+	sinceCancelMs: number;
+	chainLength: number;
+}
+
+function newMeleeTrack(): MeleeTrack {
+	return {
+		lastAction: "none",
+		lastTimer: 0,
+		wasBlocking: false,
+		wasStunned: false,
+		wasMassiveReady: false,
+		sinceCancelMs: Number.POSITIVE_INFINITY,
+		chainLength: 0,
+	};
+}
 
 function stats(values: number[]) {
 	if (values.length === 0) return { min: 0, max: 0, avg: 0, stdDev: 0 };
@@ -170,6 +232,47 @@ export class PhysicsDiagnostics {
 	/** Projectile tracks, keyed by bullet id. */
 	private bulletTracks = new Map<number, BulletTrack>();
 
+	/**
+	 * Melee counters.
+	 *
+	 * Deliberately two kinds. The `must be zero` group catches a system breaking
+	 * its own rules; the counting group catches a system that is silently never
+	 * used. Only the second kind can tell a genuinely clean run apart from a
+	 * build where nobody ever drew a sword — and every zero-target below is
+	 * trivially satisfied by the latter.
+	 */
+	private meleeTracks = new Map<string, MeleeTrack>();
+	private moveCounts: Record<MeleeMove, number> = {
+		slash: 0,
+		uppercut: 0,
+		massive: 0,
+	};
+	private outcomeCounts: Record<MeleeOutcome, number> = {
+		hit: 0,
+		backstab: 0,
+		blocked: 0,
+		parried: 0,
+	};
+	private outcomeByMove: Record<MeleeMove, Record<MeleeOutcome, number>> = {
+		slash: { hit: 0, backstab: 0, blocked: 0, parried: 0 },
+		uppercut: { hit: 0, backstab: 0, blocked: 0, parried: 0 },
+		massive: { hit: 0, backstab: 0, blocked: 0, parried: 0 },
+	};
+	/** What broke the frame data contract, so a count is actionable. */
+	private meleeViolations: object[] = [];
+	private blocksRaised = 0;
+	private cancels = 0;
+	private butterflyChains = 0;
+	private longestChain = 0;
+	private stunsTaken = 0;
+	private massivesArmed = 0;
+	/** Rule violations. Every one of these must end the run at zero. */
+	private illegalActions = 0;
+	private blockedUnblockables = 0;
+	private frameDataViolations = 0;
+	private stuckActionFrames = 0;
+	private meleeDesyncFrames = 0;
+
 	/** Movement-feel counters. */
 	private jumps = 0;
 	private wallJumps = 0;
@@ -202,6 +305,27 @@ export class PhysicsDiagnostics {
 		this.peakRise = 0;
 		this.wasGrounded = false;
 
+		this.meleeTracks.clear();
+		this.moveCounts = { slash: 0, uppercut: 0, massive: 0 };
+		this.outcomeCounts = { hit: 0, backstab: 0, blocked: 0, parried: 0 };
+		this.outcomeByMove = {
+			slash: { hit: 0, backstab: 0, blocked: 0, parried: 0 },
+			uppercut: { hit: 0, backstab: 0, blocked: 0, parried: 0 },
+			massive: { hit: 0, backstab: 0, blocked: 0, parried: 0 },
+		};
+		this.meleeViolations = [];
+		this.blocksRaised = 0;
+		this.cancels = 0;
+		this.butterflyChains = 0;
+		this.longestChain = 0;
+		this.stunsTaken = 0;
+		this.massivesArmed = 0;
+		this.illegalActions = 0;
+		this.blockedUnblockables = 0;
+		this.frameDataViolations = 0;
+		this.stuckActionFrames = 0;
+		this.meleeDesyncFrames = 0;
+
 		setTimeout(() => {
 			const report = this.finish();
 			console.log(`__DIAGNOSTIC_RESULT__${JSON.stringify(report)}__END__`);
@@ -221,13 +345,45 @@ export class PhysicsDiagnostics {
 		this.skipJitterFrames = Math.max(this.skipJitterFrames, frames);
 	}
 
-	recordReconciliation(errorPx: number, replayed: number) {
+	recordReconciliation(
+		errorPx: number,
+		replayed: number,
+		meleeDiverged = false,
+	) {
 		if (!this.active) return;
 		this.recon.push({
 			frame: this.frameCount,
 			errorPx: round(errorPx),
 			replayed,
 		});
+		// The melee counterpart of a position error: the replay landed on a
+		// different sword state than was predicted, which means the client drew a
+		// swing the server never ran.
+		if (meleeDiverged) this.meleeDesyncFrames++;
+	}
+
+	/**
+	 * A sword impact the server judged.
+	 *
+	 * Counted from events rather than inferred from state, because the outcome —
+	 * blocked, parried, backstab — exists only at the instant of resolution and
+	 * is gone by the next snapshot.
+	 */
+	recordMeleeEvent(move: MeleeMove, outcome: MeleeOutcome) {
+		if (!this.active) return;
+		this.outcomeCounts[outcome]++;
+		// Also keyed by move. A flat "0 blocked" is ambiguous — it reads the same
+		// whether guards are failing or whether everything that connected was
+		// unblockable by design, and those need opposite fixes.
+		this.outcomeByMove[move][outcome]++;
+		// A block that stopped an unblockable move would mean the frame data table
+		// and the resolver disagree about what blocking covers.
+		if (
+			!MOVES[move].blockable &&
+			(outcome === "blocked" || outcome === "parried")
+		) {
+			this.blockedUnblockables++;
+		}
 	}
 
 	record(sample: DiagnosticSample) {
@@ -278,6 +434,15 @@ export class PhysicsDiagnostics {
 
 		this.trackMovement(p);
 		this.trackBullets(sample);
+		this.trackMelee("local", p, sample.dt, FRAME_TOLERANCE_MS);
+		if (sample.enemyState) {
+			this.trackMelee(
+				"remote",
+				sample.enemyState,
+				sample.dt,
+				SNAPSHOT_TOLERANCE_MS,
+			);
+		}
 
 		if (this.skipJitterFrames > 0) {
 			this.skipJitterFrames--;
@@ -429,6 +594,153 @@ export class PhysicsDiagnostics {
 		};
 	}
 
+	/**
+	 * Watch one fighter's sword state for a frame.
+	 *
+	 * Everything here is derived from transitions in `PlayerPosition` rather than
+	 * from hooks in the combat code, on purpose: instrumentation that shares code
+	 * with the thing it measures cannot catch that thing misbehaving. A state
+	 * machine that skips a phase looks fine to itself.
+	 */
+	private trackMelee(
+		who: string,
+		s: PlayerPosition,
+		dtMs: number,
+		toleranceMs: number,
+	) {
+		let t = this.meleeTracks.get(who);
+		if (!t) {
+			t = newMeleeTrack();
+			this.meleeTracks.set(who, t);
+		}
+		t.sinceCancelMs += dtMs;
+
+		const stunned = s.stunTimer > 0;
+		/**
+		 * Was this fighter interrupted by a hit in the recent past?
+		 *
+		 * Being hit cancels whatever you were doing, uncancellable or not, so an
+		 * early-ended heavy move is only a contract violation if nothing hit you.
+		 * Stun alone is not a wide enough tell: after reconciliation the client can
+		 * observe the move already gone while the (shorter) hitstun has expired.
+		 * Invulnerability lasts longer than the lightest hitstun, so it is the
+		 * reliable "you were just hit" marker.
+		 */
+		const interrupted = stunned || s.iframeTimer > 0;
+
+		// Nothing may act while stunned. This is the single rule that, if broken,
+		// makes every combo in the game meaningless.
+		if (stunned && (s.meleeAction !== "none" || s.blocking)) {
+			this.illegalActions++;
+		}
+		if (stunned && !t.wasStunned) this.stunsTaken++;
+
+		// A move must not outlive the duration its own table declares.
+		if (s.meleeAction !== "none") {
+			const total = moveDuration(s.meleeAction);
+			if (s.meleeTimer > total + toleranceMs) {
+				this.stuckActionFrames++;
+				if (t.lastAction !== s.meleeAction) {
+					this.frameDataViolations++;
+					this.noteViolation({
+						who,
+						kind: "overran",
+						move: s.meleeAction,
+						timerMs: round(s.meleeTimer),
+						declaredMs: total,
+					});
+				}
+			}
+		}
+
+		// ---- move started ----
+		if (s.meleeAction !== "none" && s.meleeAction !== t.lastAction) {
+			this.moveCounts[s.meleeAction]++;
+
+			// A slash landing inside the butterfly window after a cancelled one is a
+			// chain: the technique working as intended.
+			if (s.meleeAction === "slash" && t.sinceCancelMs <= BUTTERFLY_WINDOW_MS) {
+				t.chainLength++;
+				this.butterflyChains++;
+				this.longestChain = Math.max(this.longestChain, t.chainLength);
+			} else {
+				t.chainLength = 0;
+			}
+		}
+
+		// ---- move ended ----
+		if (t.lastAction !== "none" && s.meleeAction !== t.lastAction) {
+			const total = moveDuration(t.lastAction);
+			// Ending early means something cancelled it — a block, a stance switch,
+			// or being hit. Ending early on a move the table says is uncancellable
+			// is a contract violation.
+			if (t.lastTimer < total - toleranceMs) {
+				this.cancels++;
+				t.sinceCancelMs = 0;
+				if (!MOVES[t.lastAction].cancellable && !interrupted) {
+					this.frameDataViolations++;
+					this.noteViolation({
+						who,
+						kind: "uncancellable_move_ended_early",
+						move: t.lastAction,
+						timerMs: round(t.lastTimer),
+						declaredMs: total,
+					});
+				}
+			}
+		}
+
+		if (s.blocking && !t.wasBlocking) this.blocksRaised++;
+		if (s.massiveReady && !t.wasMassiveReady) this.massivesArmed++;
+
+		t.lastAction = s.meleeAction;
+		t.lastTimer = s.meleeTimer;
+		t.wasBlocking = s.blocking;
+		t.wasStunned = stunned;
+		t.wasMassiveReady = s.massiveReady;
+	}
+
+	private noteViolation(detail: object) {
+		if (this.meleeViolations.length < 12) {
+			this.meleeViolations.push({ frame: this.frameCount, ...detail });
+		}
+	}
+
+	private summariseMelee() {
+		const moves =
+			this.moveCounts.slash +
+			this.moveCounts.uppercut +
+			this.moveCounts.massive;
+
+		return {
+			/** Did the mechanics fire at all? Zeroes here are a failed run. */
+			slashes: this.moveCounts.slash,
+			uppercuts: this.moveCounts.uppercut,
+			massives: this.moveCounts.massive,
+			blocks: this.blocksRaised,
+			massivesArmed: this.massivesArmed,
+			hits: this.outcomeCounts.hit,
+			backstabs: this.outcomeCounts.backstab,
+			blockedHits: this.outcomeCounts.blocked,
+			parries: this.outcomeCounts.parried,
+			stuns: this.stunsTaken,
+			/** Cancels, and how many of them chained into a butterfly. */
+			cancels: this.cancels,
+			butterflyChains: this.butterflyChains,
+			longestButterflyChain: this.longestChain,
+			totalMoves: moves,
+			/** Rule violations. Every one of these must be 0. */
+			illegalActions: this.illegalActions,
+			blockedUnblockables: this.blockedUnblockables,
+			frameDataViolations: this.frameDataViolations,
+			stuckActionFrames: this.stuckActionFrames,
+			meleeDesyncFrames: this.meleeDesyncFrames,
+			/** What each move actually ran into. Zero blocked slashes is a defect. */
+			outcomeByMove: this.outcomeByMove,
+			violations: this.meleeViolations,
+		};
+	}
+
 	private trackMovement(p: PlayerPosition) {
 		if (p.grounded) {
 			this.lastGroundY = p.y;
@@ -508,6 +820,7 @@ export class PhysicsDiagnostics {
 		const totalFrames = frames.length;
 
 		const bulletSummary = this.summariseBullets();
+		const meleeSummary = this.summariseMelee();
 
 		const failures: string[] = [];
 		if (this.jitter.length > 0) {
@@ -525,6 +838,25 @@ export class PhysicsDiagnostics {
 			if (b.maxPathDeviationPx > BULLET_PATH_TOLERANCE_PX) {
 				failures.push(`projectile path bent ${b.maxPathDeviationPx}px`);
 			}
+		}
+
+		// Sword combat breaking its own rules. Each of these is a contract the
+		// frame data table makes and the resolver is supposed to keep.
+		const m = meleeSummary;
+		if (m.illegalActions > 0) {
+			failures.push(`${m.illegalActions} actions while stunned`);
+		}
+		if (m.blockedUnblockables > 0) {
+			failures.push(`${m.blockedUnblockables} unblockables blocked`);
+		}
+		if (m.frameDataViolations > 0) {
+			failures.push(`${m.frameDataViolations} frame data violations`);
+		}
+		if (m.stuckActionFrames > 0) {
+			failures.push(`${m.stuckActionFrames} frames stuck in a melee action`);
+		}
+		if (m.meleeDesyncFrames > 0) {
+			failures.push(`${m.meleeDesyncFrames} melee prediction desyncs`);
 		}
 
 		return {
@@ -573,6 +905,12 @@ export class PhysicsDiagnostics {
 			penetrationEvents: this.penetrations.slice(0, 20),
 			/** Projectile trajectory quality. Bullets are ballistic, so all zeroes is achievable. */
 			bulletSummary,
+			/**
+			 * Sword combat. Read both halves: the violation counters must be zero,
+			 * and the move counters must not be — a run where nobody swung satisfies
+			 * every zero-target trivially and proves nothing.
+			 */
+			meleeSummary,
 			jitterEvents: this.jitter,
 			jitterSummary: {
 				total: this.jitter.length,

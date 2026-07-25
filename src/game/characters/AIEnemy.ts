@@ -1,15 +1,12 @@
 import Phaser from "phaser";
 import { EventBus } from "../EventBus";
 import Bullets from "../skills/Bullets";
-import Melee from "../weapons/Melee";
 import { type AIConfig, DEFAULT_AI_CONFIG } from "./AIConfig";
-import EnemyBrain, { type AIOutput } from "./EnemyBrain";
-import { FacingState } from "./playerStates";
+import EnemyBrain, { type AIInput, type AIOutput } from "./EnemyBrain";
 
 export default class AIEnemy extends Phaser.GameObjects.Sprite {
 	public bullets: Bullets;
 	private brain: EnemyBrain;
-	private melee?: Melee;
 	private _hp = 100;
 	lastFacingDirection = 1;
 	lastAttackTime = 0;
@@ -19,10 +16,12 @@ export default class AIEnemy extends Phaser.GameObjects.Sprite {
 		moveRight: false,
 		jump: false,
 		attack: false,
+		block: false,
+		uppercut: false,
+		swordStance: true,
+		face: 0,
 		aimAngle: 0,
 		evadeActive: false,
-		switchToMelee: false,
-		switchToRanged: true,
 	};
 
 	public get hp() {
@@ -77,51 +76,25 @@ export default class AIEnemy extends Phaser.GameObjects.Sprite {
 		return dir;
 	}
 
-	private decideFacing(): FacingState {
-		const currentKey = this.anims.currentAnim?.key;
-		const direction = currentKey?.split("-")[0];
-		return direction === "left" ? FacingState.LEFT : FacingState.RIGHT;
-	}
-
 	preUpdate(t: number, dt: number) {
 		super.preUpdate(t, dt);
 	}
 
-	update(
-		time: number,
-		delta: number,
-		playerX: number,
-		playerY: number,
-		playerFacingDirection: number,
-		hasLineOfSight = true,
-		playerHP = 100,
-		wallTouch: "none" | "left" | "right" = "none",
-	) {
+	/**
+	 * Decide and animate. Perception is built by the scene, from simulation state
+	 * only, so the offline enemy and the server-hosted bot read the world through
+	 * exactly the same structure.
+	 *
+	 * Neither bullets nor sword hits are spawned here. Bullets belong to the
+	 * scene's `BulletSystem` (offline) or the server (online); melee is resolved
+	 * by the simulation from `PlayerPosition`. This class used to spawn its own
+	 * melee sprite, which nothing simulated and which therefore never hit anyone.
+	 */
+	update(input: AIInput, time: number, delta: number) {
 		if (this._hp <= 0) {
 			this.anims.play("turn");
 			return;
 		}
-
-		this.melee?.updatePosition(this.x, this.y);
-
-		const dx = playerX - this.x;
-		const dy = playerY - this.y;
-		const distance = Math.sqrt(dx * dx + dy * dy);
-
-		const input = {
-			playerX,
-			playerY,
-			selfX: this.x,
-			selfY: this.y,
-			distanceToPlayer: distance,
-			playerFacingDirection,
-			touchingDown: this.grounded,
-			touchingLeft: wallTouch === "left",
-			touchingRight: wallTouch === "right",
-			hasLineOfSight,
-			selfHP: this._hp,
-			enemyHP: playerHP,
-		};
 
 		// The brain runs every frame. It used to be skipped during a dodge, which
 		// froze `lastAIOutput` and left the scene driving physics from stale
@@ -139,18 +112,5 @@ export default class AIEnemy extends Phaser.GameObjects.Sprite {
 		} else {
 			if (this.grounded) this.anims.play("turn");
 		}
-
-		// Ranged fire is owned by the scene's BulletSystem, which is the only
-		// thing that actually simulates and resolves bullets. Firing here too
-		// used to spawn a second, unsimulated sprite that never moved.
-		if (output.attack && distance < 100 && time - this.lastAttackTime > 250) {
-			this.lastAttackTime = time;
-			this.meleeAttack();
-		}
-	}
-
-	private meleeAttack() {
-		const facing = this.decideFacing();
-		this.melee = new Melee(this.scene, facing, this.x, this.y);
 	}
 }

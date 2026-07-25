@@ -2,6 +2,7 @@ import type { ServerChannel } from "@geckos.io/server";
 import type { AIConfig } from "../src/game/characters/AIConfig.js";
 import { EnemyBrain } from "../src/game/characters/EnemyBrain.js";
 import {
+	applyMeleeResult,
 	BULLET_DAMAGE,
 	BULLET_SPEED,
 	type BulletState,
@@ -11,18 +12,30 @@ import {
 	createPlayerState,
 	hasLineOfSight,
 	isBulletOutOfBounds,
+	type MeleeMove,
+	type MeleeOutcome,
+	meleePhase,
 	PLAYER_HEIGHT,
 	PLAYER_WIDTH,
 	type PlayerIntent,
 	type PlayerPosition,
+	resolveMelee,
 	tickBullet,
 	tickPlayer,
 } from "./physics.js";
 
 export interface PlayerInput extends PlayerIntent {
 	seq: number;
-	attack: boolean;
 	aimAngle: number;
+}
+
+export interface MeleeEventMsg {
+	attackerId: string;
+	move: MeleeMove;
+	outcome: MeleeOutcome;
+	x: number;
+	y: number;
+	dir: number;
 }
 
 interface ConnectedPlayer {
@@ -33,7 +46,6 @@ interface ConnectedPlayer {
 	/** Full simulation state — never rebuilt per tick, or wall state is lost. */
 	state: PlayerPosition;
 	hp: number;
-	facingDir: number;
 	lastAttackTime: number;
 	/** Inputs received but not yet simulated, in arrival order. */
 	queue: PlayerInput[];
@@ -107,6 +119,10 @@ function idleInput(seq = 0): PlayerInput {
 		right: false,
 		up: false,
 		attack: false,
+		block: false,
+		uppercut: false,
+		swordStance: true,
+		face: 0,
 		aimAngle: 0,
 	};
 }
@@ -116,6 +132,8 @@ export class GameRoom {
 	private players = new Map<string, ConnectedPlayer>();
 	private bullets: BulletState[] = [];
 	private nextBulletId = 0;
+	/** Melee impacts accumulated since the last broadcast, for client effects. */
+	private meleeEvents: MeleeEventMsg[] = [];
 	private channelIds: string[] = [];
 	private tickAccumulator = 0;
 	private broadcastAccumulator = 0;
@@ -148,9 +166,12 @@ export class GameRoom {
 		this.players.set(id, {
 			channel,
 			brain: null,
-			state: createPlayerState(isFirst ? START_X_A : START_X_B, START_Y),
+			state: createPlayerState(
+				isFirst ? START_X_A : START_X_B,
+				START_Y,
+				isFirst ? 1 : -1,
+			),
 			hp: 100,
-			facingDir: isFirst ? 1 : -1,
 			lastAttackTime: 0,
 			queue: [],
 			lastInput: idleInput(),
@@ -197,9 +218,12 @@ export class GameRoom {
 		this.players.set(id, {
 			channel: null,
 			brain: new EnemyBrain(botConfig()),
-			state: createPlayerState(isFirst ? START_X_A : START_X_B, START_Y),
+			state: createPlayerState(
+				isFirst ? START_X_A : START_X_B,
+				START_Y,
+				isFirst ? 1 : -1,
+			),
 			hp: 100,
-			facingDir: isFirst ? 1 : -1,
 			lastAttackTime: 0,
 			queue: [],
 			lastInput: idleInput(),
@@ -239,6 +263,13 @@ export class GameRoom {
 				),
 				selfHP: bot.hp,
 				enemyHP: foe.hp,
+				enemyAction: foe.state.meleeAction,
+				enemyPhase: meleePhase(foe.state),
+				enemyBlocking: foe.state.blocking,
+				enemyStunned: foe.state.stunTimer > 0,
+				selfAction: bot.state.meleeAction,
+				selfStunned: bot.state.stunTimer > 0,
+				selfMassiveReady: bot.state.massiveReady,
 			},
 			now,
 			dtMs,
@@ -250,6 +281,10 @@ export class GameRoom {
 			right: out.moveRight,
 			up: out.jump,
 			attack: out.attack,
+			block: out.block,
+			uppercut: out.uppercut,
+			swordStance: out.swordStance,
+			face: out.face,
 			aimAngle: out.aimAngle,
 		};
 	}
@@ -265,13 +300,16 @@ export class GameRoom {
 		t: number;
 		players: SnapshotPlayer[];
 		bullets: SnapshotBullet[];
+		melee: MeleeEventMsg[];
 	} {
 		const playerArr: SnapshotPlayer[] = [];
 		for (const [id, p] of this.players) {
 			playerArr.push({
 				id,
 				hp: p.hp,
-				facingDir: p.facingDir,
+				// Facing lives in the simulation now, because the melee hitbox is
+				// built from it and both sides must agree on which way a swing points.
+				facingDir: p.state.facing,
 				lastSeq: p.lastSeq,
 				state: p.state,
 			});
@@ -287,6 +325,7 @@ export class GameRoom {
 				vx: b.vx,
 				vy: b.vy,
 			})),
+			melee: this.meleeEvents.slice(),
 		};
 	}
 
@@ -342,10 +381,14 @@ export class GameRoom {
 
 			player.state = tickPlayer(player.state, input, dt);
 
-			if (input.left) player.facingDir = -1;
-			else if (input.right) player.facingDir = 1;
-
-			if (player.hp > 0 && input.attack && canFire(player.lastAttackTime, now)) {
+			// A fighter holds a sword or a gun, never both: firing is gated on the
+			// stance the simulation says they are actually in.
+			if (
+				player.hp > 0 &&
+				player.state.stance === "gun" &&
+				input.attack &&
+				canFire(player.lastAttackTime, now)
+			) {
 				player.lastAttackTime = now;
 				this.bullets.push({
 					id: this.nextBulletId++,
@@ -358,6 +401,7 @@ export class GameRoom {
 			}
 		}
 
+		this.resolveMeleeHits();
 		this.tickBullets(dt);
 
 		if (this.resetTimer > 0) {
@@ -370,6 +414,47 @@ export class GameRoom {
 			if (player.hp <= 0) {
 				this.resetTimer = RESET_DELAY_MS;
 				break;
+			}
+		}
+	}
+
+	/**
+	 * Judge every live melee hitbox against every other fighter.
+	 *
+	 * This is the half of sword combat a client never gets to decide. Whether a
+	 * swing connected, was blocked, was parried or landed from behind depends on
+	 * *both* fighters, and only the server sees both authoritatively — so the
+	 * client predicts the swing's timing and nothing about its outcome.
+	 *
+	 * The consequences are written straight into `state`, which is the whole
+	 * reason stun and launch live in the simulation: they replay through
+	 * reconciliation with no special case.
+	 */
+	private resolveMeleeHits() {
+		for (const [attackerId, attacker] of this.players) {
+			if (attacker.hp <= 0) continue;
+
+			for (const [defenderId, defender] of this.players) {
+				if (defenderId === attackerId || defender.hp <= 0) continue;
+
+				const result = resolveMelee(attacker.state, defender.state);
+				if (!result) continue;
+
+				const damage = applyMeleeResult(
+					attacker.state,
+					defender.state,
+					result,
+				);
+				defender.hp = Math.max(0, defender.hp - damage);
+
+				this.meleeEvents.push({
+					attackerId,
+					move: result.move,
+					outcome: result.outcome,
+					x: result.x,
+					y: result.y,
+					dir: result.dir,
+				});
 			}
 		}
 	}
@@ -398,14 +483,18 @@ export class GameRoom {
 		this.channelIds.forEach((id, i) => {
 			const p = this.players.get(id);
 			if (!p) return;
-			p.state = createPlayerState(i === 0 ? START_X_A : START_X_B, START_Y);
+			p.state = createPlayerState(
+				i === 0 ? START_X_A : START_X_B,
+				START_Y,
+				i === 0 ? 1 : -1,
+			);
 			p.hp = 100;
-			p.facingDir = i === 0 ? 1 : -1;
 			p.lastAttackTime = 0;
 			p.queue.length = 0;
 			if (p.brain) p.brain = new EnemyBrain(botConfig());
 		});
 		this.bullets = [];
+		this.meleeEvents.length = 0;
 		this.resetTimer = -1;
 
 		// Tell clients explicitly. A respawn is a legitimate discontinuity, and
@@ -424,5 +513,8 @@ export class GameRoom {
 		for (const player of this.players.values()) {
 			player.channel?.emit("state", snap);
 		}
+		// Melee events are one-shot. Cleared unconditionally, so a room with no
+		// listening humans does not accumulate them forever.
+		this.meleeEvents.length = 0;
 	}
 }

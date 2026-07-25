@@ -18,8 +18,64 @@ import {
 	probeWall,
 	type WallSide,
 } from "./Collision";
+import {
+	copyMeleeState,
+	createMeleeState,
+	isCommitted,
+	isStunned,
+	type MeleeIntent,
+	type MeleeState,
+	tickMelee,
+} from "./Melee";
 
 export type { Rect } from "./Arena";
+/**
+ * Melee is re-exported by name, never with `export *`.
+ *
+ * A star re-export silently resolves to nothing across the server's module
+ * boundary: `server/physics.ts` re-exports this file, and everything listed
+ * explicitly arrives while everything behind an `export *` vanishes — no
+ * resolution error, just an empty namespace and a server that dies on boot with
+ * "does not provide an export named 'applyMeleeResult'". Same family as the
+ * default-export trap in EnemyBrain: anything `server/` reaches through must be
+ * an explicit named export.
+ */
+export {
+	applyMeleeResult,
+	BACKSTAB_BONUS_STUN_MS,
+	BLOCK_PUSHBACK,
+	BLOCK_STARTUP_MS,
+	bodyRect,
+	copyMeleeState,
+	createMeleeState,
+	GUARD_BREAK_STUN_MS,
+	isBehind,
+	isCancellable,
+	isCommitted,
+	isStunned,
+	MASSIVE_CHARGE_MS,
+	MELEE_IFRAME_MS,
+	meleeHitbox,
+	meleePhase,
+	MOVES,
+	moveDuration,
+	PARRY_WINDOW_MS,
+	resolveMelee,
+	SLASH_CANCELLED_MS,
+	tickMelee,
+} from "./Melee";
+export type {
+	MeleeAction,
+	MeleeBody,
+	MeleeIntent,
+	MeleeMove,
+	MeleeOutcome,
+	MeleePhase,
+	MeleeResult,
+	MeleeState,
+	MoveDef,
+	Stance,
+} from "./Melee";
 export {
 	hasLineOfSight,
 	PLAYER_HEIGHT,
@@ -67,6 +123,13 @@ export const GROUND_ACCEL = 2600;
 export const AIR_ACCEL = 1800;
 export const GROUND_FRICTION = 2600;
 export const AIR_FRICTION = 500;
+/**
+ * Ground friction while stunned. Normal friction kills a knockback impulse in
+ * two frames, so no shove would ever be visible: a Massive Strike's 420 px/s
+ * would move the target 34px at 2600, versus 73px here. Being hit hard should
+ * look like being hit hard.
+ */
+export const STUN_GROUND_FRICTION = 1200;
 
 export const WALL_SLIDE_SPEED = 160;
 export const WALL_JUMP_HORIZONTAL = 230;
@@ -81,6 +144,13 @@ export const WALL_JUMP_LOCKOUT = 140;
 /** Wall contact lingers briefly so a wall jump does not need frame-perfect timing. */
 export const WALL_COYOTE_MS = 100;
 
+/**
+ * Walking while blocking. A guard you can carry at full speed is a guard with no
+ * cost, and it would make circling behind a blocker — the intended answer to a
+ * turtle — impossible to actually perform.
+ */
+export const BLOCK_MOVE_MULTIPLIER = 0.55;
+
 export const BULLET_SPEED = 600;
 export const BULLET_DAMAGE = 10;
 export const ATTACK_COOLDOWN = 250;
@@ -89,14 +159,26 @@ export const ATTACK_COOLDOWN = 250;
 // Player state
 // ---------------------------------------------------------------------------
 
-export interface PlayerIntent {
+export interface PlayerIntent extends MeleeIntent {
 	left: boolean;
 	right: boolean;
 	/** Jump, held. Held-ness drives variable jump height, so pass the raw key state. */
 	up: boolean;
 }
 
-export interface PlayerPosition {
+/** Everything false: neutral input, and what a stunned fighter is reduced to. */
+export const NEUTRAL_INTENT: Readonly<PlayerIntent> = Object.freeze({
+	left: false,
+	right: false,
+	up: false,
+	attack: false,
+	block: false,
+	uppercut: false,
+	swordStance: true,
+	face: 0,
+});
+
+export interface PlayerPosition extends MeleeState {
 	x: number;
 	y: number;
 	vx: number;
@@ -118,7 +200,11 @@ export interface PlayerPosition {
 	jumpHeld: boolean;
 }
 
-export function createPlayerState(x: number, y: number): PlayerPosition {
+export function createPlayerState(
+	x: number,
+	y: number,
+	facing = 1,
+): PlayerPosition {
 	return {
 		x,
 		y,
@@ -132,6 +218,7 @@ export function createPlayerState(x: number, y: number): PlayerPosition {
 		wallCoyoteTimer: 0,
 		jumping: false,
 		jumpHeld: false,
+		...createMeleeState(facing),
 	};
 }
 
@@ -152,6 +239,7 @@ export function copyPlayerState(
 	target.wallCoyoteTimer = source.wallCoyoteTimer;
 	target.jumping = source.jumping;
 	target.jumpHeld = source.jumpHeld;
+	copyMeleeState(source, target);
 	return target;
 }
 
@@ -169,9 +257,14 @@ function decay(timerMs: number, dt: number): number {
 /**
  * Advance one player by exactly `dt` seconds. Pure: returns new state.
  *
- * Order matters — timers, then intent, then jump, then gravity, then a single
- * collision-resolved move. Resolving movement exactly once per tick is what
- * keeps contact flags and positions consistent between client and server.
+ * Order matters — melee, then timers, then intent, then jump, then gravity, then
+ * a single collision-resolved move. Resolving movement exactly once per tick is
+ * what keeps contact flags and positions consistent between client and server.
+ *
+ * Melee runs first because it decides whether this fighter is allowed to act at
+ * all. Stun and launch live in this same state and replay through
+ * reconciliation like any other physics — that is the whole reason combat state
+ * is here rather than in a system beside it.
  */
 export function tickPlayer(
 	pos: PlayerPosition,
@@ -180,23 +273,49 @@ export function tickPlayer(
 ): PlayerPosition {
 	const s: PlayerPosition = { ...pos };
 
+	tickMelee(s, input, dt);
+	// A stunned fighter still falls and still collides; it just does not steer.
+	const stunned = isStunned(s);
+	// Heavy moves root you where you stand. This is the "animation punishment":
+	// a whiffed Massive or uppercut cannot be walked or jumped out of.
+	const rooted = stunned || isCommitted(s);
+
 	s.wallJumpTimer = decay(s.wallJumpTimer, dt);
 	s.coyoteTimer = decay(s.coyoteTimer, dt);
 	s.jumpBufferTimer = decay(s.jumpBufferTimer, dt);
 	s.wallCoyoteTimer = decay(s.wallCoyoteTimer, dt);
 
-	if (input.up && !s.jumpHeld) {
+	const wantsJump = input.up && !rooted;
+	if (wantsJump && !s.jumpHeld) {
 		s.jumpBufferTimer = JUMP_BUFFER_MS;
 	}
 
 	// ---- horizontal intent ----
-	const dir = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+	const dir = rooted ? 0 : (input.right ? 1 : 0) - (input.left ? 1 : 0);
+
+	// Facing follows aim, falling back to the walk direction when nothing is
+	// aimed. Steering it separately from movement is what lets a fighter back
+	// away while still guarding the side the attacker is on.
+	//
+	// It is locked while a move is running: committing to a direction is the
+	// point of committing to a swing, and a hitbox that could be steered during
+	// its active frames would make blocking unreadable.
+	const faceWish = input.face !== 0 ? (input.face > 0 ? 1 : -1) : dir;
+	if (s.meleeAction === "none" && !stunned && faceWish !== 0) {
+		s.facing = faceWish;
+	}
+
+	const targetSpeed =
+		PLAYER_WALK_SPEED * (s.blocking ? BLOCK_MOVE_MULTIPLIER : 1);
 	const steerable = s.wallJumpTimer <= 0;
 	if (steerable && dir !== 0) {
 		const accel = s.grounded ? GROUND_ACCEL : AIR_ACCEL;
-		s.vx = approach(s.vx, dir * PLAYER_WALK_SPEED, accel * dt);
+		s.vx = approach(s.vx, dir * targetSpeed, accel * dt);
 	} else {
-		const friction = s.grounded ? GROUND_FRICTION : AIR_FRICTION;
+		// Full ground friction would eat a knockback in two frames and no shove
+		// would ever be visible. A stunned fighter slides.
+		const groundFriction = stunned ? STUN_GROUND_FRICTION : GROUND_FRICTION;
+		const friction = s.grounded ? groundFriction : AIR_FRICTION;
 		s.vx = approach(s.vx, 0, friction * dt);
 	}
 
@@ -221,7 +340,7 @@ export function tickPlayer(
 	}
 
 	// ---- variable jump height ----
-	if (s.jumping && !input.up && s.vy < 0) {
+	if (s.jumping && !wantsJump && s.vy < 0) {
 		s.vy *= JUMP_CUT_MULTIPLIER;
 		s.jumping = false;
 	}
@@ -261,7 +380,10 @@ export function tickPlayer(
 		s.wallTouch = "none";
 	}
 
-	s.jumpHeld = input.up;
+	// Latch the intent that was actually allowed, not the raw button. A fighter
+	// who held jump through a stun must press again afterwards rather than
+	// launching the instant control returns.
+	s.jumpHeld = wantsJump;
 	return s;
 }
 

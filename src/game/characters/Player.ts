@@ -1,15 +1,9 @@
 import Phaser from "phaser";
 import { ATTACK_COOLDOWN } from "../constants";
 import Bullets from "../skills/Bullets";
-import Melee from "../weapons/Melee";
 import type { AIOutput } from "./EnemyBrain";
 
-import {
-	ActionState,
-	FacingState,
-	MovementState,
-	StanceState,
-} from "./playerStates";
+import { FacingState, MovementState } from "./playerStates";
 
 interface DoublePressEntry {
 	lastTime: number;
@@ -20,11 +14,8 @@ export default class Player extends Phaser.GameObjects.Sprite {
 	private doublePressEligibility: Record<number, DoublePressEntry> = {};
 	movementState = MovementState.NATURAL;
 	private stateTimer = 0;
-	private stanceState = StanceState.RANGED;
 	public bullets!: Bullets;
 	private mouseAngle = 0;
-	private actionState = ActionState.NATURAL;
-	private melee?: Melee;
 	hp = 100;
 	lastFacingDirection = 1;
 	private aiOverrideInput: AIOutput | null = null;
@@ -80,20 +71,6 @@ export default class Player extends Phaser.GameObjects.Sprite {
 		this.aiOverrideInput = input;
 	}
 
-	performAIAttack(angle: number) {
-		this.mouseAngle = angle;
-		// Ranged shots are spawned by the scene's BulletSystem so there is a
-		// single simulated source of bullets; only melee is local.
-		if (this.stanceState === StanceState.MELEE) {
-			this.meleeAttack(this.scene);
-		}
-	}
-
-	meleeAttack(scene: Phaser.Scene) {
-		const facing = this.decideFacing();
-		this.melee = new Melee(scene, facing, this.x, this.y);
-	}
-
 	getMouseAngle() {
 		return this.mouseAngle;
 	}
@@ -107,28 +84,6 @@ export default class Player extends Phaser.GameObjects.Sprite {
 
 	setMouseAngle(angle: number) {
 		this.mouseAngle = angle;
-	}
-
-	machineAttack(pointer: Phaser.Input.Pointer, scene: Phaser.Scene) {
-		const now = scene.game.loop.time;
-		if (now - this.lastAttackTime < this.attackCooldown) return;
-		switch (this.stanceState) {
-			case StanceState.MELEE:
-				if (pointer.leftButtonDown()) {
-					this.lastAttackTime = now;
-					this.meleeAttack(scene);
-				} else if (pointer.rightButtonDown()) {
-					this.actionState = ActionState.BLOCKING;
-					console.count("Blocking");
-				} else if (pointer.rightButtonReleased()) {
-					console.count("Unblocking");
-					this.actionState = ActionState.NATURAL;
-				}
-				break;
-			case StanceState.RANGED:
-				// Ranged fire is spawned by the scene's BulletSystem.
-				break;
-		}
 	}
 
 	preUpdate(t: number, dt: number) {
@@ -154,15 +109,6 @@ export default class Player extends Phaser.GameObjects.Sprite {
 				break;
 		}
 
-		switch (this.actionState) {
-			case ActionState.BLOCKING:
-				if (this.grounded || this.movementState === MovementState.NATURAL) {
-				}
-				this.anims.play("idle");
-				break;
-			default:
-				break;
-		}
 	}
 
 	private cleanMovementState() {
@@ -193,7 +139,6 @@ export default class Player extends Phaser.GameObjects.Sprite {
 		_dt: number,
 		cursors: Record<string, Phaser.Input.Keyboard.Key>,
 	) {
-		this.melee?.updatePosition(this.x, this.y);
 		if (this.aiOverrideInput) {
 			this.updateAI();
 			return;
@@ -224,25 +169,11 @@ export default class Player extends Phaser.GameObjects.Sprite {
 		} else {
 			this.decideIdle();
 		}
-		if (Phaser.Input.Keyboard.JustDown(cursors.switchMelee)) {
-			this.stanceState = StanceState.MELEE;
-			console.log(this.stanceState);
-		} else if (Phaser.Input.Keyboard.JustDown(cursors.switchRanged)) {
-			this.stanceState = StanceState.RANGED;
-			console.log(this.stanceState);
-		}
 	}
 
 	private updateAI() {
 		const input = this.aiOverrideInput!;
-		this.melee?.updatePosition(this.x, this.y);
 		if (this.movementState !== MovementState.NATURAL) return;
-		this.actionState = ActionState.NATURAL;
-		if (input.switchToMelee) {
-			this.stanceState = StanceState.MELEE;
-		} else if (input.switchToRanged) {
-			this.stanceState = StanceState.RANGED;
-		}
 		if (input.moveLeft) {
 			this.anims.play("left", true);
 		} else if (input.moveRight) {
@@ -250,12 +181,6 @@ export default class Player extends Phaser.GameObjects.Sprite {
 		} else {
 			this.decideIdle();
 		}
-		if (
-			input.attack &&
-			this.scene.game.loop.time - this.lastAttackTime > this.attackCooldown
-		) {
-			this.lastAttackTime = this.scene.game.loop.time;
-			this.performAIAttack(input.aimAngle);
-		}
+		this.mouseAngle = input.aimAngle;
 	}
 }

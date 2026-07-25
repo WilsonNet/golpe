@@ -16,6 +16,7 @@ import {
 	JUMP_HEIGHT_PX,
 	JUMP_VELOCITY,
 	MAX_FALL_SPEED,
+	NEUTRAL_INTENT,
 	PLAYER_WALK_SPEED,
 	type PlayerIntent,
 	type PlayerPosition,
@@ -48,7 +49,7 @@ function state(overrides: Partial<PlayerPosition> = {}): PlayerPosition {
 }
 
 function input(overrides: Partial<PlayerIntent> = {}): PlayerIntent {
-	return { left: false, right: false, up: false, ...overrides };
+	return { ...NEUTRAL_INTENT, ...overrides };
 }
 
 function tick(

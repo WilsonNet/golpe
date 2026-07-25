@@ -9,11 +9,12 @@ import {
 	PLAYER_HEIGHT,
 	PLAYER_WIDTH,
 	type PlayerIntent,
+	type PlayerPosition,
 } from "../simulation/Physics";
 import { friLerp, RemoteInterpolator, ServerClock } from "./Interpolation";
 import { OnlineManager } from "./OnlineManager";
 import { PredictedPlayer, RenderSmoother } from "./Prediction";
-import type { GameSnapshot } from "./types";
+import type { GameSnapshot, MeleeEventMsg } from "./types";
 
 /** Beyond this, a remote position change is a teleport, not movement. */
 const REMOTE_SNAP_PX = 100;
@@ -26,9 +27,15 @@ export interface OnlineCallbacks {
 	onLocalHp: (hp: number) => void;
 	onRemoteHp: (hp: number) => void;
 	/** Reconciliation result, for the diagnostic. */
-	onReconcile: (errorPx: number, replayed: number) => void;
+	onReconcile: (
+		errorPx: number,
+		replayed: number,
+		meleeDiverged: boolean,
+	) => void;
 	/** A discontinuity that is expected — respawns — so it is not counted as jitter. */
 	onTeleport: () => void;
+	/** A sword impact the server judged, for effects only. */
+	onMeleeEvent: (event: MeleeEventMsg) => void;
 }
 
 /**
@@ -60,6 +67,8 @@ export class OnlineSession {
 	private remoteSprite?: Phaser.GameObjects.Sprite;
 	private remoteBody?: { x: number; y: number };
 	private latestSnapshot?: GameSnapshot;
+	/** The remote fighter's authoritative simulation state, position aside. */
+	private remoteAuthoritative?: PlayerPosition;
 
 	private _localHp = 100;
 	private _remoteHp = 100;
@@ -100,6 +109,11 @@ export class OnlineSession {
 		return this._remoteFacing;
 	}
 
+	/** The remote fighter's sprite, once one exists, so effects can punch it. */
+	get remoteBodySprite(): Phaser.GameObjects.Sprite | undefined {
+		return this.remoteSprite;
+	}
+
 	/**
 	 * Remote fighter position in *body* space (AABB top-left), matching what
 	 * the simulation uses. Reading it off the sprite instead would be in
@@ -107,6 +121,26 @@ export class OnlineSession {
 	 */
 	get remotePosition(): { x: number; y: number } | null {
 		return this.remoteBody ? { ...this.remoteBody } : null;
+	}
+
+	/**
+	 * The remote fighter's full state: combat straight from the snapshot,
+	 * position from the interpolator.
+	 *
+	 * The two halves come from different clocks on purpose. Position must be
+	 * interpolated or the remote stutters between 20Hz updates; sword state must
+	 * not be, because a swing rendered 150ms late is a swing you cannot react to,
+	 * and reacting is the entire game. Combat state is discrete and cheap to be
+	 * slightly early with — position is not.
+	 */
+	get remoteState(): PlayerPosition | null {
+		if (!this.remoteAuthoritative) return null;
+		if (!this.remoteBody) return this.remoteAuthoritative;
+		return {
+			...this.remoteAuthoritative,
+			x: this.remoteBody.x,
+			y: this.remoteBody.y,
+		};
 	}
 
 	connect(solo = false) {
@@ -131,6 +165,7 @@ export class OnlineSession {
 		this.bulletFlights.clear();
 		this.bulletDead.clear();
 		this.remoteBody = undefined;
+		this.remoteAuthoritative = undefined;
 		this.callbacks.onTeleport();
 		console.log("[ONLINE] round reset");
 	}
@@ -144,21 +179,13 @@ export class OnlineSession {
 	 * Called once per PHYSICS_DT so the client and server consume input at the
 	 * same rate.
 	 */
-	fixedStep(
-		intent: PlayerIntent,
-		attack: boolean,
-		aimAngle: number,
-		dt: number,
-	) {
+	fixedStep(intent: PlayerIntent, aimAngle: number, dt: number) {
 		const seq = this.predicted.step(intent, dt);
-		this.manager.sendInput({
-			seq,
-			left: intent.left,
-			right: intent.right,
-			up: intent.up,
-			attack,
-			aimAngle,
-		});
+		// Spread the intent rather than listing its fields: `PlayerInput` extends
+		// `PlayerIntent` precisely so a field added to the simulation cannot be
+		// silently left out of the packet, which would make the server replay a
+		// different input than the client predicted.
+		this.manager.sendInput({ ...intent, seq, aimAngle });
 	}
 
 	/** Per-frame presentation update: remote interpolation and bullets. */
@@ -323,13 +350,24 @@ export class OnlineSession {
 					this.predicted.state.x - before.x,
 					this.predicted.state.y - before.y,
 				);
-				this.callbacks.onReconcile(result.errorPx, result.replayed);
+					this.callbacks.onReconcile(
+					result.errorPx,
+					result.replayed,
+					result.meleeDiverged,
+				);
 			} else {
 				this._remoteHp = p.hp;
 				this._remoteFacing = p.facingDir;
+				this.remoteAuthoritative = p.state;
 				this.callbacks.onRemoteHp(p.hp);
 				this.remote.push(snap.t, p.state.x, p.state.y);
 			}
+		}
+
+		// Sword impacts are one-shot effects. A dropped datagram costs a spark,
+		// never a consequence — those all travel in `state`.
+		for (const event of snap.melee ?? []) {
+			this.callbacks.onMeleeEvent(event);
 		}
 
 		if (!this._matched && snap.players.length >= 2) {

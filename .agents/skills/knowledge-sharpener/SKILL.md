@@ -49,9 +49,19 @@ Prefer the most specific home:
 
 | Knowledge | Goes in |
 |---|---|
-| A rule anyone touching the repo must follow | `AGENTS.md` |
-| Deep detail about one workflow or subsystem | that subsystem's `SKILL.md` |
+| What the game should *do* | `specs/` — the source of truth |
+| A rule that was written by a real bug | `docs/invariants.md` |
+| Where code lives and who owns it | `docs/architecture.md` |
+| How to measure something | `docs/diagnostics.md` |
+| A pointer every session needs | `AGENTS.md` — **one line, then a link** |
+| Deep detail about one workflow | that workflow's `SKILL.md` |
 | A number/threshold and its rationale | next to the constant, in code |
+
+**`AGENTS.md` is an index, not a wiki.** It loads into every single session, so
+prose there is a tax on all of them. If an entry needs a paragraph, it belongs in
+`docs/` or `specs/` with a one-line pointer in `AGENTS.md`. Adding a section to
+`AGENTS.md` is almost always the wrong move; adding a row to its "Where to look"
+table is almost always the right one.
 
 Rewrite stale lines rather than appending near-duplicates. **Delete** statements
 the session proved wrong — a knowledge base with contradictions is worse than a
@@ -64,12 +74,15 @@ Code can see what knowledge exists without listing directories.
 
 Regenerate and compare:
 
+Project skills are indexed in `AGENTS.md`; framework reference skills live in
+`docs/phaser-skills.md`, so check the union of the two.
+
 ```bash
 # Every skill on disk
-ls -1 .agents/skills
+ls -1 .agents/skills | tr -d /  | sort
 
-# Every skill currently indexed in AGENTS.md
-grep -oE '\.agents/skills/[a-z0-9-]+' AGENTS.md | sed 's|.agents/skills/||' | sort -u
+# Every skill currently indexed
+grep -ohE '`[a-z0-9-]+`' AGENTS.md docs/phaser-skills.md | tr -d '`' | sort -u
 ```
 
 Any name in the first list and not the second needs a pointer line added. Any

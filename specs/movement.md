@@ -20,6 +20,11 @@ JUMP_HEIGHT_PX = JUMP_VELOCITY² / (2 × GRAVITY) = 700² / 3600 = 136px
 [arena.md](arena.md) sits within 136px of the surface below it, and a test
 asserts this. Re-check the arena whenever these move.
 
+It also changes **combat**: the uppercut's launch velocity is chosen relative to
+the jump so that a launched fighter rises slightly *less* than they could jump.
+Retuning the jump silently retunes what being launched feels like — see
+[melee.md](melee.md).
+
 ## Basic movement
 
 - **WASD**: W = jump, A = left, D = right, S = down.
@@ -66,6 +71,25 @@ asserts this. Re-check the arena whenever these move.
 - **Wall coyote: 100ms**, so a wall jump does not need frame-perfect timing.
 - World edges are wall-jumpable. Chained wall jumps can climb a flat wall.
 - **Priority: ground jump wins over wall jump** when grounded.
+
+## Stun and launch
+
+Combat can take movement away, and it does so inside the same `tickPlayer` that
+does everything else — never as a separate code path, or client and server would
+disagree about who can move.
+
+- **While stunned, all intent is discarded**: no walking, no jump, no attack, no
+  block, no stance change. Gravity and collision continue as normal, so a
+  stunned fighter still falls and still lands.
+- **A launch is an impulse**, like a dash: the uppercut sets `vy = -620` and
+  clears `grounded`, then ordinary physics carries the arc. The launch is
+  deliberately weaker than a jump (−700), so being launched leaves you lower than
+  you could have jumped — helpless, but not automatically thrown off the level.
+- **Knockback is also just an impulse** on `vx`.
+
+Because all three live in the replayed simulation state, prediction reconciles
+them like any other physics. See [melee.md](melee.md) for what applies them and
+[netcode.md](netcode.md) for why that matters.
 
 ## Collision
 

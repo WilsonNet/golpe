@@ -12,9 +12,13 @@ netcode.
 
 | Doc | What's in it |
 |---|---|
-| [Specs](specs/README.md) | **Source of truth for intended behaviour** — movement, combat, arena, netcode. |
+| [Specs](specs/README.md) | **Source of truth for intended behaviour** — movement, sword combat, ranged combat, arena, netcode. |
 | [Running the game](docs/running-the-game.md) | Every way to launch it: player vs AI, AI vs AI, player vs player, online AI vs AI. Dev servers, controls, URL parameters, debug hooks, troubleshooting. |
-| [AGENTS.md](AGENTS.md) | Architecture, invariants, physics model, netcode rules, and the skill index. Also loaded as `CLAUDE.md`. |
+| [AGENTS.md](AGENTS.md) | The index every agent session loads: the rules that bite, commands, controls, and where to find everything else. Also loaded as `CLAUDE.md`. |
+| [Architecture](docs/architecture.md) | Module map, the client/server boundary, and the online-first model. |
+| [Invariants](docs/invariants.md) | Every rule that was written by a real bug, with the bug that motivated it. |
+| [Diagnostics](docs/diagnostics.md) | The physics diagnostic tool: console hooks, reading the report, and the traps that produce false results. |
+| [Agent config](docs/agent-config.md) | The write-once/run-everywhere symlink layout for OpenCode and Claude Code. |
 | [Feedback loop](.agents/skills/feedback-loop/SKILL.md) | The physics diagnostic: how to measure a bug before fixing it, and the catalogue of root causes already found. |
 | [Herdr dev workspace](.agents/skills/herdr-dev-workspace/SKILL.md) | Running the dev servers in visible herdr panes instead of background processes. |
 | [Knowledge sharpener](.agents/skills/knowledge-sharpener/SKILL.md) | End-of-session routine for folding what was learned back into the docs. |

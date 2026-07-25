@@ -1,8 +1,13 @@
 # Combat Mechanics
 
-**Intent:** ranged duelling across a vertical arena, where positioning and
-line-of-sight matter more than reflexes. Projectiles must read as instant and
-travel dead straight.
+**Intent:** a sword duel across a vertical arena, with a gun as the answer to
+distance. Reads and positioning decide fights; the ranged game exists to stop
+turtling at range, not to win on its own.
+
+Sword combat is large enough to own a document — see **[melee.md](melee.md)**
+for the GunZ-derived frame data, blocking, parries, the butterfly and the
+Massive Strike. This file covers the ranged half, damage and the round
+lifecycle.
 
 ## Authority
 
@@ -17,12 +22,16 @@ to, producing a second sprite nothing simulated, which froze on screen forever.
 
 ## Stance system
 
-- **Q**: melee stance. **E**: ranged stance. Default at spawn: **ranged**.
-- Switching is instant, no cooldown.
+- **Q**: sword stance. **E**: gun stance. Default at spawn: **sword** — this is
+  a sword game first, and the gun is the answer to a range problem.
+- Switching is instant and has no cooldown, but it is not free: it **cancels a
+  cancellable melee move**, which is GunZ's slash-shot. It cannot escape the
+  recovery of a heavy move.
+- Blocking requires the sword; firing requires the gun.
 
 ## Ranged combat
 
-- **Left-click** fires toward the cursor.
+- **Left-click** fires toward the cursor, in gun stance only.
 - Bullet speed **600 px/s**, damage **10** per hit.
 - Attack cooldown **250ms**, shared by all attacks.
 - Unlimited ammunition.
@@ -39,21 +48,16 @@ to, producing a second sprite nothing simulated, which froze on screen forever.
 
 ## Melee combat
 
-- Requires melee stance.
-- **Left-click** swings a hitbox **30px** in front of the facing direction.
-- Hitbox lives **150ms** and follows the fighter while active.
-- Only triggered within **100px** of the target.
-
-## Blocking
-
-- Requires melee stance. **Right-click (hold)** enters the blocking state.
-- While blocking the fighter is forced to idle animation.
-- *Damage reduction is not implemented* — blocking currently has no defensive
-  effect.
+Specified in full in **[melee.md](melee.md)**. In summary: slash, uppercut and
+Massive Strike, each with startup/active/recovery frame data; a front-only block
+with a parry window that guard-breaks the attacker; and slash-into-block
+cancelling that produces the butterfly. The server is the sole judge of a melee
+hit, exactly as it is for bullets.
 
 ## Damage and rounds
 
-- Fighters start at **100 HP**. Bullet damage **10**, so ten clean hits is a KO.
+- Fighters start at **100 HP**. Bullet damage **10**, so ten clean hits is a KO;
+  melee damage ranges from 7 (slash) to 24 (Massive Strike).
 - HP is clamped at 0; a dead fighter is drawn at **0.3 alpha**.
 - **Online:** at 0 HP the server waits **1.5s**, resets both fighters to their
   spawns at full HP, clears all bullets, and broadcasts `round-reset`. Damage is
@@ -70,6 +74,13 @@ randomised per round so no two fights are identical.
 
 - Aim is jittered by accuracy; a perfect bot would be unplayable.
 - The brain will not fire without line of sight.
+- **It picks its stance by range**: sword inside melee reach, gun outside it. A
+  bot that never drew its sword would leave the entire system in
+  [melee.md](melee.md) untested by the AI-vs-AI feedback loop, which is the only
+  place it gets exercised.
+- **It sword-fights rather than mashing:** butterflies to close, blocks a swing
+  it reads coming, uppercuts an opponent who is blocking, charges a Massive only
+  at a safe distance, and punishes a whiffed heavy move.
 - **Jump intent is held for 240ms, then force-released for 60ms.** Jump height is
   analogue and edge-triggered, so an AI emitting `jump` on scattered single
   frames could only ever produce a minimum-height hop and could never reach the
@@ -79,7 +90,7 @@ randomised per round so no two fights are identical.
 
 ## Not implemented
 
-- Blocking damage reduction.
-- Knockback on hit.
-- Invincibility frames.
+- Knockback from **bullets** (melee knockback exists — see [melee.md](melee.md)).
+- Invincibility frames against **bullets** (melee has 180ms of them).
 - Ammunition or reloading.
+- Lag compensation on hit detection, ranged or melee.

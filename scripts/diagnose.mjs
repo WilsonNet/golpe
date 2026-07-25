@@ -171,6 +171,7 @@ function digest(r) {
 		yRange: r.playerMovement?.yRange,
 		movement: r.movementSummary,
 		bullets: r.bulletSummary,
+		melee: r.meleeSummary,
 		recon: r.reconciliationSummary,
 		collisions: r.collisionSummary,
 		penetrations: r.penetrationEvents?.slice(0, 3),

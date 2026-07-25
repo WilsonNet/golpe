@@ -17,7 +17,8 @@ it.
 | Spec | Covers |
 |---|---|
 | [movement.md](movement.md) | Walking, jumping, dashing, wall jumps, the feel constants and why they hold |
-| [combat.md](combat.md) | Stances, ranged and melee attacks, damage, round lifecycle |
+| [combat.md](combat.md) | Stances, ranged attacks, damage, round lifecycle |
+| [melee.md](melee.md) | Sword combat: frame data, blocking, parries, the butterfly, the Massive Strike |
 | [arena.md](arena.md) | World bounds, platform layout, reachability rules |
 | [netcode.md](netcode.md) | Online-first model, prediction, reconciliation, projectiles, bots |
 

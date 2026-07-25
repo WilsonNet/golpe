@@ -3,7 +3,10 @@ import { createDudeAnims } from "../anims/dude/dudeAnims";
 import type { AIConfig } from "../characters/AIConfig";
 import AIEnemy from "../characters/AIEnemy";
 import { playableControls } from "../characters/Controls";
-import EnemyBrain, { type AIInput } from "../characters/EnemyBrain";
+import EnemyBrain, {
+	type AIInput,
+	type AIOutput,
+} from "../characters/EnemyBrain";
 import Player from "../characters/Player";
 import { MovementState } from "../characters/playerStates";
 import { BulletSystem, type BulletTarget } from "../combat/BulletSystem";
@@ -15,13 +18,19 @@ import {
 	drawArena,
 	syncSpriteToBody,
 } from "../render/ArenaRenderer";
+import { type ImpactEvent, MeleeFx } from "../render/MeleeFx";
 import {
+	applyMeleeResult,
 	BULLET_DAMAGE,
 	canFire,
 	createPlayerState,
 	hasLineOfSight,
+	type MeleeResult,
+	meleePhase,
+	NEUTRAL_INTENT,
 	type PlayerIntent,
 	type PlayerPosition,
+	resolveMelee,
 	tickPlayer,
 } from "../simulation/Physics";
 
@@ -36,7 +45,21 @@ const START_PLAYER_Y = 480;
 const START_ENEMY_X = 668;
 const START_ENEMY_Y = 480;
 
-const NO_INTENT: PlayerIntent = { left: false, right: false, up: false };
+const NO_INTENT: PlayerIntent = { ...NEUTRAL_INTENT };
+
+/** Translate a brain's decision into the intent the simulation consumes. */
+function intentFromAI(output: AIOutput): PlayerIntent {
+	return {
+		left: output.moveLeft,
+		right: output.moveRight,
+		up: output.jump,
+		attack: output.attack,
+		block: output.block,
+		uppercut: output.uppercut,
+		swordStance: output.swordStance,
+		face: output.face,
+	};
+}
 
 export default class Game extends Phaser.Scene {
 	private player?: Player;
@@ -57,6 +80,7 @@ export default class Game extends Phaser.Scene {
 
 	private bullets!: BulletSystem;
 	private diagnostics!: PhysicsDiagnostics;
+	private meleeVfx!: MeleeFx;
 
 	private aiVsAIMode = false;
 	private playerBrain?: EnemyBrain;
@@ -79,6 +103,12 @@ export default class Game extends Phaser.Scene {
 	private playerAimAngle = 0;
 	private playerWantsAttack = false;
 	private diagPhysicsSteps = 0;
+	/**
+	 * Which weapon the local fighter has asked for. Absolute rather than a
+	 * toggle, because a toggle cannot survive a dropped input — see
+	 * specs/netcode.md.
+	 */
+	private swordStance = true;
 
 	constructor() {
 		super("Game");
@@ -97,6 +127,9 @@ export default class Game extends Phaser.Scene {
 		this.player = new Player(this, START_PLAYER_X, START_PLAYER_Y, "dude");
 		this.aiEnemy = new AIEnemy(this, START_ENEMY_X, START_ENEMY_Y, "dude");
 		this.bullets = new BulletSystem(this);
+		this.meleeVfx = new MeleeFx(this);
+		this.meleeVfx.registerBody("local", this.player);
+		this.meleeVfx.registerBody("remote", this.aiEnemy);
 		this.diagnostics = new PhysicsDiagnostics(() =>
 			this.onlineMode ? "online" : "offline",
 		);
@@ -142,6 +175,12 @@ export default class Game extends Phaser.Scene {
 		>;
 
 		this.input.keyboard?.on("keydown-P", () => this.toggleAIVsAI());
+		this.input.keyboard?.on("keydown-Q", () => {
+			this.swordStance = true;
+		});
+		this.input.keyboard?.on("keydown-E", () => {
+			this.swordStance = false;
+		});
 		this.input.mouse?.disableContextMenu();
 
 		this.input.on("pointermove", (pointer: Phaser.Input.Pointer) => {
@@ -200,12 +239,33 @@ export default class Game extends Phaser.Scene {
 			onRemoteHp: (hp) => {
 				this.enemyHpText?.setText(`enemy hp: ${Math.max(0, hp)}`);
 			},
-			onReconcile: (errorPx, replayed) => {
-				this.diagnostics.recordReconciliation(errorPx, replayed);
-				// A correction this large is a respawn, not a misprediction.
-				if (errorPx > 100) this.diagnostics.markTeleport();
+			onReconcile: (errorPx, replayed, meleeDiverged) => {
+				// A correction this large is a respawn, not a misprediction. The
+				// server replaces the whole state, so the sword state changes too —
+				// counting that as a prediction desync would blame the netcode for a
+				// round ending.
+				const respawn = errorPx > 100;
+				this.diagnostics.recordReconciliation(
+					errorPx,
+					replayed,
+					meleeDiverged && !respawn,
+				);
+				if (respawn) this.diagnostics.markTeleport();
 			},
 			onTeleport: () => this.diagnostics.markTeleport(),
+			onMeleeEvent: (event) => {
+				// The server names the attacker, so the victim is whoever it is not.
+				const victim =
+					event.attackerId === this.online?.manager.myId ? "remote" : "local";
+				this.meleeFx(event, victim);
+				this.diagnostics.recordMeleeEvent(event.move, event.outcome);
+				// A hit is an announced discontinuity, exactly like a respawn. Only
+				// the server can know a swing connected, so the client necessarily
+				// mispredicts the stun and knockback and then rewinds into them —
+				// tens of pixels in one frame, from correct netcode. Counting that as
+				// jitter would mean the metric fails hardest when combat works.
+				this.diagnostics.markTeleport(2);
+			},
 		});
 		this.online.connect(this.soloMatch);
 
@@ -232,6 +292,8 @@ export default class Game extends Phaser.Scene {
 			this.updateOffline(t, dtSec);
 		}
 
+		this.renderMelee(dt);
+
 		if (this.diagnostics.isActive) {
 			this.diagnostics.record({
 				t,
@@ -241,6 +303,11 @@ export default class Game extends Phaser.Scene {
 				enemy: this.onlineMode
 					? (this.online?.remotePosition ?? null)
 					: { x: this.enemyPhys.x, y: this.enemyPhys.y },
+				// The full opponent state, so blocks and parries the local fighter
+				// is on the receiving end of are measured too.
+				enemyState: this.onlineMode
+					? (this.online?.remoteState ?? null)
+					: this.enemyPhys,
 				bullets: this.onlineMode
 					? [...(this.online?.bullets ?? [])]
 					: this.bullets.snapshot(),
@@ -248,6 +315,28 @@ export default class Game extends Phaser.Scene {
 				cameraY: this.cameras.main.scrollY,
 			});
 		}
+	}
+
+	/**
+	 * Draw both fighters' sword state.
+	 *
+	 * Runs every frame rather than every physics step, because this is
+	 * presentation: it reads the simulation and never writes to it. The local
+	 * fighter's state is predicted, so its swing appears on the frame the button
+	 * was pressed; the remote's comes from the authoritative snapshot.
+	 */
+	private renderMelee(dtMs: number) {
+		this.meleeVfx.updateFighter("local", this.playerPhys, dtMs);
+
+		if (this.onlineMode) {
+			const sprite = this.online?.remoteBodySprite;
+			if (sprite) this.meleeVfx.registerBody("remote", sprite);
+			const remote = this.online?.remoteState;
+			if (remote) this.meleeVfx.updateFighter("remote", remote, dtMs);
+			return;
+		}
+
+		this.meleeVfx.updateFighter("remote", this.enemyPhys, dtMs);
 	}
 
 	/**
@@ -295,16 +384,36 @@ export default class Game extends Phaser.Scene {
 		this.gatherEnemyIntent(t, dtSec);
 	}
 
+	/**
+	 * Read the keyboard and mouse into simulation intent.
+	 *
+	 * Buttons are passed through raw, never edge-detected here: the simulation
+	 * does its own press-edge detection (jump height is analogue, a slash needs a
+	 * press edge, a Massive fires on release), and edge-detecting twice would
+	 * mean the client and server disagreed about what a frame's input was.
+	 */
+	private keyboardIntent(): PlayerIntent {
+		const pointer = this.input.activePointer;
+		return {
+			left: this.cursors.left?.isDown ?? false,
+			right: this.cursors.right?.isDown ?? false,
+			up: this.cursors.up?.isDown ?? false,
+			attack: pointer?.leftButtonDown() ?? false,
+			block: pointer?.rightButtonDown() ?? false,
+			uppercut: this.cursors.uppercut?.isDown ?? false,
+			swordStance: this.swordStance,
+			// You face where you aim. That is what lets a player retreat while
+			// still guarding the side the attacker is coming from.
+			face: Math.cos(this.playerAimAngle) >= 0 ? 1 : -1,
+		};
+	}
+
 	private gatherKeyboardIntent(t: number) {
 		if (!this.player || !this.cursors) return;
 
 		this.player.update(t, 16, this.cursors);
 
-		this.playerIntent = {
-			left: this.cursors.left?.isDown ?? false,
-			right: this.cursors.right?.isDown ?? false,
-			up: this.cursors.up?.isDown ?? false,
-		};
+		this.playerIntent = this.keyboardIntent();
 
 		// A dash is an impulse on the shared simulation, not a separate movement
 		// path — it sets velocity and then normal physics carries it.
@@ -330,18 +439,13 @@ export default class Game extends Phaser.Scene {
 				this.enemyPhys,
 				this.player.hp,
 				this.aiEnemy.hp,
-				this.aiEnemy.getFacingDirection(),
 			),
 			t,
 			dtSec * 1000,
 		);
 		this.player.setAIOverride(output);
 
-		this.playerIntent = {
-			left: output.moveLeft,
-			right: output.moveRight,
-			up: output.jump,
-		};
+		this.playerIntent = intentFromAI(output);
 		this.playerAimAngle = output.aimAngle;
 		this.playerWantsAttack = output.attack;
 	}
@@ -349,39 +453,33 @@ export default class Game extends Phaser.Scene {
 	private gatherEnemyIntent(t: number, dtSec: number) {
 		if (!this.aiEnemy || !this.player || this.aiEnemy.hp <= 0) return;
 
-		const los = hasLineOfSight(
-			this.enemyPhys.x,
-			this.enemyPhys.y,
-			this.playerPhys.x,
-			this.playerPhys.y,
-		);
-
 		this.aiEnemy.update(
+			this.perceive(
+				this.enemyPhys,
+				this.playerPhys,
+				this.aiEnemy.hp,
+				this.player.hp,
+			),
 			t,
 			dtSec * 1000,
-			this.playerPhys.x,
-			this.playerPhys.y,
-			this.player.getFacingDirection(),
-			los,
-			this.player.hp,
-			this.enemyPhys.wallTouch,
 		);
 
-		const output = this.aiEnemy.lastAIOutput;
-		this.enemyIntent = {
-			left: output.moveLeft,
-			right: output.moveRight,
-			up: output.jump,
-		};
+		this.enemyIntent = intentFromAI(this.aiEnemy.lastAIOutput);
 	}
 
-	/** Build the perception an AI brain reads, from simulation state only. */
+	/**
+	 * Build the perception an AI brain reads, from simulation state only.
+	 *
+	 * Both AI paths — the offline enemy and the client-side brain driving the
+	 * local fighter — go through here, and the server builds the same structure
+	 * for its bots. One perception shape means a brain cannot accidentally be
+	 * cleverer in one mode than another.
+	 */
 	private perceive(
 		self: PlayerPosition,
 		foe: PlayerPosition,
 		selfHP: number,
 		enemyHP: number,
-		foeFacing: number,
 	): AIInput {
 		const dx = foe.x - self.x;
 		const dy = foe.y - self.y;
@@ -391,13 +489,20 @@ export default class Game extends Phaser.Scene {
 			selfX: self.x,
 			selfY: self.y,
 			distanceToPlayer: Math.sqrt(dx * dx + dy * dy),
-			playerFacingDirection: foeFacing,
+			playerFacingDirection: foe.facing,
 			touchingDown: self.grounded,
 			touchingLeft: self.wallTouch === "left",
 			touchingRight: self.wallTouch === "right",
 			hasLineOfSight: hasLineOfSight(self.x, self.y, foe.x, foe.y),
 			selfHP,
 			enemyHP,
+			enemyAction: foe.meleeAction,
+			enemyPhase: meleePhase(foe),
+			enemyBlocking: foe.blocking,
+			enemyStunned: foe.stunTimer > 0,
+			selfAction: self.meleeAction,
+			selfStunned: self.stunTimer > 0,
+			selfMassiveReady: self.massiveReady,
 		};
 	}
 
@@ -422,7 +527,12 @@ export default class Game extends Phaser.Scene {
 	private handleOfflineAttacks(now: number) {
 		if (!this.player || !this.aiEnemy) return;
 
-		if (this.playerWantsAttack && canFire(this.player.lastAttackTime, now)) {
+		// A fighter holds a sword or a gun, never both.
+		if (
+			this.playerPhys.stance === "gun" &&
+			this.playerWantsAttack &&
+			canFire(this.player.lastAttackTime, now)
+		) {
 			this.player.lastAttackTime = now;
 			const c = bodyCentre(this.playerPhys.x, this.playerPhys.y);
 			this.bullets.fire(c.x, c.y, this.playerAimAngle, "player");
@@ -432,6 +542,7 @@ export default class Game extends Phaser.Scene {
 		const enemyOutput = this.aiEnemy.lastAIOutput;
 		if (
 			this.aiEnemy.hp > 0 &&
+			this.enemyPhys.stance === "gun" &&
 			enemyOutput.attack &&
 			canFire(this.aiEnemy.lastAttackTime, now)
 		) {
@@ -441,7 +552,81 @@ export default class Game extends Phaser.Scene {
 			EventBus.emit("bullet-fired");
 		}
 
+		this.resolveOfflineMelee();
 		this.bullets.resolve(this.bulletTargets());
+	}
+
+	/**
+	 * Judge sword hits without a server. `?offline=true` only.
+	 *
+	 * This mirrors `GameRoom.resolveMeleeHits` because both call the same
+	 * simulation code — the escape hatch must not become a second, divergent set
+	 * of combat rules, since it is the one path nobody dogfoods.
+	 */
+	private resolveOfflineMelee() {
+		if (!this.player || !this.aiEnemy) return;
+
+		const sides = [
+			{
+				state: this.playerPhys,
+				alive: this.player.hp > 0,
+				onHit: (dmg: number) => this.onEnemyMeleeHit(dmg),
+				foe: this.enemyPhys,
+				foeAlive: this.aiEnemy.hp > 0,
+			},
+			{
+				state: this.enemyPhys,
+				alive: this.aiEnemy.hp > 0,
+				onHit: (dmg: number) => this.onPlayerMeleeHit(dmg),
+				foe: this.playerPhys,
+				foeAlive: this.player.hp > 0,
+			},
+		];
+
+		for (const side of sides) {
+			if (!side.alive || !side.foeAlive) continue;
+			const result = resolveMelee(side.state, side.foe);
+			if (!result) continue;
+			const damage = applyMeleeResult(side.state, side.foe, result);
+			this.meleeFx(result, side.foe === this.playerPhys ? "local" : "remote");
+			if (damage > 0) side.onHit(damage);
+		}
+	}
+
+	/**
+	 * Play the effects for one sword impact.
+	 *
+	 * The same entry point for both paths: online it is called from a server
+	 * event, offline from the local resolver. Effects therefore cannot drift
+	 * between the supported mode and the escape hatch.
+	 */
+	private meleeFx(event: ImpactEvent, victimKey?: string) {
+		this.meleeVfx.impact(event, victimKey);
+	}
+
+	private onEnemyMeleeHit(damage: number) {
+		if (!this.aiEnemy) return;
+		this.aiEnemy.takeDamage(damage);
+		console.log(
+			`[FIGHT] Player sword hit enemy! Enemy HP: ${Math.max(0, this.aiEnemy.hp)}`,
+		);
+		if (this.aiEnemy.hp <= 0) {
+			console.log("[FIGHT] Enemy defeated!");
+			this.scheduleReset();
+		}
+	}
+
+	private onPlayerMeleeHit(damage: number) {
+		if (!this.player) return;
+		this.player.takeDamage(damage);
+		this.hpText?.setText(`hp: ${Math.max(0, this.player.hp)}`);
+		console.log(
+			`[FIGHT] Enemy sword hit player! Player HP: ${Math.max(0, this.player.hp)}`,
+		);
+		if (this.player.hp <= 0) {
+			console.log("[FIGHT] Player defeated!");
+			this.scheduleReset();
+		}
 	}
 
 	private bulletTargets(): BulletTarget[] {
@@ -503,22 +688,13 @@ export default class Game extends Phaser.Scene {
 		if (this.onlineAIMode && this.playerBrain) {
 			this.gatherOnlineAIIntent(t, dtSec);
 		} else {
-			this.playerIntent = {
-				left: this.cursors.left?.isDown ?? false,
-				right: this.cursors.right?.isDown ?? false,
-				up: this.cursors.up?.isDown ?? false,
-			};
+			this.playerIntent = this.keyboardIntent();
 			this.playerAimAngle = this.player.getMouseAngle?.() ?? 0;
-			this.playerWantsAttack = this.input.activePointer?.isDown ?? false;
+			this.playerWantsAttack = this.playerIntent.attack;
 		}
 
 		this.diagPhysicsSteps = this.runFixedSteps(dtSec, (dt) => {
-			session.fixedStep(
-				this.playerIntent,
-				this.playerWantsAttack,
-				this.playerAimAngle,
-				dt,
-			);
+			session.fixedStep(this.playerIntent, this.playerAimAngle, dt);
 		});
 
 		this.playerPhys = session.predicted.state;
@@ -547,28 +723,20 @@ export default class Game extends Phaser.Scene {
 		const session = this.online;
 		if (!this.player || !this.playerBrain || !session) return;
 
-		const remote = session.remotePosition;
-		if (!remote) return;
+		// The remote fighter's full authoritative state, not just a position: the
+		// brain has to see what the opponent's sword is doing to block, punish or
+		// uppercut a guard, and inventing a blank state here would make the AI
+		// fight an opponent who never appears to swing.
+		const foe = session.remoteState;
+		if (!foe) return;
 
-		// `remotePosition` is already body space, matching the local sim.
-		const foe = createPlayerState(remote.x, remote.y);
 		const output = this.playerBrain.decide(
-			this.perceive(
-				this.playerPhys,
-				foe,
-				this.player.hp,
-				session.remoteHp,
-				session.remoteFacing,
-			),
+			this.perceive(this.playerPhys, foe, this.player.hp, session.remoteHp),
 			t,
 			dtSec * 1000,
 		);
 
-		this.playerIntent = {
-			left: output.moveLeft,
-			right: output.moveRight,
-			up: output.jump,
-		};
+		this.playerIntent = intentFromAI(output);
 		this.playerAimAngle = output.aimAngle;
 		this.playerWantsAttack = output.attack;
 	}
@@ -601,6 +769,7 @@ export default class Game extends Phaser.Scene {
 		syncSpriteToBody(this.aiEnemy, this.enemyPhys.x, this.enemyPhys.y);
 
 		this.bullets?.clear();
+		this.meleeVfx?.reset();
 		this.hpText?.setText("hp: 100");
 		this.enemyHpText?.setText("enemy hp: 100");
 		this.resetScheduled = false;

@@ -38,6 +38,18 @@ export interface ReconcileResult {
 	replayed: number;
 	/** True when the error was large enough to be a visible pop. */
 	corrected: boolean;
+	/**
+	 * The sword state diverged for a reason the client should have predicted.
+	 *
+	 * The melee equivalent of `errorPx`, and it must be false — but only
+	 * *unexplained* divergence counts. Being hit is by design unpredictable: the
+	 * client cannot know it was stunned, parried or knocked back until the server
+	 * says so, and it will always mispredict those. Counting them would make the
+	 * metric report correct netcode as a defect, which is exactly how a metric
+	 * gets ignored. What must never happen is the state machine itself running
+	 * differently on the two sides.
+	 */
+	meleeDiverged: boolean;
 }
 
 export class PredictedPlayer {
@@ -86,6 +98,9 @@ export class PredictedPlayer {
 	): ReconcileResult {
 		const predictedX = this.state.x;
 		const predictedY = this.state.y;
+		const predictedAction = this.state.meleeAction;
+		const predictedBlocking = this.state.blocking;
+		const predictedMassiveReady = this.state.massiveReady;
 
 		while (this.pending.length > 0 && this.pending[0].seq <= lastSeq) {
 			this.pending.shift();
@@ -102,10 +117,22 @@ export class PredictedPlayer {
 		const dy = this.state.y - predictedY;
 		const errorPx = Math.sqrt(dx * dx + dy * dy);
 
+		// The server telling us we were hit is the one legitimate way a sword state
+		// can change without the client having seen it coming. Stun, fresh
+		// invulnerability and a newly armed Massive are the three tells.
+		const interrupted =
+			this.state.stunTimer > 0 ||
+			this.state.iframeTimer > 0 ||
+			(this.state.massiveReady && !predictedMassiveReady);
+
 		return {
 			errorPx,
 			replayed: this.pending.length,
 			corrected: errorPx > NEGLIGIBLE_ERROR_PX,
+			meleeDiverged:
+				!interrupted &&
+				(this.state.meleeAction !== predictedAction ||
+					this.state.blocking !== predictedBlocking),
 		};
 	}
 }

@@ -21,10 +21,45 @@ report exists because a real bug was invisible without it:
 | `movementSummary` | a 184px / 2.2s moon jump, and an AI wedged in a 36px pocket |
 | `bulletSummary` | projectiles stuttering, stalling and jumping between sprites |
 | `reconciliationSummary` | a permanent ~14px client/server standing error |
+| `meleeSummary` | a sword system whose blocks, parries and Massive Strikes were never happening at all |
 
 A metric that cannot fail is worthless. Before trusting a green run, confirm the
 instrument discriminates — the projectile metrics were only believable because
 they first reported `3 jumps, 6 stalls`, then `5 jumps`, and only then zero.
+
+### Count what should happen, not only what must not
+
+Every "must be 0" metric is trivially satisfied by a build where the mechanic
+never runs. `meleeSummary` therefore has two halves, and the second one is where
+the real bugs surfaced:
+
+- **Violations** (`illegalActions`, `blockedUnblockables`, `frameDataViolations`,
+  `stuckActionFrames`, `meleeDesyncFrames`) must all be **0**.
+- **Counters** (`slashes`, `massives`, `uppercuts`, `blocks`, `parries`,
+  `backstabs`, `butterflyChains`) must all be **> 0** across a few runs.
+
+Both of the worst sword bugs presented as a zero in the second half while the
+first half read perfectly clean: reactive blocking was *impossible* online
+(19 guards raised, 0 slashes intercepted), and the backstab was firing on
+overlapping bodies (11 backstabs to 1 clean hit, which also silently disabled
+blocking, since a backstab ignores the guard).
+
+When a counter is stuck at zero, **break it down before theorising**.
+`outcomeByMove` was added for exactly this: a flat `blocked: 0` reads identically
+whether guards are failing or whether everything that connected was unblockable
+by design, and those need opposite fixes.
+
+### A metric must know the resolution of what it watches
+
+The remote fighter is only visible at 20Hz, so judging its frame data against a
+60Hz tolerance reported the *network* as a state-machine bug. Same family as the
+stale jitter threshold: a metric that flags correct behaviour trains you to
+ignore it.
+
+Likewise, **exclude what the client provably cannot predict.** Melee stun, launch
+and knockback are announced by the server, so they are marked as teleports and
+excluded from the desync counter — otherwise the metric fails hardest exactly
+when combat is working.
 
 The rule: **if you can't measure it, you can't fix it.** Never proceed with a physics fix if:
 - There is no `window.__physicsDiagnostic()` (or equivalent) producing structured data
@@ -235,6 +270,11 @@ npx vitest run src/game/simulation/Physics.test.ts
 | `bulletSummary.maxPathDeviationPx > 0` | A "straight" bullet path bent — sprite identity churn |
 | `bulletSummary.maxStepRatio` | Worst step vs expected; 1.0 is ideal, healthy is ~1.2 |
 | `bulletSummary.avgStepCv` | Step-length evenness; 0 is perfect, healthy is ~0.05 |
+| `meleeSummary.illegalActions` | Somebody acted while stunned; must be 0 |
+| `meleeSummary.blockedUnblockables` | A guard stopped a Massive or uppercut; must be 0 |
+| `meleeSummary.frameDataViolations` | A move ignored its own `MOVES` table; `violations[]` names which |
+| `meleeSummary.meleeDesyncFrames` | The client drew a swing the server never ran; must be 0 |
+| `meleeSummary` counters all > 0 | The mechanics actually fired. A clean run with zeroes here proves nothing |
 | tiny `xRange`/`yRange` | Stuck fighter, regardless of verdict |
 
 ## Known Root Causes (all fixed — do not reintroduce)
