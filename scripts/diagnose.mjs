@@ -32,9 +32,12 @@ function sinkConsole(page, lines = []) {
 
 /** Wait until the game scene has installed its debug hooks. */
 async function waitForGame(page) {
-	await page.waitForFunction(() => typeof window.__physicsDiagnostic === "function", {
-		timeout: 20000,
-	});
+	await page.waitForFunction(
+		() => typeof window.__physicsDiagnostic === "function",
+		{
+			timeout: 20000,
+		},
+	);
 }
 
 /** Poll __gameState() during a run, to see what the fighters were actually doing. */
@@ -48,7 +51,14 @@ async function sampleStates(page, durationMs, samples = 5) {
 				await page.evaluate(() => {
 					const s = window.__gameState();
 					const round = (p) =>
-						p ? { x: Math.round(p.x), y: Math.round(p.y), g: p.grounded, w: p.wallTouch } : null;
+						p
+							? {
+									x: Math.round(p.x),
+									y: Math.round(p.y),
+									g: p.grounded,
+									w: p.wallTouch,
+								}
+							: null;
 					return {
 						pState: s.playerState,
 						eState: s.enemyState,
@@ -192,7 +202,10 @@ async function main() {
 			console.log(`\n===== ${mode.toUpperCase()} run ${run}/${RUNS} =====`);
 			console.log(JSON.stringify(digest(report), null, 2));
 			if (report.jitterEvents?.length) {
-				console.log("first jitter events:", JSON.stringify(report.jitterEvents.slice(0, 8)));
+				console.log(
+					"first jitter events:",
+					JSON.stringify(report.jitterEvents.slice(0, 8)),
+				);
 			}
 		}
 	}

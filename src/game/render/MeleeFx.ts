@@ -25,8 +25,17 @@ import { TEX, tex } from "./assets";
 import { ParticleSystem } from "./Particles";
 import type { Stage } from "./Stage";
 
-/** Palette. One colour per readable game state, so a glance tells you what happened. */
-const COLOR: Record<string, number> = {
+/**
+ * Palette. One colour per readable game state, so a glance tells you what
+ * happened.
+ *
+ * Deliberately not a `Record<string, number>`: that erases which keys exist, so
+ * every lookup types as possibly-undefined and a typo for a colour that was
+ * never defined would sail through to a runtime `undefined` tint. Keying it on
+ * `MeleeMove` means adding a move to the frame-data table fails to compile until
+ * it has a colour.
+ */
+const COLOR = {
 	slash: 0xffffff,
 	uppercut: 0x8ff0ff,
 	massive: 0xffb238,
@@ -35,7 +44,7 @@ const COLOR: Record<string, number> = {
 	parry: 0xffe066,
 	backstab: 0xc471ff,
 	stun: 0xffe066,
-};
+} as const satisfies Record<MeleeMove | string, number>;
 
 export interface ImpactEvent {
 	move: MeleeMove;
@@ -375,19 +384,25 @@ export class MeleeFx {
 	update(dtMs: number) {
 		this.particles.update(dtMs);
 
-		for (let i = this.rings.length - 1; i >= 0; i--) {
-			const r = this.rings[i];
+		// Compact in place: advance every ring, keep the survivors at the front,
+		// then truncate. No splice inside the loop and no index arithmetic, so
+		// there is no way to skip an element by removing its neighbour.
+		let kept = 0;
+		for (const r of this.rings) {
 			r.ageMs += dtMs;
 			const t = Math.min(1, r.ageMs / r.lifeMs);
 			// Ease out, so the ring snaps outward and then settles.
 			const eased = 1 - (1 - t) ** 3;
 			r.sprite.scale.set(r.toScale * (0.2 + 0.8 * eased));
 			r.sprite.alpha = 1 - t;
+
 			if (t >= 1) {
 				r.sprite.destroy();
-				this.rings.splice(i, 1);
+				continue;
 			}
+			this.rings[kept++] = r;
 		}
+		this.rings.length = kept;
 	}
 
 	reset() {

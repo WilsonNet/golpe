@@ -8,24 +8,33 @@
  * and the client and server would immediately disagree.
  */
 
+import { syncSpriteToBody } from "../render/ArenaRenderer";
 import { dudeFrames } from "../render/assets";
 import type { MeleeFx } from "../render/MeleeFx";
-import { syncSpriteToBody } from "../render/ArenaRenderer";
 import type { AnimState, Queries } from "./world";
 
 /**
  * The `dude` strip has no atlas, so clips are frame ranges into it:
  * 0-3 walk left, 4 face-on, 5-8 walk right.
  */
-export const CLIPS: Record<string, { frames: number[]; fps: number }> = {
+export const CLIPS = {
 	left: { frames: [0, 1, 2, 3], fps: 10 },
 	right: { frames: [5, 6, 7, 8], fps: 10 },
 	turn: { frames: [4], fps: 1 },
 	"left-idle": { frames: [0], fps: 1 },
 	"right-idle": { frames: [5], fps: 1 },
-};
+} as const;
 
-export function playClip(anim: AnimState, clip: string) {
+/**
+ * The clips that exist, as a type.
+ *
+ * `AnimState.clip` is this union rather than `string`, so a clip lookup can
+ * never miss and a typo is a compile error instead of a sprite that silently
+ * stops animating.
+ */
+export type ClipName = keyof typeof CLIPS;
+
+export function playClip(anim: AnimState, clip: ClipName) {
 	if (anim.clip === clip) return;
 	anim.clip = clip;
 	anim.frame = 0;
@@ -56,7 +65,7 @@ export function animationSystem(queries: Queries, dtMs: number) {
 					: "right-idle",
 		);
 
-		const clip = CLIPS[e.anim.clip] ?? CLIPS.turn;
+		const clip = CLIPS[e.anim.clip];
 		e.anim.elapsedMs += dtMs;
 		const frameMs = 1000 / clip.fps;
 		while (e.anim.elapsedMs >= frameMs && clip.frames.length > 1) {
@@ -64,7 +73,8 @@ export function animationSystem(queries: Queries, dtMs: number) {
 			e.anim.frame = (e.anim.frame + 1) % clip.frames.length;
 		}
 
-		const texture = dudeFrames[clip.frames[e.anim.frame]];
+		const frameIndex = clip.frames[e.anim.frame] ?? clip.frames[0];
+		const texture = dudeFrames[frameIndex];
 		if (texture && e.sprite.texture !== texture) e.sprite.texture = texture;
 	}
 }

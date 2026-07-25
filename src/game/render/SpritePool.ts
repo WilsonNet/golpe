@@ -56,9 +56,9 @@ export class SpritePool {
 			this.layer.addChild(s);
 			this.sprites.push(s);
 		}
-		for (let i = 0; i < this.sprites.length; i++) {
-			this.sprites[i].visible = i < count;
-		}
+		this.sprites.forEach((s, i) => {
+			s.visible = i < count;
+		});
 		return this.sprites.slice(0, count);
 	}
 }

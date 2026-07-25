@@ -7,16 +7,18 @@ export default defineConfig({
 	server: {
 		port: 8080,
 	},
-	// Pixi registers its renderer and environment adapters through a global
-	// extension registry at import time, so it must exist exactly once. Left to
-	// itself the dev optimiser split pixi.js across two dep chunks, both of which
-	// ran that registration — and the app died on boot with "Extension type
-	// environment already has a handler". Pre-bundling it as one unit and
-	// deduping the resolution keeps a single instance.
+	// Three libraries here keep global state and break outright if the dev
+	// optimiser gives them two module instances:
+	//   - pixi.js registers renderers and environment adapters in a global
+	//     extension registry at import time; a second copy dies on boot with
+	//     "Extension type environment already has a handler".
+	//   - react/react-dom keep the hook dispatcher in module scope; a second copy
+	//     fails with "Invalid hook call" and a null `useState`.
+	// Both failures look like application bugs and are neither.
 	optimizeDeps: {
-		include: ["pixi.js"],
+		include: ["pixi.js", "react", "react-dom", "react-dom/client"],
 	},
 	resolve: {
-		dedupe: ["pixi.js"],
+		dedupe: ["pixi.js", "react", "react-dom"],
 	},
 });

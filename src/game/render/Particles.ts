@@ -11,7 +11,7 @@
  * cannot desync a match no matter how many of them there are.
  */
 
-import { Container, type Sprite } from "pixi.js";
+import type { Container, Sprite } from "pixi.js";
 import { tex } from "./assets";
 import { poolSprite } from "./SpritePool";
 
@@ -102,17 +102,17 @@ export class ParticleSystem {
 	update(dtMs: number) {
 		const dt = dtMs / 1000;
 
-		// Iterate backwards so a swap-remove cannot skip the element that takes
-		// the dead one's place.
-		for (let i = this.live.length - 1; i >= 0; i--) {
-			const p = this.live[i];
+		// Compact in place: advance every particle, keep the survivors at the front,
+		// then truncate. This replaced a backwards swap-remove — which worked, but
+		// only because of an index argument you had to reconstruct every time you
+		// read it. Here there is no index at all, so there is nothing to get wrong.
+		let kept = 0;
+		for (const p of this.live) {
 			p.ageMs += dtMs;
 
 			if (p.ageMs >= p.lifeMs) {
 				p.sprite.visible = false;
 				this.free.push(p.sprite);
-				this.live[i] = this.live[this.live.length - 1];
-				this.live.pop();
 				continue;
 			}
 
@@ -123,7 +123,10 @@ export class ParticleSystem {
 			p.sprite.scale.set(p.scaleFrom + (p.scaleTo - p.scaleFrom) * t);
 			p.sprite.alpha = p.alphaFrom + (p.alphaTo - p.alphaFrom) * t;
 			if (p.spin) p.sprite.rotation += p.spin * dt;
+
+			this.live[kept++] = p;
 		}
+		this.live.length = kept;
 	}
 
 	clear() {

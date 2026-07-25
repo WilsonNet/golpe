@@ -15,7 +15,13 @@
  *   node scripts/dev-herdr.mjs down     # stop both and close the tab
  */
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -105,9 +111,9 @@ async function portOpen(port) {
 		port === 9208
 			? "http://localhost:9208/.wrtc/v2/connections"
 			: `http://localhost:${port}/`;
-	const res = await fetch(url, { method: port === 9208 ? "POST" : "GET" }).catch(
-		() => null,
-	);
+	const res = await fetch(url, {
+		method: port === 9208 ? "POST" : "GET",
+	}).catch(() => null);
 	return Boolean(res);
 }
 
@@ -128,7 +134,9 @@ async function up() {
 			"--no-focus",
 		]);
 		workspace = created.workspace ?? created;
-		console.log(`created workspace ${workspace.workspace_id} (${WORKSPACE_LABEL})`);
+		console.log(
+			`created workspace ${workspace.workspace_id} (${WORKSPACE_LABEL})`,
+		);
 	}
 	const workspaceId = workspace.workspace_id;
 
@@ -177,16 +185,24 @@ async function up() {
 		previous = paneId;
 	}
 
-	writeState({ workspaceId, tabId, panes, startedAt: new Date().toISOString() });
+	writeState({
+		workspaceId,
+		tabId,
+		panes,
+		startedAt: new Date().toISOString(),
+	});
 
 	console.log(`\ndev tab ready: workspace ${workspaceId}, tab ${tabId}`);
-	for (const p of panes) console.log(`  ${p.name.padEnd(7)} ${p.paneId}  ${p.label}`);
+	for (const p of panes)
+		console.log(`  ${p.name.padEnd(7)} ${p.paneId}  ${p.label}`);
 
 	// Report real readiness rather than assuming the spawn worked.
 	console.log("\nwaiting for ports...");
 	for (const service of SERVICES) {
 		const ok = await waitForPort(service.port, 25000);
-		console.log(`  ${ok ? "ready  " : "TIMEOUT"} :${service.port} (${service.name})`);
+		console.log(
+			`  ${ok ? "ready  " : "TIMEOUT"} :${service.port} (${service.name})`,
+		);
 		if (!ok) {
 			const pane = panes.find((p) => p.name === service.name);
 			console.log(tailPane(pane.paneId, 15));
@@ -297,7 +313,9 @@ try {
 	else if (command === "status") await status();
 	else if (command === "logs") logs(positional[0], lines);
 	else {
-		console.error(`unknown command "${command}" — use up | down | status | logs`);
+		console.error(
+			`unknown command "${command}" — use up | down | status | logs`,
+		);
 		process.exit(1);
 	}
 } catch (err) {

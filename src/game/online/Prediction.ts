@@ -102,7 +102,8 @@ export class PredictedPlayer {
 		const predictedBlocking = this.state.blocking;
 		const predictedMassiveReady = this.state.massiveReady;
 
-		while (this.pending.length > 0 && this.pending[0].seq <= lastSeq) {
+		// Drop every input the server has already folded in.
+		while (this.pending[0] !== undefined && this.pending[0].seq <= lastSeq) {
 			this.pending.shift();
 		}
 

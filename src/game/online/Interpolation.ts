@@ -53,7 +53,9 @@ export class RemoteInterpolator {
 
 		// Keep a little more history than the delay needs.
 		const cutoff = t - this.delayMs * 4;
-		while (this.samples.length > 2 && this.samples[0].t < cutoff) {
+		while (this.samples.length > 2) {
+			const oldest = this.samples[0];
+			if (!oldest || oldest.t >= cutoff) break;
 			this.samples.shift();
 		}
 	}
@@ -63,27 +65,29 @@ export class RemoteInterpolator {
 	 * Falls back to the newest sample when there is nothing to interpolate.
 	 */
 	sample(nowServerMs: number): { x: number; y: number } | null {
-		if (this.samples.length === 0) return null;
-		if (this.samples.length === 1) {
-			return { x: this.samples[0].x, y: this.samples[0].y };
-		}
+		const oldest = this.samples[0];
+		const newest = this.samples.at(-1);
+		if (!oldest || !newest) return null;
+		if (this.samples.length === 1) return { x: oldest.x, y: oldest.y };
 
 		const target = nowServerMs - this.delayMs;
 
-		for (let i = this.samples.length - 1; i > 0; i--) {
-			const b = this.samples[i];
-			const a = this.samples[i - 1];
-			if (a.t <= target && target <= b.t) {
+		// Walk forward carrying the previous sample, rather than indexing `i` and
+		// `i - 1`. Samples are strictly increasing in `t`, so the first bracketing
+		// pair is the only bracketing pair — and this way there is no index
+		// arithmetic to get wrong or to have to prove correct.
+		let a: Sample | undefined;
+		for (const b of this.samples) {
+			if (a && a.t <= target && target <= b.t) {
 				const span = b.t - a.t;
 				const f = span > 0 ? (target - a.t) / span : 1;
 				return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f };
 			}
+			a = b;
 		}
 
 		// Target is outside the buffer: clamp to the nearest end rather than
 		// extrapolating, which would overshoot on a stall.
-		const newest = this.samples[this.samples.length - 1];
-		const oldest = this.samples[0];
 		return target > newest.t
 			? { x: newest.x, y: newest.y }
 			: { x: oldest.x, y: oldest.y };

@@ -72,6 +72,14 @@ are perfectly fine.
 To debug this class of bug, write a `.mts` probe that imports each layer of the
 chain and diffs `Object.keys`. It localises the break in one run.
 
+**`server/` must stay inside `tsc`.** For a long time it was not: `tsconfig.json`
+included only `src`, so the authoritative half of the game was never
+typechecked. It grew a real bug behind that gap — `botInput` read `foe.facingDir`
+after facing moved into `PlayerPosition`, so `playerFacingDirection` was
+`undefined`, `undefined * n` was `NaN`, every `playerFacesMe` test was false, and
+**the server's bots could never evade**. Nothing failed, nothing logged; the bots
+were simply worse. `npm run typecheck` now covers both projects.
+
 ## Combat authority
 
 - **One source of bullets.** `combat/BulletSystem` (offline) or the server

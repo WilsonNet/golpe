@@ -11,14 +11,15 @@ import {
 	MASSIVE_CHARGE_MS,
 	MELEE_IFRAME_MS,
 	type MeleeIntent,
+	type MeleeResult,
+	MOVES,
 	meleeHitbox,
 	meleePhase,
-	MOVES,
 	moveDuration,
 	PARRY_WINDOW_MS,
 	resolveMelee,
 	tickMelee,
-} from "./Melee";
+} from "./Melee.js";
 import {
 	createPlayerState,
 	JUMP_VELOCITY,
@@ -26,13 +27,25 @@ import {
 	type PlayerIntent,
 	type PlayerPosition,
 	tickPlayer,
-} from "./Physics";
+} from "./Physics.js";
 
 const DT = 1 / 60;
 const DT_MS = (DT * 1000) as number;
 
 function intent(overrides: Partial<PlayerIntent> = {}): PlayerIntent {
 	return { ...NEUTRAL_INTENT, ...overrides };
+}
+
+/**
+ * Assert a swing connected, and hand back the result.
+ *
+ * `resolveMelee` returns null for a miss, so every call site otherwise needs a
+ * non-null assertion — which silently turns "the hitbox stopped connecting" into
+ * a null-deref several lines later instead of a failed expectation here.
+ */
+function connects(result: MeleeResult | null): MeleeResult {
+	expect(result).not.toBeNull();
+	return result as MeleeResult;
 }
 
 /** A fighter in open space, well clear of any platform. */
@@ -58,7 +71,7 @@ function tickUntil(
 	predicate: (s: PlayerPosition) => boolean,
 	limitMs = 3000,
 ): { state: PlayerPosition; elapsedMs: number } {
-	let state = { ...s };
+	const state = { ...s };
 	let elapsedMs = 0;
 	while (!predicate(state) && elapsedMs < limitMs) {
 		tickMelee(state, intent(i), DT);
@@ -214,7 +227,7 @@ describe("blocking", () => {
 		const { attacker, defender } = duel({ defenderBlockMs: 400 });
 		const result = resolveMelee(attacker, defender);
 		expect(result?.outcome).toBe("blocked");
-		expect(applyMeleeResult(attacker, defender, result!)).toBe(0);
+		expect(applyMeleeResult(attacker, defender, connects(result))).toBe(0);
 		expect(defender.stunTimer).toBe(0);
 	});
 
@@ -223,7 +236,7 @@ describe("blocking", () => {
 			const { attacker, defender } = duel({ defenderBlockMs: 400, move });
 			const result = resolveMelee(attacker, defender);
 			expect(result?.outcome).toBe("hit");
-			expect(applyMeleeResult(attacker, defender, result!)).toBe(
+			expect(applyMeleeResult(attacker, defender, connects(result))).toBe(
 				MOVES[move].damage,
 			);
 		}
@@ -250,11 +263,13 @@ describe("blocking", () => {
 
 describe("parrying", () => {
 	it("guard-breaks the attacker and arms a free Massive Strike", () => {
-		const { attacker, defender } = duel({ defenderBlockMs: PARRY_WINDOW_MS / 2 });
+		const { attacker, defender } = duel({
+			defenderBlockMs: PARRY_WINDOW_MS / 2,
+		});
 		const result = resolveMelee(attacker, defender);
 		expect(result?.outcome).toBe("parried");
 
-		expect(applyMeleeResult(attacker, defender, result!)).toBe(0);
+		expect(applyMeleeResult(attacker, defender, connects(result))).toBe(0);
 		expect(attacker.stunTimer).toBe(GUARD_BREAK_STUN_MS);
 		expect(attacker.meleeAction).toBe("none");
 		// Stunned and blocking is a state the rules say cannot exist.
@@ -317,7 +332,7 @@ describe("backstab", () => {
 		const result = resolveMelee(attacker, defender);
 		expect(result?.outcome).toBe("backstab");
 
-		applyMeleeResult(attacker, defender, result!);
+		applyMeleeResult(attacker, defender, connects(result));
 		expect(defender.stunTimer).toBe(
 			MOVES.slash.hitstunMs + BACKSTAB_BONUS_STUN_MS,
 		);
@@ -358,7 +373,11 @@ describe("cancels", () => {
 
 	it("will not cancel a heavy move, which is what makes it punishable", () => {
 		for (const start of [
-			{ flags: { massiveReady: true }, key: "attack" as const, move: "massive" },
+			{
+				flags: { massiveReady: true },
+				key: "attack" as const,
+				move: "massive",
+			},
 			{ flags: {}, key: "uppercut" as const, move: "uppercut" },
 		]) {
 			let s = melee(fighter(start.flags), { [start.key]: true });
@@ -383,7 +402,7 @@ describe("cancels", () => {
 	it("keeps a hit that already landed when the slash is cancelled", () => {
 		const { attacker, defender } = duel({});
 		const result = resolveMelee(attacker, defender);
-		applyMeleeResult(attacker, defender, result!);
+		applyMeleeResult(attacker, defender, connects(result));
 		expect(attacker.hitLatch).toBe(true);
 
 		const cancelled = melee(attacker, { block: true });
@@ -393,7 +412,11 @@ describe("cancels", () => {
 
 	it("only lets one swing connect once", () => {
 		const { attacker, defender } = duel({});
-		applyMeleeResult(attacker, defender, resolveMelee(attacker, defender)!);
+		applyMeleeResult(
+			attacker,
+			defender,
+			connects(resolveMelee(attacker, defender)),
+		);
 		expect(resolveMelee(attacker, defender)).toBeNull();
 	});
 });
@@ -406,7 +429,11 @@ describe("hit consequences", () => {
 	it("launches the target with an uppercut", () => {
 		const { attacker, defender } = duel({ move: "uppercut" });
 		defender.grounded = true;
-		applyMeleeResult(attacker, defender, resolveMelee(attacker, defender)!);
+		applyMeleeResult(
+			attacker,
+			defender,
+			connects(resolveMelee(attacker, defender)),
+		);
 
 		expect(defender.vy).toBe(MOVES.uppercut.launchVy);
 		expect(defender.grounded).toBe(false);
@@ -423,7 +450,11 @@ describe("hit consequences", () => {
 
 	it("grants melee immunity so faster swinging stops paying", () => {
 		const { attacker, defender } = duel({});
-		applyMeleeResult(attacker, defender, resolveMelee(attacker, defender)!);
+		applyMeleeResult(
+			attacker,
+			defender,
+			connects(resolveMelee(attacker, defender)),
+		);
 		expect(defender.iframeTimer).toBe(MELEE_IFRAME_MS);
 
 		// A second, fresh swing lands inside the window and does nothing.
@@ -435,7 +466,11 @@ describe("hit consequences", () => {
 		const { attacker, defender } = duel({});
 		defender.meleeAction = "slash";
 		defender.meleeTimer = 60;
-		applyMeleeResult(attacker, defender, resolveMelee(attacker, defender)!);
+		applyMeleeResult(
+			attacker,
+			defender,
+			connects(resolveMelee(attacker, defender)),
+		);
 		expect(defender.meleeAction).toBe("none");
 	});
 });

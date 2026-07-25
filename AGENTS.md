@@ -91,12 +91,16 @@ npm run dev:herdr        # both servers in visible panes, waits for the ports
 npm run dev:herdr:logs   # read their output
 npm run dev:herdr:down
 
-npx tsc --noEmit && npx vitest run && npx vite build   # after any change
+npm run verify           # typecheck (client AND server) + tests + build
+npm run lint             # biome, across src/ server/ scripts/
 node scripts/diagnose.mjs --mode=online --runs=3       # the feedback loop
 node scripts/verify-modes.mjs                          # smoke-check every mode
 ```
 
 - Ports: Vite **8080**, Geckos **9208**.
+- **`npm run typecheck` covers two projects.** `tsconfig.json` is client-only;
+  `tsconfig.server.json` covers `server/`. Running bare `tsc` checks half the
+  game — which is how the server's bots silently lost the ability to evade.
 - **Restart the server after touching `server/` or `src/game/simulation/`** —
   tsx does not hot-reload.
 - **Never background the servers with `&`.** A detached server is invisible when

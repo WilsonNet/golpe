@@ -14,12 +14,13 @@
 import { World } from "miniplex";
 import type { Sprite } from "pixi.js";
 import type { PlayerPosition } from "../simulation/Physics";
+import type { ClipName } from "./systems";
 
 /** Which side of the match a fighter is on. Also its effects key. */
 export type Side = "local" | "remote";
 
 export interface AnimState {
-	clip: string;
+	clip: ClipName;
 	frame: number;
 	elapsedMs: number;
 }

@@ -1,0 +1,24 @@
+{
+  "//": "Shared strictness. Both the client and the server extend this, so the two halves of the game are held to one standard — the server drifted out of tsc entirely once, and grew a real bug behind the gap.",
+  "compilerOptions": {
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "forceConsistentCasingInFileNames": true,
+
+    "strict": true,
+    "strictPropertyInitialization": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "allowUnreachableCode": false,
+    "allowUnusedLabels": false,
+    "verbatimModuleSyntax": true
+  }
+}

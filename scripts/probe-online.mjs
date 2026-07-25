@@ -19,6 +19,8 @@ await a.waitForTimeout(6000);
 
 console.log(lines.slice(0, 40).join("\n"));
 console.log("--- __gameState() ---");
-console.log(JSON.stringify(await a.evaluate(() => window.__gameState()), null, 2));
+console.log(
+	JSON.stringify(await a.evaluate(() => window.__gameState()), null, 2),
+);
 
 await browser.close();

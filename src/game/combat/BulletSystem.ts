@@ -72,11 +72,13 @@ export class BulletSystem {
 
 	/** Despawn spent bullets, apply hits, and move the sprites. */
 	resolve(targets: readonly BulletTarget[]) {
-		for (let i = this.bullets.length - 1; i >= 0; i--) {
-			const b = this.bullets[i];
-
+		// Compact in place rather than splicing mid-iteration: survivors move to
+		// the front and the array is truncated once, so no index has to be
+		// reasoned about while the array is changing under it.
+		let kept = 0;
+		for (const b of this.bullets) {
 			if (isBulletOutOfBounds(b) || bulletHitsPlatform(b)) {
-				this.despawn(i);
+				this.pool.release(b.sprite);
 				continue;
 			}
 
@@ -90,21 +92,18 @@ export class BulletSystem {
 			}
 
 			if (consumed) {
-				this.despawn(i);
+				this.pool.release(b.sprite);
 				continue;
 			}
 
 			b.sprite.position.set(b.x, b.y);
+			this.bullets[kept++] = b;
 		}
+		this.bullets.length = kept;
 	}
 
 	clear() {
 		for (const b of this.bullets) this.pool.release(b.sprite);
 		this.bullets.length = 0;
-	}
-
-	private despawn(index: number) {
-		this.pool.release(this.bullets[index].sprite);
-		this.bullets.splice(index, 1);
 	}
 }

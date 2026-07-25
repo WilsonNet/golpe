@@ -13,13 +13,13 @@ import {
 	PLAYER_WIDTH,
 	pointInAnyPlatform,
 	type Rect,
-} from "./Arena";
+} from "./Arena.js";
 import {
 	type MovingBox,
 	moveAndCollide,
 	probeWall,
 	type WallSide,
-} from "./Collision";
+} from "./Collision.js";
 import {
 	copyMeleeState,
 	createMeleeState,
@@ -28,9 +28,35 @@ import {
 	type MeleeIntent,
 	type MeleeState,
 	tickMelee,
-} from "./Melee";
+} from "./Melee.js";
 
-export type { Rect } from "./Arena";
+export type { Rect } from "./Arena.js";
+export {
+	hasLineOfSight,
+	PLAYER_HEIGHT,
+	PLAYER_WIDTH,
+	penetrationDepth,
+	platforms,
+	playerBox,
+	rectsOverlap,
+	WORLD_BOTTOM,
+	WORLD_LEFT,
+	WORLD_RIGHT,
+	WORLD_TOP,
+} from "./Arena.js";
+export type { WallSide } from "./Collision.js";
+export type {
+	MeleeAction,
+	MeleeBody,
+	MeleeIntent,
+	MeleeMove,
+	MeleeOutcome,
+	MeleePhase,
+	MeleeResult,
+	MeleeState,
+	MoveDef,
+	Stance,
+} from "./Melee.js";
 /**
  * Melee is re-exported by name, never with `export *`.
  *
@@ -57,41 +83,15 @@ export {
 	isStunned,
 	MASSIVE_CHARGE_MS,
 	MELEE_IFRAME_MS,
+	MOVES,
 	meleeHitbox,
 	meleePhase,
-	MOVES,
 	moveDuration,
 	PARRY_WINDOW_MS,
 	resolveMelee,
 	SLASH_CANCELLED_MS,
 	tickMelee,
-} from "./Melee";
-export type {
-	MeleeAction,
-	MeleeBody,
-	MeleeIntent,
-	MeleeMove,
-	MeleeOutcome,
-	MeleePhase,
-	MeleeResult,
-	MeleeState,
-	MoveDef,
-	Stance,
-} from "./Melee";
-export {
-	hasLineOfSight,
-	PLAYER_HEIGHT,
-	PLAYER_WIDTH,
-	penetrationDepth,
-	platforms,
-	playerBox,
-	rectsOverlap,
-	WORLD_BOTTOM,
-	WORLD_LEFT,
-	WORLD_RIGHT,
-	WORLD_TOP,
-} from "./Arena";
-export type { WallSide } from "./Collision";
+} from "./Melee.js";
 
 /** @deprecated use `Rect` — kept so existing imports keep compiling. */
 export type Platform = Rect;

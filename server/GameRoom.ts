@@ -238,7 +238,11 @@ export class GameRoom {
 	}
 
 	/** Ask the bot's brain what it wants to do this tick. */
-	private botInput(bot: ConnectedPlayer, dtMs: number, now: number): PlayerInput {
+	private botInput(
+		bot: ConnectedPlayer,
+		dtMs: number,
+		now: number,
+	): PlayerInput {
 		const foe = [...this.players.values()].find((p) => p !== bot);
 		if (!foe || !bot.brain) return idleInput();
 
@@ -251,7 +255,12 @@ export class GameRoom {
 				selfX: bot.state.x,
 				selfY: bot.state.y,
 				distanceToPlayer: Math.hypot(dx, dy),
-				playerFacingDirection: foe.facingDir,
+				// Facing lives in the simulation, not beside it. This read `foe.facingDir`
+				// — a field removed when facing moved into `PlayerPosition` — so it was
+				// silently `undefined`, and `undefined * n` is NaN. Every `playerFacesMe`
+				// test was therefore false and the server's bots could never evade.
+				// `server/` was outside `tsc` at the time, so nothing caught it.
+				playerFacingDirection: foe.state.facing,
 				touchingDown: bot.state.grounded,
 				touchingLeft: bot.state.wallTouch === "left",
 				touchingRight: bot.state.wallTouch === "right",
@@ -440,11 +449,7 @@ export class GameRoom {
 				const result = resolveMelee(attacker.state, defender.state);
 				if (!result) continue;
 
-				const damage = applyMeleeResult(
-					attacker.state,
-					defender.state,
-					result,
-				);
+				const damage = applyMeleeResult(attacker.state, defender.state, result);
 				defender.hp = Math.max(0, defender.hp - damage);
 
 				this.meleeEvents.push({
@@ -460,23 +465,28 @@ export class GameRoom {
 	}
 
 	private tickBullets(dt: number) {
-		for (let i = this.bullets.length - 1; i >= 0; i--) {
-			const b = this.bullets[i];
+		// Compact in place: advance every bullet, keep the survivors at the front,
+		// then truncate. Splicing mid-iteration meant the loop index and the array
+		// length were changing together, which is exactly the sort of thing that
+		// works until someone adds a second removal path.
+		let kept = 0;
+		for (const b of this.bullets) {
 			tickBullet(b, dt);
 
-			if (isBulletOutOfBounds(b) || bulletHitsPlatform(b)) {
-				this.bullets.splice(i, 1);
-				continue;
-			}
+			if (isBulletOutOfBounds(b) || bulletHitsPlatform(b)) continue;
 
+			let consumed = false;
 			for (const [id, player] of this.players) {
 				if (b.ownerId === id || player.hp <= 0) continue;
 				if (!bulletHitsPlayer(b, player.state.x, player.state.y)) continue;
 				player.hp = Math.max(0, player.hp - BULLET_DAMAGE);
-				this.bullets.splice(i, 1);
+				consumed = true;
 				break;
 			}
+
+			if (!consumed) this.bullets[kept++] = b;
 		}
+		this.bullets.length = kept;
 	}
 
 	private resetPlayers() {

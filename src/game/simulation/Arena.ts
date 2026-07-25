@@ -36,22 +36,43 @@ const LEDGE_H = 24;
  *   y=468        |P|      |P|              <- ground-level cover
  *   y=568   ==================== ground ====================
  */
-export const platforms: Rect[] = [
-	{ x: 0, y: 568, w: 800, h: 32 }, // ground
-	{ x: 90, y: 450, w: 130, h: LEDGE_H }, // low left
-	{ x: 580, y: 450, w: 130, h: LEDGE_H }, // low right
-	{ x: 330, y: 360, w: 140, h: LEDGE_H }, // centre mid
-	{ x: 60, y: 250, w: 120, h: LEDGE_H }, // high left
-	{ x: 620, y: 250, w: 120, h: LEDGE_H }, // high right
-	{ x: 350, y: 170, w: 100, h: LEDGE_H }, // top centre
-	// Ground-level pillars: cover to break line-of-sight, plus wall-jump
-	// surfaces and a route up that does not need the outer ledges.
-	//
-	// Keep them clear of the ledges above and either side: a gap narrower than
-	// PLAYER_WIDTH under an overhang is a trap that pins the AI in place, which
-	// is exactly what a 30px gap here used to do.
-	{ x: 280, y: 468, w: 24, h: 100 },
-	{ x: 496, y: 468, w: 24, h: 100 },
+export const GROUND: Rect = { x: 0, y: 568, w: 800, h: 32 };
+export const LOW_LEFT: Rect = { x: 90, y: 450, w: 130, h: LEDGE_H };
+export const LOW_RIGHT: Rect = { x: 580, y: 450, w: 130, h: LEDGE_H };
+export const MID: Rect = { x: 330, y: 360, w: 140, h: LEDGE_H };
+export const HIGH_LEFT: Rect = { x: 60, y: 250, w: 120, h: LEDGE_H };
+export const HIGH_RIGHT: Rect = { x: 620, y: 250, w: 120, h: LEDGE_H };
+export const TOP_CENTRE: Rect = { x: 350, y: 170, w: 100, h: LEDGE_H };
+
+/**
+ * Ground-level pillars: cover to break line-of-sight, plus wall-jump surfaces
+ * and a route up that does not need the outer ledges.
+ *
+ * Keep them clear of the ledges above and either side: a gap narrower than
+ * PLAYER_WIDTH under an overhang is a trap that pins the AI in place, which is
+ * exactly what a 30px gap here used to do.
+ */
+export const PILLAR_LEFT: Rect = { x: 280, y: 468, w: 24, h: 100 };
+export const PILLAR_RIGHT: Rect = { x: 496, y: 468, w: 24, h: 100 };
+
+/**
+ * Every solid in the arena.
+ *
+ * Named rather than anonymous so nothing has to refer to a surface by index.
+ * Tests used to reach for `platforms[3]` with the coordinates copied into a
+ * trailing comment — which is both unreadable and a lie waiting to happen the
+ * next time the list is reordered.
+ */
+export const platforms: readonly Rect[] = [
+	GROUND,
+	LOW_LEFT,
+	LOW_RIGHT,
+	MID,
+	HIGH_LEFT,
+	HIGH_RIGHT,
+	TOP_CENTRE,
+	PILLAR_LEFT,
+	PILLAR_RIGHT,
 ];
 
 export function rectsOverlap(a: Rect, b: Rect): boolean {
@@ -104,17 +125,15 @@ export function narrowGaps(minWidth = PLAYER_WIDTH): {
 	gap: number;
 }[] {
 	const found: { a: Rect; b: Rect; gap: number }[] = [];
-	for (let i = 0; i < platforms.length; i++) {
-		for (let j = i + 1; j < platforms.length; j++) {
-			const a = platforms[i];
-			const b = platforms[j];
+	platforms.forEach((a, i) => {
+		for (const b of platforms.slice(i + 1)) {
 			const verticallyOverlap = a.y < b.y + b.h && a.y + a.h > b.y;
 			if (!verticallyOverlap) continue;
 
 			const gap = a.x < b.x ? b.x - (a.x + a.w) : a.x - (b.x + b.w);
 			if (gap > 0 && gap < minWidth) found.push({ a, b, gap });
 		}
-	}
+	});
 	return found;
 }
 

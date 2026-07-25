@@ -42,7 +42,7 @@ export class Input {
 	/** Absolute, never a toggle — a toggle cannot survive a dropped packet. */
 	swordStance = true;
 
-	private readonly onToggleAi?: () => void;
+	private readonly onToggleAi: (() => void) | undefined;
 	private readonly disposers: (() => void)[] = [];
 
 	constructor(canvas: HTMLCanvasElement, onToggleAi?: () => void) {

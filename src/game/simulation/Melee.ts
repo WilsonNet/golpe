@@ -17,7 +17,7 @@ import {
 	PLAYER_WIDTH,
 	type Rect,
 	rectsOverlap,
-} from "./Arena";
+} from "./Arena.js";
 
 export type MeleeMove = "slash" | "uppercut" | "massive";
 export type MeleeAction = "none" | MeleeMove;
@@ -144,8 +144,7 @@ export function moveDuration(move: MeleeMove): number {
  * butterfly — cancel late and it is merely safe, cancel at exactly this moment
  * and it is safe and it hurts.
  */
-export const SLASH_CANCELLED_MS =
-	MOVES.slash.startupMs + MOVES.slash.activeMs;
+export const SLASH_CANCELLED_MS = MOVES.slash.startupMs + MOVES.slash.activeMs;
 
 /** Hold the attack button this long to arm a Massive Strike. */
 export const MASSIVE_CHARGE_MS = 420;
@@ -281,7 +280,10 @@ export function createMeleeState(facing: number): MeleeState {
 	};
 }
 
-export function copyMeleeState<T extends MeleeState>(source: MeleeState, target: T): T {
+export function copyMeleeState<T extends MeleeState>(
+	source: MeleeState,
+	target: T,
+): T {
 	target.stance = source.stance;
 	target.facing = source.facing;
 	target.meleeAction = source.meleeAction;
@@ -605,7 +607,8 @@ export function applyMeleeResult(
 		default: {
 			defender.stunTimer = Math.max(
 				defender.stunTimer,
-				def.hitstunMs + (result.outcome === "backstab" ? BACKSTAB_BONUS_STUN_MS : 0),
+				def.hitstunMs +
+					(result.outcome === "backstab" ? BACKSTAB_BONUS_STUN_MS : 0),
 			);
 			defender.iframeTimer = MELEE_IFRAME_MS;
 			defender.vx += result.dir * def.knockbackVx;

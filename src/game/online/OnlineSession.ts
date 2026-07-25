@@ -1,6 +1,5 @@
 import type { Container, Sprite, Texture } from "pixi.js";
 import type { BulletSample } from "../diagnostics/PhysicsDiagnostics";
-import { syncSpriteToBody } from "../render/ArenaRenderer";
 import { SpritePool } from "../render/SpritePool";
 import { pointInAnyPlatform } from "../simulation/Arena";
 import { resolveOverlap } from "../simulation/Collision";
@@ -66,10 +65,10 @@ export class OnlineSession {
 	/** Where projectiles were drawn this frame, for the diagnostic. */
 	private readonly renderedBullets: BulletSample[] = [];
 
-	private remoteBody?: { x: number; y: number };
-	private latestSnapshot?: GameSnapshot;
+	private remoteBody: { x: number; y: number } | undefined;
+	private latestSnapshot: GameSnapshot | undefined;
 	/** The remote fighter's authoritative simulation state, position aside. */
-	private remoteAuthoritative?: PlayerPosition;
+	private remoteAuthoritative: PlayerPosition | undefined;
 
 	private _localHp = 100;
 	private _remoteHp = 100;
@@ -77,8 +76,8 @@ export class OnlineSession {
 	private _matched = false;
 
 	constructor(
-		private readonly layer: Container,
-		private readonly bulletTexture: Texture,
+		layer: Container,
+		bulletTexture: Texture,
 		private readonly startX: number,
 		private readonly startY: number,
 		private readonly callbacks: OnlineCallbacks,
@@ -227,7 +226,6 @@ export class OnlineSession {
 				this.remoteBody.x = box.x;
 				this.remoteBody.y = box.y;
 			}
-
 		}
 
 		this.renderBullets(serverNow);
@@ -342,7 +340,7 @@ export class OnlineSession {
 					this.predicted.state.x - before.x,
 					this.predicted.state.y - before.y,
 				);
-					this.callbacks.onReconcile(
+				this.callbacks.onReconcile(
 					result.errorPx,
 					result.replayed,
 					result.meleeDiverged,

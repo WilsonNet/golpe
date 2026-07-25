@@ -46,7 +46,9 @@ io.onConnection((channel) => {
 			const room = newRoom();
 			room.addPlayer(channel);
 			room.addBot();
-			console.log(`[MATCH] Player ${channel.id} in solo room ${room.id} vs bot`);
+			console.log(
+				`[MATCH] Player ${channel.id} in solo room ${room.id} vs bot`,
+			);
 			startMatch(room);
 			return;
 		}

@@ -6,8 +6,9 @@ export default defineConfig({
 	plugins: [react()],
 	logLevel: "warning",
 	resolve: {
-		// Pixi's extension registry is global and must have exactly one instance.
-		dedupe: ["pixi.js"],
+		// Global module state: Pixi's extension registry and React's hook
+		// dispatcher both require exactly one instance.
+		dedupe: ["pixi.js", "react", "react-dom"],
 	},
 	build: {
 		rollupOptions: {

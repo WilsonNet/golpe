@@ -37,5 +37,6 @@ npm run dev:herdr      # or: npm run dev:all
 #   http://localhost:8080/?offline=true           escape hatch, no server
 ```
 
-Verify a change with `npx tsc --noEmit`, `npx vitest run`, `npx vite build`, and
-`npm run diagnose` for anything touching physics or netcode.
+Verify a change with `npm run verify` (typechecks the client *and* the server,
+then tests and builds), plus `npm run diagnose` for anything touching physics or
+netcode.

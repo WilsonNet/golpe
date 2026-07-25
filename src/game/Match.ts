@@ -10,9 +10,13 @@
 
 import { type Container, Sprite, Text } from "pixi.js";
 import type { AIConfig } from "./characters/AIConfig";
-import EnemyBrain, { type AIInput, type AIOutput } from "./characters/EnemyBrain";
+import EnemyBrain, {
+	type AIInput,
+	type AIOutput,
+} from "./characters/EnemyBrain";
 import { BulletSystem, type BulletTarget } from "./combat/BulletSystem";
 import { PhysicsDiagnostics } from "./diagnostics/PhysicsDiagnostics";
+import { EventBus } from "./EventBus";
 import {
 	animationSystem,
 	bindFxBodies,
@@ -22,17 +26,15 @@ import {
 import {
 	createQueries,
 	createWorld,
-	type Entity,
 	type FighterEntity,
 	type GameWorld,
 	type Queries,
 	type Side,
 } from "./ecs/world";
-import { EventBus } from "./EventBus";
 import { Input } from "./input/Input";
 import { OnlineSession } from "./online/OnlineSession";
-import { dudeFrames, TEX, tex } from "./render/assets";
 import { bodyCentre, drawArena } from "./render/ArenaRenderer";
+import { dudeFrames, TEX, tex } from "./render/assets";
 import { type ImpactEvent, MeleeFx } from "./render/MeleeFx";
 import type { Stage } from "./render/Stage";
 import {
@@ -110,10 +112,10 @@ export class Match {
 	private aiMode = false;
 	/** Solo: the server fills the other slot with a bot instead of a human. */
 	private soloMatch = true;
-	private online?: OnlineSession;
+	private online: OnlineSession | undefined;
 
-	private localBrain?: EnemyBrain;
-	private remoteBrain?: EnemyBrain;
+	private localBrain: EnemyBrain | undefined;
+	private remoteBrain: EnemyBrain | undefined;
 
 	private accumulator = 0;
 	private localIntent: PlayerIntent = { ...NO_INTENT };
@@ -267,9 +269,11 @@ export class Match {
 	}
 
 	private installDebugHooks() {
-		const win = window as unknown as Record<string, unknown>;
-		win.__toggleAIVsAI = () => this.toggleAiVsAi();
-		win.__gameState = () => ({
+		// Typed in src/types/global.d.ts rather than cast through
+		// `Record<string, unknown>`: the harness drives the game through these, so
+		// they are a contract and should break the build when they change.
+		window.__toggleAIVsAI = () => this.toggleAiVsAi();
+		window.__gameState = () => ({
 			aiVsAIMode: !!this.localBrain,
 			onlineMode: this.onlineMode,
 			onlineAIMode: this.aiMode,
@@ -289,7 +293,7 @@ export class Match {
 				? (this.online?.bullets.length ?? 0)
 				: this.bullets.count,
 		});
-		win.__physicsDiagnostic = (durationMs = 5000) =>
+		window.__physicsDiagnostic = (durationMs = 5000) =>
 			this.diagnostics.start(durationMs);
 	}
 
@@ -567,14 +571,16 @@ export class Match {
 				x: this.remote.body.x,
 				y: this.remote.body.y,
 				alive: this.remote.fighter.hp > 0,
-				onHit: () => this.applyOfflineDamage(this.remote, BULLET_DAMAGE, "bullet"),
+				onHit: () =>
+					this.applyOfflineDamage(this.remote, BULLET_DAMAGE, "bullet"),
 			},
 			{
 				owner: "player",
 				x: this.local.body.x,
 				y: this.local.body.y,
 				alive: this.local.fighter.hp > 0,
-				onHit: () => this.applyOfflineDamage(this.local, BULLET_DAMAGE, "bullet"),
+				onHit: () =>
+					this.applyOfflineDamage(this.local, BULLET_DAMAGE, "bullet"),
 			},
 		];
 	}

@@ -533,17 +533,18 @@ export class PhysicsDiagnostics {
 	 */
 	private static pathDeviation(track: BulletTrack): number {
 		const pts = track.points;
-		if (pts.length < 3) return 0;
 		const a = pts[0];
-		const b = pts[pts.length - 1];
+		const b = pts.at(-1);
+		if (pts.length < 3 || !a || !b) return 0;
+
 		const dx = b.x - a.x;
 		const dy = b.y - a.y;
 		const len = Math.hypot(dx, dy);
 		if (len < 1e-6) return 0;
 
 		let worst = 0;
-		for (let i = 1; i < pts.length - 1; i++) {
-			const p = pts[i];
+		// Endpoints define the line, so only the interior points can deviate from it.
+		for (const p of pts.slice(1, -1)) {
 			const dist = Math.abs(dy * p.x - dx * p.y + b.x * a.y - b.y * a.x) / len;
 			worst = Math.max(worst, dist);
 		}
@@ -839,11 +840,15 @@ export class PhysicsDiagnostics {
 		const countSteps = (n: number) => stepCounts.filter((s) => s === n).length;
 
 		let travel = 0;
-		for (let i = 1; i < frames.length; i++) {
-			travel += Math.hypot(
-				frames[i].playerX - frames[i - 1].playerX,
-				frames[i].playerY - frames[i - 1].playerY,
-			);
+		let previous: DiagnosticFrame | undefined;
+		for (const f of frames) {
+			if (previous) {
+				travel += Math.hypot(
+					f.playerX - previous.playerX,
+					f.playerY - previous.playerY,
+				);
+			}
+			previous = f;
 		}
 
 		const byType: Record<string, number> = {};

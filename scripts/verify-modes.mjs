@@ -15,7 +15,13 @@ const BASE = process.env.VENTO_URL ?? "http://localhost:8080";
  * control, not that damage is dealt.
  */
 const MODES = [
-	{ label: "solo vs server bot", url: "/", tabs: 1, needsFight: false, solo: true },
+	{
+		label: "solo vs server bot",
+		url: "/",
+		tabs: 1,
+		needsFight: false,
+		solo: true,
+	},
 	{ label: "AI vs AI (one tab)", url: "/?ai=true", tabs: 1, needsFight: true },
 	{ label: "PvP (two tabs)", url: "/?online=true", tabs: 2, needsFight: false },
 	{
@@ -54,7 +60,8 @@ for (const mode of MODES) {
 		await pages[0].waitForTimeout(1000);
 		const s = await pages[0].evaluate(() => window.__gameState());
 		hps.add(`${s.playerHP}v${s.enemyHP}`);
-		if (s.remote) remotes.add(`${Math.round(s.remote.x)},${Math.round(s.remote.y)}`);
+		if (s.remote)
+			remotes.add(`${Math.round(s.remote.x)},${Math.round(s.remote.y)}`);
 		if (s.bulletCount > 0) sawBullet = true;
 	}
 

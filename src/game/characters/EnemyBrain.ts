@@ -1,5 +1,5 @@
-import type { MeleeAction, MeleePhase } from "../simulation/Melee";
-import type { AIConfig } from "./AIConfig";
+import type { MeleeAction, MeleePhase } from "../simulation/Melee.js";
+import type { AIConfig } from "./AIConfig.js";
 
 export enum AIState {
 	IDLE = "IDLE",
@@ -110,30 +110,18 @@ const BUTTERFLY: MeleeBeat[] = [
 ];
 
 /** A plain committed swing, for when there is no need to be safe. */
-const LONE_SLASH: MeleeBeat[] = [
-	{ ms: 55, attack: true },
-	{ ms: 90 },
-];
+const LONE_SLASH: MeleeBeat[] = [{ ms: 55, attack: true }, { ms: 90 }];
 
-const UPPERCUT_BEATS: MeleeBeat[] = [
-	{ ms: 60, uppercut: true },
-	{ ms: 120 },
-];
+const UPPERCUT_BEATS: MeleeBeat[] = [{ ms: 60, uppercut: true }, { ms: 120 }];
 
 /**
  * Charge, then let go. The release is what fires the Massive Strike, and it has
  * to be long enough to register as a release before the next press.
  */
-const CHARGE_BEATS: MeleeBeat[] = [
-	{ ms: 470, attack: true },
-	{ ms: 90 },
-];
+const CHARGE_BEATS: MeleeBeat[] = [{ ms: 470, attack: true }, { ms: 90 }];
 
 /** Fire an already-armed Massive: one clean press. */
-const RELEASE_MASSIVE: MeleeBeat[] = [
-	{ ms: 60, attack: true },
-	{ ms: 80 },
-];
+const RELEASE_MASSIVE: MeleeBeat[] = [{ ms: 60, attack: true }, { ms: 80 }];
 
 const GUARD: MeleeBeat[] = [{ ms: 260, block: true }];
 
@@ -299,8 +287,10 @@ export class EnemyBrain {
 		// Hysteresis, so a fighter at the boundary does not switch weapons every
 		// frame — a stance switch cancels a slash, so flicker would cancel every
 		// attack it ever started.
-		if (this.swordDrawn && distance > SWORD_DISENGAGE_PX) this.swordDrawn = false;
-		else if (!this.swordDrawn && distance < SWORD_ENGAGE_PX) this.swordDrawn = true;
+		if (this.swordDrawn && distance > SWORD_DISENGAGE_PX)
+			this.swordDrawn = false;
+		else if (!this.swordDrawn && distance < SWORD_ENGAGE_PX)
+			this.swordDrawn = true;
 
 		output.swordStance = this.swordDrawn;
 
@@ -480,7 +470,8 @@ export class EnemyBrain {
 		this.beatIndex = 0;
 		this.beatElapsed = 0;
 		// Only the butterfly repeats; everything else is a single commitment.
-		this.beatLoops = beats === BUTTERFLY ? 2 + Math.floor(Math.random() * 3) : 0;
+		this.beatLoops =
+			beats === BUTTERFLY ? 2 + Math.floor(Math.random() * 3) : 0;
 	}
 
 	/** Emit the current beat's buttons and advance the rhythm. */
@@ -488,6 +479,12 @@ export class EnemyBrain {
 		if (!this.beats) return;
 
 		const beat = this.beats[this.beatIndex];
+		// A rhythm can be replaced mid-play by a reaction, so the index is not
+		// guaranteed to still be in range.
+		if (!beat) {
+			this.beats = null;
+			return;
+		}
 		output.attack = beat.attack ?? false;
 		output.block = beat.block ?? false;
 		output.uppercut = beat.uppercut ?? false;

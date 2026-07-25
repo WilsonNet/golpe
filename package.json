@@ -2,6 +2,7 @@
   "name": "vento-aureo",
   "description": "An online-first 2D sword-fighting game: GunZ: The Duel's K-Style rebuilt in two dimensions on a deterministic simulation shared by client and server.",
   "version": "1.1.0",
+  "type": "module",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/WilsonNet/vento-aureo.git"
@@ -27,7 +28,7 @@
   "scripts": {
     "dev": "vite --config vite/config.dev.mjs",
     "build": "vite build --config vite/config.prod.mjs",
-    "lint": "biome check --write src",
+    "lint": "biome check --write src server scripts",
     "format": "biome format --write src",
     "dev:server": "tsx server/index.ts",
     "dev:all": "concurrently \"npm run dev\" \"npm run dev:server\"",
@@ -36,7 +37,9 @@
     "dev:herdr:down": "node scripts/dev-herdr.mjs down",
     "dev:herdr:status": "node scripts/dev-herdr.mjs status",
     "dev:herdr:logs": "node scripts/dev-herdr.mjs logs",
-    "diagnose": "node scripts/diagnose.mjs"
+    "diagnose": "node scripts/diagnose.mjs",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json",
+    "verify": "npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {
     "@geckos.io/client": "^3.1.0",
@@ -48,21 +51,15 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.15",
-    "@eslint/js": "^9.22.0",
     "@types/node": "^25.8.0",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
     "@vitejs/plugin-react": "^4.3.4",
     "concurrently": "^10.0.4",
-    "eslint": "^9.22.0",
-    "eslint-plugin-react-hooks": "^5.2.0",
-    "eslint-plugin-react-refresh": "^0.4.19",
-    "globals": "^16.0.0",
     "playwright": "^1.61.1",
     "terser": "^5.28.1",
     "tsx": "^4.22.0",
     "typescript": "~5.7.2",
-    "typescript-eslint": "^8.26.1",
     "vite": "^6.3.1",
     "vitest": "^4.1.6"
   }

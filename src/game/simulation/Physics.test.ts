@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
+	GROUND,
+	LOW_LEFT,
+	MID,
 	narrowGaps,
+	PILLAR_LEFT,
+	PILLAR_RIGHT,
 	PLAYER_HEIGHT,
 	PLAYER_WIDTH,
 	penetrationDepth,
 	platforms,
-} from "./Arena";
+} from "./Arena.js";
 import {
 	COYOTE_TIME_MS,
 	createPlayerState,
@@ -26,15 +31,16 @@ import {
 	WALL_JUMP_VERTICAL,
 	WALL_SLIDE_SPEED,
 	WORLD_RIGHT,
-} from "./Physics";
+} from "./Physics.js";
 
 const DT = 1 / 60;
 
-const GROUND = platforms[0]; // { x: 0,   y: 568, w: 800, h: 32 }
-const LOW_LEFT = platforms[1]; // { x: 90,  y: 450, w: 130, h: 24 }
-const MID = platforms[3]; // { x: 330, y: 360, w: 140, h: 24 }
-const PILLAR_L = platforms[7]; // { x: 250, y: 468, w: 24,  h: 100 }
-const PILLAR_R = platforms[8]; // { x: 526, y: 468, w: 24,  h: 100 }
+// Surfaces are imported by name. They used to be looked up by index with the
+// coordinates copied into a trailing comment, which had already drifted: the
+// comments claimed the pillars sat at x=250 and x=526 long after they moved to
+// 280 and 496 to close a fighter-trapping gap.
+const PILLAR_L = PILLAR_LEFT;
+const PILLAR_R = PILLAR_RIGHT;
 /**
  * Clear stretch of ground for movement tests: far enough left that no ledge
  * overhangs it and no pillar blocks the run-up.
@@ -483,8 +489,14 @@ describe("wall interaction", () => {
 describe("level reachability", () => {
 	it("every ledge is within one jump of the surface below it", () => {
 		const tops = [...new Set(platforms.map((p) => p.y))].sort((a, b) => b - a);
-		for (let i = 1; i < tops.length; i++) {
-			expect(tops[i - 1] - tops[i]).toBeLessThanOrEqual(JUMP_HEIGHT_PX);
+		// Walk downward-to-upward in pairs: every step of the ladder must be
+		// clearable from the surface beneath it.
+		let below: number | undefined;
+		for (const top of tops) {
+			if (below !== undefined) {
+				expect(below - top).toBeLessThanOrEqual(JUMP_HEIGHT_PX);
+			}
+			below = top;
 		}
 	});
 

@@ -15,7 +15,7 @@ import {
 	WORLD_LEFT,
 	WORLD_RIGHT,
 	WORLD_TOP,
-} from "./Arena";
+} from "./Arena.js";
 
 export type WallSide = "none" | "left" | "right";
 
