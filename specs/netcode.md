@@ -14,8 +14,9 @@ simulation is deterministic.
 - **Server authoritative.** `server/GameRoom.ts` owns positions, bullets, damage
   and round lifecycle. Tick **60Hz**, snapshots **20Hz**.
 - **One simulation.** `src/game/simulation/` is imported unchanged by the server.
-  It must never touch Phaser, the DOM or wall-clock time — determinism is what
-  makes reconciliation converge instead of rubber-band.
+  It must never touch the rendering engine, the DOM or wall-clock time —
+  determinism is what makes reconciliation converge instead of rubber-band. It
+  survived a whole renderer swap untouched.
 - **Anything the server imports must be a named export.** A default export
   resolves to the module *namespace object* under the server's ESM/CJS interop,
   which crashed the process with "EnemyBrain is not a constructor".
@@ -40,8 +41,9 @@ matchmaking).
 
 ## Local player: predict and replay
 
-- Every fixed step the client sends `{seq, left, right, up, attack, aimAngle}`
-  and simulates it immediately.
+- Every fixed step the client sends `{seq, ...intent, aimAngle}` and simulates it
+  immediately. `PlayerInput` extends `PlayerIntent`, so a field added to the
+  simulation cannot be silently left out of the packet.
 - The server echoes the highest `seq` it has consumed, with the full
   `PlayerPosition`.
 - On a snapshot the client **rewinds to the authoritative state and replays every

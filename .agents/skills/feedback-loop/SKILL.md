@@ -109,8 +109,9 @@ The game has a Physics Diagnostic Tool that emits structured JSON reports. These
 ## Physics Model
 
 All gameplay simulation lives in `src/game/simulation/`, imported unchanged by the
-server via `server/physics.ts`. It must stay free of Phaser, the DOM and wall-clock
-time — determinism is what makes prediction reconcile instead of rubber-band.
+server via `server/physics.ts`. It must stay free of the rendering engine, the
+DOM and wall-clock time — determinism is what makes prediction reconcile instead
+of rubber-band.
 
 - `Arena.ts` — world bounds, `platforms`, rect maths, `hasLineOfSight`, `penetrationDepth`, `narrowGaps`
 - `Collision.ts` — `moveAndCollide` (swept, axis-separated, 12px sub-steps), `probeWall`, `resolveOverlap`
@@ -122,13 +123,14 @@ between jumps.
 
 Netcode: input sequencing + rewind-and-replay reconciliation, a starvation freeze on
 the server, 150ms remote interpolation delay, and an explicit `round-reset` broadcast.
-See the Netcode section of AGENTS.md for the reasoning behind each.
+See [`docs/invariants.md`](../../../docs/invariants.md) for the reasoning behind
+each.
 
 ## Diagnostic Tool: `window.__physicsDiagnostic(durationMs)`
 
 ### How It Works
 
-Added to `Game.ts` create() alongside `__toggleAIVsAI` and `__gameState`. The function:
+Installed by `Match` alongside `__toggleAIVsAI` and `__gameState`. The function:
 
 1. Sets `_diagActive = true` and initializes frame buffers.
 2. Each game `update()` frame records: `playerX/Y/Vx/Vy`, `enemyX/Y/Vx/Vy`, `cameraX/Y`, `t`, `dt`, `physicsSteps`.
@@ -294,7 +296,7 @@ Each of these was found by measurement, not by reading code.
 | 9 | Remote clips through platforms | Interpolated paths are not simulated and cut corners | `resolveOverlap` before drawing |
 | 10 | AI could only ever short-hop | `EnemyBrain` emitted `jump` on scattered single frames; jump height is analogue | Hold 240ms, then force a 60ms release for the next press edge |
 | 11 | AI wedged in a 36px box, never fought | A 30px arena gap under an overhang, narrower than `PLAYER_WIDTH` | Move the pillars; `narrowGaps()` invariant test |
-| 12 | Phantom frozen bullets | `Player`/`AIEnemy` spawned their own sprites that nothing simulated | Only `BulletSystem` (offline) or the server (online) spawns bullets |
+| 12 | Phantom frozen bullets | The fighter classes spawned their own sprites that nothing simulated | Only `BulletSystem` (offline) or the server (online) spawns bullets |
 | 13 | Projectile sprite jumps between bullets | Sprites indexed by snapshot array position; the server `splice`s dead bullets so indices shift | Key sprites by bullet id |
 | 14 | Projectiles laggy and stuttering | Bullets interpolated 150ms in the past, mixed with a dead-reckon fallback computed at a different time base (~90px jump when crossing between them) | Dead-reckon only — bullets are ballistic and closed-form |
 | 15 | Projectile sawtooth (jump every 50ms, stall between) | Position re-derived from the newest snapshot each frame, so each snapshot moved the extrapolation base | Anchor once on first sight, then fly off the local clock |

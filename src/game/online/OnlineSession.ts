@@ -1,4 +1,4 @@
-import type Phaser from "phaser";
+import type { Container, Sprite, Texture } from "pixi.js";
 import type { BulletSample } from "../diagnostics/PhysicsDiagnostics";
 import { syncSpriteToBody } from "../render/ArenaRenderer";
 import { SpritePool } from "../render/SpritePool";
@@ -32,8 +32,10 @@ export interface OnlineCallbacks {
 		replayed: number,
 		meleeDiverged: boolean,
 	) => void;
-	/** A discontinuity that is expected — respawns — so it is not counted as jitter. */
+	/** A discontinuity that is expected — so it is not counted as jitter. */
 	onTeleport: () => void;
+	/** The server respawned both fighters: all continuity is legitimately broken. */
+	onRoundReset: () => void;
 	/** A sword impact the server judged, for effects only. */
 	onMeleeEvent: (event: MeleeEventMsg) => void;
 }
@@ -60,11 +62,10 @@ export class OnlineSession {
 	/** Bullets already known to have hit geometry; never drawn again. */
 	private readonly bulletDead = new Set<number>();
 	/** Bullet id -> sprite, so a sprite never changes which bullet it represents. */
-	private readonly bulletSprites = new Map<number, Phaser.GameObjects.Sprite>();
+	private readonly bulletSprites = new Map<number, Sprite>();
 	/** Where projectiles were drawn this frame, for the diagnostic. */
 	private readonly renderedBullets: BulletSample[] = [];
 
-	private remoteSprite?: Phaser.GameObjects.Sprite;
 	private remoteBody?: { x: number; y: number };
 	private latestSnapshot?: GameSnapshot;
 	/** The remote fighter's authoritative simulation state, position aside. */
@@ -76,13 +77,14 @@ export class OnlineSession {
 	private _matched = false;
 
 	constructor(
-		private readonly scene: Phaser.Scene,
+		private readonly layer: Container,
+		private readonly bulletTexture: Texture,
 		private readonly startX: number,
 		private readonly startY: number,
 		private readonly callbacks: OnlineCallbacks,
 	) {
 		this.predicted = new PredictedPlayer(startX, startY);
-		this.bulletPool = new SpritePool(scene, "fireball");
+		this.bulletPool = new SpritePool(layer, bulletTexture);
 		this.manager = new OnlineManager(
 			`${location.protocol}//${location.hostname}`,
 			9208,
@@ -107,11 +109,6 @@ export class OnlineSession {
 
 	get remoteFacing(): number {
 		return this._remoteFacing;
-	}
-
-	/** The remote fighter's sprite, once one exists, so effects can punch it. */
-	get remoteBodySprite(): Phaser.GameObjects.Sprite | undefined {
-		return this.remoteSprite;
 	}
 
 	/**
@@ -166,7 +163,7 @@ export class OnlineSession {
 		this.bulletDead.clear();
 		this.remoteBody = undefined;
 		this.remoteAuthoritative = undefined;
-		this.callbacks.onTeleport();
+		this.callbacks.onRoundReset();
 		console.log("[ONLINE] round reset");
 	}
 
@@ -231,11 +228,6 @@ export class OnlineSession {
 				this.remoteBody.y = box.y;
 			}
 
-			if (!this.remoteSprite) {
-				this.remoteSprite = this.scene.add.sprite(0, 0, "dude");
-				this.remoteSprite.setOrigin(0.5);
-			}
-			syncSpriteToBody(this.remoteSprite, this.remoteBody.x, this.remoteBody.y);
 		}
 
 		this.renderBullets(serverNow);
@@ -318,7 +310,7 @@ export class OnlineSession {
 				sprite = this.bulletPool.acquire();
 				this.bulletSprites.set(b.id, sprite);
 			}
-			sprite.setPosition(x, y);
+			sprite.position.set(x, y);
 			this.renderedBullets.push({ id: b.id, x, y });
 		}
 
@@ -381,19 +373,14 @@ export class OnlineSession {
 		return this.renderedBullets;
 	}
 
-	/** Alpha for a fighter sprite — dead fighters fade out. */
-	applyDeathAlpha(localSprite: Phaser.GameObjects.Sprite) {
-		localSprite.setAlpha(this._localHp <= 0 ? 0.3 : 1);
-		this.remoteSprite?.setAlpha(this._remoteHp <= 0 ? 0.3 : 1);
-	}
-
-	playRemoteAnim() {
-		if (!this.remoteSprite) return;
-		const key = this._remoteFacing < 0 ? "left" : "right";
-		if (this.remoteSprite.anims.currentAnim?.key !== key) {
-			this.remoteSprite.anims.play(key, true);
-		}
-	}
+	/**
+	 * Drawing the remote fighter is not this class's job.
+	 *
+	 * It owns netcode state; the entity world owns what is on screen. The remote
+	 * is an ordinary entity whose `body` is re-pointed at `remoteState` each
+	 * frame, so the same animation, sprite-sync and effect systems that draw the
+	 * local fighter draw it too — with no second code path to keep in step.
+	 */
 
 	/** Full local reset, e.g. after a round ends. */
 	reset() {

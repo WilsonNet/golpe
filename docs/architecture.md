@@ -13,15 +13,20 @@ src/game/
     Collision.ts    swept axis-separated AABB: moveAndCollide, probeWall, resolveOverlap
     Physics.ts      tuning constants, PlayerPosition, tickPlayer, bullets
     Melee.ts        sword combat: the MOVES frame-data table, tickMelee, hitboxes, resolveMelee
-  scenes/         Phaser scenes (Boot, Preloader, Game)
-  characters/     Player, AIEnemy, EnemyBrain, AIConfig, Controls
+  ecs/            miniplex world, entity components, and the per-frame systems
+    world.ts        Entity shape, archetype queries, FighterEntity
+    systems.ts      animation, sprite sync, melee effects
+  Match.ts        the fixed-timestep loop and the wiring between sim, netcode and renderer
+  app.ts          Pixi Application bootstrap: init, load, build, tick
+  characters/     EnemyBrain, AIConfig
   combat/         BulletSystem.ts — the only simulated source of bullets offline
+  input/          Input.ts — raw keyboard and pointer state, plus dash gestures
   online/         OnlineManager (channel), OnlineSession (owns netcode),
                   Prediction.ts, Interpolation.ts, types.ts
-  render/         ArenaRenderer.ts (draws from collider data), SpritePool.ts,
-                  MeleeFx.ts (swing trails, impact particles, placeholder art)
+  render/         Stage.ts (layers + camera), ArenaRenderer.ts (draws from collider
+                  data), assets.ts, SpritePool.ts, Particles.ts, MeleeFx.ts
   diagnostics/    PhysicsDiagnostics.ts — the measurement half of the feedback loop
-  EventBus.ts     Phaser → React events (bullet-fired, enemy-hp-changed)
+  EventBus.ts     game → React events (bullet-fired, enemy-hp-changed)
 
 server/           Geckos.io authoritative server
   physics.ts        re-exports src/game/simulation/Physics
@@ -38,8 +43,8 @@ public/assets/
 ## The one hard boundary
 
 `simulation/` is the only code both the client and the server run, and it is the
-reason the netcode converges instead of rubber-banding. It may not import Phaser,
-touch the DOM, or read wall-clock time.
+reason the netcode converges instead of rubber-banding. It may not import a
+rendering engine, touch the DOM, or read wall-clock time.
 
 Everything else is a consumer of it:
 
@@ -48,6 +53,33 @@ Everything else is a consumer of it:
 - **The client** predicts its own fighter with the same `tickPlayer`, interpolates
   the remote one, and draws. It never decides an outcome.
 - **The renderer** reads simulation state and writes nothing back.
+
+## Where ECS sits
+
+The entity world (`ecs/`) owns **things that are drawn**; the simulation owns
+truth. That boundary is deliberate — see the `ecs-architecture` skill for why
+turning authoritative state into component stores would put the one part of the
+codebase that measures 0.00px error at risk, for no benefit at two fighters.
+
+Systems are plain functions run in an explicit order once a frame, and every one
+of them reads the simulation and writes only presentation. Input, netcode and AI
+are singletons owned by `Match` rather than systems: they have their own
+lifecycles, and forcing them into the world would hide their sequencing.
+
+## What the engine does not do
+
+Pixi renders. Everything else that Phaser used to supply is ours, which is why
+those pieces are explicit files rather than framework config:
+
+| Concern | Where it lives |
+|---|---|
+| Game loop, fixed timestep | `Match.update` via `app.ticker` |
+| Scenes / lifecycle | none — `app.ts` initialises in a straight line |
+| Camera, layers, screen shake | `render/Stage.ts` |
+| Input | `input/Input.ts` |
+| Particles | `render/Particles.ts` |
+| Animation | `ecs/systems.ts` + frame slices in `render/assets.ts` |
+| Physics | `simulation/` — and it always was |
 
 ## Online first
 
@@ -74,7 +106,7 @@ Run modes are listed in [running-the-game.md](running-the-game.md).
 
 ## Conventions
 
-- **Input handling lives in the `Game.ts` scene**, not `Player.ts` — one set of
+- **Input handling lives in `input/Input.ts`**, not on the entities — one set of
   listeners, one place to look.
 - **Buttons are passed to the simulation raw.** It does its own press-edge
   detection (jump height is analogue, a slash needs an edge, a Massive fires on
@@ -82,6 +114,6 @@ Run modes are listed in [running-the-game.md](running-the-game.md).
 - **`EnemyBrain.ts` drives every AI fighter** — the offline enemy, the local
   `?ai=true` fighter and the server's bots. One brain, one perception structure,
   so a bot cannot accidentally be cleverer in one mode than another.
-- **`EventBus` carries Phaser → React events** only.
-- **Phaser 4 vs 3:** `color` not `fill` in `TextStyle`; `currentAnim.key` not
-  `getCurrentKey()`.
+- **`EventBus` carries game → React events** only, and is deliberately
+  dependency-free: using the renderer's emitter made the UI depend on the
+  rendering engine for nothing more than a callback list.

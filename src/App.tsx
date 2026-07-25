@@ -1,18 +1,21 @@
-import { useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { GameCanvas } from "./GameCanvas";
 import { EventBus } from "./game/EventBus";
-import { type IRefPhaserGame, PhaserGame } from "./PhaserGame";
 
 function App() {
-	const phaserRef = useRef<IRefPhaserGame | null>(null);
 	const [bulletCount, setBulletCount] = useState(0);
 
-	EventBus.on("bullet-fired", () => {
-		setBulletCount((c) => c + 1);
-	});
+	// Subscribed in an effect, not in the render body. Subscribing during render
+	// added a fresh listener on every state change, so each shot was counted once
+	// more than the one before it.
+	useEffect(
+		() => EventBus.on("bullet-fired", () => setBulletCount((c) => c + 1)),
+		[],
+	);
 
 	return (
 		<div id="app">
-			<PhaserGame ref={phaserRef} />
+			<GameCanvas />
 			<div
 				style={{
 					position: "absolute",

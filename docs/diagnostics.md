@@ -55,12 +55,18 @@ Three rules learned the hard way, all the same shape — **a metric that flags
 correct behaviour trains you to ignore it**:
 
 - **A metric must know the resolution of what it watches.** The remote fighter is
-  only visible at 20Hz, so judging its frame data against a 60Hz tolerance
-  reported the network as a state-machine bug.
+  only visible at 20Hz, and *every* fighter is sampled once per frame while the
+  simulation steps at 60Hz — so a tolerance of one physics tick reported perfectly
+  legal moves as violations the moment the frame rate dipped below 60.
 - **Exclude what the client provably cannot predict.** Melee stun, launch and
   knockback are announced by the server, so they are marked as teleports and
   excluded from the desync counter — otherwise the metric fails hardest exactly
   when combat is working.
+- **An announced discontinuity breaks continuity, it does not fail it.** A round
+  reset replaces both fighters wholesale; a fighter caught mid-Massive looks
+  exactly like an uncancellable move ending 650ms early. `markRoundReset()` drops
+  the melee tracks, because after a respawn there is nothing left to compare
+  against.
 - **Count what should happen, not only what must not.** Every must-be-zero metric
   is trivially satisfied by a build where the mechanic never runs.
 
@@ -81,6 +87,14 @@ correct behaviour trains you to ignore it**:
   violation counter read perfectly clean.
 - **Restart the server** after editing anything under `server/` or `simulation/`;
   tsx does not hot-reload.
+- **A cold Vite dep-optimiser cache reloads the page under the harness.** After
+  deleting `node_modules/.vite`, the first page load triggers a re-optimise and a
+  full reload — the harness then watches the game reset beneath it and reports a
+  match that never progresses. Warm it with one throwaway load before measuring.
+- **Two game instances is a whole class of false result.** Startup is async and
+  React StrictMode mounts twice, so both instances install `window.__gameState`
+  and the winner need not be the survivor. The symptom is a fight frozen at
+  100 HP with no opponent, in a game that visibly renders.
 
 ## AI vs AI mode
 

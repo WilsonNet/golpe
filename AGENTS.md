@@ -48,20 +48,29 @@ spec before implementing: [movement](specs/movement.md) ·
 
 ## Tech Stack
 
-Phaser 4.1.0 (rendering, input, scenes) · React 19 (UI overlay) · Vite 6 ·
-TypeScript 5.7 strict · Geckos.io (WebRTC) authoritative server · Vitest ·
-Playwright.
+PixiJS 8 (rendering) · miniplex (ECS, entity + render layer only) · React 19 (UI
+overlay) · Vite 6 · TypeScript 5.7 strict · Geckos.io (WebRTC) authoritative
+server · Vitest · Playwright.
 
-**Custom AABB physics in `src/game/simulation/` — Arcade Physics is not used for
-gameplay.**
+**Custom AABB physics in `src/game/simulation/`.** Pixi draws; it does not
+simulate. Input, the game loop and the camera are ours too — see the `pixi-*`
+skills for what the engine does and does not provide.
+
+**ECS stops at the entity and presentation layer.** The simulation stays plain
+data and pure functions, because that is what makes rewind-and-replay a
+three-line loop. Load the `ecs-architecture` skill before adding an entity,
+component or system.
 
 ## The rules that bite
 
 One line each; the war story behind every one is in
 [`docs/invariants.md`](docs/invariants.md).
 
-- **One simulation.** `src/game/simulation/` never imports Phaser, touches the
-  DOM, or reads wall-clock time. Client and server run the same `tickPlayer`.
+- **One simulation.** `src/game/simulation/` never imports a rendering engine,
+  touches the DOM, or reads wall-clock time. Client and server run the same
+  `tickPlayer`.
+- **Systems read the simulation and write only presentation.** A system that
+  wrote back into `body` would change authoritative state outside `tickPlayer`.
 - **`specs/` is the source of truth.** Update it in the same commit.
 - **Draw from the collider data**, and position sprites via `syncSpriteToBody` —
   bodies are top-left, sprites are centre-origin.
@@ -118,5 +127,17 @@ skill verifies it.
 - **`knowledge-sharpener`** — Run at the END of a substantial session: fold what
   was learned into the docs and skills, and verify the indexes.
 
-Phaser 4 framework reference skills are indexed in
-[`docs/phaser-skills.md`](docs/phaser-skills.md).
+### Engine and architecture reference
+
+- **`ecs-architecture`** — Adding an entity, component or system, and the
+  boundary that keeps the simulation out of ECS.
+- **`pixi-application`** — The Pixi app, async init, the ticker, React mounting,
+  and the Vite dep-optimiser trap.
+- **`pixi-scene-graph`** — Containers, anchors, draw order, layers and the camera.
+- **`pixi-assets`** — Loading textures, slicing sheets, generating placeholder art.
+- **`pixi-graphics`** — The v8 shape-then-style API, and when to bake to a texture.
+- **`pixi-effects`** — Particles, blend modes, filters, screen shake, and why
+  hitstop is unavailable here.
+- **`pixi-text-and-ui`** — Text, HUD layers, and the canvas/DOM split.
+- **`pixi-input`** — Keyboard and pointer input, world coordinates, and why edge
+  detection belongs in the simulation.

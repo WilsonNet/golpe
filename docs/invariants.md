@@ -9,12 +9,28 @@ This file is engineering rules. For what the game is *supposed to do*, see
 
 ## The simulation
 
-- **One simulation.** `src/game/simulation/` must never import Phaser, touch the
-  DOM, or read wall-clock time. Client and server run the *same* `tickPlayer`;
-  any divergence becomes rubber-banding.
+- **One simulation.** `src/game/simulation/` must never import a rendering
+  engine, touch the DOM, or read wall-clock time. Client and server run the
+  *same* `tickPlayer`; any divergence becomes rubber-banding. It survived a whole
+  engine swap untouched, which is the clearest evidence the boundary is real.
+- **ECS stops at the entity and presentation layer.** Systems read simulation
+  state and write only presentation. A system that wrote back into `body` would
+  be changing authoritative state outside `tickPlayer`, and the two sides would
+  immediately disagree. See the `ecs-architecture` skill.
 - **Bodies are top-left, sprites are centre-origin.** Always position sprites via
   `syncSpriteToBody`. Assigning body coordinates straight to a sprite draws it
-  half a body off.
+  half a body off — and the bug presents as "collision feels slightly wrong",
+  which sends you looking in the wrong file.
+- **The renderer must exist exactly once.** Pixi registers renderers and
+  environment adapters in a global registry at import time, so two module
+  instances kill the app on boot with `Extension type environment already has a
+  handler`. Vite's dep optimiser will split it happily; `optimizeDeps.include`
+  and `resolve.dedupe` both name `pixi.js` to stop that.
+- **Only one game instance may boot.** Startup is async and React StrictMode
+  mounts twice, so two `Match` instances race and both install the
+  `window.__gameState` hooks — the winner is not necessarily the survivor. The
+  diagnostic then reads a destroyed match and reports a fight frozen at 100 HP
+  with no opponent. `GameCanvas` serialises boots through one promise chain.
 - **Draw from the collider data.** `ArenaRenderer.drawArena` derives every
   platform sprite from `platforms`. Hand-placing sprites is how visuals and
   colliders silently disagreed — a 400px image for a 100px collider, so players
@@ -58,9 +74,9 @@ chain and diffs `Object.keys`. It localises the break in one run.
 
 ## Combat authority
 
-- **One source of bullets.** The scene's `BulletSystem` (offline) or the server
-  (online). `Player`/`AIEnemy` must not spawn their own ranged sprites — those
-  were never simulated and froze on screen forever.
+- **One source of bullets.** `combat/BulletSystem` (offline) or the server
+  (online). Nothing else may spawn a ranged sprite — the fighter classes used to,
+  producing projectiles nothing simulated, which froze on screen forever.
 - **The server is the only judge of a melee hit.** The client predicts the swing
   *state machine* so it draws on the press frame; it never decides that it
   connected. Damage, stun, launch and knockback are applied server-side in

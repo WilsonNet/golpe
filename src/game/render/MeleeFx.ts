@@ -3,36 +3,30 @@
  * read back by the simulation.
  *
  * That separation is not stylistic. The obvious way to sell a heavy hit is
- * hitstop, freezing the game for a few frames on impact; it is unavailable here,
- * because pausing the simulation on one machine and not the other desyncs the
- * match. So impact is faked entirely in the renderer: shake, a scale punch, and
- * a lot of particles. See specs/melee.md.
- *
- * All artwork is generated at runtime as obvious placeholder geometry — flat
- * white shapes, tinted per effect — so it can be swapped for real sprites
- * without touching any of the timing or triggering logic below.
+ * hitstop, freezing the game for a few frames on impact; it is unavailable
+ * here, because pausing the simulation on one machine and not the other desyncs
+ * the match. So impact is faked entirely in the renderer: shake, a scale punch,
+ * and a lot of particles. See specs/melee.md.
  */
 
-import type Phaser from "phaser";
-import { MOVES, type MeleeMove, type MeleeOutcome } from "../simulation/Melee";
+import { type Container, Sprite } from "pixi.js";
 import {
 	MASSIVE_CHARGE_MS,
+	type MeleeMove,
+	type MeleeOutcome,
+	MOVES,
+	meleePhase,
 	PARRY_WINDOW_MS,
 	PLAYER_HEIGHT,
 	PLAYER_WIDTH,
 	type PlayerPosition,
-	meleePhase,
 } from "../simulation/Physics";
-
-const TEX_SPARK = "fx_spark";
-const TEX_SHARD = "fx_shard";
-const TEX_RING = "fx_ring";
-const TEX_ARC = "fx_arc";
-const TEX_BLADE = "fx_blade";
-const TEX_GUARD = "fx_guard";
+import { TEX, tex } from "./assets";
+import { ParticleSystem } from "./Particles";
+import type { Stage } from "./Stage";
 
 /** Palette. One colour per readable game state, so a glance tells you what happened. */
-const COLOR = {
+const COLOR: Record<string, number> = {
 	slash: 0xffffff,
 	uppercut: 0x8ff0ff,
 	massive: 0xffb238,
@@ -41,90 +35,7 @@ const COLOR = {
 	parry: 0xffe066,
 	backstab: 0xc471ff,
 	stun: 0xffe066,
-} as const;
-
-function ensureTexture(
-	scene: Phaser.Scene,
-	key: string,
-	w: number,
-	h: number,
-	draw: (g: Phaser.GameObjects.Graphics) => void,
-) {
-	if (scene.textures.exists(key)) return;
-	const g = scene.add.graphics();
-	draw(g);
-	g.generateTexture(key, w, h);
-	g.destroy();
-}
-
-/**
- * Placeholder art, drawn in code.
- *
- * Deliberately crude: flat white primitives that read clearly at speed and are
- * unmistakably temporary. Everything is white so a single tint per effect
- * controls its colour.
- */
-export function createFxTextures(scene: Phaser.Scene) {
-	ensureTexture(scene, TEX_SPARK, 8, 8, (g) => {
-		g.fillStyle(0xffffff, 1);
-		g.beginPath();
-		g.moveTo(4, 0);
-		g.lineTo(8, 4);
-		g.lineTo(4, 8);
-		g.lineTo(0, 4);
-		g.closePath();
-		g.fillPath();
-	});
-
-	ensureTexture(scene, TEX_SHARD, 16, 4, (g) => {
-		g.fillStyle(0xffffff, 1);
-		g.fillRect(0, 0, 16, 4);
-	});
-
-	ensureTexture(scene, TEX_RING, 96, 96, (g) => {
-		g.lineStyle(5, 0xffffff, 1);
-		g.strokeCircle(48, 48, 44);
-	});
-
-	// A crescent: the swing trail. Drawn facing +x so it can simply be rotated.
-	ensureTexture(scene, TEX_ARC, 96, 96, (g) => {
-		g.fillStyle(0xffffff, 1);
-		g.beginPath();
-		g.arc(48, 48, 46, -1.0, 1.0, false);
-		g.arc(48, 48, 24, 1.0, -1.0, true);
-		g.closePath();
-		g.fillPath();
-	});
-
-	// Placeholder sword: blade, guard, grip. To be replaced by real art.
-	ensureTexture(scene, TEX_BLADE, 44, 10, (g) => {
-		g.fillStyle(0xdfe7f5, 1);
-		g.fillRect(12, 3, 32, 4);
-		g.fillStyle(0x8a94a6, 1);
-		g.fillRect(8, 0, 3, 10);
-		g.fillRect(0, 3, 8, 4);
-	});
-
-	// The guard arc shown while blocking.
-	ensureTexture(scene, TEX_GUARD, 32, 64, (g) => {
-		g.lineStyle(5, 0xffffff, 1);
-		g.beginPath();
-		g.arc(4, 32, 26, -1.1, 1.1, false);
-		g.strokePath();
-	});
-}
-
-/** Per-fighter persistent sprites, created on first sight. */
-interface FighterFx {
-	arc: Phaser.GameObjects.Sprite;
-	blade: Phaser.GameObjects.Sprite;
-	guard: Phaser.GameObjects.Sprite;
-	/** Accumulator so ambient emitters puff at a fixed rate, not per frame. */
-	emitAccMs: number;
-	/** Sprite the fighter is drawn with, for the impact scale punch. */
-	body?: Phaser.GameObjects.Sprite;
-	punch: number;
-}
+};
 
 export interface ImpactEvent {
 	move: MeleeMove;
@@ -134,56 +45,39 @@ export interface ImpactEvent {
 	dir: number;
 }
 
+/** An expanding ring, tracked by hand so it needs no tween library. */
+interface Ring {
+	sprite: Sprite;
+	ageMs: number;
+	lifeMs: number;
+	toScale: number;
+}
+
+/** Per-fighter persistent sprites, created on first sight. */
+interface FighterFx {
+	arc: Sprite;
+	blade: Sprite;
+	guard: Sprite;
+	emitAccMs: number;
+	/** Sprite the fighter is drawn with, for the impact scale punch. */
+	body?: Sprite;
+	punch: number;
+}
+
 export class MeleeFx {
 	private readonly fighters = new Map<string, FighterFx>();
-	private readonly sparks: Phaser.GameObjects.Particles.ParticleEmitter;
-	private readonly shards: Phaser.GameObjects.Particles.ParticleEmitter;
-	private readonly motes: Phaser.GameObjects.Particles.ParticleEmitter;
+	private readonly particles: ParticleSystem;
+	private readonly rings: Ring[] = [];
 
-	constructor(private readonly scene: Phaser.Scene) {
-		createFxTextures(scene);
-
-		// Three shared emitters in explode mode, rather than one per effect: the
-		// per-burst settings are pushed in at explode time, which keeps the number
-		// of live emitters constant no matter how frantic the fight gets.
-		this.sparks = scene.add.particles(0, 0, TEX_SPARK, {
-			lifespan: 340,
-			speed: { min: 90, max: 320 },
-			scale: { start: 1.1, end: 0 },
-			alpha: { start: 1, end: 0 },
-			gravityY: 420,
-			blendMode: "ADD",
-			emitting: false,
-		});
-
-		this.shards = scene.add.particles(0, 0, TEX_SHARD, {
-			lifespan: 480,
-			speed: { min: 140, max: 420 },
-			scale: { start: 1, end: 0.2 },
-			alpha: { start: 1, end: 0 },
-			rotate: { min: 0, max: 360 },
-			gravityY: 600,
-			blendMode: "ADD",
-			emitting: false,
-		});
-
-		// Ambient: charge motes and stun sparks. Slow, floaty, no gravity.
-		this.motes = scene.add.particles(0, 0, TEX_SPARK, {
-			lifespan: 420,
-			speed: { min: 10, max: 50 },
-			scale: { start: 0.7, end: 0 },
-			alpha: { start: 0.9, end: 0 },
-			blendMode: "ADD",
-			emitting: false,
-		});
-
-		for (const e of [this.sparks, this.shards, this.motes]) {
-			e.setDepth(50);
-		}
+	constructor(
+		private readonly layer: Container,
+		private readonly stage: Stage,
+	) {
+		this.particles = new ParticleSystem(layer);
 	}
 
 	/** Bind a fighter's sprite so impacts can punch its scale. */
-	registerBody(key: string, sprite: Phaser.GameObjects.Sprite) {
+	registerBody(key: string, sprite: Sprite) {
 		this.fx(key).body = sprite;
 	}
 
@@ -191,18 +85,22 @@ export class MeleeFx {
 		let f = this.fighters.get(key);
 		if (f) return f;
 
-		const arc = this.scene.add.sprite(0, 0, TEX_ARC).setVisible(false);
-		arc.setBlendMode("ADD");
-		arc.setDepth(45);
+		const mk = (texture: string, blend: boolean) => {
+			const s = new Sprite(tex(texture));
+			s.anchor.set(0.5);
+			s.visible = false;
+			if (blend) s.blendMode = "add";
+			this.layer.addChild(s);
+			return s;
+		};
 
-		const blade = this.scene.add.sprite(0, 0, TEX_BLADE).setVisible(false);
-		blade.setDepth(44);
-
-		const guard = this.scene.add.sprite(0, 0, TEX_GUARD).setVisible(false);
-		guard.setBlendMode("ADD");
-		guard.setDepth(46);
-
-		f = { arc, blade, guard, emitAccMs: 0, punch: 0 };
+		f = {
+			arc: mk(TEX.arc, true),
+			blade: mk(TEX.blade, false),
+			guard: mk(TEX.guard, true),
+			emitAccMs: 0,
+			punch: 0,
+		};
 		this.fighters.set(key, f);
 		return f;
 	}
@@ -226,10 +124,8 @@ export class MeleeFx {
 		this.drawGuard(f, s, cx, cy, dir);
 
 		f.emitAccMs += dtMs;
-		const puff = f.emitAccMs >= 40;
-		if (puff) f.emitAccMs = 0;
-
-		if (puff) {
+		if (f.emitAccMs >= 40) {
+			f.emitAccMs = 0;
 			this.drawCharge(s, cx, cy);
 			this.drawStun(s, cx, s.y);
 		}
@@ -245,31 +141,28 @@ export class MeleeFx {
 		dir: number,
 	) {
 		if (s.meleeAction === "none") {
-			f.arc.setVisible(false);
-			f.blade.setVisible(false);
+			f.arc.visible = false;
+			f.blade.visible = false;
 			return;
 		}
 
 		const def = MOVES[s.meleeAction];
 		const phase = meleePhase(s);
-		const total = def.startupMs + def.activeMs;
 		// 0 at the start of the wind-up, 1 as the active window closes: the swing
 		// reads as one continuous motion rather than snapping between phases.
-		const swing = Math.min(1, s.meleeTimer / total);
+		const swing = Math.min(1, s.meleeTimer / (def.startupMs + def.activeMs));
 
 		// Slash and Massive cut across; the uppercut travels upward.
-		const arcFrom = s.meleeAction === "uppercut" ? 1.5 : -0.95;
-		const arcTo = s.meleeAction === "uppercut" ? -1.5 : 0.95;
-		const angle = arcFrom + (arcTo - arcFrom) * swing;
+		const from = s.meleeAction === "uppercut" ? 1.5 : -0.95;
+		const to = s.meleeAction === "uppercut" ? -1.5 : 0.95;
+		const angle = from + (to - from) * swing;
 
-		const reach = def.reachPx;
-		f.blade.setVisible(true);
-		f.blade.setPosition(cx + dir * 12, cy);
-		f.blade.setRotation(dir > 0 ? angle : Math.PI - angle);
-		f.blade.setScale(dir > 0 ? 1 : 1, 1);
+		f.blade.visible = true;
+		f.blade.position.set(cx + dir * 12, cy);
+		f.blade.rotation = dir > 0 ? angle : Math.PI - angle;
 
-		if (phase === "startup") {
-			f.arc.setVisible(false);
+		if (phase !== "active") {
+			f.arc.visible = false;
 			return;
 		}
 
@@ -279,12 +172,15 @@ export class MeleeFx {
 			1,
 			Math.max(0, (s.meleeTimer - def.startupMs) / def.activeMs),
 		);
-		f.arc.setVisible(phase === "active");
-		f.arc.setPosition(cx + dir * reach * 0.55, cy + def.boxTopOffset * 0.5);
-		f.arc.setRotation(dir > 0 ? angle : Math.PI - angle);
-		f.arc.setScale((reach / 46) * (0.8 + 0.3 * activeT));
-		f.arc.setAlpha(1 - activeT * 0.75);
-		f.arc.setTint(COLOR[s.meleeAction]);
+		f.arc.visible = true;
+		f.arc.position.set(
+			cx + dir * def.reachPx * 0.55,
+			cy + def.boxTopOffset * 0.5,
+		);
+		f.arc.rotation = dir > 0 ? angle : Math.PI - angle;
+		f.arc.scale.set((def.reachPx / 46) * (0.8 + 0.3 * activeT));
+		f.arc.alpha = 1 - activeT * 0.75;
+		f.arc.tint = COLOR[s.meleeAction];
 	}
 
 	private drawGuard(
@@ -295,18 +191,18 @@ export class MeleeFx {
 		dir: number,
 	) {
 		if (!s.blocking) {
-			f.guard.setVisible(false);
+			f.guard.visible = false;
 			return;
 		}
 		// The parry window is the only thing a defender can time, so it is the one
 		// thing the guard has to communicate: bright and large while it is open,
 		// dim and small once it has passed.
 		const parrying = s.blockTimer <= PARRY_WINDOW_MS;
-		f.guard.setVisible(true);
-		f.guard.setPosition(cx + dir * 20, cy);
-		f.guard.setScale(dir > 0 ? 1 : -1, parrying ? 1.15 : 1);
-		f.guard.setTint(parrying ? COLOR.parry : COLOR.block);
-		f.guard.setAlpha(parrying ? 1 : 0.45);
+		f.guard.visible = true;
+		f.guard.position.set(cx + dir * 20, cy);
+		f.guard.scale.set(dir > 0 ? 1 : -1, parrying ? 1.15 : 1);
+		f.guard.tint = parrying ? COLOR.parry : COLOR.block;
+		f.guard.alpha = parrying ? 1 : 0.45;
 	}
 
 	private drawCharge(s: PlayerPosition, cx: number, cy: number) {
@@ -314,28 +210,48 @@ export class MeleeFx {
 
 		if (s.massiveReady) {
 			// Armed: a steady bright pulse, so the threat is obvious to both players.
-			this.motes.setParticleTint(COLOR.massive);
-			this.motes.explode(3, cx, cy);
+			this.particles.burst({
+				texture: TEX.spark,
+				count: 3,
+				x: cx,
+				y: cy,
+				tint: COLOR.massive,
+				speed: [10, 60],
+				lifeMs: 420,
+				scale: [0.8, 0],
+			});
 			return;
 		}
 
-		// Charging: motes drawn inward, denser as the charge fills.
+		// Charging: motes drawn inward, tighter as the charge fills.
 		const t = Math.min(1, s.chargeTimer / MASSIVE_CHARGE_MS);
 		const radius = 46 - 30 * t;
-		const angle = Math.random() * Math.PI * 2;
-		this.motes.setParticleTint(COLOR.charge);
-		this.motes.explode(
-			1,
-			cx + Math.cos(angle) * radius,
-			cy + Math.sin(angle) * radius,
-		);
+		const a = Math.random() * Math.PI * 2;
+		this.particles.burst({
+			texture: TEX.spark,
+			count: 1,
+			x: cx + Math.cos(a) * radius,
+			y: cy + Math.sin(a) * radius,
+			tint: COLOR.charge,
+			speed: [5, 25],
+			lifeMs: 380,
+			scale: [0.7, 0],
+		});
 	}
 
 	private drawStun(s: PlayerPosition, cx: number, top: number) {
 		if (s.stunTimer <= 0) return;
-		const angle = (s.stunTimer / 90) % (Math.PI * 2);
-		this.motes.setParticleTint(COLOR.stun);
-		this.motes.explode(1, cx + Math.cos(angle) * 16, top - 10 + Math.sin(angle) * 5);
+		const a = (s.stunTimer / 90) % (Math.PI * 2);
+		this.particles.burst({
+			texture: TEX.spark,
+			count: 1,
+			x: cx + Math.cos(a) * 16,
+			y: top - 10 + Math.sin(a) * 5,
+			tint: COLOR.stun,
+			speed: [5, 20],
+			lifeMs: 400,
+			scale: [0.6, 0],
+		});
 	}
 
 	/**
@@ -346,127 +262,144 @@ export class MeleeFx {
 	private applyPunch(f: FighterFx, dtMs: number) {
 		if (!f.body) return;
 		if (f.punch <= 0) {
-			f.body.setScale(1);
+			f.body.scale.set(1);
 			return;
 		}
 		f.punch = Math.max(0, f.punch - dtMs / 180);
-		const k = 1 + 0.35 * f.punch;
-		f.body.setScale(k, 1 + 0.18 * f.punch);
+		f.body.scale.set(1 + 0.35 * f.punch, 1 + 0.18 * f.punch);
 	}
 
 	/** One sword impact, as judged by the server (or by the offline resolver). */
 	impact(event: ImpactEvent, victimKey?: string) {
-		const { move, outcome, x, y, dir } = event;
+		const { move, outcome, x, y } = event;
 		const heavy = move === "massive";
 
 		if (victimKey) this.fx(victimKey).punch = heavy ? 1 : 0.55;
 
+		const sparks = (count: number, tint: number, speedMax = 320) =>
+			this.particles.burst({
+				texture: TEX.spark,
+				count,
+				x,
+				y,
+				tint,
+				speed: [90, speedMax],
+				lifeMs: 340,
+				scale: [1.1, 0],
+				gravity: 420,
+			});
+
+		const shards = (count: number, tint: number) =>
+			this.particles.burst({
+				texture: TEX.shard,
+				count,
+				x,
+				y,
+				tint,
+				speed: [140, 420],
+				lifeMs: 480,
+				scale: [1, 0.2],
+				gravity: 600,
+				spin: true,
+			});
+
 		switch (outcome) {
-			case "blocked": {
-				this.sparks.setParticleTint(COLOR.block);
-				this.sparks.explode(10, x, y);
+			case "blocked":
+				sparks(10, COLOR.block);
 				this.ring(x, y, COLOR.block, 0.5, 220);
-				this.shake(70, 0.002);
+				this.stage.startShake(70, 2);
 				break;
-			}
 
-			case "parried": {
+			case "parried":
 				// The biggest read in the game deserves the biggest tell.
-				this.sparks.setParticleTint(COLOR.parry);
-				this.sparks.explode(22, x, y);
-				this.shards.setParticleTint(COLOR.parry);
-				this.shards.explode(14, x, y);
+				sparks(22, COLOR.parry);
+				shards(14, COLOR.parry);
 				this.ring(x, y, COLOR.parry, 1.3, 420);
-				this.shake(180, 0.008);
+				this.stage.startShake(180, 7);
 				break;
-			}
 
-			case "backstab": {
-				this.sparks.setParticleTint(COLOR.backstab);
-				this.sparks.explode(20, x, y);
-				this.shards.setParticleTint(COLOR.backstab);
-				this.shards.explode(10, x, y);
+			case "backstab":
+				sparks(20, COLOR.backstab);
+				shards(10, COLOR.backstab);
 				this.ring(x, y, COLOR.backstab, 0.9, 320);
-				this.shake(150, 0.006);
+				this.stage.startShake(150, 5);
 				break;
-			}
 
 			default: {
 				const tint = COLOR[move];
-				this.sparks.setParticleTint(tint);
-				this.sparks.explode(heavy ? 26 : 12, x, y);
-				if (move !== "slash") {
-					this.shards.setParticleTint(tint);
-					this.shards.explode(heavy ? 18 : 8, x, y);
-				}
+				sparks(heavy ? 26 : 12, tint, heavy ? 420 : 320);
+				if (move !== "slash") shards(heavy ? 18 : 8, tint);
 				if (heavy) this.ring(x, y, tint, 1.5, 460);
 				if (move === "uppercut") this.launchPlume(x, y);
-				this.shake(heavy ? 240 : 80, heavy ? 0.011 : 0.003);
+				this.stage.startShake(heavy ? 240 : 80, heavy ? 9 : 3);
 				break;
 			}
 		}
-
-		// Nudge the burst along the swing so it reads as directional.
-		this.sparks.setPosition(dir * 4, 0);
 	}
 
 	/** An upward cone, sold as the target leaving the ground. */
 	private launchPlume(x: number, y: number) {
-		this.sparks.setParticleTint(COLOR.uppercut);
-		for (let i = 0; i < 8; i++) {
-			this.sparks.explode(1, x + (Math.random() - 0.5) * 20, y - i * 7);
-		}
+		this.particles.burst({
+			texture: TEX.spark,
+			count: 14,
+			x,
+			y,
+			tint: COLOR.uppercut,
+			speed: [180, 420],
+			// Straight up, give or take: -90 degrees with a narrow spread.
+			angle: [-Math.PI * 0.72, -Math.PI * 0.28],
+			lifeMs: 460,
+			scale: [1.2, 0],
+			gravity: 500,
+		});
 	}
 
 	private ring(
 		x: number,
 		y: number,
 		tint: number,
-		scale: number,
-		durationMs: number,
+		toScale: number,
+		lifeMs: number,
 	) {
-		const ring = this.scene.add.sprite(x, y, TEX_RING);
-		ring.setTint(tint);
-		ring.setBlendMode("ADD");
-		ring.setDepth(49);
-		ring.setScale(scale * 0.2);
-		this.scene.tweens.add({
-			targets: ring,
-			scale: scale,
-			alpha: 0,
-			duration: durationMs,
-			ease: "Cubic.Out",
-			onComplete: () => ring.destroy(),
-		});
+		const sprite = new Sprite(tex(TEX.ring));
+		sprite.anchor.set(0.5);
+		sprite.position.set(x, y);
+		sprite.tint = tint;
+		sprite.blendMode = "add";
+		sprite.scale.set(toScale * 0.2);
+		this.layer.addChild(sprite);
+		this.rings.push({ sprite, ageMs: 0, lifeMs, toScale });
 	}
 
-	/**
-	 * Camera shake only — never a simulation pause.
-	 *
-	 * Phaser applies shake as a render-time offset and leaves `scrollX`/`scrollY`
-	 * alone, so this does not register as camera jitter in the diagnostic.
-	 */
-	private shake(durationMs: number, intensity: number) {
-		this.scene.cameras.main.shake(durationMs, intensity);
-	}
+	/** Advance particles and rings. Frame time, never simulation time. */
+	update(dtMs: number) {
+		this.particles.update(dtMs);
 
-	/** Drop a fighter's sprites, e.g. when a remote leaves. */
-	forget(key: string) {
-		const f = this.fighters.get(key);
-		if (!f) return;
-		f.arc.destroy();
-		f.blade.destroy();
-		f.guard.destroy();
-		this.fighters.delete(key);
+		for (let i = this.rings.length - 1; i >= 0; i--) {
+			const r = this.rings[i];
+			r.ageMs += dtMs;
+			const t = Math.min(1, r.ageMs / r.lifeMs);
+			// Ease out, so the ring snaps outward and then settles.
+			const eased = 1 - (1 - t) ** 3;
+			r.sprite.scale.set(r.toScale * (0.2 + 0.8 * eased));
+			r.sprite.alpha = 1 - t;
+			if (t >= 1) {
+				r.sprite.destroy();
+				this.rings.splice(i, 1);
+			}
+		}
 	}
 
 	reset() {
 		for (const f of this.fighters.values()) {
-			f.arc.setVisible(false);
-			f.blade.setVisible(false);
-			f.guard.setVisible(false);
+			f.arc.visible = false;
+			f.blade.visible = false;
+			f.guard.visible = false;
 			f.punch = 0;
-			f.body?.setScale(1);
+			f.body?.scale.set(1);
 		}
+		this.particles.clear();
+		for (const r of this.rings) r.sprite.destroy();
+		this.rings.length = 0;
 	}
 }

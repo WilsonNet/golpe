@@ -1,4 +1,4 @@
-import type Phaser from "phaser";
+import type { Container, Sprite, Texture } from "pixi.js";
 import type { BulletSample } from "../diagnostics/PhysicsDiagnostics";
 import { SpritePool } from "../render/SpritePool";
 import {
@@ -13,7 +13,7 @@ import {
 export type BulletOwner = "player" | "enemy";
 
 interface LocalBullet extends BulletState {
-	sprite: Phaser.GameObjects.Sprite;
+	sprite: Sprite;
 }
 
 /** Something a bullet can hit. `onHit` runs at most once per bullet. */
@@ -38,8 +38,8 @@ export class BulletSystem {
 	private pool: SpritePool;
 	private nextId = 0;
 
-	constructor(scene: Phaser.Scene, texture = "fireball") {
-		this.pool = new SpritePool(scene, texture);
+	constructor(layer: Container, texture: Texture) {
+		this.pool = new SpritePool(layer, texture);
 	}
 
 	get count(): number {
@@ -53,7 +53,7 @@ export class BulletSystem {
 
 	fire(x: number, y: number, angle: number, owner: BulletOwner) {
 		const sprite = this.pool.acquire();
-		sprite.setPosition(x, y);
+		sprite.position.set(x, y);
 		this.bullets.push({
 			id: this.nextId++,
 			ownerId: owner,
@@ -94,7 +94,7 @@ export class BulletSystem {
 				continue;
 			}
 
-			b.sprite.setPosition(b.x, b.y);
+			b.sprite.position.set(b.x, b.y);
 		}
 	}
 

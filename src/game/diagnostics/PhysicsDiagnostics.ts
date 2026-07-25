@@ -345,6 +345,26 @@ export class PhysicsDiagnostics {
 		this.skipJitterFrames = Math.max(this.skipJitterFrames, frames);
 	}
 
+	/**
+	 * A round ended and both fighters were replaced at their spawns.
+	 *
+	 * Melee tracking compares each frame against the last, so a respawn breaks the
+	 * comparison rather than failing it: a fighter caught mid-Massive has its
+	 * state wiped with no stun and no invulnerability, which looks exactly like an
+	 * uncancellable move ending 650ms early. That produced a FAIL in roughly one
+	 * run in three, always on a legitimate KO.
+	 *
+	 * Dropping the tracks is the honest answer — after an announced discontinuity
+	 * there is no continuity left to judge. It is deliberately *not* folded into
+	 * `markTeleport`, which also fires on every sword impact; clearing there would
+	 * reset the butterfly chain counter dozens of times a match and mask real
+	 * violations.
+	 */
+	markRoundReset() {
+		this.markTeleport();
+		this.meleeTracks.clear();
+	}
+
 	recordReconciliation(
 		errorPx: number,
 		replayed: number,
@@ -615,6 +635,19 @@ export class PhysicsDiagnostics {
 		}
 		t.sinceCancelMs += dtMs;
 
+		/**
+		 * The observation interval, not the simulation interval.
+		 *
+		 * State is sampled once per *frame* while the simulation steps at 60Hz, so
+		 * the last value seen before a move ends can be a whole frame stale — plus
+		 * up to a tick, since the move can only end on a tick boundary. Below 60fps
+		 * a frame is the longer of the two, and judging against a fixed one-tick
+		 * tolerance reported perfectly legal moves as contract violations: a
+		 * Massive observed ending at 700ms of its declared 720ms, purely because
+		 * the run was averaging 49fps.
+		 */
+		const tolerance = Math.max(toleranceMs, dtMs + FRAME_TOLERANCE_MS);
+
 		const stunned = s.stunTimer > 0;
 		/**
 		 * Was this fighter interrupted by a hit in the recent past?
@@ -638,7 +671,7 @@ export class PhysicsDiagnostics {
 		// A move must not outlive the duration its own table declares.
 		if (s.meleeAction !== "none") {
 			const total = moveDuration(s.meleeAction);
-			if (s.meleeTimer > total + toleranceMs) {
+			if (s.meleeTimer > total + tolerance) {
 				this.stuckActionFrames++;
 				if (t.lastAction !== s.meleeAction) {
 					this.frameDataViolations++;
@@ -674,7 +707,7 @@ export class PhysicsDiagnostics {
 			// Ending early means something cancelled it — a block, a stance switch,
 			// or being hit. Ending early on a move the table says is uncancellable
 			// is a contract violation.
-			if (t.lastTimer < total - toleranceMs) {
+			if (t.lastTimer < total - tolerance) {
 				this.cancels++;
 				t.sinceCancelMs = 0;
 				if (!MOVES[t.lastAction].cancellable && !interrupted) {

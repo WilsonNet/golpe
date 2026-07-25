@@ -74,15 +74,12 @@ Code can see what knowledge exists without listing directories.
 
 Regenerate and compare:
 
-Project skills are indexed in `AGENTS.md`; framework reference skills live in
-`docs/phaser-skills.md`, so check the union of the two.
-
 ```bash
 # Every skill on disk
-ls -1 .agents/skills | tr -d /  | sort
+ls -1 .agents/skills | tr -d / | sort
 
 # Every skill currently indexed
-grep -ohE '`[a-z0-9-]+`' AGENTS.md docs/phaser-skills.md | tr -d '`' | sort -u
+grep -ohE '`[a-z0-9-]+`' AGENTS.md | tr -d '`' | sort -u
 ```
 
 Any name in the first list and not the second needs a pointer line added. Any
