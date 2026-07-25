@@ -48,7 +48,7 @@ because pane ids are machine-local.
 ```
 workspace "vento-aureo"
 └── tab "dev"
-    ├── pane "vite :8080"     npm run dev-nolog
+    ├── pane "vite :8080"     npm run dev
     └── pane "geckos :9208"   npm run dev:server
 ```
 
@@ -83,7 +83,7 @@ herdr tab create --workspace w1 --cwd "$PWD" --label dev --no-focus
 herdr pane split w1:pA --direction down --ratio 0.5 --cwd "$PWD"
                                         # -> result.pane.pane_id
 herdr pane rename w1:pA "vite :8080"
-herdr pane run w1:pA npm run dev-nolog  # command is argv, not a shell string
+herdr pane run w1:pA npm run dev  # command is argv, not a shell string
 herdr pane send-keys w1:pA ctrl+c
 herdr pane list                         # -> result.panes[] with agent_status
 herdr tab close w1:tA
@@ -95,7 +95,7 @@ herdr tab close w1:tA
 - **Use `--source visible`.** The default `recent` source returns *empty* for a
   long-running process that is simply sitting there logging. `--lines` applies
   to the JSON sources, so slice the text yourself.
-- **`pane run` takes argv**, e.g. `pane run w1:pA npm run dev-nolog` — not a
+- **`pane run` takes argv**, e.g. `pane run w1:pA npm run dev` — not a
   quoted shell string.
 - A workspace/tab/pane id is `w1`, `w1:t5`, `w1:p5`. Ids are per-session and are
   not stable across a server restart, hence the state file.

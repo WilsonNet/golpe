@@ -156,21 +156,50 @@ here says nothing about the netcode.
 
 ## Controls
 
+### Movement
+
 | Input | Action |
 |---|---|
 | **W** | Jump — hold for height, release early to cut the arc |
 | **A** / **D** | Move left / right |
-| **S** | Down |
 | Double-tap **A** / **D** | Dash |
-| **Mouse** | Aim |
-| **Left click** | Fire |
-| **Q** / **E** | Switch to melee / ranged |
+| **Mouse** | Aim — **you face where you aim**, which is how you keep your guard toward an attacker while retreating |
 | **P** | Toggle AI vs AI |
 
 Jumping is forgiving on both sides of a ledge: 100ms of coyote time after
 walking off, and a 120ms jump buffer before landing. While airborne and touching
 a wall, jump again to wall jump — world edges count, so a flat wall can be
 climbed with chained wall jumps.
+
+### Combat
+
+**Q** draws the sword, **E** the gun. **Sword is the default** — this is a sword
+game, and the gun answers a range problem.
+
+| Input | Sword | Gun |
+|---|---|---|
+| **Left click** (tap) | Slash | Fire |
+| **Left click** (hold ~420ms, then release) | **Massive Strike** | Fire |
+| **Right click** (hold) | **Block** | — |
+| **F** | **Uppercut** | — |
+
+The three things worth knowing before your first match:
+
+- **Cancel your slash into a block.** Only the slash can be cancelled, and doing
+  it the instant the swing lands cuts 330ms down to ~160ms while leaving you
+  guarding. That is the *butterfly*, and it is the correct way to apply pressure.
+- **Blocking early beats blocking late.** The first 140ms of a *fresh* block is a
+  parry window: absorb a swing inside it and the attacker is guard-broken and you
+  get a free Massive Strike. Holding block never re-arms it.
+- **A guard only covers the side you face.** The answers to a turtle are the
+  uppercut (unblockable, launches them) and simply getting behind them — a
+  backstab ignores the guard entirely.
+
+Heavy moves are a commitment: the Massive Strike and the uppercut cannot be
+cancelled and root you where you stand, so whiffing one loses the exchange.
+
+Full frame data and the reasoning behind every number is in
+[`specs/melee.md`](../specs/melee.md).
 
 ---
 

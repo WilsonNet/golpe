@@ -2,7 +2,7 @@
  * Sword combat, modelled on GunZ: The Duel's K-Style. See specs/melee.md.
  *
  * Deterministic and engine-free, like everything else in `simulation/`: no
- * Phaser, no DOM, no wall-clock time. The client predicts this state machine so
+ * rendering engine, no DOM, no wall-clock time. The client predicts this so
  * a swing draws on the frame the button is pressed, and the server runs the
  * identical code so the two agree without a reconciliation special case.
  *
@@ -56,7 +56,7 @@ export interface MoveDef {
 
 export const MOVES: Record<MeleeMove, MoveDef> = {
 	/**
-	 * The bread and butter. Its 310ms total against a 140ms cancelled length is
+	 * The bread and butter. Its 330ms total against a 160ms cancelled length is
 	 * the entire reward for learning the butterfly — shrink the recovery and the
 	 * technique stops mattering.
 	 */

@@ -31,7 +31,7 @@ const SERVICES = [
 	{
 		name: "vite",
 		label: "vite :8080",
-		command: ["npm", "run", "dev-nolog"],
+		command: ["npm", "run", "dev"],
 		port: 8080,
 		ready: /Local:\s+http/,
 	},

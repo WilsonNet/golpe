@@ -1,9 +1,11 @@
 /**
  * Deterministic gameplay simulation, shared verbatim by client and server.
  *
- * Nothing in here may touch Phaser, the DOM or wall-clock time: given the same
- * state, input and dt, both sides must produce bit-identical results. That is
- * what makes client-side prediction reconcile instead of rubber-band.
+ * Nothing in here may touch a rendering engine, the DOM or wall-clock time:
+ * given the same state, input and dt, both sides must produce bit-identical
+ * results. That is what makes client-side prediction reconcile instead of
+ * rubber-band — and it is why this directory survived a whole renderer swap
+ * without a single edit.
  */
 
 import {
