@@ -9,7 +9,13 @@
  * Output is wrapped as `__DIAGNOSTIC_RESULT__{...}__END__` on one console line.
  */
 
-import { penetrationDepth } from "../simulation/Arena";
+import {
+	PLAYER_HEIGHT,
+	penetrationDepth,
+	platforms,
+	WORLD_BOTTOM,
+	WORLD_RIGHT,
+} from "../simulation/Arena";
 import {
 	BULLET_SPEED,
 	MAX_FALL_SPEED,
@@ -273,6 +279,18 @@ export class PhysicsDiagnostics {
 	private stuckActionFrames = 0;
 	private meleeDesyncFrames = 0;
 
+	/**
+	 * Arena coverage.
+	 *
+	 * A fight can satisfy every correctness metric while happening inside a
+	 * 118px box in the middle of an 800px arena — which is exactly what the AI
+	 * did once it learned to sword-fight. Every ledge, the wall jumps, the
+	 * line-of-sight cover and the whole ranged game go untested by such a run,
+	 * and nothing in the report said so.
+	 */
+	private surfacesUsed = new Set<number>();
+	private highestY = Number.POSITIVE_INFINITY;
+
 	/** Movement-feel counters. */
 	private jumps = 0;
 	private wallJumps = 0;
@@ -304,6 +322,8 @@ export class PhysicsDiagnostics {
 		this.airFrames = 0;
 		this.peakRise = 0;
 		this.wasGrounded = false;
+		this.surfacesUsed.clear();
+		this.highestY = Number.POSITIVE_INFINITY;
 
 		this.meleeTracks.clear();
 		this.moveCounts = { slash: 0, uppercut: 0, massive: 0 };
@@ -555,7 +575,21 @@ export class PhysicsDiagnostics {
 		const tracks = [...this.bulletTracks.values()].filter(
 			(t) => t.points.length >= BULLET_MIN_POINTS,
 		);
-		if (tracks.length === 0) return undefined;
+		// Report an empty run as a loud zero, never as an absent section. Returning
+		// undefined here meant "no projectile was fired at all" and "projectiles
+		// were flawless" printed identically — so the entire ranged pipeline could
+		// go untested by the canonical run without anything looking wrong.
+		if (tracks.length === 0) {
+			return {
+				tracked: 0,
+				teleportFrames: 0,
+				frozenFrames: 0,
+				maxPathDeviationPx: 0,
+				maxStepRatio: 0,
+				avgStepCv: 0,
+				offenders: [],
+			};
+		}
 
 		let teleports = 0;
 		let frozen = 0;
@@ -776,7 +810,15 @@ export class PhysicsDiagnostics {
 	}
 
 	private trackMovement(p: PlayerPosition) {
+		this.highestY = Math.min(this.highestY, p.y);
 		if (p.grounded) {
+			// Which surface is underfoot: the body's feet rest on a platform's top.
+			platforms.forEach((plat, i) => {
+				const onTop = Math.abs(p.y + PLAYER_HEIGHT - plat.y) < 2;
+				const withinSpan =
+					p.x + PLAYER_HEIGHT > plat.x && p.x < plat.x + plat.w;
+				if (onTop && withinSpan) this.surfacesUsed.add(i);
+			});
 			this.lastGroundY = p.y;
 		} else {
 			this.airFrames++;
@@ -931,6 +973,32 @@ export class PhysicsDiagnostics {
 				wallJumps: this.wallJumps,
 				pctAirborne: Math.round((this.airFrames / totalFrames) * 100),
 				peakRisePx: Math.round(this.peakRise),
+			},
+			/**
+			 * How much of the arena the fight actually touched.
+			 *
+			 * Correctness metrics say whether what happened was legal; these say
+			 * whether enough happened to be worth trusting. A duel confined to a
+			 * narrow band in the middle never tests the ledges, the wall jumps, the
+			 * line-of-sight cover or the ranged game.
+			 */
+			arenaSummary: {
+				xSpanPct: Math.round(
+					((Math.max(...frames.map((f) => f.playerX)) -
+						Math.min(...frames.map((f) => f.playerX))) /
+						WORLD_RIGHT) *
+						100,
+				),
+				ySpanPct: Math.round(
+					((Math.max(...frames.map((f) => f.playerY)) -
+						Math.min(...frames.map((f) => f.playerY))) /
+						WORLD_BOTTOM) *
+						100,
+				),
+				/** Distinct platforms stood on, out of every solid in the arena. */
+				surfacesUsed: this.surfacesUsed.size,
+				surfacesAvailable: platforms.length,
+				highestY: Math.round(this.highestY),
 			},
 			/** Collision integrity: must be all zeroes. */
 			collisionSummary: {

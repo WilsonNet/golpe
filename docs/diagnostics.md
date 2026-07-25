@@ -38,6 +38,9 @@ Emitted as `__DIAGNOSTIC_RESULT__{...}__END__` on one console line.
 | `meleeSummary` counters | `slashes`, `massives`, `uppercuts`, `blocks`, `parries`, `backstabs`, `butterflyChains` — **must be > 0**, or the run proves nothing |
 | `meleeSummary.outcomeByMove` | outcomes per move; a flat `blocked: 0` cannot distinguish "guards failing" from "everything that landed was unblockable" |
 | `meleeSummary.violations[]` | which fighter broke which frame-data contract, and by how much |
+| `arenaSummary.xSpanPct` / `ySpanPct` | how much of the arena the fight touched. A duel confined to a narrow band tests almost nothing |
+| `arenaSummary.surfacesUsed` | distinct platforms stood on, out of `surfacesAvailable`. 1 of 9 means the ledges are untested |
+| `bulletSummary.tracked` | projectiles seen. **0 means the entire ranged pipeline went untested**, not that it was flawless |
 | `bulletSummary.teleportFrames` / `frozenFrames` | projectile jumps and stalls — **must be 0** |
 | `bulletSummary.maxPathDeviationPx` | bend in a straight path; >0 means a sprite was reassigned |
 | `bulletSummary.maxStepRatio` / `avgStepCv` | step vs expected (1.0 ideal) and evenness (0 ideal) |
@@ -69,6 +72,13 @@ correct behaviour trains you to ignore it**:
   against.
 - **Count what should happen, not only what must not.** Every must-be-zero metric
   is trivially satisfied by a build where the mechanic never runs.
+- **Absence must be loud.** `bulletSummary` used to return *nothing* when no
+  projectile was fired, so "the ranged game never happened" and "projectiles were
+  flawless" printed identically. It now reports a zero.
+- **Coverage is a metric too.** Correctness says whether what happened was legal;
+  coverage says whether enough happened to be worth trusting. `arenaSummary`
+  exists because the AI learned to sword-fight and promptly stopped using 89% of
+  the arena — every violation counter stayed clean.
 
 ## Traps that produce false results
 
@@ -95,6 +105,24 @@ correct behaviour trains you to ignore it**:
   React StrictMode mounts twice, so both instances install `window.__gameState`
   and the winner need not be the survivor. The symptom is a fight frozen at
   100 HP with no opponent, in a game that visibly renders.
+
+## Judging a run
+
+Read the whole report, and **judge coverage across a few runs rather than one**.
+Individual matches legitimately vary — one may be a pure brawl, the next a
+ranged duel across the ledges — and that variety is the point. What must hold is
+that across a handful of runs every mechanic fires at least once and every
+violation counter stays at zero.
+
+Healthy for the canonical 14s online AI-vs-AI run:
+
+| Metric | Healthy |
+|---|---|
+| `arenaSummary.xSpanPct` | 50-95% |
+| `arenaSummary.surfacesUsed` | 3-6 of 9 |
+| `bulletSummary.tracked` | 4-20 |
+| `meleeSummary` move counters | all non-zero across a few runs |
+| every violation counter | **0, every run** |
 
 ## AI vs AI mode
 

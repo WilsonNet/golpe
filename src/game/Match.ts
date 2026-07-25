@@ -54,7 +54,6 @@ import {
 /** Client physics runs at a fixed 60Hz to match the server, whatever the display does. */
 const PHYSICS_DT = 1 / 60;
 const MAX_PHYSICS_STEPS = 5;
-const DASH_SPEED = 1000;
 const RESET_DELAY_MS = 2000;
 
 const START_PLAYER_X = 100;
@@ -75,6 +74,7 @@ function intentFromAI(output: AIOutput): PlayerIntent {
 		uppercut: output.uppercut,
 		swordStance: output.swordStance,
 		face: output.face,
+		dash: output.dash,
 	};
 }
 
@@ -226,7 +226,7 @@ export class Match {
 					this.remote.fighter.hp = hp;
 					this.enemyHpText.text = `enemy hp: ${Math.max(0, hp)}`;
 				},
-				onReconcile: (errorPx, replayed, meleeDiverged) => {
+				onReconcile: (errorPx, replayed, meleeDiverged, divergence) => {
 					// A correction this large is a respawn, not a misprediction. The
 					// server replaces the whole state, so the sword state changes too;
 					// counting that as a prediction desync would blame the netcode for a
@@ -238,6 +238,9 @@ export class Match {
 						meleeDiverged && !respawn,
 					);
 					if (respawn) this.diagnostics.markTeleport();
+					if (meleeDiverged && !respawn && divergence) {
+						console.log(`[DESYNC] ${JSON.stringify(divergence)}`);
+					}
 				},
 				onTeleport: () => this.diagnostics.markTeleport(),
 				onRoundReset: () => this.diagnostics.markRoundReset(),
@@ -388,15 +391,6 @@ export class Match {
 		};
 	}
 
-	/**
-	 * A dash is an impulse on the shared simulation, not a separate movement
-	 * path — it sets velocity and then normal physics and collision carry it.
-	 */
-	private applyDash(body: PlayerPosition) {
-		const dash = this.input.consumeDash();
-		if (dash !== 0) body.vx = dash * DASH_SPEED;
-	}
-
 	// =========================================================
 	//  ONLINE
 	// =========================================================
@@ -427,7 +421,6 @@ export class Match {
 		} else {
 			this.aimAngle = this.input.aimAngle(this.local.body.x, this.local.body.y);
 			this.localIntent = this.input.intent(this.aimAngle);
-			this.applyDash(session.predicted.state);
 		}
 
 		this.diagSteps = this.runFixedSteps(dtSec, (dt) => {
@@ -485,7 +478,6 @@ export class Match {
 		} else {
 			this.aimAngle = this.input.aimAngle(this.local.body.x, this.local.body.y);
 			this.localIntent = this.input.intent(this.aimAngle);
-			this.applyDash(this.local.body);
 		}
 
 		if (this.remoteBrain) {

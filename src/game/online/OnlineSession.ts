@@ -12,7 +12,11 @@ import {
 } from "../simulation/Physics";
 import { friLerp, RemoteInterpolator, ServerClock } from "./Interpolation";
 import { OnlineManager } from "./OnlineManager";
-import { PredictedPlayer, RenderSmoother } from "./Prediction";
+import {
+	PredictedPlayer,
+	type ReconcileResult,
+	RenderSmoother,
+} from "./Prediction";
 import type { GameSnapshot, MeleeEventMsg } from "./types";
 
 /** Beyond this, a remote position change is a teleport, not movement. */
@@ -30,6 +34,7 @@ export interface OnlineCallbacks {
 		errorPx: number,
 		replayed: number,
 		meleeDiverged: boolean,
+		divergence?: ReconcileResult["meleeDivergence"],
 	) => void;
 	/** A discontinuity that is expected — so it is not counted as jitter. */
 	onTeleport: () => void;

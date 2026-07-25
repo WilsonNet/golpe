@@ -257,6 +257,16 @@ export interface MeleeIntent {
 	 * position.
 	 */
 	face: number;
+	/**
+	 * Dash impulse this tick: -1, 1, or 0 for none.
+	 *
+	 * It travels in the intent rather than being applied to the state directly,
+	 * because anything that moves a fighter has to be something *both* sides
+	 * simulate. Applied locally it was erased by the very next reconciliation —
+	 * the server never heard about it, so its authoritative state had no dash in
+	 * it and the client was snapped back mid-dash.
+	 */
+	dash: number;
 }
 
 export function createMeleeState(facing: number): MeleeState {

@@ -162,6 +162,9 @@ export class Input {
 			// You face where you aim. That is what lets a player retreat while still
 			// guarding the side the attacker is coming from.
 			face: Math.cos(aimAngle) >= 0 ? 1 : -1,
+			// One-shot: consumed here so the impulse is sent exactly once, and the
+			// server applies the same tick the client predicted.
+			dash: this.consumeDash(),
 		};
 	}
 

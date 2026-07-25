@@ -1,4 +1,11 @@
+import {
+	PLAYER_HEIGHT,
+	PLAYER_WIDTH,
+	platforms,
+	type Rect,
+} from "../simulation/Arena.js";
 import type { MeleeAction, MeleePhase } from "../simulation/Melee.js";
+import { JUMP_HEIGHT_PX } from "../simulation/Physics.js";
 import type { AIConfig } from "./AIConfig.js";
 
 export enum AIState {
@@ -7,6 +14,16 @@ export enum AIState {
 	RETREAT = "RETREAT",
 	ATTACK = "ATTACK",
 	EVADE = "EVADE",
+	/**
+	 * Deliberately break away, take height, and fight with the gun.
+	 *
+	 * Without this the state machine could only ever close and swing: at sword
+	 * range the only outcome was ATTACK, so two bots met in the middle and stayed
+	 * there. Measured, that was 11% of the arena's width, one of nine surfaces,
+	 * zero wall jumps and zero bullets — every ledge, the line-of-sight cover and
+	 * the whole ranged pipeline untested by the canonical run.
+	 */
+	ZONE = "ZONE",
 }
 
 export interface AIInput {
@@ -45,6 +62,8 @@ export interface AIOutput {
 	swordStance: boolean;
 	/** -1/1 to face that way, 0 to let movement decide. */
 	face: number;
+	/** Dash impulse: -1, 1, or 0. */
+	dash: number;
 	aimAngle: number;
 	evadeActive: boolean;
 }
@@ -86,6 +105,42 @@ const STRIKE_RANGE_PX = 70;
 const UPPERCUT_RANGE_PX = 58;
 /** Near enough to be worth charging at, far enough not to be punished for it. */
 const CHARGE_RANGE_PX = 150;
+
+/** Zoning aims to get at least this far away — comfortably outside sword range. */
+const ZONE_RANGE_PX = 330;
+/** How long a zoning phase lasts before the bot re-evaluates. */
+const ZONE_DURATION_MS = 2600;
+/** Minimum gap between zoning phases, so a bot cannot simply never engage. */
+const ZONE_COOLDOWN_MS = 2200;
+
+/**
+ * The nearest ledge that is above the fighter and within a single jump.
+ *
+ * Zoning without a destination just means jumping on the spot: a fighter has to
+ * be standing under a ledge for a jump to reach one, and left to chance that
+ * almost never happens. Measured without this, three matches used one of the
+ * arena's nine surfaces and never rose above the bottom third.
+ */
+function perchAbove(selfX: number, selfY: number): Rect | null {
+	let best: Rect | null = null;
+	let bestDx = Number.POSITIVE_INFINITY;
+
+	for (const p of platforms) {
+		const standingY = p.y - PLAYER_HEIGHT;
+		const rise = selfY - standingY;
+		// Must be genuinely above, and reachable from here.
+		if (rise < 30 || rise > JUMP_HEIGHT_PX * 0.9) continue;
+		// Wide enough to land on.
+		if (p.w < PLAYER_WIDTH) continue;
+
+		const dx = Math.abs(p.x + p.w / 2 - selfX);
+		if (dx < bestDx) {
+			bestDx = dx;
+			best = p;
+		}
+	}
+	return best;
+}
 
 /** One phase of a scripted melee rhythm: which buttons, for how long. */
 interface MeleeBeat {
@@ -165,6 +220,8 @@ export class EnemyBrain {
 	private guardDecision: boolean | null = null;
 	/** Whether this particular stun will be punished with a charge. Rolled once. */
 	private stunPunishDecision: boolean | null = null;
+	/** ms until this fighter is willing to break away and zone again. */
+	private zoneCooldown = 0;
 
 	constructor(config: AIConfig) {
 		this.config = config;
@@ -195,6 +252,7 @@ export class EnemyBrain {
 		this.swordDrawn = true;
 		this.guardDecision = null;
 		this.stunPunishDecision = null;
+		this.zoneCooldown = 0;
 	}
 
 	getCurrentState(): AIState {
@@ -225,6 +283,7 @@ export class EnemyBrain {
 	decide(input: AIInput, _time: number, delta: number): AIOutput {
 		this.decisionCooldown -= delta;
 		this.stateTimer += delta;
+		this.zoneCooldown = Math.max(0, this.zoneCooldown - delta);
 		this.trackStuck(input, delta);
 
 		const isLowHP = input.selfHP <= 30;
@@ -392,7 +451,12 @@ export class EnemyBrain {
 
 		// They are turtling. A block only covers the front and cannot stop an
 		// uppercut, so there are two answers; take the one the range allows.
-		if (input.enemyBlocking && distance < UPPERCUT_RANGE_PX + 10) {
+		//
+		// The window is generous on purpose: once fighters started using the whole
+		// arena, close-range guard reads became rare enough that the uppercut —
+		// the designed answer to a guard — stopped happening at all across whole
+		// matches. A mechanic that never fires is untested.
+		if (input.enemyBlocking && distance < UPPERCUT_RANGE_PX + 25) {
 			return UPPERCUT_BEATS;
 		}
 
@@ -536,8 +600,26 @@ export class EnemyBrain {
 		// contact was correct when the only weapon was a gun; with a sword it
 		// meant the fighter fled the exact distance its best options need, and no
 		// melee exchange ever happened.
+		// A zoning phase runs to its own clock; ending it early would mean never
+		// actually getting anywhere.
+		if (this.state === AIState.ZONE) {
+			const done =
+				this.stateTimer > ZONE_DURATION_MS ||
+				input.distanceToPlayer > ZONE_RANGE_PX * 1.4;
+			if (!done) return AIState.ZONE;
+			this.zoneCooldown = ZONE_COOLDOWN_MS;
+		}
+
 		if (input.distanceToPlayer < STRIKE_RANGE_PX) {
-			return isLowHP ? AIState.RETREAT : AIState.ATTACK;
+			if (isLowHP) return AIState.RETREAT;
+			// Break away sometimes rather than brawling until someone dies. Cautious
+			// fighters zone more, which is what makes two bots play differently
+			// instead of mirroring each other into the centre of the map.
+			const wantsSpace = 0.5 - 0.28 * this.config.aggressiveness;
+			if (this.zoneCooldown <= 0 && Math.random() < wantsSpace) {
+				return AIState.ZONE;
+			}
+			return AIState.ATTACK;
 		}
 		if (isLowHP && !isEnemyLow) {
 			if (input.distanceToPlayer < 500) {
@@ -595,6 +677,7 @@ export class EnemyBrain {
 			// meet them is not a flourish — it is the difference between blocking
 			// and being backstabbed.
 			face: input.playerX >= input.selfX ? 1 : -1,
+			dash: 0,
 			aimAngle,
 			evadeActive: false,
 		};
@@ -672,6 +755,51 @@ export class EnemyBrain {
 					}
 					output.attack = true;
 				}
+				break;
+			}
+
+			case AIState.ZONE: {
+				// Put the arena between us: back off, and climb while doing it. Height
+				// is what turns a retreat into a position rather than a corner.
+				const away = input.selfX - input.playerX;
+				const perch = perchAbove(input.selfX, input.selfY);
+
+				// Space first, height second. Climbing while still inside sword range
+				// left the fighter high but engaged: the gun never came out, because
+				// the stance only holsters past SWORD_DISENGAGE_PX. Getting out of
+				// reach is what makes the ranged game reachable at all.
+				const tooClose = input.distanceToPlayer < SWORD_DISENGAGE_PX + 40;
+
+				if (tooClose) {
+					output.moveLeft = away < 0;
+					output.moveRight = away >= 0;
+					// Walking away from someone who walks at your speed gains nothing —
+					// the gap never opens. The dash is the only tool that creates
+					// separation against an equal-speed opponent.
+					if (Math.random() < 0.14) output.dash = away >= 0 ? 1 : -1;
+				} else if (perch) {
+					// Head for a specific ledge and jump when actually underneath it.
+					// Steering toward a destination is the difference between climbing
+					// the arena and hopping on the spot.
+					const target = perch.x + perch.w / 2;
+					const dx = target - input.selfX;
+					if (Math.abs(dx) > PLAYER_WIDTH / 2) {
+						output.moveRight = dx > 0;
+						output.moveLeft = dx < 0;
+					} else if (input.touchingDown) {
+						output.jump = true;
+					}
+				}
+
+				// Wall jump rather than sliding back down a face.
+				if (
+					!input.touchingDown &&
+					(input.touchingLeft || input.touchingRight)
+				) {
+					output.jump = true;
+				}
+
+				output.attack = input.hasLineOfSight;
 				break;
 			}
 

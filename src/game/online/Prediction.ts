@@ -50,6 +50,15 @@ export interface ReconcileResult {
 	 * differently on the two sides.
 	 */
 	meleeDiverged: boolean;
+	/** What diverged, when it did. Empty otherwise. */
+	meleeDivergence?: {
+		predictedAction: string;
+		actualAction: string;
+		predictedBlocking: boolean;
+		actualBlocking: boolean;
+		stunTimer: number;
+		iframeTimer: number;
+	};
 }
 
 export class PredictedPlayer {
@@ -126,14 +135,29 @@ export class PredictedPlayer {
 			this.state.iframeTimer > 0 ||
 			(this.state.massiveReady && !predictedMassiveReady);
 
+		const diverged =
+			!interrupted &&
+			(this.state.meleeAction !== predictedAction ||
+				this.state.blocking !== predictedBlocking);
+
 		return {
 			errorPx,
 			replayed: this.pending.length,
 			corrected: errorPx > NEGLIGIBLE_ERROR_PX,
-			meleeDiverged:
-				!interrupted &&
-				(this.state.meleeAction !== predictedAction ||
-					this.state.blocking !== predictedBlocking),
+			meleeDiverged: diverged,
+			// Captured so a rare divergence is diagnosable rather than a bare count.
+			...(diverged
+				? {
+						meleeDivergence: {
+							predictedAction,
+							actualAction: this.state.meleeAction,
+							predictedBlocking,
+							actualBlocking: this.state.blocking,
+							stunTimer: this.state.stunTimer,
+							iframeTimer: this.state.iframeTimer,
+						},
+					}
+				: {}),
 		};
 	}
 }

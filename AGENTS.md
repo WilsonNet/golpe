@@ -83,6 +83,11 @@ One line each; the war story behind every one is in
 - **Never freeze frames on impact.** Hitstop desyncs; fake it in the renderer.
 - **Changing gravity or jump velocity changes level reachability** — and retunes
   combat, because the uppercut's launch is derived from the jump.
+- **Anything that moves a fighter travels in the intent.** A dash applied
+  straight to predicted state was erased by the next reconciliation.
+- **A clean run is not a good run.** Read `arenaSummary` and the `meleeSummary`
+  counters: every must-be-zero metric is satisfied by a build where nothing
+  happens.
 
 ## Commands
 

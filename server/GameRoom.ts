@@ -123,6 +123,7 @@ function idleInput(seq = 0): PlayerInput {
 		uppercut: false,
 		swordStance: true,
 		face: 0,
+		dash: 0,
 		aimAngle: 0,
 	};
 }
@@ -294,6 +295,7 @@ export class GameRoom {
 			uppercut: out.uppercut,
 			swordStance: out.swordStance,
 			face: out.face,
+			dash: out.dash,
 			aimAngle: out.aimAngle,
 		};
 	}

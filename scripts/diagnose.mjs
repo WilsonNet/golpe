@@ -20,7 +20,9 @@ function arg(name, fallback) {
 }
 
 const MODE = arg("mode", "both");
-const DURATION = Number(arg("duration", 8000));
+// 8s was barely two engagements — long enough to prove the mechanics are legal,
+// too short to prove the arena and the ranged game get used at all.
+const DURATION = Number(arg("duration", 14000));
 const RUNS = Number(arg("runs", 1));
 
 /** Attach a console sink to a page and return the collected lines. */
@@ -180,6 +182,7 @@ function digest(r) {
 		xRange: r.playerMovement?.xRange,
 		yRange: r.playerMovement?.yRange,
 		movement: r.movementSummary,
+		arena: r.arenaSummary,
 		bullets: r.bulletSummary,
 		melee: r.meleeSummary,
 		recon: r.reconciliationSummary,

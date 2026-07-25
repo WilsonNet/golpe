@@ -22,6 +22,7 @@ report exists because a real bug was invisible without it:
 | `bulletSummary` | projectiles stuttering, stalling and jumping between sprites |
 | `reconciliationSummary` | a permanent ~14px client/server standing error |
 | `meleeSummary` | a sword system whose blocks, parries and Massive Strikes were never happening at all |
+| `arenaSummary` | a fight confined to 11% of the arena, using one of nine surfaces and firing no shots — with every correctness metric clean |
 
 A metric that cannot fail is worthless. Before trusting a green run, confirm the
 instrument discriminates — the projectile metrics were only believable because
@@ -43,6 +44,25 @@ first half read perfectly clean: reactive blocking was *impossible* online
 (19 guards raised, 0 slashes intercepted), and the backstab was firing on
 overlapping bodies (11 backstabs to 1 clean hit, which also silently disabled
 blocking, since a backstab ignores the guard).
+
+### Coverage is a metric, and absence must be loud
+
+Correctness says whether what happened was legal. **Coverage says whether enough
+happened to be worth trusting.** They fail independently, and the second failure
+is the quiet one:
+
+- `bulletSummary` used to return *nothing* when no projectile was fired, so "the
+  ranged game never happened" and "projectiles were flawless" printed
+  identically. An empty section must become a loud zero.
+- `arenaSummary` exists because the AI learned to sword-fight and promptly
+  stopped using 89% of the arena. Every violation counter stayed clean while the
+  ledges, the wall jumps, the line-of-sight cover and the entire ranged pipeline
+  went untested.
+
+**Judge coverage across a few runs, not one.** Individual matches legitimately
+vary — one is a brawl, the next a ranged duel across the ledges — and that
+variety is the point. What must hold every run is that the violation counters are
+zero; what must hold across a handful is that every mechanic fired at least once.
 
 When a counter is stuck at zero, **break it down before theorising**.
 `outcomeByMove` was added for exactly this: a flat `blocked: 0` reads identically

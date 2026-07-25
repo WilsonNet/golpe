@@ -58,6 +58,17 @@ Retuning the jump silently retunes what being launched feels like — see
 - Dash speed **1000 px/s**; double-tap window **200ms**; lockout **250ms**.
 - A dash is an *impulse on the shared simulation* — it sets velocity, then
   normal physics and collision carry it. It is not a separate movement path.
+- **The dash travels in the intent, like every other input.** Anything that
+  moves a fighter has to be something *both* sides simulate. Applied straight to
+  the client's predicted state and never sent, it was erased by the very next
+  reconciliation: the server had no dash in its authoritative state, so it
+  snapped the client back mid-dash. Only the double-tap *detection* is local —
+  it is a gesture, not a button, so the input layer resolves it and hands the
+  simulation a one-shot impulse.
+- **A dash is the only way to break away from an equal-speed opponent.** Walking
+  backwards from someone who walks at your speed never opens a gap, which is why
+  the AI could not disengage — and therefore never used the gun or the upper
+  half of the arena — until it was given one.
 
 ## Wall interaction
 

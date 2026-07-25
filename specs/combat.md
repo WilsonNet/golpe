@@ -15,10 +15,10 @@ lifecycle.
 
 - **Online (every normal match):** the server spawns, simulates and resolves all
   bullets. Clients only draw them.
-- **`?offline=true` escape hatch only:** the scene's `BulletSystem`.
+- **`?offline=true` escape hatch only:** `combat/BulletSystem`.
 
-`Player` and `AIEnemy` must never spawn ranged projectiles themselves. They used
-to, producing a second sprite nothing simulated, which froze on screen forever.
+Nothing else may spawn a ranged projectile. The fighter classes used to, which
+produced a second sprite nothing simulated — it froze on screen forever.
 
 ## Stance system
 
@@ -67,8 +67,9 @@ hit, exactly as it is for bullets.
 
 ## AI fighters
 
-`EnemyBrain` drives both the offline enemy and the server-hosted bots, with a
-state machine: IDLE, CHASE, RETREAT, ATTACK, EVADE. Tuned via `AIConfig`
+`EnemyBrain` drives every AI fighter — the offline enemy, the local `?ai=true`
+fighter and the server-hosted bots — with a state machine: IDLE, CHASE, RETREAT,
+ATTACK, EVADE, ZONE. Tuned via `AIConfig`
 (`skillLevel`, `reactionTime`, `accuracy`, `aggressiveness`, `dodgeChance`),
 randomised per round so no two fights are identical.
 
@@ -81,6 +82,12 @@ randomised per round so no two fights are identical.
 - **It sword-fights rather than mashing:** butterflies to close, blocks a swing
   it reads coming, uppercuts an opponent who is blocking, charges a Massive only
   at a safe distance, and punishes a whiffed heavy move.
+- **It breaks away and takes height.** Cautious fighters disengage more, dash to
+  create the gap, climb to a specific ledge, and fight with the gun from there.
+  Without this the state machine could only ever close and swing: two bots met in
+  the middle and stayed there, using 11% of the arena's width, one of its nine
+  surfaces, and firing not a single shot. The whole ranged game and every
+  platform went untested by the canonical run.
 - **Jump intent is held for 240ms, then force-released for 60ms.** Jump height is
   analogue and edge-triggered, so an AI emitting `jump` on scattered single
   frames could only ever produce a minimum-height hop and could never reach the

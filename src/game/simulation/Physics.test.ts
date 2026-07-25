@@ -14,6 +14,7 @@ import {
 import {
 	COYOTE_TIME_MS,
 	createPlayerState,
+	DASH_SPEED,
 	FALL_GRAVITY_MULTIPLIER,
 	GRAVITY,
 	JUMP_BUFFER_MS,
@@ -483,6 +484,39 @@ describe("wall interaction", () => {
 			best = Math.max(best, y0 - s.y);
 		}
 		expect(best).toBeGreaterThan(JUMP_HEIGHT_PX * 1.5);
+	});
+});
+
+describe("dash", () => {
+	it("is an impulse carried by the intent, so both sides simulate it", () => {
+		// It used to be applied straight to the client's predicted state and never
+		// sent, so the server had no dash in its authoritative state and the very
+		// next reconciliation erased it mid-dash.
+		const start = state({ x: OPEN_X, y: standingOn(GROUND.y), grounded: true });
+		const dashed = tick(start, { dash: 1 });
+		expect(dashed.vx).toBe(DASH_SPEED);
+	});
+
+	it("refuses to re-dash until the lockout expires", () => {
+		let s = tick(
+			state({ x: OPEN_X, y: standingOn(GROUND.y), grounded: true }),
+			{ dash: 1 },
+		);
+		expect(s.dashTimer).toBeGreaterThan(0);
+
+		// Held down, it must not become a permanent speed boost.
+		s = tick(s, { dash: 1 });
+		expect(s.vx).toBeLessThan(DASH_SPEED);
+	});
+
+	it("carries far enough to actually create separation", () => {
+		// The reason the AI needed one: walking away from someone who walks at
+		// your speed never opens a gap.
+		let s = state({ x: OPEN_X, y: standingOn(GROUND.y), grounded: true });
+		const startX = s.x;
+		s = tick(s, { dash: 1 });
+		for (let i = 0; i < 30; i++) s = tick(s, {});
+		expect(s.x - startX).toBeGreaterThan(PLAYER_WALK_SPEED * 0.3);
 	});
 });
 

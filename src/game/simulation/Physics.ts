@@ -153,6 +153,11 @@ export const WALL_COYOTE_MS = 100;
  */
 export const BLOCK_MOVE_MULTIPLIER = 0.55;
 
+/** Dash impulse. An impulse on the shared simulation, not a movement mode. */
+export const DASH_SPEED = 1000;
+/** Minimum gap between dashes, so it cannot be held down as a speed boost. */
+export const DASH_LOCKOUT_MS = 250;
+
 export const BULLET_SPEED = 600;
 export const BULLET_DAMAGE = 10;
 export const ATTACK_COOLDOWN = 250;
@@ -178,6 +183,7 @@ export const NEUTRAL_INTENT: Readonly<PlayerIntent> = Object.freeze({
 	uppercut: false,
 	swordStance: true,
 	face: 0,
+	dash: 0,
 });
 
 export interface PlayerPosition extends MeleeState {
@@ -200,6 +206,8 @@ export interface PlayerPosition extends MeleeState {
 	jumping: boolean;
 	/** Jump button state last tick, for press-edge detection. */
 	jumpHeld: boolean;
+	/** ms until another dash is allowed. */
+	dashTimer: number;
 }
 
 export function createPlayerState(
@@ -220,6 +228,7 @@ export function createPlayerState(
 		wallCoyoteTimer: 0,
 		jumping: false,
 		jumpHeld: false,
+		dashTimer: 0,
 		...createMeleeState(facing),
 	};
 }
@@ -241,6 +250,7 @@ export function copyPlayerState(
 	target.wallCoyoteTimer = source.wallCoyoteTimer;
 	target.jumping = source.jumping;
 	target.jumpHeld = source.jumpHeld;
+	target.dashTimer = source.dashTimer;
 	copyMeleeState(source, target);
 	return target;
 }
@@ -283,6 +293,7 @@ export function tickPlayer(
 	const rooted = stunned || isCommitted(s);
 
 	s.wallJumpTimer = decay(s.wallJumpTimer, dt);
+	s.dashTimer = decay(s.dashTimer, dt);
 	s.coyoteTimer = decay(s.coyoteTimer, dt);
 	s.jumpBufferTimer = decay(s.jumpBufferTimer, dt);
 	s.wallCoyoteTimer = decay(s.wallCoyoteTimer, dt);
@@ -319,6 +330,14 @@ export function tickPlayer(
 		const groundFriction = stunned ? STUN_GROUND_FRICTION : GROUND_FRICTION;
 		const friction = s.grounded ? groundFriction : AIR_FRICTION;
 		s.vx = approach(s.vx, 0, friction * dt);
+	}
+
+	// ---- dash ----
+	// An impulse on the shared simulation, not a separate movement path: it sets
+	// velocity and then ordinary physics and collision carry it.
+	if (!rooted && input.dash !== 0 && s.dashTimer <= 0) {
+		s.vx = input.dash > 0 ? DASH_SPEED : -DASH_SPEED;
+		s.dashTimer = DASH_LOCKOUT_MS;
 	}
 
 	// ---- jump (ground jump wins over wall jump) ----
