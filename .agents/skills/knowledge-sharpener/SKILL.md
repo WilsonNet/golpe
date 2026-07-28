@@ -1,6 +1,6 @@
 ---
 name: knowledge-sharpener
-description: "Use at the END of any substantial session — after a refactor, a bug hunt, a physics fix, or anything that changed how the project works — to fold what was learned back into AGENTS.md and the affected SKILL.md files, and to verify every skill is indexed in AGENTS.md. Triggers on: end of session, wrap up, update the docs, update AGENTS.md, sharpen knowledge, post-session, what did we learn, knowledge upkeep, skill index."
+description: "Use at the END of any substantial session — after a refactor, a bug hunt, a physics fix, or anything that changed how the project works — to fold what was learned back into specs/, docs/, AGENTS.md and the affected SKILL.md files, to verify every skill is indexed in AGENTS.md, and to review this routine itself against how the session actually went. Triggers on: end of session, wrap up, update the docs, update AGENTS.md, sharpen knowledge, post-session, what did we learn, knowledge upkeep, skill index, improve the skill, review the skill."
 license: MIT
 ---
 
@@ -75,15 +75,20 @@ Code can see what knowledge exists without listing directories.
 Regenerate and compare:
 
 ```bash
-# Every skill on disk
-ls -1 .agents/skills | tr -d / | sort
-
-# Every skill currently indexed
-grep -ohE '`[a-z0-9-]+`' AGENTS.md | tr -d '`' | sort -u
+diff <(ls -1 .agents/skills | tr -d / | sort) \
+     <(grep -oE '^- \*\*`[a-z0-9-]+`\*\*' AGENTS.md \
+       | grep -oE '`[a-z0-9-]+`' | tr -d '`' | sort -u)
 ```
 
-Any name in the first list and not the second needs a pointer line added. Any
-name in the second and not the first is a dangling reference — remove it.
+Only lines matching the Skills section's `- **\`name\`** — …` form count. An
+earlier version of this check scraped *every* backticked word in `AGENTS.md`,
+which cannot fail usefully: a skill missing from the index still "passed"
+whenever its name appeared in backticks anywhere for an unrelated reason, and the
+dangling-reference direction was pure noise. **A check that cannot fail is not a
+check** — the same rule the `feedback-loop` skill applies to metrics.
+
+Any name only on disk needs a pointer line added. Any name only in the index is a
+dangling reference — remove it.
 
 ### 4. Check the symlinks still resolve
 
@@ -111,6 +116,31 @@ description: When to use it, plus trigger keywords
 Avoid tool-specific keys (e.g. `compatibility:`), which make a skill read as
 single-tool.
 
+### 6. Sharpen the sharpener
+
+**This file is part of the knowledge base, so every run of the routine is
+evidence about the routine.** Fix it in the same commit as the rest — a step that
+is only ever described as broken in a finished conversation is exactly the
+knowledge this skill exists to stop losing.
+
+Answer these before closing:
+
+- **Did a step mislead, or pass when it should have failed?** Rewrite it and say
+  what the old version let through. The index check in step 3 was replaced for
+  precisely this: it scraped every backticked word and therefore could not fail.
+- **Did the session produce knowledge with no home in step 2's table?** Add the
+  row. A fact routed by guesswork lands somewhere nobody reloads.
+- **Did you do something in the routine that is not written here?** That is the
+  step you will forget next time.
+- **Is a step now dead?** Delete it. A check nobody runs teaches the next agent
+  that the checks are optional.
+
+Two things this step is not. It is **not** a changelog — the git history of this
+file already is one, and narrating the edit wastes the context every future
+session pays for. And it is **not** an invitation to grow the file: if a step has
+outgrown a paragraph, the detail belongs in `docs/`, with the step reduced to a
+pointer. Prefer replacing a step over appending one.
+
 ## Quality bar
 
 A good entry survives contact with a future session:
@@ -127,5 +157,7 @@ Before declaring the session done, confirm you can answer:
 
 1. What would the next agent get wrong without this update?
 2. Is that answer now written somewhere that gets loaded automatically?
+3. What would the next agent get wrong about *this routine* — and is step 6's
+   answer written down, or still only in this conversation?
 
-If the second answer is no, the session is not finished.
+If either of the last two answers is no, the session is not finished.

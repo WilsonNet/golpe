@@ -142,7 +142,9 @@ skill verifies it.
 - **`specs`** — Keeping `specs/` authoritative: read before implementing, update
   in the same commit as any behaviour change.
 - **`knowledge-sharpener`** — Run at the END of a substantial session: fold what
-  was learned into the docs and skills, and verify the indexes.
+  was learned into the docs and skills, verify the indexes, and review the
+  routine itself — the run is evidence about the routine, and step 6 fixes it in
+  the same commit.
 
 ### Engine and architecture reference
 
