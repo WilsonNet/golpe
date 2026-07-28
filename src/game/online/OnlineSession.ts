@@ -17,7 +17,7 @@ import {
 	type ReconcileResult,
 	RenderSmoother,
 } from "./Prediction";
-import type { GameSnapshot, MeleeEventMsg } from "./types";
+import type { GameSnapshot, MeleeEventMsg, SnapshotBullet } from "./types";
 
 /** Beyond this, a remote position change is a teleport, not movement. */
 const REMOTE_SNAP_PX = 100;
@@ -374,6 +374,18 @@ export class OnlineSession {
 	/** Projectiles as drawn this frame, for the diagnostic. */
 	get bullets(): readonly BulletSample[] {
 		return this.renderedBullets;
+	}
+
+	/**
+	 * The server's bullets with their velocities, for the aim probe.
+	 *
+	 * Read from the raw snapshot rather than `renderedBullets`, because the
+	 * heading is authoritative: it is fixed at spawn from the aim angle the client
+	 * sent, and it is the only way to check that a shot actually left in the
+	 * direction the cursor was pointing.
+	 */
+	get bulletVectors(): readonly SnapshotBullet[] {
+		return this.latestSnapshot?.bullets ?? [];
 	}
 
 	/**

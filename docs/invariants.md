@@ -119,6 +119,11 @@ stops the butterfly being the only option.
   is built from it, so both sides must agree. Driving it from the walk direction
   meant a fighter standing still could never turn, and two who had crossed stayed
   back-to-back forever.
+- **Facing is locked for a swing's startup and active frames only.** That is the
+  window where the direction is a promise — a steerable live hitbox is an
+  unreadable one. Locking the whole move made a player holding the attack button
+  ignore the cursor for 332ms at a time; freeing recovery cut the worst case to
+  154ms, both measured by `scripts/aim-probe.mjs`.
 - **Backstab needs a full body width of separation.** Fighters do not collide
   with each other, so in a scramble the bodies overlap and facing is locked
   mid-swing. Deciding "behind" from a few pixels made the backstab the default
@@ -130,6 +135,23 @@ stops the butterfly being the only option.
   rhythms of presses and releases, because inputs are edge-triggered and holding a
   button does nothing. A rhythm that ran to completion left the bot deaf for up to
   ~950ms — longer than any window it was supposed to react inside.
+
+## Input and aim
+
+- **Convert the cursor against the logical view, never `canvas.width`.** Under
+  `autoDensity` the canvas backing store is the logical size times the device
+  pixel ratio, so on a 2x display dividing by it doubled every cursor position:
+  aim ran up to 162° wrong and bullets left in a direction nobody pointed at.
+  `app.screen` is the logical rectangle; the camera scroll is added on top,
+  because the pointer is a screen fact and body centres are world facts.
+- **Store the pointer normalised and resolve it on read.** Converting on the
+  pointer event freezes the world position at whatever the view and camera were
+  when the mouse last twitched — a cursor held still while the camera moves is
+  still aiming somewhere.
+- **Aim is invisible to the AI-vs-AI loop.** The brains hand the simulation an
+  angle and never touch a cursor, so `diagnose.mjs` cannot fail on any of the
+  above. `scripts/aim-probe.mjs` drives a real mouse, and it must be run at
+  `--dpr=2` — every backing-store bug is invisible at 1.
 
 ## Projectiles
 

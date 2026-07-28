@@ -30,14 +30,86 @@ export const KEYS = {
 /** Two taps inside this window are a dash rather than two steps. */
 const DOUBLE_TAP_MS = 200;
 
+/**
+ * What the cursor has to be measured against to become a world position.
+ *
+ * `width`/`height` are the **logical** view — 800x600, the size the game is
+ * authored in — never `canvas.width`/`canvas.height`. Under `autoDensity` the
+ * canvas backing store is the logical size times `devicePixelRatio`, so on an
+ * ordinary 2x display dividing by it put the cursor at twice its real world
+ * coordinates: the fighter believed the pointer was almost always to its right
+ * and below it, aim was up to 132° wrong, and shots left in a direction nobody
+ * had pointed at. `app.screen` is the logical rectangle and stays correct
+ * through a resize.
+ *
+ * The camera offset is included because the pointer is a *screen* fact and
+ * everything it is compared against — body centres, aim angles, bullet spawns —
+ * is a *world* fact. They coincide only while the camera sits at the origin,
+ * which is exactly the condition that makes the missing term invisible today
+ * and a silent bug the day the camera scrolls.
+ */
+export interface Viewport {
+	readonly width: number;
+	readonly height: number;
+	readonly cameraX: number;
+	readonly cameraY: number;
+}
+
+/**
+ * Cursor to a fraction of the canvas.
+ *
+ * The canvas is letterboxed and scaled by CSS, so the displayed rectangle is
+ * the only frame both the event and the element agree on — and the ratio is the
+ * one quantity in the whole chain that no pixel ratio can distort.
+ */
+export function normalisePointer(
+	clientX: number,
+	clientY: number,
+	rect: { left: number; top: number; width: number; height: number },
+): { u: number; v: number } {
+	return {
+		u: rect.width > 0 ? (clientX - rect.left) / rect.width : 0,
+		v: rect.height > 0 ? (clientY - rect.top) / rect.height : 0,
+	};
+}
+
+/** A canvas fraction to a world position. Pure, so it is testable. */
+export function viewToWorld(
+	u: number,
+	v: number,
+	view: Viewport,
+): { x: number; y: number } {
+	return {
+		x: u * view.width + view.cameraX,
+		y: v * view.height + view.cameraY,
+	};
+}
+
 export class Input {
 	private readonly down = new Set<string>();
 	private leftMouse = false;
 	private rightMouse = false;
 
+	/**
+	 * Cursor as a fraction of the canvas, resolved to world coordinates on read.
+	 *
+	 * Stored normalised rather than converted on the event, because a pointer that
+	 * has not moved is still aiming somewhere: converting once would freeze the
+	 * world position at the camera and view size of whichever frame the mouse last
+	 * twitched, and the fighter would stop tracking a cursor the player is holding
+	 * still while the camera moves under it.
+	 */
+	private pointerU = 0.5;
+	private pointerV = 0.5;
+
 	/** Cursor in world coordinates. */
-	pointerX = 0;
-	pointerY = 0;
+	get pointerX(): number {
+		return viewToWorld(this.pointerU, this.pointerV, this.viewport).x;
+	}
+
+	get pointerY(): number {
+		return viewToWorld(this.pointerU, this.pointerV, this.viewport).y;
+	}
 
 	/** Absolute, never a toggle — a toggle cannot survive a dropped packet. */
 	swordStance = true;
@@ -45,7 +117,12 @@ export class Input {
 	private readonly onToggleAi: (() => void) | undefined;
 	private readonly disposers: (() => void)[] = [];
 
-	constructor(canvas: HTMLCanvasElement, onToggleAi?: () => void) {
+	constructor(
+		canvas: HTMLCanvasElement,
+		/** Live: read on every aim, so a resize or a camera scroll is picked up. */
+		readonly viewport: Viewport,
+		onToggleAi?: () => void,
+	) {
 		this.onToggleAi = onToggleAi;
 
 		const keydown = (e: KeyboardEvent) => {
@@ -70,11 +147,13 @@ export class Input {
 		};
 
 		const pointerMove = (e: PointerEvent) => {
-			const rect = canvas.getBoundingClientRect();
-			// Scale from CSS pixels to world pixels: the canvas is letterboxed, so
-			// the two only coincide at exactly 1:1.
-			this.pointerX = ((e.clientX - rect.left) / rect.width) * canvas.width;
-			this.pointerY = ((e.clientY - rect.top) / rect.height) * canvas.height;
+			const p = normalisePointer(
+				e.clientX,
+				e.clientY,
+				canvas.getBoundingClientRect(),
+			);
+			this.pointerU = p.u;
+			this.pointerV = p.v;
 		};
 
 		const pointerDown = (e: PointerEvent) => {

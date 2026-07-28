@@ -51,6 +51,32 @@ export class BulletSystem {
 		return this.bullets.map((b) => ({ id: b.id, x: b.x, y: b.y }));
 	}
 
+	/**
+	 * Projectiles with their headings, for the aim probe.
+	 *
+	 * `snapshot()` deliberately carries position only — the physics diagnostic
+	 * measures travel, and a heading tells it nothing. Aim is the opposite: the
+	 * heading *is* the measurement, because a shot that leaves the right place in
+	 * the wrong direction looks identical from a position sample.
+	 */
+	vectors(): {
+		id: number;
+		owner: string;
+		x: number;
+		y: number;
+		vx: number;
+		vy: number;
+	}[] {
+		return this.bullets.map((b) => ({
+			id: b.id,
+			owner: b.ownerId,
+			x: b.x,
+			y: b.y,
+			vx: b.vx,
+			vy: b.vy,
+		}));
+	}
+
 	fire(x: number, y: number, angle: number, owner: BulletOwner) {
 		const sprite = this.pool.acquire();
 		sprite.position.set(x, y);

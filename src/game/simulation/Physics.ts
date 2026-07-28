@@ -27,6 +27,7 @@ import {
 	isStunned,
 	type MeleeIntent,
 	type MeleeState,
+	meleePhase as meleePhaseOf,
 	tickMelee,
 } from "./Melee.js";
 
@@ -310,11 +311,17 @@ export function tickPlayer(
 	// aimed. Steering it separately from movement is what lets a fighter back
 	// away while still guarding the side the attacker is on.
 	//
-	// It is locked while a move is running: committing to a direction is the
-	// point of committing to a swing, and a hitbox that could be steered during
-	// its active frames would make blocking unreadable.
+	// The lock covers a swing's startup and active frames only — the window in
+	// which the direction is a promise. Steering a live hitbox would make blocking
+	// unreadable, and turning during the wind-up would erase the tell the
+	// defender reads. Recovery has no hitbox and no tell left to give, so the
+	// pointer takes the fighter back: locking it too meant a player holding the
+	// attack button chained slashes and went 332ms at a time without obeying the
+	// cursor, which is what "the game struggles to follow the mouse" was.
+	const phase = meleePhaseOf(s);
+	const committed = phase === "startup" || phase === "active";
 	const faceWish = input.face !== 0 ? (input.face > 0 ? 1 : -1) : dir;
-	if (s.meleeAction === "none" && !stunned && faceWish !== 0) {
+	if (!committed && !stunned && faceWish !== 0) {
 		s.facing = faceWish;
 	}
 

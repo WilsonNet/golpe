@@ -112,6 +112,24 @@ node scripts/diagnose.mjs --mode=online --runs=3   # the canonical run
 - `?offline=true` exists only for working without a server. Never diagnose it and
   conclude anything about the netcode.
 
+### What AI vs AI cannot test: aim
+
+The brains hand the simulation an aim angle directly and never touch a cursor, so
+**every mouse bug is invisible to the canonical run**. A cursor→world conversion
+that divided by the canvas backing store instead of the logical view put aim up
+to 162° out on any 2x display, and three clean `diagnose.mjs` runs said nothing.
+
+```bash
+node scripts/aim-probe.mjs            # dpr 1 and 2
+node scripts/aim-probe.mjs --dpr=2    # the ratio that catches backing-store bugs
+```
+
+It drives a real mouse around the canvas and measures the cursor→world error, the
+aim angle, which side the fighter turned to, how long it ignores a cursor that
+crossed sides *while swinging* (`attackTurn.worstMs`), and the heading a fired
+bullet actually left with. Run it after touching `input/`, `app.ts`, facing rules
+or anything that spawns a projectile.
+
 ## Architecture Overview
 
 The game has a Physics Diagnostic Tool that emits structured JSON reports. These reports are captured by Playwright and fed back to the LLM as hard numerical data. This replaces blind guessing with a measurable feedback loop.
@@ -389,6 +407,7 @@ for fps in [30, 60, 85, 120]:
 | `scripts/diagnose.mjs` | Playwright harness: drives both modes, preflights the server, prints a digest |
 | `scripts/probe-online.mjs` | Dumps one online client's console + `__gameState()` when something is off |
 | `scripts/verify-modes.mjs` | Smoke-checks every launch mode: connects, matches, fights |
+| `scripts/aim-probe.mjs` | Drives a real cursor: screen→world mapping, facing, and shot direction, at dpr 1 and 2 |
 | `scripts/dev-herdr.mjs` | Dev servers in visible herdr panes, with real port readiness |
 | `src/game/diagnostics/PhysicsDiagnostics.ts` | Collection and report generation |
 | `src/game/simulation/` | The code under test — `Arena`, `Collision`, `Physics` |

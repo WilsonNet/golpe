@@ -37,6 +37,26 @@ Retuning the jump silently retunes what being launched feels like — see
   classic platformer "snap" — it removes the floaty apex.
 - Terminal velocity: **950 px/s**.
 
+## Aim and facing
+
+**A fighter faces the cursor, always — the only exceptions are a swing's startup
+and active frames, and being stunned.** Facing travels in the intent as `face`
+(-1, 1, or 0 meaning "let the feet decide"), so the client and server derive it
+from the same input on the same tick. See [melee.md](melee.md) for why the two
+exceptions exist, and [combat.md](combat.md) for the shot that leaves along the
+same angle.
+
+**The cursor is a screen fact and everything it is compared against is a world
+fact.** The conversion divides by the *logical* view — 800x600, `app.screen` —
+and adds the camera scroll. Dividing by `canvas.width` instead is the trap: with
+`autoDensity` the backing store is the logical size times the device pixel ratio,
+so on an ordinary 2x display every cursor position doubled. The fighter believed
+the pointer was almost always to its right and below it, aim was up to **162°**
+wrong, and shots left in a direction nobody had pointed at. Nothing in the AI vs
+AI loop can see this — the bots hand the simulation an angle and never touch a
+cursor — which is why `scripts/aim-probe.mjs` exists and why it runs at
+`--dpr=2`.
+
 ## Jumping
 
 - Jump velocity **−700 px/s**, giving a **136px** peak rise and roughly **0.70s**

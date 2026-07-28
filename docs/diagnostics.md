@@ -10,6 +10,8 @@ the full workflow** — this file is the reference for the tool itself.
 
 - `window.__physicsDiagnostic(durationMs = 5000)` — collect frames, print a JSON report
 - `window.__gameState()` — HP, AI states, and full `playerPhys` / `enemyPhys`
+- `window.__aimState()` — cursor in world space, aim angle, facing, move phase,
+  and the local fighter's live bullets with their headings
 - `window.__toggleAIVsAI()` — or press **P** in-game
 
 ## Harness (preferred)
@@ -20,7 +22,26 @@ node scripts/diagnose.mjs                       # offline + online, 8s each
 node scripts/diagnose.mjs --mode=online --runs=3  # the canonical run
 node scripts/probe-online.mjs                   # dump one online client's console
 node scripts/verify-modes.mjs                   # smoke-check every launch mode
+node scripts/aim-probe.mjs                      # cursor, facing and shot direction, at dpr 1 and 2
 ```
+
+## The aim probe
+
+`diagnose.mjs` is blind to aim: AI vs AI is the canonical run and the brains hand
+the simulation an angle directly, so no cursor is ever involved. `aim-probe.mjs`
+drives a real mouse instead and reports:
+
+| Field | Meaning |
+|---|---|
+| `worstPointerErrPx` | cursor→world error. **0 is achievable**; anything else is a conversion bug |
+| `worstAimErrDeg` | angle the fighter aimed vs the angle the cursor asked for |
+| `facing` | how many cursor positions the fighter turned to correctly |
+| `attackTurn.worstMs` | longest the fighter ignored a cursor that crossed sides **while swinging** |
+| `shots[].errDeg` | angle a bullet actually left with vs the angle aimed |
+
+**Run it at `--dpr=2`.** The bug it was built for — dividing by the canvas
+backing store rather than the logical view — is exactly invisible at device pixel
+ratio 1, which is the only ratio a default headless browser has.
 
 ## Reading the report
 
@@ -82,6 +103,14 @@ correct behaviour trains you to ignore it**:
 
 ## Traps that produce false results
 
+- **A canvas taller than the browser window silently fakes an aim bug.**
+  Playwright clamps a mouse move to the viewport, so every sample below the fold
+  returns the *previous* cursor position — which reads exactly like a broken
+  conversion. `aim-probe.mjs` now throws if the canvas does not fit.
+- **A shot fired into a fighter standing on top of you is never observed.** The
+  server destroys it in the same tick, so it never reaches a 20Hz snapshot and
+  the probe can only report "no shot fired". Shoot upward, early, before the bot
+  closes.
 - **A dead game server reads as PASS.** No snapshots means no reconciliation and
   no jitter. `scripts/diagnose.mjs` preflights `:9208` and marks a run
   `INVALID: no server snapshots received`. Never trust an online run without a

@@ -48,7 +48,10 @@ export async function startGame(parent: HTMLElement): Promise<GameHandle> {
 	createFxTextures(app.renderer);
 
 	const stage = new Stage(app.stage);
-	const match = new Match(stage, app.canvas);
+	// `app.screen` is the logical view, not the canvas backing store — the cursor
+	// must be measured against the world the game is authored in, or every aim is
+	// wrong by exactly the device pixel ratio.
+	const match = new Match(stage, app.canvas, app.screen);
 
 	// The ticker hands over a Ticker, not a delta — `deltaMS` is real elapsed
 	// milliseconds, which is what the fixed-timestep accumulator needs. Using

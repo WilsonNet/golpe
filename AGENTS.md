@@ -85,6 +85,9 @@ One line each; the war story behind every one is in
   combat, because the uppercut's launch is derived from the jump.
 - **Anything that moves a fighter travels in the intent.** A dash applied
   straight to predicted state was erased by the next reconciliation.
+- **AI vs AI cannot test aim.** The brains hand the simulation an angle and never
+  touch a cursor, so anything about the mouse must be measured with
+  `scripts/aim-probe.mjs`, at `--dpr=2`.
 - **A clean run is not a good run.** Read `arenaSummary` and the `meleeSummary`
   counters: every must-be-zero metric is satisfied by a build where nothing
   happens.
@@ -100,6 +103,7 @@ npm run verify           # typecheck (client AND server) + tests + build
 npm run lint             # biome, across src/ server/ scripts/
 node scripts/diagnose.mjs --mode=online --runs=3       # the feedback loop
 node scripts/verify-modes.mjs                          # smoke-check every mode
+node scripts/aim-probe.mjs                             # cursor, facing and shot direction
 ```
 
 - Ports: Vite **8080**, Geckos **9208**.

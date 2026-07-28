@@ -175,7 +175,8 @@ time it takes to get there.
 
 **Behind means a full body width past their centre (32px).** Fighters do not
 collide with each other, so in any close exchange the two bodies are literally
-standing inside one another — and facing is locked while a move runs. Deciding
+standing inside one another — and facing is locked through a swing's active
+frames. Deciding
 "behind" from the sign of a few pixels in that situation made the backstab the
 *default* outcome of a scramble rather than a reward for winning one: a measured
 match produced 11 backstabs to 1 clean hit, and because a backstab ignores the
@@ -187,6 +188,18 @@ so they can back away while still guarding the side the attacker is on. Deriving
 facing from the walk direction alone meant a fighter standing still could never
 turn around, and two fighters who had crossed over stayed permanently
 back-to-back.
+
+**Facing is locked through a move's startup and active frames, and free again in
+recovery.** The lock covers exactly the window in which the direction is a
+promise: steering a live hitbox would make blocking unreadable, and turning
+during the wind-up would erase the tell the defender is reading. Recovery has no
+hitbox and no tell left to give.
+
+Locking the whole move instead — which is what this said originally — meant a
+player holding the attack button chained slashes and **went 332ms at a time
+without obeying the cursor**, measured by `scripts/aim-probe.mjs`. That is the
+whole of "the game struggles to follow the mouse pointer". Freeing recovery caps
+the worst case at a slash's startup plus active frames, measured at 154ms.
 
 ## The Massive Strike
 

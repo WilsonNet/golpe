@@ -22,6 +22,8 @@ import {
 	JUMP_HEIGHT_PX,
 	JUMP_VELOCITY,
 	MAX_FALL_SPEED,
+	MOVES,
+	meleePhase,
 	NEUTRAL_INTENT,
 	PLAYER_WALK_SPEED,
 	type PlayerIntent,
@@ -286,6 +288,55 @@ describe("horizontal movement", () => {
 			10,
 		);
 		expect(air.vx).toBeGreaterThan(ground.vx);
+	});
+});
+
+describe("facing follows the pointer", () => {
+	const grounded = () =>
+		state({ x: OPEN_X, y: standingOn(GROUND.y), grounded: true, facing: 1 });
+
+	it("turns to the aimed side while standing still", () => {
+		const r = tick(grounded(), { face: -1 });
+		expect(r.facing).toBe(-1);
+	});
+
+	it("turns against the walk direction when aim and feet disagree", () => {
+		// Retreating while guarding the side the attacker is on.
+		const r = ticks(grounded(), { right: true, face: -1 }, 10);
+		expect(r.facing).toBe(-1);
+		expect(r.vx).toBeGreaterThan(0);
+	});
+
+	it("will not turn during a swing's startup or active frames", () => {
+		// The direction is a promise for as long as the hitbox is a threat.
+		let s = tick(grounded(), { attack: true, face: 1 });
+		const def = MOVES.slash;
+		const activeEndMs = def.startupMs + def.activeMs;
+		while (s.meleeTimer < activeEndMs - DT * 1000) {
+			s = tick(s, { attack: true, face: -1 });
+			expect(s.facing).toBe(1);
+		}
+	});
+
+	it("turns back to the pointer during recovery", () => {
+		// Regression: locking facing for the whole move meant a player holding the
+		// attack button chained slashes and ignored the cursor for 332ms at a time.
+		let s = tick(grounded(), { attack: true, face: 1 });
+		const def = MOVES.slash;
+		const recoveryStartMs = def.startupMs + def.activeMs;
+		while (s.meleeTimer < recoveryStartMs + 1) {
+			s = tick(s, { attack: true, face: 1 });
+		}
+		expect(meleePhase(s)).toBe("recovery");
+
+		const turned = tick(s, { attack: true, face: -1 });
+		expect(turned.facing).toBe(-1);
+		expect(turned.meleeAction).toBe("slash");
+	});
+
+	it("will not turn while stunned", () => {
+		const r = tick(state({ ...grounded(), stunTimer: 200 }), { face: -1 });
+		expect(r.facing).toBe(1);
 	});
 });
 

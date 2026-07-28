@@ -13,7 +13,7 @@
  */
 
 import type { AIState } from "../game/characters/EnemyBrain";
-import type { PlayerPosition } from "../game/simulation/Physics";
+import type { MeleePhase, PlayerPosition } from "../game/simulation/Physics";
 
 export interface GameStateSnapshot {
 	aiVsAIMode: boolean;
@@ -30,6 +30,42 @@ export interface GameStateSnapshot {
 	bulletCount: number;
 }
 
+/**
+ * Everything that decides where the local fighter looks and shoots.
+ *
+ * Aim is the one system the AI-vs-AI loop cannot exercise: the bots hand the
+ * simulation an angle directly and never touch a cursor, so a broken
+ * screen→world conversion is invisible to `diagnose.mjs` and shows up only as
+ * "the game struggles to follow the mouse". `scripts/aim-probe.mjs` drives a
+ * real cursor and reads this.
+ */
+export interface AimSnapshot {
+	/** Cursor in world pixels, after the screen→world conversion under test. */
+	pointerX: number;
+	pointerY: number;
+	/** Centre of the local fighter's body, world pixels. */
+	centreX: number;
+	centreY: number;
+	/** The angle the simulation and the gun both use, radians. */
+	aimAngle: number;
+	/** Which side of the fighter the cursor is on: -1, 0 or 1. */
+	aimSide: number;
+	/** The facing the simulation settled on. Should equal `aimSide`. */
+	facing: number;
+	/** Facing is not steerable during a swing's startup or active frames. */
+	phase: MeleePhase;
+	stance: "sword" | "gun";
+	/** A dead fighter cannot fire — the probe must not read that as a bad angle. */
+	hp: number;
+	/** Logical viewport and camera the conversion was done against. */
+	viewWidth: number;
+	viewHeight: number;
+	cameraX: number;
+	cameraY: number;
+	/** Live projectiles owned by the local fighter, with their headings. */
+	bullets: { id: number; x: number; y: number; angle: number }[];
+}
+
 declare global {
 	interface Window {
 		/** Flip AI vs AI, same as pressing P. */
@@ -38,5 +74,7 @@ declare global {
 		__gameState?: () => GameStateSnapshot;
 		/** Collect frames for `durationMs`, then print `__DIAGNOSTIC_RESULT__…__END__`. */
 		__physicsDiagnostic?: (durationMs?: number) => string;
+		/** Where the cursor points, where the fighter looks, and where its shots go. */
+		__aimState?: () => AimSnapshot;
 	}
 }

@@ -128,6 +128,8 @@ export class Match {
 	constructor(
 		private readonly stage: Stage,
 		canvas: HTMLCanvasElement,
+		/** Logical view size — `app.screen`, never the canvas backing store. */
+		screen: { readonly width: number; readonly height: number },
 	) {
 		drawArena(stage.background, stage.arena);
 
@@ -143,7 +145,26 @@ export class Match {
 		bindFxBodies(this.queries, this.fx);
 
 		this.buildHud(stage.hud);
-		this.input = new Input(canvas, () => this.toggleAiVsAi());
+		this.input = new Input(
+			canvas,
+			// A live view: the getters are read on every aim, so a resized window or
+			// a scrolled camera is accounted for without re-plumbing anything.
+			{
+				get width() {
+					return screen.width;
+				},
+				get height() {
+					return screen.height;
+				},
+				get cameraX() {
+					return stage.cameraX;
+				},
+				get cameraY() {
+					return stage.cameraY;
+				},
+			},
+			() => this.toggleAiVsAi(),
+		);
 		this.installDebugHooks();
 
 		const params = new URLSearchParams(window.location.search);
@@ -298,6 +319,51 @@ export class Match {
 		});
 		window.__physicsDiagnostic = (durationMs = 5000) =>
 			this.diagnostics.start(durationMs);
+		// Aim is the one system AI vs AI cannot exercise — the brains hand the
+		// simulation an angle and never touch a cursor. `scripts/aim-probe.mjs`
+		// drives a real mouse and reads this.
+		window.__aimState = () => {
+			const c = bodyCentre(this.local.body.x, this.local.body.y);
+			const gap = this.input.pointerX - c.x;
+			return {
+				pointerX: this.input.pointerX,
+				pointerY: this.input.pointerY,
+				centreX: c.x,
+				centreY: c.y,
+				aimAngle: this.aimAngle,
+				aimSide: gap === 0 ? 0 : Math.sign(gap),
+				facing: this.local.body.facing,
+				phase: meleePhase(this.local.body),
+				stance: this.local.body.stance,
+				hp: this.local.fighter.hp,
+				viewWidth: this.input.viewport.width,
+				viewHeight: this.input.viewport.height,
+				cameraX: this.stage.cameraX,
+				cameraY: this.stage.cameraY,
+				bullets: this.localBullets(),
+			};
+		};
+	}
+
+	/** Local fighter's live projectiles with their headings, for the aim probe. */
+	private localBullets(): {
+		id: number;
+		x: number;
+		y: number;
+		angle: number;
+	}[] {
+		const mine = this.online?.manager.myId;
+		const raw = this.onlineMode
+			? [...(this.online?.bulletVectors ?? [])].filter(
+					(b) => b.ownerId === mine,
+				)
+			: this.bullets.vectors().filter((b) => b.owner === "player");
+		return raw.map((b) => ({
+			id: b.id,
+			x: b.x,
+			y: b.y,
+			angle: Math.atan2(b.vy, b.vx),
+		}));
 	}
 
 	// =========================================================
