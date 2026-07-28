@@ -72,6 +72,12 @@ are perfectly fine.
 To debug this class of bug, write a `.mts` probe that imports each layer of the
 chain and diffs `Object.keys`. It localises the break in one run.
 
+**A re-export is not an import.** `Physics.ts` re-exports `meleePhase` from
+`Melee.js` for the server's benefit, and that line creates *no local binding* —
+using `meleePhase` inside `Physics.ts` is a plain "cannot find name". Import what
+the module itself uses, separately from what it re-exports (aliasing, e.g.
+`meleePhase as meleePhaseOf`, keeps the two apart and readable).
+
 **`server/` must stay inside `tsc`.** For a long time it was not: `tsconfig.json`
 included only `src`, so the authoritative half of the game was never
 typechecked. It grew a real bug behind that gap — `botInput` read `foe.facingDir`

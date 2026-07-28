@@ -57,6 +57,7 @@ Emitted as `__DIAGNOSTIC_RESULT__{...}__END__` on one console line.
 | `reconciliationSummary.visibleCorrections` | corrections > 1px; only respawns should appear |
 | `meleeSummary` violations | `illegalActions`, `blockedUnblockables`, `frameDataViolations`, `stuckActionFrames`, `meleeDesyncFrames` — **all must be 0** |
 | `meleeSummary` counters | `slashes`, `massives`, `uppercuts`, `blocks`, `parries`, `backstabs`, `butterflyChains` — **must be > 0**, or the run proves nothing |
+| `meleeSummary.blockedHits` vs `parries` | a guard that beat the 140ms parry window is `blocked`; earlier is `parried`. **Reactive guarding produces `blockedHits: 0` legitimately** — `blocked` is the turtle's signature |
 | `meleeSummary.outcomeByMove` | outcomes per move; a flat `blocked: 0` cannot distinguish "guards failing" from "everything that landed was unblockable" |
 | `meleeSummary.violations[]` | which fighter broke which frame-data contract, and by how much |
 | `arenaSummary.xSpanPct` / `ySpanPct` | how much of the arena the fight touched. A duel confined to a narrow band tests almost nothing |

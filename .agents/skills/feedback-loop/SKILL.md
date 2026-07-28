@@ -69,6 +69,21 @@ When a counter is stuck at zero, **break it down before theorising**.
 whether guards are failing or whether everything that connected was unblockable
 by design, and those need opposite fixes.
 
+### Baseline the rule you changed, not the build you remember
+
+A counter that looks wrong after a change is not evidence until you have seen
+what it reads *without* that change. AI-vs-AI counts vary run to run, so a memory
+of "there used to be more parries" is worthless.
+
+The cheap, decisive move is to **revert only the one rule, re-run, and compare**:
+after freeing facing during a swing's recovery, three runs reported `parries: 0`.
+Temporarily restoring the old line and re-running gave `1, 0, 2` — and the fixed
+build then gave `3, 1, 0`. Same range, no regression, question closed in four
+minutes. Guessing would have cost an afternoon or shipped a real regression.
+
+Restart the server between the revert and the re-run — tsx does not hot-reload
+`server/` or `simulation/`, so an unrestarted server measures the old rule twice.
+
 ### A metric must know the resolution of what it watches
 
 The remote fighter is only visible at 20Hz, so judging its frame data against a

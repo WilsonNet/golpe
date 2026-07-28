@@ -122,6 +122,10 @@ node scripts/aim-probe.mjs                             # cursor, facing and shot
 **RMB** block · **F** uppercut · **Q/E** sword/gun stance · **P** toggle AI vs AI.
 Sword is the default stance.
 
+**You face the cursor**, except through a swing's startup and active frames and
+while stunned; the gun fires along the same angle. See
+[movement](specs/movement.md) and [melee](specs/melee.md).
+
 Buttons are passed to the simulation raw — it does its own press-edge detection,
 and edge-detecting in the scene too would desync client and server.
 

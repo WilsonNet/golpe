@@ -20,7 +20,8 @@ src/game/
   app.ts          Pixi Application bootstrap: init, load, build, tick
   characters/     EnemyBrain, AIConfig
   combat/         BulletSystem.ts — the only simulated source of bullets offline
-  input/          Input.ts — raw keyboard and pointer state, plus dash gestures
+  input/          Input.ts — raw keyboard and pointer state, dash gestures, and the
+                  cursor->world conversion (logical view + camera, never canvas.width)
   online/         OnlineManager (channel), OnlineSession (owns netcode),
                   Prediction.ts, Interpolation.ts, types.ts
   render/         Stage.ts (layers + camera), ArenaRenderer.ts (draws from collider
@@ -33,8 +34,9 @@ server/           Geckos.io authoritative server
   GameRoom.ts       authoritative tick, bullets, melee resolution, round lifecycle
   index.ts          matchmaking and deferred placement
 
-scripts/          diagnose.mjs (Playwright harness), dev-herdr.mjs, probe-online.mjs,
-                  verify-modes.mjs
+scripts/          diagnose.mjs (Playwright harness), aim-probe.mjs (drives a real
+                  cursor — the only thing that can test aim), dev-herdr.mjs,
+                  probe-online.mjs, verify-modes.mjs
 specs/            the source of truth for intended behaviour
 docs/             how to work in this repo
 public/assets/
@@ -108,6 +110,10 @@ Run modes are listed in [running-the-game.md](running-the-game.md).
 
 - **Input handling lives in `input/Input.ts`**, not on the entities — one set of
   listeners, one place to look.
+- **The cursor is converted once, in `Input`, and read as world coordinates
+  everywhere else.** It is stored normalised and resolved against the *logical*
+  view plus the camera on read — see the Input and aim section of
+  [invariants.md](invariants.md) for why the canvas backing store is the trap.
 - **Buttons are passed to the simulation raw.** It does its own press-edge
   detection (jump height is analogue, a slash needs an edge, a Massive fires on
   release); edge-detecting in the scene as well would desync client and server.

@@ -288,6 +288,14 @@ worst bugs found while building this — reactive blocking being impossible, and
 the backstab firing on overlapping bodies — showed up as a **zero in the second
 row while the first row was perfectly clean**.
 
+**`blockedHits: 0` alongside `parries > 0` is the expected signature of reactive
+guarding, not a defect.** A guard held longer than the 140ms parry window when
+the hit lands is a `blocked`; anything earlier is a `parried`. Since
+`BLOCK_STARTUP_MS` is 0 and the AI raises its guard on reading a swing, virtually
+every guard it wins lands inside the window. `blocked` is what a *turtle* who has
+been holding the button produces — so a run of all `parried` says the guards are
+reactive, and a run of all `blocked` would say nobody is reading anything.
+
 `outcomeByMove` breaks the outcomes down per move, because a flat `blocked: 0` is
 ambiguous: it reads identically whether guards are failing or whether everything
 that connected happened to be unblockable by design, and those need opposite
