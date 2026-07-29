@@ -10,6 +10,7 @@ import {
 	type PlayerIntent,
 	type PlayerPosition,
 } from "../simulation/Physics";
+import type { TrainingConfigMsg, TrainingStateMsg } from "../training/types";
 import { friLerp, RemoteInterpolator, ServerClock } from "./Interpolation";
 import { OnlineManager } from "./OnlineManager";
 import {
@@ -144,13 +145,28 @@ export class OnlineSession {
 		};
 	}
 
-	connect(solo = false) {
+	connect(solo = false, training = false) {
 		this.manager.connect(
 			(snap) => this.onSnapshot(snap),
 			(msg) => this.callbacks.onStatus(msg),
 			() => this.onRoundReset(),
 			solo,
+			training,
 		);
+	}
+
+	/**
+	 * The training room's two extra messages, passed straight through.
+	 *
+	 * Deliberately thin: the training room is not netcode, it is a client of it,
+	 * so this class gains a pipe rather than a mode.
+	 */
+	onTrainingState(handler: (state: TrainingStateMsg) => void) {
+		this.manager.onTraining(handler);
+	}
+
+	sendTrainingConfig(msg: TrainingConfigMsg) {
+		this.manager.sendTrainingConfig(msg);
 	}
 
 	/**

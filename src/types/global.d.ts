@@ -14,12 +14,15 @@
 
 import type { AIState } from "../game/characters/EnemyBrain";
 import type { MeleePhase, PlayerPosition } from "../game/simulation/Physics";
+import type { TrainingApi } from "../game/training/report";
 
 export interface GameStateSnapshot {
 	aiVsAIMode: boolean;
 	onlineMode: boolean;
 	onlineAIMode: boolean;
 	soloMatch: boolean;
+	/** `?training=true`: the opponent is a scriptable dummy, not a bot. */
+	trainingMode: boolean;
 	playerHP: number;
 	enemyHP: number;
 	playerState: AIState | undefined;
@@ -76,5 +79,16 @@ declare global {
 		__physicsDiagnostic?: (durationMs?: number) => string;
 		/** Where the cursor points, where the fighter looks, and where its shots go. */
 		__aimState?: () => AimSnapshot;
+		/**
+		 * The training room's controller: configure the dummy, drive the local
+		 * fighter, run a scenario, read a structured report.
+		 *
+		 * Present only under `?training=true`. It is a first-class deliverable
+		 * rather than a debug convenience — an agent can set up a scenario, run it
+		 * and read the result with no human involved, which is what turns "does
+		 * RMB actually guard a slash from the left?" into a repeatable observation
+		 * rather than something inferred from watching two brains fight.
+		 */
+		__training?: TrainingApi;
 	}
 }

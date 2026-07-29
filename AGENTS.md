@@ -44,7 +44,7 @@ stated in English survives. **Change behaviour, change the spec, in the same
 commit** — and tuning a constant counts as changing behaviour. Read the relevant
 spec before implementing: [movement](specs/movement.md) ·
 [combat](specs/combat.md) · [melee](specs/melee.md) · [arena](specs/arena.md) ·
-[netcode](specs/netcode.md).
+[netcode](specs/netcode.md) · [training room](specs/training-room.md).
 
 ## Tech Stack
 
@@ -88,6 +88,10 @@ One line each; the war story behind every one is in
 - **AI vs AI cannot test aim.** The brains hand the simulation an angle and never
   touch a cursor, so anything about the mouse must be measured with
   `scripts/aim-probe.mjs`, at `--dpr=2`.
+- **The dummy is an input source, never a simulation flag.** The training room
+  adds a third input source beside the network queue and `EnemyBrain`, and
+  nothing else. It is server-side because a client-side dummy would bypass the
+  netcode it exists to test through.
 - **A clean run is not a good run.** Read `arenaSummary` and the `meleeSummary`
   counters: every must-be-zero metric is satisfied by a build where nothing
   happens.
@@ -104,14 +108,17 @@ npm run lint             # biome, across src/ server/ scripts/
 node scripts/diagnose.mjs --mode=online --runs=3       # the feedback loop
 node scripts/verify-modes.mjs                          # smoke-check every mode
 node scripts/aim-probe.mjs                             # cursor, facing and shot direction
+node scripts/training-probe.mjs                        # one interaction, against a scripted dummy
 ```
 
 - Ports: Vite **8080**, Geckos **9208**.
 - **`npm run typecheck` covers two projects.** `tsconfig.json` is client-only;
   `tsconfig.server.json` covers `server/`. Running bare `tsc` checks half the
   game — which is how the server's bots silently lost the ability to evade.
-- **Restart the server after touching `server/` or `src/game/simulation/`** —
-  tsx does not hot-reload.
+- **Restart the server after touching `server/`, `src/game/simulation/`,
+  `src/game/characters/` or `src/game/training/`** — all four are inside
+  `tsconfig.server.json` and tsx does not hot-reload. The client *does* reload,
+  which makes a stale server look like a bug in your change.
 - **Never background the servers with `&`.** A detached server is invisible when
   it dies, and `pgrep -f "tsx server/index.ts"` matches its own shell. Load the
   `herdr-dev-workspace` skill.
@@ -121,6 +128,11 @@ node scripts/aim-probe.mjs                             # cursor, facing and shot
 **WASD** move/jump · **LMB** slash (hold 420ms then release = Massive Strike) ·
 **RMB** block · **F** uppercut · **Q/E** sword/gun stance · **P** toggle AI vs AI.
 Sword is the default stance.
+
+**`?training=true`** opens the training room: a scriptable practice dummy, a DOM
+menu over the canvas, and `window.__training` for agents. No key toggles the
+panel — it is a URL mode, and its header collapses it. See
+[specs/training-room.md](specs/training-room.md).
 
 **You face the cursor**, except through a swing's startup and active frames and
 while stunned; the gun fires along the same angle. See
@@ -136,7 +148,8 @@ Every skill lives in `.agents/skills/<name>/SKILL.md` and is loaded with
 skill verifies it.
 
 - **`feedback-loop`** — Diagnosing physics jitter, network desync, projectile or
-  combat bugs. The canonical test is online AI vs AI.
+  combat bugs. The canonical test is online AI vs AI; the training probe is the
+  scalpel for a single interaction.
 - **`herdr-dev-workspace`** — Starting, inspecting or stopping the dev servers in
   visible herdr panes instead of background processes.
 - **`specs`** — Keeping `specs/` authoritative: read before implementing, update

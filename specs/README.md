@@ -21,6 +21,7 @@ it.
 | [melee.md](melee.md) | Sword combat: frame data, blocking, parries, the butterfly, the Massive Strike |
 | [arena.md](arena.md) | World bounds, platform layout, reachability rules |
 | [netcode.md](netcode.md) | Online-first model, prediction, reconciliation, projectiles, bots |
+| [training-room.md](training-room.md) | The scriptable practice dummy, its beat format, and the agent API |
 
 ## Rules
 

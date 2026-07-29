@@ -50,6 +50,7 @@ import {
 	resolveMelee,
 	tickPlayer,
 } from "./simulation/Physics";
+import { TrainingRoom } from "./training/TrainingRoom";
 
 /** Client physics runs at a fixed 60Hz to match the server, whatever the display does. */
 const PHYSICS_DT = 1 / 60;
@@ -112,7 +113,17 @@ export class Match {
 	private aiMode = false;
 	/** Solo: the server fills the other slot with a bot instead of a human. */
 	private soloMatch = true;
+	/**
+	 * Training: the server fills the other slot with a *scriptable dummy*.
+	 *
+	 * Still online, still solo, still predicted and reconciled — the only
+	 * difference is what decides the opponent's inputs. A client-side dummy would
+	 * have been easier and worthless: it would bypass exactly the netcode the
+	 * training room is used to test other things through.
+	 */
+	private trainingMode = false;
 	private online: OnlineSession | undefined;
+	private training: TrainingRoom | undefined;
 
 	private localBrain: EnemyBrain | undefined;
 	private remoteBrain: EnemyBrain | undefined;
@@ -175,6 +186,18 @@ export class Match {
 		// `?offline=true` is an escape hatch for working without a game server. It
 		// is not the supported path — it bypasses the netcode entirely.
 		this.onlineMode = params.get("offline") !== "true";
+		// Both spellings, because both get typed.
+		this.trainingMode =
+			params.get("training") === "true" ||
+			params.get("training-room") === "true";
+
+		if (this.trainingMode) {
+			// A training room is an ordinary online, single-human match by
+			// construction. `?offline=true&training=true` is not a mode: offline
+			// bypasses the server, and the dummy lives there.
+			this.onlineMode = true;
+			this.soloMatch = true;
+		}
 
 		if (this.onlineMode) this.startOnline();
 		else if (this.aiMode) this.startOfflineAi();
@@ -266,10 +289,11 @@ export class Match {
 				onTeleport: () => this.diagnostics.markTeleport(),
 				onRoundReset: () => this.diagnostics.markRoundReset(),
 				onMeleeEvent: (event) => {
-					const victim: Side =
-						event.attackerId === this.online?.manager.myId ? "remote" : "local";
+					const byLocal = event.attackerId === this.online?.manager.myId;
+					const victim: Side = byLocal ? "remote" : "local";
 					this.fx.impact(event, victim);
 					this.diagnostics.recordMeleeEvent(event.move, event.outcome);
+					this.training?.recordMeleeEvent(event, byLocal);
 					// A hit is an announced discontinuity, exactly like a respawn. Only
 					// the server can know a swing connected, so the client necessarily
 					// mispredicts the stun and knockback and then rewinds into them —
@@ -278,7 +302,18 @@ export class Match {
 				},
 			},
 		);
-		this.online.connect(this.soloMatch);
+		this.online.connect(this.soloMatch, this.trainingMode);
+
+		if (this.trainingMode) {
+			this.training = new TrainingRoom({
+				session: this.online,
+				input: this.input,
+				diagnostics: this.diagnostics,
+				localBody: () => this.local.body,
+				localHp: () => this.local.fighter.hp,
+			});
+			console.log("[TRAINING] window.__training installed");
+		}
 
 		if (this.aiMode) {
 			this.localBrain = new EnemyBrain(fightConfig());
@@ -302,6 +337,7 @@ export class Match {
 			onlineMode: this.onlineMode,
 			onlineAIMode: this.aiMode,
 			soloMatch: this.soloMatch,
+			trainingMode: this.trainingMode,
 			playerHP: this.local.fighter.hp,
 			enemyHP: this.onlineMode
 				? (this.online?.remoteHp ?? this.remote.fighter.hp)
@@ -385,6 +421,7 @@ export class Match {
 		this.fx.update(dtMs);
 		this.stage.update(dtMs);
 
+		this.training?.update(dtMs);
 		this.record(dtMs);
 	}
 
@@ -713,6 +750,7 @@ export class Match {
 
 	destroy() {
 		this.input.destroy();
+		this.training?.destroy();
 		this.online?.disconnect();
 	}
 }

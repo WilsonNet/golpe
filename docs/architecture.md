@@ -27,16 +27,26 @@ src/game/
   render/         Stage.ts (layers + camera), ArenaRenderer.ts (draws from collider
                   data), assets.ts, SpritePool.ts, Particles.ts, MeleeFx.ts
   diagnostics/    PhysicsDiagnostics.ts — the measurement half of the feedback loop
+  training/       the training room's client half and its shared vocabulary
+    types.ts        config, beats and the two wire messages — shared with the server
+    scripts.ts      behaviour -> beat list; pure, and unit tested
+    TrainingRoom.ts window.__training, and a *view* over PhysicsDiagnostics
+    report.ts       the agent-facing API and report shapes (client only)
   EventBus.ts     game → React events (bullet-fired, enemy-hp-changed)
+
+src/ui/           React overlays drawn over the canvas
+  TrainingPanel.tsx the training menu — DOM, and a client of window.__training
 
 server/           Geckos.io authoritative server
   physics.ts        re-exports src/game/simulation/Physics
   GameRoom.ts       authoritative tick, bullets, melee resolution, round lifecycle
+  TrainingDummy.ts  the scriptable practice dummy: an input source, like EnemyBrain
   index.ts          matchmaking and deferred placement
 
 scripts/          diagnose.mjs (Playwright harness), aim-probe.mjs (drives a real
-                  cursor — the only thing that can test aim), dev-herdr.mjs,
-                  probe-online.mjs, verify-modes.mjs
+                  cursor — the only thing that can test aim), training-probe.mjs
+                  (one interaction at a time), dev-herdr.mjs, probe-online.mjs,
+                  verify-modes.mjs
 specs/            the source of truth for intended behaviour
 docs/             how to work in this repo
 public/assets/
@@ -117,6 +127,13 @@ Run modes are listed in [running-the-game.md](running-the-game.md).
 - **Buttons are passed to the simulation raw.** It does its own press-edge
   detection (jump height is analogue, a slash needs an edge, a Massive fires on
   release); edge-detecting in the scene as well would desync client and server.
+- **The training dummy is a third input source, not a second pipeline.**
+  `GameRoom` chooses between a network queue, an `EnemyBrain` and a
+  `TrainingDummy`, and everything downstream of that choice is identical. It
+  lives in `server/` for the same reason the solo bot does: a client-side dummy
+  would bypass prediction, reconciliation and server-owned bullets, which is
+  exactly what a training session is used to test other things through. See
+  [specs/training-room.md](../specs/training-room.md).
 - **`EnemyBrain.ts` drives every AI fighter** — the offline enemy, the local
   `?ai=true` fighter and the server's bots. One brain, one perception structure,
   so a bot cannot accidentally be cleverer in one mode than another.

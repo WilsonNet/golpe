@@ -36,6 +36,18 @@ const MODES = [
 		tabs: 1,
 		needsFight: true,
 	},
+	/**
+	 * The training room. `needsFight: false` because Playwright presses no keys
+	 * and the default dummy is deliberately idle — the check is that a dummy was
+	 * seated at all and the match is live, which is what `training` asserts below.
+	 */
+	{
+		label: "training room",
+		url: "/?training=true",
+		tabs: 1,
+		needsFight: false,
+		training: true,
+	},
 ];
 
 const browser = await chromium.launch();
@@ -66,18 +78,27 @@ for (const mode of MODES) {
 	}
 
 	const s = await pages[0].evaluate(() => window.__gameState());
+	// A training room is only seated when the agent API exists *and* the server
+	// has described the room back to it. Either alone passes with an empty room.
+	const training = mode.training
+		? await pages[0].evaluate(
+				() => !!window.__training && window.__training.state().connected,
+			)
+		: false;
 	const fighting = hps.size > 1;
 	// Two idle humans legitimately stand still, so presence is the signal there;
 	// a server bot should actually move.
 	const opponentPresent = remotes.size >= 1;
 	const opponentMoved = remotes.size > 1;
-	const ok = mode.needsFight
-		? fighting
-		: mode.solo
-			? opponentMoved
-			: opponentPresent;
+	const ok = mode.training
+		? training && opponentPresent
+		: mode.needsFight
+			? fighting
+			: mode.solo
+				? opponentMoved
+				: opponentPresent;
 	console.log(
-		`${ok ? "OK  " : "FAIL"} ${mode.label.padEnd(28)} online=${s.onlineMode} solo=${s.soloMatch} ai=${s.onlineAIMode} opponent=${opponentMoved ? "moving" : opponentPresent ? "present" : "MISSING"} bullets=${sawBullet} hp=${[...hps].join(" -> ")}`,
+		`${ok ? "OK  " : "FAIL"} ${mode.label.padEnd(28)} online=${s.onlineMode} solo=${s.soloMatch} ai=${s.onlineAIMode} training=${s.trainingMode}${mode.training ? `/${training ? "seated" : "EMPTY"}` : ""} opponent=${opponentMoved ? "moving" : opponentPresent ? "present" : "MISSING"} bullets=${sawBullet} hp=${[...hps].join(" -> ")}`,
 	);
 	await ctx.close();
 }

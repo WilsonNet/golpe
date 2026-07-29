@@ -38,9 +38,28 @@ io.onConnection((channel) => {
 	 * the same rooms, the same authoritative tick and the same reconciliation as
 	 * PvP, so the netcode is exercised every time anyone plays.
 	 */
-	const place = (solo: boolean) => {
+	const place = (solo: boolean, training = false) => {
 		if (placed) return;
 		placed = true;
+
+		/**
+		 * A training room is single-human by construction.
+		 *
+		 * It is never offered to matchmaking — it is created here, filled with a
+		 * dummy immediately, and therefore already full. Seating a stranger in
+		 * somebody's practice session would be a bug with no upside: the second
+		 * slot is the thing under the practising player's control.
+		 */
+		if (training) {
+			const room = newRoom();
+			room.addPlayer(channel);
+			room.addDummy();
+			console.log(
+				`[MATCH] Player ${channel.id} in training room ${room.id} vs dummy`,
+			);
+			startMatch(room);
+			return;
+		}
 
 		if (solo) {
 			const room = newRoom();
@@ -68,7 +87,8 @@ io.onConnection((channel) => {
 	};
 
 	channel.on("join", (data: unknown) => {
-		place(Boolean((data as { solo?: boolean } | null)?.solo));
+		const msg = data as { solo?: boolean; training?: boolean } | null;
+		place(Boolean(msg?.solo), Boolean(msg?.training));
 	});
 
 	setTimeout(() => place(false), JOIN_GRACE_MS);

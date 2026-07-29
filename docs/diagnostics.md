@@ -13,6 +13,9 @@ the full workflow** — this file is the reference for the tool itself.
 - `window.__aimState()` — cursor in world space, aim angle, facing, move phase,
   and the local fighter's live bullets with their headings
 - `window.__toggleAIVsAI()` — or press **P** in-game
+- `window.__training` — the training room's controller, present only under
+  `?training=true`. See *The training probe* below and
+  [specs/training-room.md](../specs/training-room.md).
 
 ## Harness (preferred)
 
@@ -23,6 +26,7 @@ node scripts/diagnose.mjs --mode=online --runs=3  # the canonical run
 node scripts/probe-online.mjs                   # dump one online client's console
 node scripts/verify-modes.mjs                   # smoke-check every launch mode
 node scripts/aim-probe.mjs                      # cursor, facing and shot direction, at dpr 1 and 2
+node scripts/training-probe.mjs                 # one interaction at a time, against a scripted dummy
 ```
 
 ## The aim probe
@@ -42,6 +46,47 @@ drives a real mouse instead and reports:
 **Run it at `--dpr=2`.** The bug it was built for — dividing by the canvas
 backing store rather than the logical view — is exactly invisible at device pixel
 ratio 1, which is the only ratio a default headless browser has.
+
+## The training probe
+
+`diagnose.mjs` measures a whole chaotic match; `training-probe.mjs` measures
+**one interaction**. Neither replaces the other, and the choice is not about
+which is stricter:
+
+| Question | Tool |
+|---|---|
+| Is the game healthy end to end? | `diagnose.mjs --mode=online --runs=3` |
+| Does a block actually stop a slash from the left? | `training-probe.mjs` |
+| Did the fix change the thing I aimed at? | usually both |
+
+A brain never does the same thing twice, so the canonical run can only tell you
+that *something* happened legally. The training room hands the simulation a
+dummy that does exactly one thing on command, which is what makes a single
+mechanic falsifiable.
+
+It prints `__TRAINING_RESULT__{...}__END__` on one console line and exits
+non-zero on failure. Useful flags: `--only=backstab` to run one row,
+`--keep-open` to leave the browser up.
+
+Every row's expectation comes from [specs/melee.md](../specs/melee.md) — a slash
+deals 7, an uppercut beats a guard for 11 and launches, a Massive beats it for
+24, a guard facing away is backstabbed and one at less than a body width is not.
+Three rows are about the tool rather than the game:
+
+- **Determinism.** The same script twice must produce the same event sequence.
+  If it does not, nothing measured with the training room means anything, and
+  that is a bug in the feature rather than flakiness to retry around.
+- **No desync.** `meleeDesyncFrames` must be 0 and `reconciliation.avgErrorPx`
+  must stay in the band a normal match shows (≈0–3px, asserted at ≤5).
+- **Activity.** The summary carries `playerMoves`, `dummyMoves` and `impacts`
+  across the whole battery, and a battery with zero impacts fails outright —
+  every must-be-zero row is satisfied by a build where nothing happens.
+
+`__training.report()` is a **filtered view of `PhysicsDiagnostics`**, not a
+second measurement stack: the melee counters and violations are the same ones
+the canonical run prints. Damage and bullet counters come from the server, which
+is the only thing that sees a projectile connect or a hit land through
+invincibility.
 
 ## Reading the report
 
@@ -153,6 +198,14 @@ Healthy for the canonical 14s online AI-vs-AI run:
 | `bulletSummary.tracked` | 4-20 |
 | `meleeSummary` move counters | all non-zero across a few runs |
 | every violation counter | **0, every run** |
+
+Healthy for the training battery:
+
+| Metric | Healthy |
+|---|---|
+| `verdict` | `PASS`, all 12 rows |
+| `activity.impacts` | > 0 — a battery that judged no impact proves nothing |
+| `activity.playerMoves` / `dummyMoves` | both > 0 |
 
 ## AI vs AI mode
 

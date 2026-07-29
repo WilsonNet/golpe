@@ -145,6 +145,46 @@ crossed sides *while swinging* (`attackTurn.worstMs`), and the heading a fired
 bullet actually left with. Run it after touching `input/`, `app.ts`, facing rules
 or anything that spawns a projectile.
 
+### What AI vs AI cannot test: one specific interaction
+
+A brain never does the same thing twice. The canonical run can tell you that
+*something* legal happened; it cannot tell you whether **this** block stops
+**that** slash — and every input feature so far was validated by inference from
+a noisy fight rather than by observation.
+
+```bash
+node scripts/training-probe.mjs             # the full battery
+node scripts/training-probe.mjs --only=backstab
+```
+
+`?training=true` seats a **scriptable dummy** instead of a bot, and
+`window.__training` drives both it and your own fighter. It is still an ordinary
+online match — the dummy is server-side precisely so a scenario exercises
+prediction, reconciliation and server-owned hits rather than bypassing them.
+
+**Reach for the training probe when the question names one mechanic**: does a
+guard stop a slash, does an uppercut beat it, is the recovery on a whiffed
+Massive actually punishable, does the frame data match the table. **Reach for
+`diagnose.mjs` when the question is about the whole system**: jitter,
+reconciliation error over a real fight, arena coverage, projectile trajectories.
+Neither replaces the other — a training scenario is 850ms of two fighters doing
+exactly one thing, which is a terrible sample of a match and a perfect sample of
+a mechanic.
+
+Two traps specific to the training room, both of which produce a confident wrong
+answer rather than an error:
+
+- **A stale server.** `tsx` does not hot-reload, and `src/game/training/` is
+  server code. The client reloads, so a scenario happily reads its new config
+  back and then measures the fighters standing at the *old* spawn positions.
+- **A scenario that measures its own setup.** A punish test whose setup move
+  *lands* stuns the dummy, and the stun eats the counter-attack it was supposed
+  to demonstrate. Whiff on purpose when recovery is the thing under test.
+
+Its determinism row is not a nicety: if the same script produces different events
+on two runs, nothing measured with the training room means anything, and that is
+a bug in the room rather than flakiness to retry around.
+
 ## Architecture Overview
 
 The game has a Physics Diagnostic Tool that emits structured JSON reports. These reports are captured by Playwright and fed back to the LLM as hard numerical data. This replaces blind guessing with a measurable feedback loop.
@@ -423,6 +463,9 @@ for fps in [30, 60, 85, 120]:
 | `scripts/probe-online.mjs` | Dumps one online client's console + `__gameState()` when something is off |
 | `scripts/verify-modes.mjs` | Smoke-checks every launch mode: connects, matches, fights |
 | `scripts/aim-probe.mjs` | Drives a real cursor: screen→world mapping, facing, and shot direction, at dpr 1 and 2 |
+| `scripts/training-probe.mjs` | One interaction at a time against a scripted dummy: block, uppercut, backstab, frame data, determinism |
+| `server/TrainingDummy.ts` | The scriptable dummy: a deterministic input source with `EnemyBrain`'s contract |
+| `src/game/training/TrainingRoom.ts` | `window.__training`, and the report as a *view* over `PhysicsDiagnostics` |
 | `scripts/dev-herdr.mjs` | Dev servers in visible herdr panes, with real port readiness |
 | `src/game/diagnostics/PhysicsDiagnostics.ts` | Collection and report generation |
 | `src/game/simulation/` | The code under test — `Arena`, `Collision`, `Physics` |

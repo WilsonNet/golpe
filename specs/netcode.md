@@ -30,14 +30,45 @@ simulation is deterministic.
 | `/?online=true` | A second human |
 | `/?online=true&ai=true` | A second client, both AI — the canonical test mode |
 | `/?offline=true` | None. Escape hatch, bypasses all of this. Unsupported. |
+| `/?training=true` | A scriptable practice dummy — see [training-room.md](training-room.md) |
 
-The client sends `join {solo}` on connect; the server holds placement until it
-knows which kind of match is wanted (1.5s grace, then it assumes human
+The client sends `join {solo, training}` on connect; the server holds placement
+until it knows which kind of match is wanted (1.5s grace, then it assumes human
 matchmaking).
 
 **A bot is an ordinary player** to the simulation: same `PlayerPosition`, same
 `tickPlayer`, same bullets. Only its input source differs — it reads
 `EnemyBrain` instead of a network queue, and never starves.
+
+**A training dummy is a third input source into the same pipeline**, not a
+second pipeline. `GameRoom` picks between a network queue, an `EnemyBrain` and a
+`TrainingDummy`; everything downstream of that choice is identical.
+
+## Training rooms
+
+Two extra messages, and they are the *only* ones. Both are training-specific and
+neither touches the snapshot path.
+
+| Message | Direction | Carries |
+|---|---|---|
+| `training-config` | client → server | `{ config?, reset?, clearRecording? }` |
+| `training-state` | server → client | resolved config, dummy status, server-side counters |
+
+- **`training-state` is sent on change**, alongside the snapshot broadcast and
+  never per tick. Position is deliberately outside the change signature: it is
+  already in the snapshot, and including it would turn "on change" into "every
+  broadcast" the moment the dummy walks.
+- **The server echoes the resolved config**, so the UI and the agent API reflect
+  what the room actually is rather than what they asked for.
+- **Config changes apply live.** Requiring a reconnect would make the menu
+  useless and stop an agent running a battery.
+- **A training room is single-human by construction.** It is created on demand,
+  filled with a dummy immediately — and therefore already full — and never
+  offered to matchmaking. Seating a stranger in somebody's practice session has
+  no upside: the second slot is the thing under their control.
+- **Damage and bullet counters are server-side.** A client never learns why a
+  projectile disappeared, and invincibility hides HP changes; counting at the
+  point of resolution is the only honest source.
 
 ## Local player: predict and replay
 

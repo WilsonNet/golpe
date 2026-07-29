@@ -85,6 +85,19 @@ export function viewToWorld(
 	};
 }
 
+/** A DOM node that owns the keystrokes going into it. */
+function isEditable(target: EventTarget | null): boolean {
+	const el = target as HTMLElement | null;
+	if (!el || typeof el.tagName !== "string") return false;
+	const tag = el.tagName.toLowerCase();
+	return (
+		tag === "input" ||
+		tag === "textarea" ||
+		tag === "select" ||
+		el.isContentEditable === true
+	);
+}
+
 export class Input {
 	private readonly down = new Set<string>();
 	private leftMouse = false;
@@ -126,6 +139,10 @@ export class Input {
 		this.onToggleAi = onToggleAi;
 
 		const keydown = (e: KeyboardEvent) => {
+			// Typing into the training panel is not playing the game. Without this,
+			// setting a walk bound to "500" also walked the fighter, and every WASD
+			// character typed into a field was a movement command as well.
+			if (isEditable(e.target)) return;
 			// Browsers repeat a held key. A repeat is not a press, and treating it
 			// as one would make simply holding a direction read as a dash.
 			if (!e.repeat) this.notePress(e.code);
@@ -221,14 +238,86 @@ export class Input {
 		return d;
 	}
 
+	// -------------------------------------------------------------------------
+	// Programmatic control
+	//
+	// The training room's `__training.input()` drives the fighter through here,
+	// *above* the keyboard rather than beside it. A second input path would mean
+	// an agent tested something a player can never produce; layered on top, what
+	// it drives is exactly what a keyboard drives.
+	//
+	// Playwright can press keys, but it cannot express "hold attack for exactly
+	// 420ms and release on this frame" — which is the whole of the Massive
+	// Strike, and half of the frame data.
+	// -------------------------------------------------------------------------
+
+	private overrideIntent: Partial<PlayerIntent> | null = null;
+	private overrideAim: number | null = null;
+	private overrideUntilMs = 0;
+	/**
+	 * How many times the override has been read into an intent.
+	 *
+	 * A hold shorter than a frame would otherwise be set and cleared between two
+	 * reads and never reach the simulation at all — an input that silently did
+	 * not happen, which is the worst possible failure for an instrument.
+	 */
+	private overrideReads = 0;
+	private static readonly MIN_OVERRIDE_READS = 2;
+
+	get overrideActive(): boolean {
+		return this.overrideIntent !== null;
+	}
+
+	/** Hold a set of buttons for `holdMs`, then fall back to the keyboard. */
+	hold(intent: Partial<PlayerIntent>, holdMs: number, aimAngle?: number) {
+		this.overrideIntent = intent;
+		this.overrideAim = aimAngle ?? null;
+		this.overrideUntilMs = performance.now() + Math.max(0, holdMs);
+		this.overrideReads = 0;
+	}
+
+	/** Drop back to the keyboard immediately. */
+	releaseOverride() {
+		this.overrideIntent = null;
+		this.overrideAim = null;
+		this.overrideUntilMs = 0;
+		this.overrideReads = 0;
+	}
+
+	private takeOverride(): Partial<PlayerIntent> | null {
+		if (!this.overrideIntent) return null;
+		const expired =
+			performance.now() >= this.overrideUntilMs &&
+			this.overrideReads >= Input.MIN_OVERRIDE_READS;
+		if (expired) {
+			this.releaseOverride();
+			return null;
+		}
+		this.overrideReads++;
+		return this.overrideIntent;
+	}
+
 	/** Angle from a fighter's centre to the cursor. */
 	aimAngle(bodyX: number, bodyY: number): number {
+		if (this.overrideIntent && this.overrideAim !== null) {
+			return this.overrideAim;
+		}
 		const c = bodyCentre(bodyX, bodyY);
 		return Math.atan2(this.pointerY - c.y, this.pointerX - c.x);
 	}
 
 	/** Build one tick of simulation intent from the current button state. */
 	intent(aimAngle: number): PlayerIntent {
+		const override = this.takeOverride();
+		if (override) {
+			return {
+				...NEUTRAL_INTENT,
+				// Facing still follows the aim unless the caller states otherwise, so
+				// a programmatic slash points where a player's would.
+				face: Math.cos(aimAngle) >= 0 ? 1 : -1,
+				...override,
+			};
+		}
 		return {
 			...NEUTRAL_INTENT,
 			left: this.isDown(KEYS.left),

@@ -248,6 +248,16 @@ export class PhysicsDiagnostics {
 	 * trivially satisfied by the latter.
 	 */
 	private meleeTracks = new Map<string, MeleeTrack>();
+	/**
+	 * The same move and block counts, split by fighter.
+	 *
+	 * A flat total cannot tell "both fighters are swinging" from "one fighter is
+	 * swinging and the other has been standing still for the whole run" — and the
+	 * second is the shape of every training scenario, where knowing which side a
+	 * move came from *is* the measurement.
+	 */
+	private movesByFighter: Record<string, Record<MeleeMove, number>> = {};
+	private blocksByFighter: Record<string, number> = {};
 	private moveCounts: Record<MeleeMove, number> = {
 		slash: 0,
 		uppercut: 0,
@@ -306,8 +316,39 @@ export class PhysicsDiagnostics {
 	}
 
 	start(durationMs: number): string {
-		if (this.active) return "DIAGNOSTIC_ALREADY_RUNNING";
+		// An *open* run (the training room's) is superseded rather than protected:
+		// it has no end time of its own, so refusing here would make
+		// `__physicsDiagnostic()` permanently unusable in training mode.
+		if (this.active && this.durationMs > 0) return "DIAGNOSTIC_ALREADY_RUNNING";
+		this.reset(durationMs);
 
+		setTimeout(() => {
+			const report = this.finish();
+			console.log(`__DIAGNOSTIC_RESULT__${JSON.stringify(report)}__END__`);
+		}, durationMs);
+
+		return `DIAGNOSTIC_STARTED: ${durationMs}ms`;
+	}
+
+	/**
+	 * Start collecting with no end time, for the training room.
+	 *
+	 * The timed `start` answers "was this match clean?"; a training scenario is a
+	 * window bounded by a `reset` at one end and a `report()` at the other, and
+	 * its length is decided by the scenario rather than known in advance. Same
+	 * collector, same counters, same thresholds — a second measurement stack that
+	 * disagreed with this one would be worse than no second stack.
+	 */
+	startOpen() {
+		this.reset(0);
+	}
+
+	/** The report as it stands, without stopping. */
+	peek(): object {
+		return this.buildReport();
+	}
+
+	private reset(durationMs: number) {
 		this.active = true;
 		this.durationMs = durationMs;
 		this.frames = [];
@@ -345,13 +386,8 @@ export class PhysicsDiagnostics {
 		this.frameDataViolations = 0;
 		this.stuckActionFrames = 0;
 		this.meleeDesyncFrames = 0;
-
-		setTimeout(() => {
-			const report = this.finish();
-			console.log(`__DIAGNOSTIC_RESULT__${JSON.stringify(report)}__END__`);
-		}, durationMs);
-
-		return `DIAGNOSTIC_STARTED: ${durationMs}ms`;
+		this.movesByFighter = {};
+		this.blocksByFighter = {};
 	}
 
 	/**
@@ -724,6 +760,12 @@ export class PhysicsDiagnostics {
 		// ---- move started ----
 		if (s.meleeAction !== "none" && s.meleeAction !== t.lastAction) {
 			this.moveCounts[s.meleeAction]++;
+			let mine = this.movesByFighter[who];
+			if (!mine) {
+				mine = { slash: 0, uppercut: 0, massive: 0 };
+				this.movesByFighter[who] = mine;
+			}
+			mine[s.meleeAction]++;
 
 			// A slash landing inside the butterfly window after a cancelled one is a
 			// chain: the technique working as intended.
@@ -758,7 +800,10 @@ export class PhysicsDiagnostics {
 			}
 		}
 
-		if (s.blocking && !t.wasBlocking) this.blocksRaised++;
+		if (s.blocking && !t.wasBlocking) {
+			this.blocksRaised++;
+			this.blocksByFighter[who] = (this.blocksByFighter[who] ?? 0) + 1;
+		}
 		if (s.massiveReady && !t.wasMassiveReady) this.massivesArmed++;
 
 		t.lastAction = s.meleeAction;
@@ -805,6 +850,9 @@ export class PhysicsDiagnostics {
 			meleeDesyncFrames: this.meleeDesyncFrames,
 			/** What each move actually ran into. Zero blocked slashes is a defect. */
 			outcomeByMove: this.outcomeByMove,
+			/** Who did what: "local" is the fighter this client is predicting. */
+			movesByFighter: this.movesByFighter,
+			blocksByFighter: this.blocksByFighter,
 			violations: this.meleeViolations,
 		};
 	}
@@ -872,7 +920,10 @@ export class PhysicsDiagnostics {
 
 	private finish(): object {
 		this.active = false;
+		return this.buildReport();
+	}
 
+	private buildReport(): object {
 		const frames = this.frames;
 		if (frames.length === 0) return { error: "no_frames_collected" };
 

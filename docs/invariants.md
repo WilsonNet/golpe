@@ -78,6 +78,13 @@ using `meleePhase` inside `Physics.ts` is a plain "cannot find name". Import wha
 the module itself uses, separately from what it re-exports (aliasing, e.g.
 `meleePhase as meleePhaseOf`, keeps the two apart and readable).
 
+**`tsx` does not hot-reload, and `src/game/training/` counts as server code.**
+Restart after touching `server/`, `src/game/simulation/`, `src/game/characters/`
+or `src/game/training/` — all four are inside `tsconfig.server.json`. A stale
+server is a genuinely confusing failure because the *client* reloads: a training
+scenario read its new spawn positions back from its own config and then measured
+the fighters standing at the old ones, with nothing in the report to say why.
+
 **`server/` must stay inside `tsc`.** For a long time it was not: `tsconfig.json`
 included only `src`, so the authoritative half of the game was never
 typechecked. It grew a real bug behind that gap — `botInput` read `foe.facingDir`
@@ -209,3 +216,55 @@ Verified: `teleportFrames` 0, `frozenFrames` 0, `maxPathDeviationPx` 0,
 - **Respawns are announced, not inferred.** The server broadcasts `round-reset`
   and the client drops all interpolation history. Blending across a respawn drew
   the remote sliding through the arena.
+
+## The training room
+
+Full detail in [specs/training-room.md](../specs/training-room.md); these are the
+ways it goes wrong quietly.
+
+- **The dummy is server-side, and never a simulation flag.** It is an *input
+  source* with `EnemyBrain`'s exact contract, so `GameRoom` picks a source rather
+  than growing a branch. If a `training` flag ever reaches `tickPlayer`, the
+  design has gone wrong. A client-side dummy would be easy and worthless: it
+  bypasses prediction, reconciliation and server-owned bullets, which is the
+  whole of what a training session is used to test other things through.
+- **The dummy must be deterministic.** No `Math.random`, no wall clock — only
+  accumulated `dtMs`. The training room is the instrument other measurements are
+  taken with, so a dummy that drifted between runs would launder its own
+  flakiness into every later result.
+- **A beat list is a controller recording, not a command list.** Buttons are held
+  for the beat and the gaps carry as much meaning as the presses. A rhythm that
+  holds `attack` forever produces exactly one swing.
+- **The butterfly's cancel must land at `SLASH_CANCELLED_MS`.** A block pressed
+  during startup is *ignored* — and, because the cancel is checked on the press
+  edge only, the guard is then already held and never cancels at all. Measured, a
+  butterfly cancelling at 55ms produced 7 swings where 15 were intended.
+- **Aim, then swing — they cannot share a tick.** `tickMelee` starts the move
+  before facing is applied, and facing is locked through startup and active, so a
+  fighter that aims and attacks on the same tick commits to whichever way it was
+  already facing. `__training.input()` leads with the aim, and deliberately does
+  *not* release in between: a released frame hands the fighter back to the
+  cursor, which turns it straight back round.
+- **Moves start from neutral only.** Two programmatic holds back to back read as
+  one press, and a step fired inside the previous move's recovery is silently
+  swallowed — three chained attacks produced two moves, and the report could only
+  say the third never happened.
+- **A dummy spawn is a level-design decision.** The obvious `x=300` puts it on
+  top of `PILLAR_LEFT`, 100px above the player, where no attack can reach it and
+  every scenario reports a clean whiff. The defaults sit on the clear ground
+  between the pillars, 60px apart — inside slash range and outside
+  `BACKSTAB_MIN_SEPARATION_PX`.
+- **A move that connects stuns the dummy.** A punish scenario whose setup *hits*
+  never gets punished: the counter-attack is discarded along with every other
+  input the stun eats. Whiff on purpose when the recovery is the thing under
+  test.
+- **Count damage before invincibility refills the bar.** Otherwise a practice
+  session — where both fighters are invincible by default — reports that nothing
+  ever landed.
+- **The measurement window must open after the reset settles.** A respawn is a
+  legitimate discontinuity worth a single ~40px correction; folding it into the
+  window made a healthy scenario report several times a normal match's
+  reconciliation error, measuring its own setup.
+- **Typing is not gameplay.** `Input` ignores keydown on editable elements and
+  the panel blurs on any canvas click. Without it, setting a walk bound to "500"
+  also walked the fighter, and a menu that swallows WASD makes the mode useless.
