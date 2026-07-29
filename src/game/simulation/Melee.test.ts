@@ -4,6 +4,8 @@ import {
 	BACKSTAB_BONUS_STUN_MS,
 	BACKSTAB_MIN_SEPARATION_PX,
 	BLOCK_STARTUP_MS,
+	blocksBullet,
+	createMeleeState,
 	GUARD_BREAK_STUN_MS,
 	isBehind,
 	isCancellable,
@@ -12,6 +14,7 @@ import {
 	MELEE_IFRAME_MS,
 	type MeleeIntent,
 	type MeleeResult,
+	type MeleeState,
 	MOVES,
 	meleeHitbox,
 	meleePhase,
@@ -21,6 +24,7 @@ import {
 	tickMelee,
 } from "./Melee.js";
 import {
+	BULLET_SPEED,
 	createPlayerState,
 	JUMP_VELOCITY,
 	NEUTRAL_INTENT,
@@ -602,3 +606,46 @@ function duel(opts: DuelOptions): {
 
 	return { attacker, defender };
 }
+
+describe("blocksBullet", () => {
+	/** A guard covers the side you face — the same rule melee already follows. */
+	function guard(facing: number, blocking = true): MeleeState {
+		const s = createMeleeState(facing);
+		s.blocking = blocking;
+		return s;
+	}
+
+	it("absorbs a shot arriving from the front", () => {
+		// Travelling right means it came from the left, so a fighter facing left
+		// is guarding it.
+		expect(blocksBullet(guard(-1), BULLET_SPEED)).toBe(true);
+		expect(blocksBullet(guard(1), -BULLET_SPEED)).toBe(true);
+	});
+
+	it("does not stop a shot from behind", () => {
+		expect(blocksBullet(guard(1), BULLET_SPEED)).toBe(false);
+		expect(blocksBullet(guard(-1), -BULLET_SPEED)).toBe(false);
+	});
+
+	it("does nothing without a raised guard", () => {
+		expect(blocksBullet(guard(-1, false), BULLET_SPEED)).toBe(false);
+	});
+
+	/** Straight up or down there is no side for a front-only guard to cover. */
+	it("does not stop a purely vertical shot", () => {
+		expect(blocksBullet(guard(-1), 0)).toBe(false);
+		expect(blocksBullet(guard(1), 0)).toBe(false);
+	});
+
+	/**
+	 * The reason this is not a free defence: `blocking` is only ever set in sword
+	 * stance, so a fighter absorbing shots cannot return fire.
+	 */
+	it("is unreachable in gun stance, because blocking is", () => {
+		const s = createMeleeState(1);
+		tickMelee(s, intent({ block: true, swordStance: false }), DT);
+		expect(s.stance).toBe("gun");
+		expect(s.blocking).toBe(false);
+		expect(blocksBullet(s, -BULLET_SPEED)).toBe(false);
+	});
+});

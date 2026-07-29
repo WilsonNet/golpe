@@ -681,6 +681,7 @@ export class Match {
 				x: this.remote.body.x,
 				y: this.remote.body.y,
 				alive: this.remote.fighter.hp > 0,
+				state: this.remote.body,
 				onHit: () =>
 					this.applyOfflineDamage(this.remote, BULLET_DAMAGE, "bullet"),
 			},
@@ -689,6 +690,7 @@ export class Match {
 				x: this.local.body.x,
 				y: this.local.body.y,
 				alive: this.local.fighter.hp > 0,
+				state: this.local.body,
 				onHit: () =>
 					this.applyOfflineDamage(this.local, BULLET_DAMAGE, "bullet"),
 			},

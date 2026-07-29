@@ -17,6 +17,7 @@ import {
 	BULLET_DAMAGE,
 	BULLET_SPEED,
 	type BulletState,
+	blocksBullet,
 	bulletHitsPlatform,
 	bulletHitsPlayer,
 	canFire,
@@ -737,6 +738,15 @@ export class GameRoom {
 			for (const [id, player] of this.players) {
 				if (b.ownerId === id || player.hp <= 0) continue;
 				if (!bulletHitsPlayer(b, player.state.x, player.state.y)) continue;
+
+				// A guard covers the side you face, bullets included. The shot is
+				// consumed either way — it hit something — but an absorbed one deals
+				// nothing and is not counted as a hit against the shooter.
+				if (blocksBullet(player.state, b.vx)) {
+					consumed = true;
+					break;
+				}
+
 				player.hp = Math.max(0, player.hp - BULLET_DAMAGE);
 				player.stats.damageTaken += BULLET_DAMAGE;
 				// A client never learns why a projectile vanished, so this counter is

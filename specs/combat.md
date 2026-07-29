@@ -43,8 +43,23 @@ produced a second sprite nothing simulated — it froze on screen forever.
   response.** This is what makes their position a closed-form function of time,
   and it is why they are dead-reckoned rather than interpolated
   (see [netcode.md](netcode.md)).
-- A bullet is destroyed on contact with a platform, on hitting a fighter, or on
-  leaving the world bounds.
+- A bullet is destroyed on contact with a platform, on hitting a fighter, on
+  being absorbed by a guard, or on leaving the world bounds.
+- **A raised block stops a bullet outright**, front only, exactly as it stops a
+  slash: 0 damage, and the shot is consumed. A bullet travelling right arrives
+  from the left, so it is blocked by a fighter facing left; a purely vertical
+  shot has no side to come from and is not blocked.
+  - **There is no parry against a bullet.** A parry guard-breaks the attacker and
+    hands the defender a free Massive Strike, which is worthless at gun range and
+    would make holding block strictly dominant against a gunner.
+  - **No knockback.** Bullets apply none, and a blocked one is no exception.
+  - This does not make the gun useless, because every cost of blocking is still
+    paid: it covers one side, it slows you to 55% walk speed, it does nothing
+    against an uppercut or a Massive Strike, and — decisively — **it requires the
+    sword, so a fighter absorbing shots cannot return fire**. The answer to a
+    guard is to move around it, not to out-damage it.
+  - *Not implemented:* an impact effect for an absorbed shot. The effect path
+    carries a `MeleeMove`, which a bullet is not.
 - Bullets spawn at the **centre** of the firing body, not its top-left corner.
 - Sprites come from a recycled pool; a bullet sprite is bound to a bullet **id**,
   never to a position in an array.

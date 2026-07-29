@@ -4,9 +4,11 @@ import { SpritePool } from "../render/SpritePool";
 import {
 	BULLET_SPEED,
 	type BulletState,
+	blocksBullet,
 	bulletHitsPlatform,
 	bulletHitsPlayer,
 	isBulletOutOfBounds,
+	type MeleeState,
 	tickBullet,
 } from "../simulation/Physics";
 
@@ -23,6 +25,8 @@ export interface BulletTarget {
 	x: number;
 	y: number;
 	alive: boolean;
+	/** The fighter's melee state, because a raised guard stops a bullet too. */
+	state: MeleeState;
 	onHit: () => void;
 }
 
@@ -112,7 +116,10 @@ export class BulletSystem {
 			for (const target of targets) {
 				if (target.owner === b.ownerId || !target.alive) continue;
 				if (!bulletHitsPlayer(b, target.x, target.y)) continue;
-				target.onHit();
+				// The same rule the server applies, from the same function. The escape
+				// hatch is the one path nobody dogfoods, so it must never become a
+				// second set of combat rules.
+				if (!blocksBullet(target.state, b.vx)) target.onHit();
 				consumed = true;
 				break;
 			}

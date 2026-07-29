@@ -131,6 +131,9 @@ slash would make the butterfly not merely safe but strictly free. Cancelling int
 the block still works — the cancel ends the move first, and the guard comes up
 after.
 
+- **Front only, and it covers bullets too.** A raised guard absorbs a shot
+  arriving from the front — 0 damage, and the bullet is consumed. See
+  [combat.md](combat.md); there is no parry against a bullet.
 - **Front only.** A block covers the side the fighter faces. An attack landing
   from behind is not blocked at all — see *Backstab* below.
 - **Blockable attacks are fully absorbed**: zero damage, a small shared

@@ -41,6 +41,7 @@ import type {
 import {
 	type DummyScript,
 	defaultTrainingConfig,
+	mergeTrainingConfig,
 	type TrainingConfigPatch,
 	type TrainingStateMsg,
 } from "./types";
@@ -497,7 +498,15 @@ export class TrainingRoom {
 			config.behaviour = "script";
 			config.script = scenario.script;
 		}
-		if (Object.keys(config).length > 0) await this.set(config);
+		// Onto the *defaults*, never onto whatever the last scenario left behind.
+		//
+		// `set` merges, which is what live editing needs, and a battery built on
+		// that merge is silently order-dependent: a scenario that handed the dummy
+		// a gun and moved the spawns left both in place, so the next row measured
+		// a ranged fight it had never asked for and failed for reasons that had
+		// nothing to do with it. A scenario is supposed to be a complete
+		// description of a situation.
+		await this.set(mergeTrainingConfig(defaultTrainingConfig(), config));
 		await this.reset();
 
 		for (const step of scenario.steps ?? []) {

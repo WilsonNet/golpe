@@ -74,6 +74,7 @@ export {
 	BACKSTAB_BONUS_STUN_MS,
 	BLOCK_PUSHBACK,
 	BLOCK_STARTUP_MS,
+	blocksBullet,
 	bodyRect,
 	copyMeleeState,
 	createMeleeState,

@@ -519,6 +519,33 @@ export interface MeleeResult {
  * A block covers one side only, so this is what makes footsies an answer to a
  * turtle: circling behind somebody beats their guard outright.
  */
+/**
+ * Does this fighter's guard stop a bullet travelling at `bulletVx`?
+ *
+ * The same rule as melee, applied to the one thing a guard used to ignore
+ * completely: a block covers the side you face, so a shot has to arrive from in
+ * front to be absorbed. A bullet travelling right arrives from the left, so it
+ * is blocked by a fighter facing left.
+ *
+ * Blocking is already expensive — one side only, 55% walk speed, nothing against
+ * an uppercut or a Massive — and, decisively, **it requires the sword**, so a
+ * fighter absorbing shots cannot return fire. `tickMelee` only ever sets
+ * `blocking` in sword stance, which is what keeps this from being a free
+ * defence: the answer to a guard is to move around it, not to out-shoot it.
+ *
+ * There is deliberately no parry here. A parry guard-breaks the attacker and
+ * hands the defender a free Massive Strike, which is worthless at gun range and
+ * would make holding block strictly dominant against a gunner.
+ */
+export function blocksBullet(defender: MeleeState, bulletVx: number): boolean {
+	if (!defender.blocking) return false;
+	const from = Math.sign(bulletVx);
+	// A purely vertical shot has no side to come from, so there is nothing for a
+	// front-only guard to be in front of.
+	if (from === 0) return false;
+	return from !== defender.facing;
+}
+
 export function isBehind(attacker: MeleeBody, defender: MeleeBody): boolean {
 	const ax = attacker.x + PLAYER_WIDTH / 2;
 	const dx = defender.x + PLAYER_WIDTH / 2;

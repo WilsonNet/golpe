@@ -432,8 +432,14 @@ const BATTERY = [
 		verify(_report, { a, b }) {
 			const c = checks(a);
 			const seq = (r) => r.events.map((e) => `${e.move}:${e.outcome}`);
-			c.atLeast("events in run A", seq(a).length, 3);
-			c.atLeast("events in run B", seq(b).length, 3);
+			// Determinism is a property of the *script*, so the dummy's own move
+			// count is the direct measure and the one that must match exactly.
+			// Impacts are not: the first hit knocks the target out of range, so how
+			// many of a fixed number of swings connect is a fact about knockback,
+			// and requiring three of them made this row fail for reasons that had
+			// nothing to do with determinism.
+			c.atLeast("dummy moves in run A", a.dummy.moves.slash, 3);
+			c.atLeast("dummy moves in run B", b.dummy.moves.slash, 3);
 			// The window is wall-clock bounded, so the two runs can differ by the
 			// last, partially-elapsed cycle. Everything before that must be identical
 			// — if it is not, no measurement taken with this room means anything.
@@ -493,6 +499,93 @@ const BATTERY = [
 			// The dummy replays the same buttons, so it must produce the same move.
 			c.atLeast("dummy slashes on playback", playback.dummy.moves.slash, 3);
 			c.atLeast("dummy blocks on playback", playback.dummy.blocks, 1);
+			return c.fails;
+		},
+	},
+	{
+		/**
+		 * A guard covers the side you face, and that now includes bullets. The
+		 * dummy holds a gun and shoots; the player guards, then turns away.
+		 */
+		name: "a block stops a bullet from the front",
+		async run(page) {
+			/**
+			 * Sampled *while the guard is still up*, not after the scenario settles.
+			 *
+			 * `run()` reports once the steps are done, and the dummy keeps firing
+			 * into an unguarded player for the whole settle window — so the first
+			 * version of this row measured the three shots that landed after the
+			 * block ended and called a working guard a failure.
+			 */
+			const holdAndSample = async (facing) => {
+				await page.evaluate(
+					(f) =>
+						window.__training.set({
+							behaviour: "slash",
+							dummyStance: "gun",
+							facing: "foe",
+							// Both fighters in the clear lane *between* the two pillars.
+							// Far enough apart that the dummy's swings cannot reach and
+							// only its shots can — otherwise a melee hit would be doing
+							// the damage this row attributes to a bullet — and with no
+							// cover in between: at x=200 every shot died on PILLAR_LEFT
+							// and the row measured a wall rather than a guard.
+							spawn: {
+								player: { x: 330, y: 480 },
+								dummy: { x: 460, y: 480 },
+							},
+							timing: { periodMs: 300 },
+						}),
+					facing,
+				);
+				await page.evaluate(() => window.__training.reset());
+				return page.evaluate(async (f) => {
+					const hold = window.__training.input({ block: true }, 2600, f);
+					let first = null;
+					let last = null;
+					for (let i = 0; i < 26; i++) {
+						await new Promise((r) => setTimeout(r, 90));
+						const s = window.__training.state();
+						if (!s.local.blocking) continue;
+						// Damage is cumulative since the reset, so the total includes any
+						// shot that landed in the moment before the guard came up. The
+						// question is what the *guard* let through, which is the delta
+						// across the window it was actually up.
+						first ??= s;
+						last = s;
+					}
+					await hold;
+					return {
+						samples: first && last ? 1 : 0,
+						blocking: !!last?.local.blocking,
+						facing: last?.local.facing ?? 0,
+						damageWhileBlocking:
+							(last?.stats.player.damageTaken ?? 0) -
+							(first?.stats.player.damageTaken ?? 0),
+					};
+				}, facing);
+			};
+
+			// Aiming right faces the dummy — the shots arrive from the front.
+			const front = await holdAndSample(0);
+			// Aiming left turns the guard away from them.
+			const back = await holdAndSample(Math.PI);
+			return { report: await report(page), extra: { front, back } };
+		},
+		verify(report, { front, back }) {
+			const c = checks(report);
+			c.eq("guard was up while sampling", front.blocking, true);
+			c.eq("facing the shots", front.facing, 1);
+			c.eq("damage through a front guard", front.damageWhileBlocking, 0);
+			// A guard pointed the wrong way must still let shots through, or this
+			// row would pass just as well against a fighter nothing could reach.
+			c.eq("guard was up while sampling (turned away)", back.blocking, true);
+			c.eq("facing away from the shots", back.facing, -1);
+			c.atLeast(
+				"damage with the guard turned away",
+				back.damageWhileBlocking,
+				10,
+			);
 			return c.fails;
 		},
 	},
@@ -644,7 +737,10 @@ async function main() {
 			{ playerMoves: 0, dummyMoves: 0, impacts: 0 },
 		),
 	};
-	if (summary.activity.impacts === 0) {
+	// Only meaningful for the whole battery: a filtered run may legitimately
+	// contain no melee at all (the bullet row is entirely ranged), and failing it
+	// for that would train everyone to ignore the check that matters.
+	if (!ONLY && summary.activity.impacts === 0) {
 		summary.verdict = "FAIL";
 		summary.failed.push({
 			name: "battery activity",
