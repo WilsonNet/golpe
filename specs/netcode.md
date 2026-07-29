@@ -100,9 +100,12 @@ measured as ~24px of correction per snapshot and left the player never landing.
   dropped datagram emptied the buffer and the remote teleported ~100px.
 - Interpolated positions are depenetrated before drawing: a straight line between
   two legal snapshots can still clip a corner.
-- **Respawns are announced, not inferred.** The server broadcasts `round-reset`
-  and the client drops all interpolation history. Blending across a respawn drew
-  the remote sliding through the arena.
+- **Respawns are announced, not inferred** — and the announcement is not
+  ordered. The server broadcasts `round-reset` and the client drops all
+  interpolation history; blending across a respawn drew the remote sliding
+  through the arena. But the message races the snapshot that carries the
+  respawned state, so anything that must survive a respawn also derives it from
+  a correction past 100px, which cannot be dropped or reordered.
 
 ## Melee: predict the swing, never the hit
 

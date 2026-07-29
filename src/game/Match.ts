@@ -15,7 +15,10 @@ import EnemyBrain, {
 	type AIOutput,
 } from "./characters/EnemyBrain";
 import { BulletSystem, type BulletTarget } from "./combat/BulletSystem";
-import { PhysicsDiagnostics } from "./diagnostics/PhysicsDiagnostics";
+import {
+	PhysicsDiagnostics,
+	RESPAWN_CORRECTION_PX,
+} from "./diagnostics/PhysicsDiagnostics";
 import { EventBus } from "./EventBus";
 import {
 	animationSystem,
@@ -270,20 +273,32 @@ export class Match {
 					this.remote.fighter.hp = hp;
 					this.enemyHpText.text = `enemy hp: ${Math.max(0, hp)}`;
 				},
-				onReconcile: (errorPx, replayed, meleeDiverged, divergence) => {
+				onReconcile: (result) => {
 					// A correction this large is a respawn, not a misprediction. The
 					// server replaces the whole state, so the sword state changes too;
 					// counting that as a prediction desync would blame the netcode for a
 					// round ending.
-					const respawn = errorPx > 100;
+					const respawn = result.errorPx > RESPAWN_CORRECTION_PX;
 					this.diagnostics.recordReconciliation(
-						errorPx,
-						replayed,
-						meleeDiverged && !respawn,
+						result.errorPx,
+						result.replayed,
+						result.meleeDiverged && !respawn,
+						// Every replacement, explained or not — *including* the respawn
+						// case. A respawn is the loudest possible discontinuity and the
+						// one most likely to be mistaken for a broken state machine, so
+						// dropping it here is exactly backwards.
+						result.meleeReplaced
+							? {
+									reason: respawn ? "respawn" : result.replaceReason,
+									detail: result.meleeDivergence,
+								}
+							: undefined,
 					);
-					if (respawn) this.diagnostics.markTeleport();
-					if (meleeDiverged && !respawn && divergence) {
-						console.log(`[DESYNC] ${JSON.stringify(divergence)}`);
+					// The diagnostic breaks its own melee continuity on a correction
+					// this large — see RESPAWN_CORRECTION_PX. Nothing more is needed
+					// here.
+					if (result.meleeDiverged && !respawn && result.meleeDivergence) {
+						console.log(`[DESYNC] ${JSON.stringify(result.meleeDivergence)}`);
 					}
 				},
 				onTeleport: () => this.diagnostics.markTeleport(),

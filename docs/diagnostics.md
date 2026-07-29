@@ -101,6 +101,8 @@ Emitted as `__DIAGNOSTIC_RESULT__{...}__END__` on one console line.
 | `reconciliationSummary.avgErrorPx` | client/server disagreement; **0.00 is achievable and expected** |
 | `reconciliationSummary.visibleCorrections` | corrections > 1px; only respawns should appear |
 | `meleeSummary` violations | `illegalActions`, `blockedUnblockables`, `frameDataViolations`, `stuckActionFrames`, `meleeDesyncFrames` — **all must be 0** |
+| `meleeSummary.meleeReplacements` | sword states the server replaced, with the reconciler's verdict on each: `stun`, `iframe`, `massive-armed` and `respawn` are facts only the server holds; **`unexplained` is the one that is a bug** |
+| `meleeSummary.violations[].replacedThisFrame` | what the server did on the frame a violation fired. `null` means the state machine really did break its own table |
 | `meleeSummary` counters | `slashes`, `massives`, `uppercuts`, `blocks`, `parries`, `backstabs`, `butterflyChains` — **must be > 0**, or the run proves nothing |
 | `meleeSummary.blockedHits` vs `parries` | a guard that beat the 140ms parry window is `blocked`; earlier is `parried`. **Reactive guarding produces `blockedHits: 0` legitimately** — `blocked` is the turtle's signature |
 | `meleeSummary.outcomeByMove` | outcomes per move; a flat `blocked: 0` cannot distinguish "guards failing" from "everything that landed was unblockable" |

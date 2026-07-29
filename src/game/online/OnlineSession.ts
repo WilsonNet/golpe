@@ -30,13 +30,15 @@ export interface OnlineCallbacks {
 	onStatus: (msg: string) => void;
 	onLocalHp: (hp: number) => void;
 	onRemoteHp: (hp: number) => void;
-	/** Reconciliation result, for the diagnostic. */
-	onReconcile: (
-		errorPx: number,
-		replayed: number,
-		meleeDiverged: boolean,
-		divergence?: ReconcileResult["meleeDivergence"],
-	) => void;
+	/**
+	 * The whole reconciliation result, for the diagnostic.
+	 *
+	 * One object rather than four positional arguments, because the fourth — the
+	 * divergence detail — was declared here and never actually passed at the call
+	 * site. It was captured, dropped on the floor, and the `[DESYNC]` log that
+	 * exists to make a rare divergence diagnosable could only ever print nothing.
+	 */
+	onReconcile: (result: ReconcileResult) => void;
 	/** A discontinuity that is expected — so it is not counted as jitter. */
 	onTeleport: () => void;
 	/** The server respawned both fighters: all continuity is legitimately broken. */
@@ -361,11 +363,7 @@ export class OnlineSession {
 					this.predicted.state.x - before.x,
 					this.predicted.state.y - before.y,
 				);
-				this.callbacks.onReconcile(
-					result.errorPx,
-					result.replayed,
-					result.meleeDiverged,
-				);
+				this.callbacks.onReconcile(result);
 			} else {
 				this._remoteHp = p.hp;
 				this._remoteFacing = p.facingDir;

@@ -50,6 +50,19 @@ export interface ReconcileResult {
 	 * differently on the two sides.
 	 */
 	meleeDiverged: boolean;
+	/**
+	 * The replay landed on a different sword state than was predicted, whatever
+	 * the reason — including the legitimate ones.
+	 *
+	 * Separate from `meleeDiverged`, which is only the *unexplained* subset. The
+	 * frame data metric needs to know about the explained ones too: an
+	 * uncancellable move that vanishes because the server replaced the state is
+	 * not the state machine breaking its own table, and counting it as one
+	 * reports correct netcode as a defect.
+	 */
+	meleeReplaced: boolean;
+	/** Why the state was allowed to change without the client predicting it. */
+	replaceReason: "stun" | "iframe" | "massive-armed" | "unexplained" | null;
 	/** What diverged, when it did. Empty otherwise. */
 	meleeDivergence?: {
 		predictedAction: string;
@@ -130,23 +143,33 @@ export class PredictedPlayer {
 		// The server telling us we were hit is the one legitimate way a sword state
 		// can change without the client having seen it coming. Stun, fresh
 		// invulnerability and a newly armed Massive are the three tells.
-		const interrupted =
-			this.state.stunTimer > 0 ||
-			this.state.iframeTimer > 0 ||
-			(this.state.massiveReady && !predictedMassiveReady);
+		const reason: ReconcileResult["replaceReason"] =
+			this.state.stunTimer > 0
+				? "stun"
+				: this.state.iframeTimer > 0
+					? "iframe"
+					: this.state.massiveReady && !predictedMassiveReady
+						? "massive-armed"
+						: null;
+		const interrupted = reason !== null;
 
-		const diverged =
-			!interrupted &&
-			(this.state.meleeAction !== predictedAction ||
-				this.state.blocking !== predictedBlocking);
+		const changed =
+			this.state.meleeAction !== predictedAction ||
+			this.state.blocking !== predictedBlocking;
+		const diverged = !interrupted && changed;
 
 		return {
 			errorPx,
 			replayed: this.pending.length,
 			corrected: errorPx > NEGLIGIBLE_ERROR_PX,
 			meleeDiverged: diverged,
+			meleeReplaced: changed,
+			replaceReason: changed ? (reason ?? "unexplained") : null,
 			// Captured so a rare divergence is diagnosable rather than a bare count.
-			...(diverged
+			// Captured whenever the state was replaced, not only when it was
+			// unexplained: the explained cases are exactly the ones another metric
+			// needs to be told about.
+			...(changed
 				? {
 						meleeDivergence: {
 							predictedAction,

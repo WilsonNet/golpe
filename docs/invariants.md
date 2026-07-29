@@ -213,9 +213,23 @@ Verified: `teleportFrames` 0, `frozenFrames` 0, `maxPathDeviationPx` 0,
 - **Remote *combat* state is not interpolated.** Position must be, or the remote
   stutters between updates; sword state must not be, because a swing rendered
   150ms late is a swing you cannot react to.
-- **Respawns are announced, not inferred.** The server broadcasts `round-reset`
-  and the client drops all interpolation history. Blending across a respawn drew
-  the remote sliding through the arena.
+- **Respawns are announced, not inferred — but an announcement can lose a race.**
+  The server broadcasts `round-reset` and the client drops all interpolation
+  history; blending across a respawn drew the remote sliding through the arena.
+  What that announcement cannot be trusted to do is *arrive first*: it is a
+  datagram, and the snapshot carrying the respawned state races it. Melee
+  tracking relied on it alone, so when the snapshot won it observed a fighter
+  caught mid-Massive with the move gone, no stun and no invulnerability — which
+  is indistinguishable from an uncancellable move ending 400ms early, and was
+  reported as one in roughly one canonical run in five. Anything that must
+  survive a respawn should also derive it from a fact the client can see: a
+  correction past `RESPAWN_CORRECTION_PX` (100px) is the same event and cannot be
+  dropped or reordered.
+- **Instrumentation that captures a detail and never passes it is worse than
+  none.** `ReconcileResult.meleeDivergence` was built to make a rare desync
+  diagnosable, and the call site passed three of the four arguments — so the
+  `[DESYNC]` log could only ever print nothing, and the metric it was meant to
+  explain went unexplained for as long as it existed.
 
 ## The training room
 

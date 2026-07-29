@@ -67,6 +67,17 @@ const PENETRATION_TOLERANCE_PX = 0.5;
 /** Frames of jitter checking skipped after an announced teleport. */
 const TELEPORT_SUPPRESSION_FRAMES = 4;
 
+/**
+ * A correction this large is a respawn, not a misprediction.
+ *
+ * The same threshold `RenderSmoother` snaps at, and the same one `Match` uses to
+ * decide a melee divergence is not the netcode's fault. It lives here because
+ * *this* is the layer that has to act on it: a respawn wipes a fighter caught
+ * mid-move with no stun and no invulnerability, which is indistinguishable in
+ * the state from an uncancellable move ending early.
+ */
+export const RESPAWN_CORRECTION_PX = 100;
+
 interface DiagnosticFrame {
 	playerX: number;
 	playerY: number;
@@ -94,6 +105,18 @@ interface ReconEvent {
 	frame: number;
 	errorPx: number;
 	replayed: number;
+}
+
+/**
+ * A reconciliation that landed on a different sword state than was predicted.
+ *
+ * `reason` is the reconciler's own verdict on whether the client could have
+ * known: `stun`, `iframe` and `massive-armed` are all facts only the server
+ * holds, and `unexplained` is the one that is actually a bug.
+ */
+export interface MeleeReplacement {
+	reason: string | null;
+	detail?: object | undefined;
 }
 
 interface PenetrationEvent {
@@ -249,6 +272,15 @@ export class PhysicsDiagnostics {
 	 */
 	private meleeTracks = new Map<string, MeleeTrack>();
 	/**
+	 * Sword-state replacements the server handed down, with their reasons.
+	 *
+	 * Instrumentation before conclusion: an uncancellable move that ends early is
+	 * a contract violation *or* a state the server replaced, and the two are
+	 * indistinguishable from the local fighter's state alone.
+	 */
+	private meleeReplacements: (MeleeReplacement & { frame: number })[] = [];
+	private pendingMeleeReplacement: MeleeReplacement | null = null;
+	/**
 	 * The same move and block counts, split by fighter.
 	 *
 	 * A flat total cannot tell "both fighters are swinging" from "one fighter is
@@ -375,6 +407,8 @@ export class PhysicsDiagnostics {
 			massive: { hit: 0, backstab: 0, blocked: 0, parried: 0 },
 		};
 		this.meleeViolations = [];
+		this.meleeReplacements = [];
+		this.pendingMeleeReplacement = null;
 		this.blocksRaised = 0;
 		this.cancels = 0;
 		this.butterflyChains = 0;
@@ -425,6 +459,7 @@ export class PhysicsDiagnostics {
 		errorPx: number,
 		replayed: number,
 		meleeDiverged = false,
+		replacement?: MeleeReplacement,
 	) {
 		if (!this.active) return;
 		this.recon.push({
@@ -436,6 +471,34 @@ export class PhysicsDiagnostics {
 		// different sword state than was predicted, which means the client drew a
 		// swing the server never ran.
 		if (meleeDiverged) this.meleeDesyncFrames++;
+
+		// A respawn-sized correction breaks melee continuity as thoroughly as it
+		// breaks positional continuity, and the metric must not wait to be told.
+		//
+		// `round-reset` announces a respawn, and relying on that announcement alone
+		// was the bug: it is a datagram, and the snapshot carrying the respawned
+		// state races it. When the snapshot won, a fighter caught mid-Massive was
+		// observed with its move gone, no stun and no invulnerability — reported as
+		// an uncancellable move ending 400ms early, in roughly one canonical run in
+		// five. This is the same fact derived from the correction itself, which
+		// cannot be dropped or reordered.
+		if (errorPx > RESPAWN_CORRECTION_PX) {
+			this.markRoundReset();
+			return;
+		}
+
+		// Every replacement, including the ones the reconciler legitimately
+		// excuses. Snapshots arrive between frames, so this is remembered and
+		// consumed by the next `record()` — which is exactly when its effect on
+		// the local fighter's sword state first becomes observable.
+		if (replacement) {
+			this.pendingMeleeReplacement = replacement;
+			this.meleeReplacements.push({
+				frame: this.frameCount,
+				...replacement,
+			});
+			if (this.meleeReplacements.length > 24) this.meleeReplacements.shift();
+		}
 	}
 
 	/**
@@ -510,7 +573,11 @@ export class PhysicsDiagnostics {
 
 		this.trackMovement(p);
 		this.trackBullets(sample);
-		this.trackMelee("local", p, sample.dt, FRAME_TOLERANCE_MS);
+		// Only the local fighter is predicted, so only it can have had its sword
+		// state replaced by a reconciliation.
+		const replacement = this.pendingMeleeReplacement;
+		this.pendingMeleeReplacement = null;
+		this.trackMelee("local", p, sample.dt, FRAME_TOLERANCE_MS, replacement);
 		if (sample.enemyState) {
 			this.trackMelee(
 				"remote",
@@ -698,6 +765,7 @@ export class PhysicsDiagnostics {
 		s: PlayerPosition,
 		dtMs: number,
 		toleranceMs: number,
+		replacement: MeleeReplacement | null = null,
 	) {
 		let t = this.meleeTracks.get(who);
 		if (!t) {
@@ -795,6 +863,13 @@ export class PhysicsDiagnostics {
 						move: t.lastAction,
 						timerMs: round(t.lastTimer),
 						declaredMs: total,
+						stunTimer: round(s.stunTimer),
+						iframeTimer: round(s.iframeTimer),
+						// The question this instrumentation exists to answer: did the
+						// server replace this state, or did the state machine break its
+						// own table?
+						replacedThisFrame: replacement ?? null,
+						recentReplacements: this.meleeReplacements.slice(-3),
 					});
 				}
 			}
@@ -850,6 +925,8 @@ export class PhysicsDiagnostics {
 			meleeDesyncFrames: this.meleeDesyncFrames,
 			/** What each move actually ran into. Zero blocked slashes is a defect. */
 			outcomeByMove: this.outcomeByMove,
+			/** Sword states the server replaced, and whether the client could have known. */
+			meleeReplacements: this.meleeReplacements,
 			/** Who did what: "local" is the fighter this client is predicting. */
 			movesByFighter: this.movesByFighter,
 			blocksByFighter: this.blocksByFighter,
