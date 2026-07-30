@@ -29,10 +29,29 @@ export function NamePrompt() {
 	const linkRef = useRef<HTMLInputElement>(null);
 	const roomId = useRoomId();
 
-	useEffect(
-		() => EventBus.on("need-player-name", (() => setAsking(true)) as never),
-		[],
-	);
+	useEffect(() => {
+		const off = EventBus.on("need-player-name", (() =>
+			setAsking(true)) as never);
+		// Close on the *event*, not only on this form's submit.
+		//
+		// `window.__setPlayerName` fires the same event, and is documented as taking
+		// the path a player takes — which was not true while the modal only listened
+		// to its own button. It stayed mounted over the game with its share-link field
+		// still focused, and because `Input` ignores keystrokes aimed at an editable
+		// element, every key a probe pressed afterwards was silently swallowed.
+		const offAnswer = EventBus.on("player-name", (() =>
+			setAsking(false)) as never);
+		return () => {
+			off();
+			offAnswer();
+		};
+	}, []);
+
+	// Hand the keyboard back to the canvas. A field left focused behind a dismissed
+	// modal eats WASD, which reads as a dead game rather than a focus problem.
+	useEffect(() => {
+		if (!asking) (document.activeElement as HTMLElement | null)?.blur();
+	}, [asking]);
 
 	// Focus once the field exists. A modal a player has to click into before
 	// typing is a modal they will type past.
@@ -48,7 +67,6 @@ export function NamePrompt() {
 				setError("Pick something. Anything.");
 				return;
 			}
-			setAsking(false);
 			EventBus.emit("player-name", name);
 		},
 		[value],

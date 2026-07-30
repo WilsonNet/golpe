@@ -75,9 +75,45 @@ cursor — which is why `scripts/aim-probe.mjs` exists and why it runs at
 ## Dash
 
 - Double-tap **A** or **D** to dash that direction.
-- Dash speed **1000 px/s**; double-tap window **200ms**; lockout **250ms**.
+- Dash speed **1000 px/s**; double-tap window **300ms**; travel **160ms**;
+  lockout **250ms**.
 - A dash is an *impulse on the shared simulation* — it sets velocity, then
   normal physics and collision carry it. It is not a separate movement path.
+
+### A dash in the air is a straight line
+
+**While airborne and dashing, gravity is off and `vy` is pinned to zero.** The
+fighter ends the dash at exactly the Y it started.
+
+- **This is what makes the gesture aimable.** A dash that fell while it travelled
+  was a dive, and how far it dropped depended on where in the jump arc it was
+  thrown — so the same input crossed a different gap every time.
+- **Grounded dashes keep gravity.** Gravity does nothing visible to a fighter
+  standing on a floor, but it is what presses it *into* the floor, and contact is
+  where `grounded` comes from. Suppressing it left a ground dash airborne on
+  paper: unable to jump, with coyote time never starting because it never
+  registered as grounded to begin with. A ground dash that carries off a ledge
+  flattens out the moment it leaves.
+- **Travel is deliberately shorter than the lockout.** The 90ms between them is
+  the window gravity always gets, so no amount of chained dashing is level
+  flight. Raise travel past the lockout and the fighter never comes down.
+- **A jump, a wall, or being hit all end it.** Each sets or needs a vertical
+  velocity the flat line would otherwise eat — most importantly the uppercut's
+  launch, which arrives with stun and would have been silently cancelled.
+- It changes reachability, like anything that moves a fighter: gaps that needed a
+  jump can now be crossed flat. Only ever *more* reachable, never less.
+
+### Forgiveness
+
+- **300ms, up from 200.** Dashing at the peak of a jump means releasing the
+  direction you jumped with and landing both taps before the apex passes, and
+  200ms made that genuinely hard while being comfortable standing still.
+- The ceiling is deliberate stepping. Players tap a direction to take a single
+  small step, roughly 350ms apart or slower, so a window much past 300 starts
+  reading two intended steps as a dash — and an unwanted dash across the arena is
+  a far worse failure than a missed one.
+- Pinned by tests against a fake clock (`DoubleTapDash`), because a feel constant
+  nothing pins gets retuned by accident.
 - **The dash travels in the intent, like every other input.** Anything that
   moves a fighter has to be something *both* sides simulate. Applied straight to
   the client's predicted state and never sent, it was erased by the very next

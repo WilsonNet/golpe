@@ -319,6 +319,24 @@ sixteen fighters breaks things two never could.
   `attackerId === myId` was correct in a duel and wrong the instant a third fighter
   existed: every hit between two other players punched the local fighter's sprite.
 
+## Input and the UI
+
+- **A programmatic entry point must drive the same *state* the UI does, not just
+  fire the same event.** `window.__setPlayerName` emitted `player-name` and was
+  documented as taking the path a player takes — while the modal closed only on its
+  own submit handler. Called from a script it left the modal mounted over the game
+  with its share-link field focused, and `Input` ignores keystrokes aimed at an
+  editable element, so **every key a probe pressed afterwards was silently
+  swallowed**. The claim was false in exactly the way that is hardest to notice:
+  the game looked fine and simply did not respond.
+- **Hand the keyboard back when an overlay closes.** A focused field behind a
+  dismissed modal eats WASD, which reads as a dead game rather than a focus
+  problem.
+- **A feel constant needs a test with a fake clock.** The dash window is timing,
+  not logic, so `DoubleTapDash` is separated from the DOM specifically to be
+  testable — otherwise the only check is a human saying it feels wrong, which is
+  how it got too tight in the first place.
+
 ## Rooms
 
 - **A one-shot control message must be reliable.** Geckos datagrams are

@@ -27,8 +27,66 @@ export const KEYS = {
 	toggleAi: "KeyP",
 } as const;
 
-/** Two taps inside this window are a dash rather than two steps. */
-const DOUBLE_TAP_MS = 200;
+/**
+ * Two taps inside this window are a dash rather than two steps.
+ *
+ * **300ms, up from 200.** At 200 the gesture was reliable standing still and
+ * genuinely hard in the air: dashing at the peak of a jump means releasing the
+ * direction you jumped with and then landing both taps inside the window, all
+ * while the apex passes. Widening it is the cheapest forgiveness available and
+ * costs nothing else.
+ *
+ * The ceiling is deliberate stepping. Players tap a direction to make a single
+ * small step, and those taps come roughly 350ms apart or slower — so a window
+ * much past 300 starts reading two intended steps as a dash, and an unwanted dash
+ * across the arena is a far worse failure than a missed one.
+ */
+export const DASH_DOUBLE_TAP_MS = 300;
+
+/**
+ * Double-tap dash detection, as its own testable unit.
+ *
+ * Separated from `Input` so the *timing* can be tested without a DOM or a real
+ * clock — the window is a feel constant, and a feel constant that nothing pins
+ * gets retuned by accident. `Input` owns the keyboard; this owns the gesture.
+ */
+export class DoubleTapDash {
+	private lastPress: Record<string, number> = {};
+	private pending = 0;
+
+	constructor(private readonly windowMs: number = DASH_DOUBLE_TAP_MS) {}
+
+	/** Note a *press* — not a repeat, and not a release. */
+	press(code: string, nowMs: number) {
+		const previous = this.lastPress[code] ?? Number.NEGATIVE_INFINITY;
+		if (nowMs - previous < this.windowMs) {
+			this.pending = code === KEYS.left ? -1 : 1;
+			// Consume the pair, so a third tap has to start a fresh gesture rather
+			// than chaining a dash off every subsequent press.
+			this.lastPress[code] = Number.NEGATIVE_INFINITY;
+			return;
+		}
+		this.lastPress[code] = nowMs;
+	}
+
+	/** Take the dash direction, if one was gestured since the last call. */
+	consume(): number {
+		const d = this.pending;
+		this.pending = 0;
+		return d;
+	}
+
+	/**
+	 * Forget everything, including a gesture that had already landed.
+	 *
+	 * Used when focus is lost. A dash held over a window switch would fire whenever
+	 * the player came back, which is an input they made a minute ago.
+	 */
+	reset() {
+		this.lastPress = {};
+		this.pending = 0;
+	}
+}
 
 /**
  * What the cursor has to be measured against to become a world position.
@@ -160,7 +218,7 @@ export class Input {
 			this.down.clear();
 			this.leftMouse = false;
 			this.rightMouse = false;
-			this.lastPress = {};
+			this.dashGesture.reset();
 		};
 
 		const pointerMove = (e: PointerEvent) => {
@@ -213,29 +271,19 @@ export class Input {
 	 * dash is a *gesture* rather than a button: the simulation is handed the
 	 * resulting impulse, not the taps. It stays outside `PlayerIntent` for the
 	 * same reason — see how the impulse is applied in `Match`.
+	 *
+	 * The timing lives in `DoubleTapDash` so it can be tested against a fake clock.
 	 */
-	private lastPress: Record<string, number> = {};
-	private pendingDash = 0;
+	private readonly dashGesture = new DoubleTapDash();
 
 	private notePress(code: string) {
 		if (code !== KEYS.left && code !== KEYS.right) return;
-		const now = performance.now();
-		const previous = this.lastPress[code] ?? -Infinity;
-		if (now - previous < DOUBLE_TAP_MS) {
-			this.pendingDash = code === KEYS.left ? -1 : 1;
-			// Consume the pair, so a third tap has to start a fresh gesture rather
-			// than chaining a dash off every subsequent press.
-			this.lastPress[code] = -Infinity;
-			return;
-		}
-		this.lastPress[code] = now;
+		this.dashGesture.press(code, performance.now());
 	}
 
 	/** Take the dash direction, if one was gestured since the last call. */
 	consumeDash(): number {
-		const d = this.pendingDash;
-		this.pendingDash = 0;
-		return d;
+		return this.dashGesture.consume();
 	}
 
 	// -------------------------------------------------------------------------

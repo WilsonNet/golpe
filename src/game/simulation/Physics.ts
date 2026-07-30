@@ -161,6 +161,20 @@ export const BLOCK_MOVE_MULTIPLIER = 0.55;
 export const DASH_SPEED = 1000;
 /** Minimum gap between dashes, so it cannot be held down as a speed boost. */
 export const DASH_LOCKOUT_MS = 250;
+/**
+ * How long a dash holds its line — no gravity, no vertical drift at all.
+ *
+ * A dash that fell while it travelled was a dive, and it made the one thing a
+ * dash is for — crossing a gap, breaking away, repositioning at the peak of a
+ * jump — depend on how far through the arc you happened to be. Holding Y makes it
+ * a *line*, which is what a player is aiming when they gesture it.
+ *
+ * **Deliberately shorter than `DASH_LOCKOUT_MS`.** The gap between the two is the
+ * window in which gravity always gets a say, so no amount of dashing is level
+ * flight: at 160 against a 250ms lockout, a chained dasher still falls for 90ms in
+ * every 250. Raise this past the lockout and the fighter simply never comes down.
+ */
+export const DASH_DURATION_MS = 160;
 
 export const BULLET_SPEED = 600;
 export const BULLET_DAMAGE = 10;
@@ -212,6 +226,15 @@ export interface PlayerPosition extends MeleeState {
 	jumpHeld: boolean;
 	/** ms until another dash is allowed. */
 	dashTimer: number;
+	/**
+	 * ms of dash still travelling. While non-zero the fighter ignores gravity and
+	 * holds its Y exactly — see `DASH_DURATION_MS`.
+	 *
+	 * Separate from `dashTimer`, which is the cooldown. Conflating them would tie
+	 * how long a dash flies to how often one may be thrown, and the two want
+	 * different numbers for opposite reasons.
+	 */
+	dashActiveTimer: number;
 }
 
 export function createPlayerState(
@@ -233,6 +256,7 @@ export function createPlayerState(
 		jumping: false,
 		jumpHeld: false,
 		dashTimer: 0,
+		dashActiveTimer: 0,
 		...createMeleeState(facing),
 	};
 }
@@ -255,6 +279,7 @@ export function copyPlayerState(
 	target.jumping = source.jumping;
 	target.jumpHeld = source.jumpHeld;
 	target.dashTimer = source.dashTimer;
+	target.dashActiveTimer = source.dashActiveTimer;
 	copyMeleeState(source, target);
 	return target;
 }
@@ -298,6 +323,14 @@ export function tickPlayer(
 
 	s.wallJumpTimer = decay(s.wallJumpTimer, dt);
 	s.dashTimer = decay(s.dashTimer, dt);
+	s.dashActiveTimer = decay(s.dashActiveTimer, dt);
+	// Being hit ends a dash.
+	//
+	// Not politeness: a dash suppresses gravity and pins `vy` to zero, so a launch
+	// applied between ticks — the uppercut's whole point — would be silently eaten
+	// by the next one. Every launch arrives with stun, which makes this the one
+	// place that has to notice.
+	if (stunned) s.dashActiveTimer = 0;
 	s.coyoteTimer = decay(s.coyoteTimer, dt);
 	s.jumpBufferTimer = decay(s.jumpBufferTimer, dt);
 	s.wallCoyoteTimer = decay(s.wallCoyoteTimer, dt);
@@ -348,6 +381,12 @@ export function tickPlayer(
 	if (!rooted && input.dash !== 0 && s.dashTimer <= 0) {
 		s.vx = input.dash > 0 ? DASH_SPEED : -DASH_SPEED;
 		s.dashTimer = DASH_LOCKOUT_MS;
+		s.dashActiveTimer = DASH_DURATION_MS;
+		// Flatten the arc from the first frame, so a dash thrown while rising or
+		// falling travels the same line as one thrown standing still.
+		s.vy = 0;
+		// No longer a jump that can be cut short by releasing the button.
+		s.jumping = false;
 	}
 
 	// ---- jump (ground jump wins over wall jump) ----
@@ -358,6 +397,10 @@ export function tickPlayer(
 			s.coyoteTimer = 0;
 			s.jumpBufferTimer = 0;
 			s.jumping = true;
+			// A jump out of a dash ends the dash. Any vertical velocity set here would
+			// otherwise be zeroed by the dash's own flat line, and the jump would
+			// simply not happen.
+			s.dashActiveTimer = 0;
 		} else if (s.wallTouch !== "none" && s.wallJumpTimer <= 0) {
 			const away = s.wallTouch === "left" ? 1 : -1;
 			s.vx = away * WALL_JUMP_HORIZONTAL;
@@ -367,6 +410,7 @@ export function tickPlayer(
 			s.wallJumpTimer = WALL_JUMP_LOCKOUT;
 			s.jumpBufferTimer = 0;
 			s.jumping = true;
+			s.dashActiveTimer = 0;
 		}
 	}
 
@@ -377,15 +421,31 @@ export function tickPlayer(
 	}
 	if (s.vy >= 0) s.jumping = false;
 
-	// ---- gravity ----
-	s.vy += (s.vy > 0 ? GRAVITY * FALL_GRAVITY_MULTIPLIER : GRAVITY) * dt;
+	// ---- gravity, unless an airborne dash is holding its line ----
+	//
+	// An air dash is horizontal. Not "mostly horizontal": `vy` is pinned to zero so
+	// the fighter ends the dash at exactly the Y it started, which is what makes the
+	// gesture aimable — the same input crosses the same gap whether it was thrown
+	// rising, falling, or at the peak of a jump.
+	//
+	// **Grounded dashes keep gravity**, and must. Gravity does nothing visible to a
+	// fighter standing on a floor, but it is what presses it *into* the floor — and
+	// contact is what `grounded` is derived from. Suppressing it made a ground dash
+	// leave the fighter airborne on paper: it could not jump, and coyote time never
+	// started because it never registered as having been grounded to begin with.
+	if (s.dashActiveTimer > 0 && !s.grounded) {
+		s.vy = 0;
+	} else {
+		s.vy += (s.vy > 0 ? GRAVITY * FALL_GRAVITY_MULTIPLIER : GRAVITY) * dt;
 
-	const pressingIntoWall =
-		(dir < 0 && s.wallTouch === "left") || (dir > 0 && s.wallTouch === "right");
-	if (!s.grounded && pressingIntoWall && s.vy > WALL_SLIDE_SPEED) {
-		s.vy = WALL_SLIDE_SPEED;
+		const pressingIntoWall =
+			(dir < 0 && s.wallTouch === "left") ||
+			(dir > 0 && s.wallTouch === "right");
+		if (!s.grounded && pressingIntoWall && s.vy > WALL_SLIDE_SPEED) {
+			s.vy = WALL_SLIDE_SPEED;
+		}
+		if (s.vy > MAX_FALL_SPEED) s.vy = MAX_FALL_SPEED;
 	}
-	if (s.vy > MAX_FALL_SPEED) s.vy = MAX_FALL_SPEED;
 
 	// ---- one collision-resolved move ----
 	const box: MovingBox = { x: s.x, y: s.y, w: PLAYER_WIDTH, h: PLAYER_HEIGHT };
@@ -393,7 +453,12 @@ export function tickPlayer(
 	s.x = box.x;
 	s.y = box.y;
 
-	if (contacts.wall !== "none") s.vx = 0;
+	// A dash into a wall is over. Letting the timer run out would leave the fighter
+	// hovering against the wall with nothing left pushing it.
+	if (contacts.wall !== "none") {
+		s.vx = 0;
+		s.dashActiveTimer = 0;
+	}
 	if (contacts.grounded) s.vy = 0;
 	if (contacts.ceiling && s.vy < 0) s.vy = 0;
 

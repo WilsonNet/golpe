@@ -14,6 +14,7 @@ import {
 import {
 	COYOTE_TIME_MS,
 	createPlayerState,
+	DASH_DURATION_MS,
 	DASH_SPEED,
 	FALL_GRAVITY_MULTIPLIER,
 	GRAVITY,
@@ -568,6 +569,129 @@ describe("dash", () => {
 		s = tick(s, { dash: 1 });
 		for (let i = 0; i < 30; i++) s = tick(s, {});
 		expect(s.x - startX).toBeGreaterThan(PLAYER_WALK_SPEED * 0.3);
+	});
+
+	/**
+	 * A dash is a *line*, not a dive.
+	 *
+	 * Falling while it travelled made the one thing a dash is for — crossing a gap,
+	 * repositioning at the peak of a jump — depend on how far through the arc you
+	 * happened to be. Holding Y is what makes the gesture aimable.
+	 */
+	it("holds its Y exactly while it travels", () => {
+		let s = state({ x: OPEN_X, y: 300, vy: 400 });
+		s = tick(s, { dash: 1 });
+		const y = s.y;
+
+		const frames = Math.floor(DASH_DURATION_MS / 1000 / DT) - 1;
+		for (let i = 0; i < frames; i++) {
+			s = tick(s, {});
+			expect(s.vy).toBe(0);
+			expect(s.y).toBe(y);
+		}
+	});
+
+	it("travels the same line whether thrown rising, falling or level", () => {
+		const from = (vy: number) => {
+			let s = state({ x: OPEN_X, y: 300, vy });
+			s = tick(s, { dash: 1 });
+			for (let i = 0; i < 8; i++) s = tick(s, {});
+			return { x: s.x, y: s.y };
+		};
+		expect(from(-500)).toEqual(from(0));
+		expect(from(400)).toEqual(from(0));
+	});
+
+	it("gives gravity the reins back when it ends", () => {
+		let s = state({ x: OPEN_X, y: 300 });
+		s = tick(s, { dash: 1 });
+		// Past the duration, and still short of the lockout.
+		s = ticks(s, {}, Math.ceil(DASH_DURATION_MS / 1000 / DT) + 1);
+		expect(s.dashActiveTimer).toBe(0);
+		expect(s.vy).toBeGreaterThan(0);
+	});
+
+	/**
+	 * The reason `DASH_DURATION_MS` is shorter than `DASH_LOCKOUT_MS`: the gap
+	 * between them is the window gravity always gets. Make the duration longer and
+	 * a chained dasher simply never comes down.
+	 */
+	it("cannot be chained into level flight", () => {
+		let s = state({ x: 20, y: 120 });
+		const startY = s.y;
+		// Dash the instant the lockout allows it, for a full second.
+		for (let i = 0; i < 60; i++) s = tick(s, { dash: 1 });
+		expect(s.y).toBeGreaterThan(startY);
+	});
+
+	it("lets a jump out of it actually leave the ground", () => {
+		// The jump sets a negative vy that the dash's flat line would otherwise zero.
+		let s = state({ x: OPEN_X, y: standingOn(GROUND.y), grounded: true });
+		s = tick(s, { dash: 1 });
+		s = tick(s, { up: true });
+		expect(s.dashActiveTimer).toBe(0);
+		expect(s.vy).toBeLessThan(0);
+	});
+
+	/**
+	 * Being hit beats a dash — and it has to, or the uppercut's launch would be
+	 * silently eaten by the flat line the dash is holding.
+	 */
+	it("is interrupted by a stun, so a launch still launches", () => {
+		let s = state({ x: OPEN_X, y: 300 });
+		s = tick(s, { dash: 1 });
+		expect(s.dashActiveTimer).toBeGreaterThan(0);
+
+		// What `applyMeleeResult` does to a fighter it launches.
+		s = { ...s, stunTimer: 400, vy: -620 };
+		s = tick(s, {});
+		expect(s.dashActiveTimer).toBe(0);
+		expect(s.vy).toBeLessThan(0);
+		expect(s.y).toBeLessThan(300);
+	});
+
+	/**
+	 * A grounded dash must stay grounded.
+	 *
+	 * Suppressing gravity outright broke this: gravity is what presses a standing
+	 * fighter *into* the floor, and floor contact is where `grounded` comes from. So
+	 * a ground dash left the fighter airborne on paper — unable to jump, with coyote
+	 * time never starting because it never registered as grounded in the first place.
+	 */
+	it("stays on the floor when dashed along it, and can still jump", () => {
+		let s = state({ x: OPEN_X, y: standingOn(GROUND.y), grounded: true });
+		s = tick(s, { dash: 1 });
+		expect(s.grounded).toBe(true);
+		expect(s.y).toBe(standingOn(GROUND.y));
+
+		s = tick(s, { up: true });
+		expect(s.vy).toBeLessThan(0);
+	});
+
+	it("flattens out when a ground dash carries it off a ledge", () => {
+		// Dash right off the low-left ledge: grounded for the first tick, then a flat
+		// line rather than a dive.
+		let s = state({
+			x: LOW_LEFT.x + LOW_LEFT.w - PLAYER_WIDTH,
+			y: standingOn(LOW_LEFT.y),
+			grounded: true,
+		});
+		s = tick(s, { dash: 1 });
+		// The body only leaves the ledge once it has cleared its edge entirely.
+		const airborne = until(s, {}, (p) => !p.grounded, 5).state;
+		expect(airborne.grounded).toBe(false);
+		expect(airborne.dashActiveTimer).toBeGreaterThan(0);
+
+		const y = airborne.y;
+		expect(tick(airborne, {}).y).toBe(y);
+	});
+
+	it("ends against a wall instead of hovering there", () => {
+		// Dash left into the arena's left edge from right beside it.
+		let s = state({ x: 2, y: standingOn(GROUND.y), grounded: true });
+		s = tick(s, { dash: -1 });
+		s = ticks(s, {}, 6);
+		expect(s.dashActiveTimer).toBe(0);
 	});
 });
 

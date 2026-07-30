@@ -93,133 +93,109 @@ const MELEE_ACTIONS: readonly MeleeAction[] = [
 	"massive",
 ];
 
-const FLAG_GROUNDED = 1 << 0;
-const FLAG_JUMPING = 1 << 1;
-const FLAG_JUMP_HELD = 1 << 2;
-const FLAG_HIT_LATCH = 1 << 3;
-const FLAG_BLOCKING = 1 << 4;
-const FLAG_MASSIVE_READY = 1 << 5;
-const FLAG_ATTACK_HELD = 1 << 6;
-const FLAG_BLOCK_HELD = 1 << 7;
-const FLAG_UPPERCUT_HELD = 1 << 8;
-
 /**
- * Every field of `PlayerPosition`, exactly once.
+ * The three encodings, each listing the fields it carries **in wire order**.
  *
- * Order is irrelevant — this list exists so the compiler can prove the packer
- * knows about every field. `_exhaustive` below is the proof.
+ * These are the packer, not a description of it: `packState` and `unpackState`
+ * both walk these lists, so a field's slot in the array and its bit in the flag
+ * word are derived rather than written down twice. The indices used to be
+ * hand-numbered on the unpacking side, which meant inserting one field in the
+ * middle silently shifted every field after it — a desync with no symptom except
+ * unexplained correction, and the exact mistake adding `dashActiveTimer` invited.
  */
-const STATE_FIELDS = [
+const NUMBER_FIELDS = [
 	"x",
 	"y",
 	"vx",
 	"vy",
-	"grounded",
-	"wallTouch",
 	"wallJumpTimer",
 	"coyoteTimer",
 	"jumpBufferTimer",
 	"wallCoyoteTimer",
-	"jumping",
-	"jumpHeld",
 	"dashTimer",
-	"stance",
+	"dashActiveTimer",
 	"facing",
-	"meleeAction",
 	"meleeTimer",
-	"hitLatch",
-	"blocking",
 	"blockTimer",
 	"chargeTimer",
-	"massiveReady",
 	"stunTimer",
 	"iframeTimer",
+] as const;
+
+const ENUM_FIELDS = ["wallTouch", "stance", "meleeAction"] as const;
+
+/** One bit each, in this order. */
+const FLAG_FIELDS = [
+	"grounded",
+	"jumping",
+	"jumpHeld",
+	"hitLatch",
+	"blocking",
+	"massiveReady",
 	"attackHeld",
 	"blockHeld",
 	"uppercutHeld",
 ] as const;
 
+type NumberField = (typeof NUMBER_FIELDS)[number];
+type FlagField = (typeof FLAG_FIELDS)[number];
+
 /**
- * Compile-time proof that `STATE_FIELDS` covers `PlayerPosition`.
+ * Compile-time proof that the three lists cover `PlayerPosition`.
  *
  * Add a field to the simulation and this line stops compiling with the name of
- * the field you forgot, which is the whole point of it existing.
+ * the field you forgot, which is the whole point of it existing — and now it can
+ * only be satisfied by putting the field in a list that is actually *encoded*,
+ * rather than in a parallel roll-call the encoders never read.
  */
 type UnpackedField = Exclude<
 	keyof PlayerPosition,
-	(typeof STATE_FIELDS)[number]
+	NumberField | (typeof ENUM_FIELDS)[number] | FlagField
 >;
 const _exhaustive: UnpackedField extends never ? true : UnpackedField = true;
 void _exhaustive;
+
+/** Where the enums and the flag word sit, after the numbers. */
+const ENUM_BASE = NUMBER_FIELDS.length;
+const FLAGS_AT = ENUM_BASE + ENUM_FIELDS.length;
 
 /** A fighter's full simulation state as a flat number array. */
 export type PackedState = readonly number[];
 
 export function packState(s: PlayerPosition): number[] {
-	let flags = 0;
-	if (s.grounded) flags |= FLAG_GROUNDED;
-	if (s.jumping) flags |= FLAG_JUMPING;
-	if (s.jumpHeld) flags |= FLAG_JUMP_HELD;
-	if (s.hitLatch) flags |= FLAG_HIT_LATCH;
-	if (s.blocking) flags |= FLAG_BLOCKING;
-	if (s.massiveReady) flags |= FLAG_MASSIVE_READY;
-	if (s.attackHeld) flags |= FLAG_ATTACK_HELD;
-	if (s.blockHeld) flags |= FLAG_BLOCK_HELD;
-	if (s.uppercutHeld) flags |= FLAG_UPPERCUT_HELD;
+	const out: number[] = [];
+	for (const key of NUMBER_FIELDS) out.push(s[key]);
 
-	return [
-		s.x,
-		s.y,
-		s.vx,
-		s.vy,
-		s.wallJumpTimer,
-		s.coyoteTimer,
-		s.jumpBufferTimer,
-		s.wallCoyoteTimer,
-		s.dashTimer,
-		s.facing,
-		s.meleeTimer,
-		s.blockTimer,
-		s.chargeTimer,
-		s.stunTimer,
-		s.iframeTimer,
-		WALL_SIDES.indexOf(s.wallTouch),
-		STANCES.indexOf(s.stance),
-		MELEE_ACTIONS.indexOf(s.meleeAction),
-		flags,
-	];
+	out[ENUM_BASE] = WALL_SIDES.indexOf(s.wallTouch);
+	out[ENUM_BASE + 1] = STANCES.indexOf(s.stance);
+	out[ENUM_BASE + 2] = MELEE_ACTIONS.indexOf(s.meleeAction);
+
+	let flags = 0;
+	FLAG_FIELDS.forEach((key, bit) => {
+		if (s[key]) flags |= 1 << bit;
+	});
+	out[FLAGS_AT] = flags;
+
+	return out;
 }
 
 export function unpackState(p: PackedState): PlayerPosition {
-	const at = (i: number) => p[i] ?? 0;
-	const flags = at(18);
+	const numbers = {} as Record<NumberField, number>;
+	NUMBER_FIELDS.forEach((key, i) => {
+		numbers[key] = p[i] ?? 0;
+	});
+
+	const flagWord = p[FLAGS_AT] ?? 0;
+	const flags = {} as Record<FlagField, boolean>;
+	FLAG_FIELDS.forEach((key, bit) => {
+		flags[key] = (flagWord & (1 << bit)) !== 0;
+	});
+
 	return {
-		x: at(0),
-		y: at(1),
-		vx: at(2),
-		vy: at(3),
-		wallJumpTimer: at(4),
-		coyoteTimer: at(5),
-		jumpBufferTimer: at(6),
-		wallCoyoteTimer: at(7),
-		dashTimer: at(8),
-		facing: at(9),
-		meleeTimer: at(10),
-		blockTimer: at(11),
-		chargeTimer: at(12),
-		stunTimer: at(13),
-		iframeTimer: at(14),
-		wallTouch: WALL_SIDES[at(15)] ?? "none",
-		stance: STANCES[at(16)] ?? "sword",
-		meleeAction: MELEE_ACTIONS[at(17)] ?? "none",
-		grounded: (flags & FLAG_GROUNDED) !== 0,
-		jumping: (flags & FLAG_JUMPING) !== 0,
-		jumpHeld: (flags & FLAG_JUMP_HELD) !== 0,
-		hitLatch: (flags & FLAG_HIT_LATCH) !== 0,
-		blocking: (flags & FLAG_BLOCKING) !== 0,
-		massiveReady: (flags & FLAG_MASSIVE_READY) !== 0,
-		attackHeld: (flags & FLAG_ATTACK_HELD) !== 0,
-		blockHeld: (flags & FLAG_BLOCK_HELD) !== 0,
-		uppercutHeld: (flags & FLAG_UPPERCUT_HELD) !== 0,
+		...numbers,
+		...flags,
+		wallTouch: WALL_SIDES[p[ENUM_BASE] ?? 0] ?? "none",
+		stance: STANCES[p[ENUM_BASE + 1] ?? 0] ?? "sword",
+		meleeAction: MELEE_ACTIONS[p[ENUM_BASE + 2] ?? 0] ?? "none",
 	};
 }

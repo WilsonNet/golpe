@@ -8,7 +8,14 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { normalisePointer, type Viewport, viewToWorld } from "./Input";
+import {
+	DASH_DOUBLE_TAP_MS,
+	DoubleTapDash,
+	KEYS,
+	normalisePointer,
+	type Viewport,
+	viewToWorld,
+} from "./Input";
 
 const VIEW: Viewport = { width: 800, height: 600, cameraX: 0, cameraY: 0 };
 
@@ -51,5 +58,99 @@ describe("viewToWorld", () => {
 	it("agrees with the aim angle a fighter at world centre would compute", () => {
 		const p = viewToWorld(1, 0.5, VIEW);
 		expect(Math.atan2(p.y - 300, p.x - 400)).toBeCloseTo(0, 10);
+	});
+});
+
+/**
+ * The dash gesture, against a fake clock.
+ *
+ * The window is a *feel* constant — it was widened from 200ms because dashing at
+ * the peak of a jump means releasing the direction you jumped with and landing
+ * both taps before the apex passes, which 200ms made genuinely hard. A feel
+ * constant nothing pins gets retuned by accident, so it is pinned here.
+ */
+describe("DoubleTapDash", () => {
+	it("does not dash on a single tap", () => {
+		const g = new DoubleTapDash();
+		g.press(KEYS.right, 0);
+		expect(g.consume()).toBe(0);
+	});
+
+	it("dashes on two taps inside the window", () => {
+		const g = new DoubleTapDash();
+		g.press(KEYS.right, 0);
+		g.press(KEYS.right, DASH_DOUBLE_TAP_MS - 1);
+		expect(g.consume()).toBe(1);
+	});
+
+	it("reports the direction of the key that was tapped", () => {
+		const g = new DoubleTapDash();
+		g.press(KEYS.left, 0);
+		g.press(KEYS.left, 50);
+		expect(g.consume()).toBe(-1);
+	});
+
+	it("ignores two taps that straddle the window", () => {
+		const g = new DoubleTapDash();
+		g.press(KEYS.right, 0);
+		g.press(KEYS.right, DASH_DOUBLE_TAP_MS);
+		expect(g.consume()).toBe(0);
+	});
+
+	/**
+	 * The point of the change. At 200ms this pair was a dash only if the player
+	 * beat a window they kept missing mid-jump; the tuning exists so a comfortable
+	 * double-tap counts.
+	 */
+	it("accepts a comfortable, unhurried double-tap", () => {
+		const g = new DoubleTapDash();
+		g.press(KEYS.right, 0);
+		g.press(KEYS.right, 260);
+		expect(g.consume()).toBe(1);
+	});
+
+	/**
+	 * The ceiling. Deliberate stepping — tapping a direction to move a little —
+	 * comes at roughly this cadence, and an unwanted dash across the arena is a far
+	 * worse failure than a missed one.
+	 */
+	it("still reads deliberate stepping as steps, not a dash", () => {
+		const g = new DoubleTapDash();
+		for (const t of [0, 350, 700, 1050]) g.press(KEYS.right, t);
+		expect(g.consume()).toBe(0);
+	});
+
+	it("does not chain a dash off every subsequent tap", () => {
+		const g = new DoubleTapDash();
+		g.press(KEYS.right, 0);
+		g.press(KEYS.right, 100);
+		expect(g.consume()).toBe(1);
+		// The third tap starts a fresh gesture rather than completing another pair.
+		g.press(KEYS.right, 200);
+		expect(g.consume()).toBe(0);
+	});
+
+	it("keeps the two directions apart", () => {
+		const g = new DoubleTapDash();
+		g.press(KEYS.left, 0);
+		g.press(KEYS.right, 50);
+		expect(g.consume()).toBe(0);
+	});
+
+	it("hands the gesture over exactly once", () => {
+		const g = new DoubleTapDash();
+		g.press(KEYS.right, 0);
+		g.press(KEYS.right, 100);
+		expect(g.consume()).toBe(1);
+		expect(g.consume()).toBe(0);
+	});
+
+	/** A dash held over a window switch would fire whenever the player came back. */
+	it("forgets a landed gesture on reset", () => {
+		const g = new DoubleTapDash();
+		g.press(KEYS.right, 0);
+		g.press(KEYS.right, 100);
+		g.reset();
+		expect(g.consume()).toBe(0);
 	});
 });
