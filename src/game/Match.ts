@@ -41,6 +41,7 @@ import {
 } from "./ecs/world";
 import { Input } from "./input/Input";
 import { OnlineSession } from "./online/OnlineSession";
+import { requestedRoomId, showRoomInUrl } from "./online/room";
 import { bodyCentre, drawArena } from "./render/ArenaRenderer";
 import { dudeFrames, TEX, tex } from "./render/assets";
 import { type ImpactEvent, MeleeFx } from "./render/MeleeFx";
@@ -167,6 +168,13 @@ export class Match {
 	private resetAt = -1;
 	private elapsed = 0;
 	private playerName = "";
+	/**
+	 * The room this client asked for, from `?room=` or freshly minted.
+	 *
+	 * A proposal. The server decides and says so in the `match` message, and the
+	 * address bar is rewritten from that — see `online/room.ts`.
+	 */
+	private roomId = "";
 	/** Torn down on destroy, so a remounted match does not connect twice. */
 	private nameUnsubscribe: (() => void) | undefined;
 
@@ -219,9 +227,12 @@ export class Match {
 
 		const params = new URLSearchParams(window.location.search);
 		this.aiMode = params.get("ai") === "true";
-		// `?online=true` asks for a public deathmatch; otherwise the server gives
-		// this client its own room. Either way the match is served, predicted and
-		// reconciled.
+		// Which room, from the URL — or a new one. There is no matchmaking queue:
+		// sharing the link is how two people end up in the same match.
+		this.roomId = requestedRoomId();
+		// `?online=true` asks for a full sixteen-fighter room; otherwise the room is
+		// sized for one player plus bots. Either way the match is served, predicted
+		// and reconciled, and either way it is a room somebody else can be sent to.
 		this.soloMatch = params.get("online") !== "true";
 		// `?offline=true` is an escape hatch for working without a game server. It
 		// is not the supported path — it bypasses the netcode entirely.
@@ -234,8 +245,8 @@ export class Match {
 		// positive-integer parser the other counts use.
 		this.botCount = countParam(params, "bots");
 		this.fillCount = numberParam(params, "fill");
-		// Shortened rules, for a probe. Refused server-side on a public room, so one
-		// client cannot end everybody else's match early.
+		// Shortened rules, for a probe. Honoured server-side only for the client that
+		// *creates* the room, so a latecomer cannot end a match already in progress.
 		this.scoreLimit = numberParam(params, "scoreLimit");
 		const timeLimitSec = numberParam(params, "timeLimit");
 		this.timeLimitMs =
@@ -343,6 +354,15 @@ export class Match {
 	 * the connection is what waits for it.
 	 */
 	private beginOnline() {
+		// The address bar becomes shareable immediately, before anything has
+		// connected. A host opens the game, copies the URL and sends it — waiting for
+		// the server to confirm first would mean the link a player copies in the
+		// first second is not the room they end up in.
+		if (!this.trainingMode) {
+			showRoomInUrl(this.roomId);
+			EventBus.emit("room-id", this.roomId);
+		}
+
 		const stored = readStoredName();
 		if (stored) {
 			this.startOnline(stored);
@@ -457,12 +477,27 @@ export class Match {
 					);
 					EventBus.emit("match-over", msg);
 				},
+				onSeated: (roomId) => {
+					// The server decides the id, so the address bar follows it rather
+					// than the proposal. They agree unless the proposal was malformed.
+					this.roomId = roomId;
+					if (!this.trainingMode) {
+						showRoomInUrl(roomId);
+						EventBus.emit("room-id", roomId);
+					}
+					console.log(`[ONLINE] room ${roomId}`);
+				},
+				onRoomFull: (roomId) => {
+					this.statusText.text = "That room is full.";
+					console.log(`[ONLINE] room ${roomId} is full`);
+				},
 			},
 		);
 		this.online.connect({
 			solo: this.soloMatch,
 			training: this.trainingMode,
 			name,
+			room: this.roomId,
 			...(this.botCount === undefined ? {} : { bots: this.botCount }),
 			...(this.fillCount === undefined ? {} : { fill: this.fillCount }),
 			...(this.scoreLimit === undefined ? {} : { scoreLimit: this.scoreLimit }),
@@ -549,6 +584,7 @@ export class Match {
 			const winnerId = status?.winnerId ?? null;
 			return {
 				connected: this.online?.connected ?? false,
+				roomId: this.online?.roomId || this.roomId,
 				myId: this.online?.manager.myId ?? "",
 				myName: this.playerName,
 				fighterCount: 1 + this.remotes.size,

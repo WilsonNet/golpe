@@ -76,31 +76,47 @@ The deathmatch is the mode: **sixteen fighters, first to 21 frags, or the best
 score in five minutes.** Full rules in
 [specs/deathmatch.md](../specs/deathmatch.md).
 
+**Rooms are addressed, not matchmade.** Opening the game with no `?room=` makes a
+new room; opening it with `?room=<id>` puts you in *that* room. So one person
+hosts and everyone else follows their link.
+
 1. Start both servers, and make sure port **8080** and port **9208** are both
    reachable from wherever the players are. The client connects to the game server
    at `location.hostname:9208`, so anyone typing your machine's address or hostname
    in the browser gets there — but `localhost` will not work from another machine.
-2. Send everyone `http://<your-host>:8080/?online=true`.
-3. Each player **types a name** in the popup and presses *Enter the arena*. It is
-   remembered, so they only do it once per browser.
-4. Empty seats are filled with named bots, and each bot leaves as a human takes its
+2. **One person opens** `http://<your-host>:8080/?online=true`. The address bar
+   immediately gains a `?room=<uuid>`, and the name popup shows that link with a
+   **Copy** button.
+3. **They send that link to everyone else.** Anyone who opens it lands in the same
+   room. Opening the bare URL instead makes a *different* room — that is the one
+   mistake to watch for, and holding Tab shows the room id so it is easy to check.
+4. Each player **types a name** and presses *Enter the arena*. It is remembered, so
+   they only do it once per browser.
+5. Empty seats are filled with named bots, and each bot leaves as a human takes its
    place. Nobody ever waits for a match to start.
+
+> On a plain-HTTP address the browser blocks the modern clipboard API, so **Copy**
+> falls back to selecting the link — press Ctrl+C if it says to. The link in the
+> address bar is always correct either way.
 
 While playing:
 
 - **Hold Tab** for the scoreboard — every fighter, frags and deaths, your own row
-  highlighted, bots marked `BOT`.
+  highlighted, bots marked `BOT`, and the room id in the header so you can tell
+  whether the friend who said "I'm in" is in *this* room.
 - The canvas HUD keeps your HP, your frags against the limit, and the clock.
 - When the match ends, a **podium** shows first, second and third by name and the
   rest of the field in a table. The next match starts 15 seconds later, with scores
   zeroed and fresh bot personalities.
 
-Sizing a room, if you want something other than sixteen:
+Sizing a room, if you want something other than sixteen. **Only the person who
+creates the room decides** — a latecomer's `fill` is ignored, so nobody can resize
+a match in progress:
 
 ```
-http://<host>:8080/?online=true&fill=8    # a public room held at 8 fighters
-http://<host>:8080/?bots=3                # your own private room, 3 bots
-http://<host>:8080/?bots=0                # your own private empty room
+http://<host>:8080/?online=true&fill=8    # a room sized to 8 fighters
+http://<host>:8080/?bots=3                # a new room, 3 bots
+http://<host>:8080/?bots=0                # a new empty room
 ```
 
 ## Game modes
@@ -246,18 +262,20 @@ Full frame data and the reasoning behind every number is in
 
 | Parameter | Effect |
 |---|---|
-| *(none)* | Your own room, one server-hosted bot |
-| `?online=true` | The public 16-fighter deathmatch, shared with other humans |
-| `?bots=N` | Bots in your own room, 0-15. `0` is an empty room |
-| `?fill=N` | Hold a public room at N fighters instead of 16 |
+| *(none)* | A new room, one server-hosted bot |
+| `?room=<id>` | Play in that room. **This is how two people meet** |
+| `?online=true` | A new 16-fighter deathmatch, filled with bots |
+| `?bots=N` | Bots to seat, 0-15. `0` is an empty room |
+| `?fill=N` | Size the room to N fighters instead of 16 |
 | `?ai=true` | Make **your** fighter AI-driven (and skip the name prompt) |
-| `?scoreLimit=N` | Frags to win. **Private rooms only** |
-| `?timeLimit=S` | Match length in seconds. **Private rooms only** |
+| `?scoreLimit=N` | Frags to win |
+| `?timeLimit=S` | Match length in seconds |
 | `?training=true` | A scriptable practice dummy and its menu |
 | `?offline=true` | Escape hatch: no server, no netcode (unsupported) |
 
-`scoreLimit` and `timeLimit` are refused on a public room on purpose — one client
-must not be able to end everybody else's match early.
+`fill`, `scoreLimit` and `timeLimit` are honoured **only for the client that
+creates the room** — everyone arriving later gets the room as it already is. One
+player must not be able to resize or end a match everybody else is playing.
 
 ---
 

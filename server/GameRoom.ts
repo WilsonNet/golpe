@@ -223,13 +223,30 @@ export class GameRoom {
 	private readonly scoreLimit: number;
 	private readonly timeLimitMs: number;
 
+	/**
+	 * How many fighters this room holds, bots included.
+	 *
+	 * Fixed when the room is created and never changed. Reading it from each
+	 * arriving client's request instead would let the last person through the door
+	 * resize a match everybody else was already playing.
+	 */
+	readonly fillTarget: number;
+
 	constructor(
 		id: string,
-		rules: { scoreLimit?: number; timeLimitMs?: number } = {},
+		rules: {
+			scoreLimit?: number;
+			timeLimitMs?: number;
+			fillTarget?: number;
+		} = {},
 	) {
 		this.id = id;
 		this.scoreLimit = rules.scoreLimit ?? SCORE_LIMIT;
 		this.timeLimitMs = rules.timeLimitMs ?? TIME_LIMIT_MS;
+		this.fillTarget = Math.max(
+			1,
+			Math.min(rules.fillTarget ?? MAX_PLAYERS, MAX_PLAYERS),
+		);
 	}
 
 	get playerCount(): number {
@@ -247,11 +264,6 @@ export class GameRoom {
 
 	get isFull(): boolean {
 		return this.channelIds.length >= MAX_PLAYERS;
-	}
-
-	/** Room for one more human, counting a bot as a seat that can be freed. */
-	get hasHumanSlot(): boolean {
-		return !this.isFull || this.botCount > 0;
 	}
 
 	get names(): ReadonlySet<string> {

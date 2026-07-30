@@ -157,9 +157,16 @@ event the modal fires. A client with `?ai=true` names itself and never blocks,
 which is why every probe runs that way.
 
 **Deathmatch is the mode.** Sixteen fighters, 21 frags or 5 minutes, individual
-respawns, bots filling the empty seats. `?bots=N` sizes a private room (`0` is a
-legitimate empty one), `?fill=N` sizes a public one, `?scoreLimit`/`?timeLimit`
-shorten a private match for a probe. See [specs/deathmatch.md](specs/deathmatch.md).
+respawns, bots filling the empty seats. `?bots=N` seats bots (`0` is a legitimate
+empty room), `?fill=N` sizes the room, `?scoreLimit`/`?timeLimit` shorten a match
+for a probe — and all three are honoured only for the client that *creates* the
+room. See [specs/deathmatch.md](specs/deathmatch.md).
+
+**Rooms are addressed, not matchmade.** `?room=<uuid>` joins that room; no
+`?room=` makes a new one, and the client writes the id into the address bar so the
+URL is the invitation. **Two tabs at the same URL are in two different rooms unless
+that URL names one** — every multi-client script passes an explicit `room`, with a
+fresh id per run so consecutive runs cannot collide.
 
 **`?training=true`** opens the training room: a scriptable practice dummy, a DOM
 menu over the canvas, and `window.__training` for agents. No key toggles the

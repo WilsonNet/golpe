@@ -57,6 +57,13 @@ export interface GameStateSnapshot {
  */
 export interface MatchStateSnapshot {
 	connected: boolean;
+	/**
+	 * The room this client is in.
+	 *
+	 * Rooms are addressed rather than matchmade, so a probe that wants two clients
+	 * in one match must pass the same `?room=` to both.
+	 */
+	roomId: string;
 	/** The id the server scores this client under. */
 	myId: string;
 	myName: string;

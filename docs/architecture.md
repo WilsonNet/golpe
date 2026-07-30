@@ -28,6 +28,7 @@ src/game/
     Rollback.ts     every *other* fighter: carry its input forward, rewind on snapshot
     Interpolation.ts what is left of it — the server clock, for dead-reckoning bullets
     wire.ts         packs PlayerPosition and PlayerIntent for the snapshot
+    room.ts         which room, and keeping the address bar shareable
     types.ts        the wire messages, shared with the server
   render/         Stage.ts (layers + camera), ArenaRenderer.ts (draws from collider
                   data), assets.ts, SpritePool.ts, Particles.ts, MeleeFx.ts

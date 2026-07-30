@@ -99,6 +99,56 @@ export function useKeyHeld(code: string): boolean {
 	return held;
 }
 
+/**
+ * The room this client is in, once the game has decided.
+ *
+ * Emitted before the name prompt appears and again if the server chose a
+ * different id, so a host can copy the link before anything has connected.
+ */
+export function useRoomId(): string {
+	const [id, setId] = useState("");
+	useEffect(
+		() => EventBus.on("room-id", ((next: string) => setId(next)) as never),
+		[],
+	);
+	return id;
+}
+
+/**
+ * Copy text to the clipboard, on a plain-HTTP origin too.
+ *
+ * `navigator.clipboard` requires a secure context, and a LAN game served over
+ * `http://192.168.x.x:8080` does not have one — which is exactly the situation
+ * the share link exists for. So: try the modern API, fall back to the deprecated
+ * one that still works on insecure origins, and report honestly if neither did so
+ * the caller can tell the player to press Ctrl+C themselves.
+ */
+export async function copyText(
+	text: string,
+	fallbackField?: HTMLInputElement | null,
+): Promise<boolean> {
+	try {
+		if (navigator.clipboard?.writeText) {
+			await navigator.clipboard.writeText(text);
+			return true;
+		}
+	} catch {
+		// Insecure context or a denied permission. Fall through.
+	}
+
+	if (fallbackField) {
+		fallbackField.select();
+		try {
+			// biome-ignore lint: execCommand is deprecated and is the only copy path
+			// that works on a plain-HTTP origin, which is where LAN games are served.
+			return document.execCommand("copy");
+		} catch {
+			return false;
+		}
+	}
+	return false;
+}
+
 /** `m:ss`, for the match clock. */
 export function formatClock(ms: number): string {
 	const total = Math.max(0, Math.ceil(ms / 1000));

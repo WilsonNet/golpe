@@ -29,20 +29,58 @@ simulation is deterministic.
 
 | URL | Opponent |
 |---|---|
-| `/` | One server-hosted bot, in your own room |
+| `/` | One server-hosted bot, in a new room |
 | `/?bots=N` | N bots (0-15). `bots=0` is an empty room — see below |
 | `/?ai=true` | Server bots, and your own fighter is AI too |
-| `/?online=true` | A public deathmatch, topped up to 16 with bots |
-| `/?online=true&fill=N` | A public room held at N fighters |
-| `/?online=true&ai=true&fill=2` | Two AI clients in one room — the canonical netcode test |
+| `/?online=true` | A new 16-fighter deathmatch, topped up with bots |
+| `/?online=true&fill=N` | A room sized to N fighters |
+| `/?room=<id>` | **That** room — this is how two people play together |
+| `/?online=true&ai=true&fill=2&room=x` | Two AI clients in one room — the canonical netcode test |
 | `/?ai=true&bots=15` | A room full of AI — the canonical deathmatch test |
 | `/?offline=true` | None. Escape hatch, bypasses all of this. Unsupported. |
 | `/?training=true` | A scriptable practice dummy — see [training-room.md](training-room.md) |
 
-The client sends `join {solo, training, name, bots, fill}` on connect; the server
-holds placement until it knows which kind of match is wanted (1.5s grace, then it
-assumes public matchmaking). See [deathmatch.md](deathmatch.md) for room sizing
-and the name gate.
+The client sends `join {room, solo, training, name, bots, fill, scoreLimit,
+timeLimitMs}` on connect; the server holds placement until it knows which kind of
+match is wanted (1.5s grace, then it places anyway). See
+[deathmatch.md](deathmatch.md) for room sizing and the name gate.
+
+## Rooms are addressed, not matchmade
+
+**`?room=<id>` puts you in that room. No `?room=` makes a new one.** That is the
+whole of matchmaking, and it replaced a shared waiting queue where everybody who
+opened the game landed in the same match whether they meant to or not.
+
+- **To play together, share the link.** The id therefore has to reach the address
+  bar, or a player cannot invite anybody: the client writes it there with
+  `replaceState` before it has even connected, so a host can copy the URL while
+  they are still typing their name. The name prompt shows the link with a Copy
+  button for the same reason.
+- **The client proposes an id; the server decides.** Ids arrive from clients,
+  become `Map` keys and get logged, so they are validated (`[A-Za-z0-9_-]{1,64}`)
+  and anything else is replaced. The id the server *used* comes back in
+  `match.roomId`, and the address bar is rewritten from that rather than from the
+  proposal.
+- **Uuid generation cannot assume a secure context.** `crypto.randomUUID` is
+  unavailable on a plain-HTTP origin, which is exactly how this gets served to a
+  room full of people on a LAN — so it falls back to `getRandomValues`. Copying the
+  link has the same problem and the same shape of answer: `navigator.clipboard`
+  first, then `execCommand`, then telling the player to press Ctrl+C.
+- **Whoever creates the room sets its size and its rules.** `fill`, `scoreLimit`
+  and `timeLimitMs` are read only when the room does not exist yet; later joins
+  rebalance to the stored `fillTarget`. Otherwise the last person through the door
+  could resize or shorten a match everybody else was already playing.
+- **A room lives as long as it has a human in it**, then it and its id are
+  released. The same link afterwards creates a fresh room.
+- **A training room always gets its own fresh id** and ignores the one it was
+  given. It is single-human by construction.
+- **A room already holding sixteen humans answers `room-full`** rather than
+  leaving a client connected, receiving nothing and looking broken.
+- **Two tabs at the same URL are not in the same match** unless that URL names a
+  room. Every multi-client script therefore passes an explicit `room` — and giving
+  each one a *fresh* id also stopped consecutive runs joining the room the previous
+  one had not finished leaving, which used to report four fighters in a room that
+  asked for two.
 
 **`bots=0` is a supported mode, not a degenerate one.** An empty room is still
 fully served, predicted and reconciled, and it is the only way to measure

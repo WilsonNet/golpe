@@ -12,12 +12,19 @@
 
 import type { Standing } from "../game/simulation/Deathmatch";
 import { HUD_CSS } from "./hudStyles";
-import { formatClock, useKeyHeld, useMatch, useMatchOver } from "./useMatch";
+import {
+	formatClock,
+	useKeyHeld,
+	useMatch,
+	useMatchOver,
+	useRoomId,
+} from "./useMatch";
 
 export function Scoreboard() {
 	const match = useMatch();
 	const over = useMatchOver();
 	const held = useKeyHeld("Tab");
+	const roomId = useRoomId();
 
 	if (!match) return null;
 	// The podium is already a scoreboard, and a bigger one. Leaving the hint up
@@ -39,7 +46,15 @@ export function Scoreboard() {
 			<style>{HUD_CSS}</style>
 			<div className="vd-board-card">
 				<div className="vd-board-head">
-					<span>Deathmatch — first to {status.scoreLimit}</span>
+					<span>
+						Deathmatch — first to {status.scoreLimit}
+						{/* Which room, so a player can tell whether the friend who said
+						    "I'm in" is actually in this one. Shortened: a full uuid is
+						    unreadable and the address bar has the whole thing. */}
+						{roomId ? (
+							<span className="vd-room"> · room {roomId.slice(0, 8)}</span>
+						) : null}
+					</span>
 					<span>{formatClock(status.timeLimitMs - status.elapsedMs)}</span>
 				</div>
 				<ScoreTable standings={standings} myId={myId} />

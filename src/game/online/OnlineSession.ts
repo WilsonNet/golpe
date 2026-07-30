@@ -81,6 +81,16 @@ export interface OnlineCallbacks {
 	onMatch: (status: MatchStatus, standings: Standing[]) => void;
 	/** The match ended. Final standings, sent once. */
 	onMatchOver: (msg: MatchOverMsg) => void;
+	/**
+	 * Seated, in the room the server chose.
+	 *
+	 * Not always the room that was asked for, which is why it is reported: the
+	 * address bar follows this rather than the proposal, so the link a player copies
+	 * is the room they are actually in.
+	 */
+	onSeated: (roomId: string) => void;
+	/** The room asked for is full of humans. */
+	onRoomFull: (roomId: string) => void;
 }
 
 /**
@@ -179,6 +189,11 @@ export class OnlineSession {
 
 	get matchStatus(): MatchStatus | undefined {
 		return this._matchStatus;
+	}
+
+	/** The room the server put this client in. */
+	get roomId(): string {
+		return this.manager.roomId;
 	}
 
 	/** Every fighter this client predicts but does not own, keyed by server id. */
@@ -342,6 +357,8 @@ export class OnlineSession {
 				onRoster: (msg) => this.onRoster(msg.players),
 				onRespawn: (msg) => this.onRespawn(msg.id),
 				onMatchOver: (msg) => this.callbacks.onMatchOver(msg),
+				onSeated: (roomId) => this.callbacks.onSeated(roomId),
+				onRoomFull: (roomId) => this.callbacks.onRoomFull(roomId),
 			},
 			join,
 		);

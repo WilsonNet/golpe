@@ -147,11 +147,17 @@ async function assertServerUp() {
 async function onlineRun(browser, durationMs) {
 	await assertServerUp();
 	const ctx = await browser.newContext();
-	// `fill=2` keeps this a duel. A public room is a sixteen-fighter deathmatch
-	// now, and this run's job is the *netcode* — prediction, reconciliation,
-	// projectiles — which is cleanest to read with exactly one opponent.
+	// **The same `room` for both tabs, or they are not in the same match.** Rooms
+	// are addressed rather than matchmade, so a client with no `?room=` makes a new
+	// one — two tabs opened at the same URL would sit in two separate rooms and the
+	// report would be about a client fighting a bot on its own.
+	//
+	// A fresh id per run, so consecutive runs cannot land in each other's room.
+	// `fill=2` keeps it a duel: this run's job is the *netcode* — prediction,
+	// reconciliation, projectiles — which is cleanest to read with one opponent.
 	// `scripts/deathmatch-probe.mjs` is the sixteen-fighter measurement.
-	const url = `${BASE_URL}/?online=true&ai=true&fill=2`;
+	const room = `diag-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+	const url = `${BASE_URL}/?online=true&ai=true&fill=2&room=${room}`;
 
 	const a = await ctx.newPage();
 	const linesA = sinkConsole(a);

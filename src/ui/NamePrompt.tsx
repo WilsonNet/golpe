@@ -13,7 +13,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { EventBus } from "../game/EventBus";
+import { roomLink } from "../game/online/room";
 import { HUD_CSS } from "./hudStyles";
+import { copyText, useRoomId } from "./useMatch";
 
 /** Matches the server's cap, so nothing a player types is silently truncated. */
 const MAX_NAME = 16;
@@ -22,7 +24,10 @@ export function NamePrompt() {
 	const [asking, setAsking] = useState(false);
 	const [value, setValue] = useState("");
 	const [error, setError] = useState("");
+	const [copied, setCopied] = useState("");
 	const inputRef = useRef<HTMLInputElement>(null);
+	const linkRef = useRef<HTMLInputElement>(null);
+	const roomId = useRoomId();
 
 	useEffect(
 		() => EventBus.on("need-player-name", (() => setAsking(true)) as never),
@@ -48,6 +53,11 @@ export function NamePrompt() {
 		},
 		[value],
 	);
+
+	const share = useCallback(async () => {
+		const ok = await copyText(roomLink(roomId), linkRef.current);
+		setCopied(ok ? "Link copied." : "Select it and press Ctrl+C.");
+	}, [roomId]);
 
 	if (!asking) return null;
 
@@ -84,6 +94,30 @@ export function NamePrompt() {
 					</button>
 				</div>
 				<div className="vd-error">{error}</div>
+
+				{/* Rooms are addressed, not matchmade, so this link *is* the invitation.
+				    Shown before anything has connected, because a host wants to send it
+				    while they are still typing their own name. */}
+				{roomId ? (
+					<div className="vd-share">
+						<div className="vd-share-label">
+							Send this link to play together
+						</div>
+						<div className="vd-share-row">
+							<input
+								ref={linkRef}
+								className="vd-input vd-share-link"
+								value={roomLink(roomId)}
+								readOnly
+								onFocus={(e) => e.target.select()}
+							/>
+							<button className="vd-btn vd-copy" type="button" onClick={share}>
+								Copy
+							</button>
+						</div>
+						<div className="vd-share-note">{copied}</div>
+					</div>
+				) : null}
 			</form>
 		</div>
 	);

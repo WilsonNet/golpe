@@ -127,20 +127,28 @@ A human types a name before their client connects, and it is remembered in
   and it should not depend on their client having kept up with the final datagram
   of a match.
 
-## Room kinds
+## Rooms, and how anyone joins one
+
+**Rooms are addressed by id, not matchmade.** `?room=<uuid>` puts you in that
+room; no `?room=` makes a new one. **To play together, share the link** — which is
+why the id lands in the address bar immediately and the name prompt offers it with
+a Copy button. A host who cannot copy their own URL cannot invite anybody. Full
+mechanics in [netcode.md](netcode.md).
 
 | URL | Room |
 |---|---|
-| `/` | Private, one bot |
-| `/?bots=N` | Private, N bots (0-15). `bots=0` is an empty room |
-| `/?online=true` | Public deathmatch, topped up to 16 with bots |
-| `/?online=true&fill=N` | Public, held at N fighters |
+| `/` | A new room, one bot |
+| `/?bots=N` | A new room, N bots (0-15). `bots=0` is an empty room |
+| `/?online=true` | A new room sized to 16, topped up with bots |
+| `/?online=true&fill=N` | Sized to N fighters |
+| `/?room=<id>` | That room, and whoever is already in it |
 | `/?ai=true&bots=15` | A room full of AI — the canonical deathmatch test |
-| `/?scoreLimit=N&timeLimit=S` | Shortened rules. **Private rooms only** |
+| `/?scoreLimit=N&timeLimit=S` | Shortened rules. **Only when creating the room** |
 
-**Shortened rules are refused on a public room.** A five-minute match is the right
-length to play and the wrong length to measure, so a probe can ask for a short
-one — but one client must not be able to end everybody else's match early.
+**Size and rules belong to whoever created the room.** A five-minute match is the
+right length to play and the wrong length to measure, so a probe can ask for a
+short one — but a latecomer must not be able to resize or shorten a match
+everybody else is already playing.
 
 ## Verification
 

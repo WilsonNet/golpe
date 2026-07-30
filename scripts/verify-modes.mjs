@@ -71,12 +71,22 @@ const MODES = [
 
 const browser = await chromium.launch();
 
-for (const mode of MODES) {
+for (const [modeIndex, mode] of MODES.entries()) {
 	const ctx = await browser.newContext();
 	const pages = [];
+	// One room per mode, shared by that mode's tabs.
+	//
+	// Both halves matter. Rooms are addressed rather than matchmade, so two tabs
+	// opened without a `room` land in two *different* rooms and a PvP check can
+	// never pass. And a fresh id per mode is what finally stopped each mode joining
+	// the room the previous one had not finished leaving — which used to report four
+	// fighters in a room that asked for two.
+	const room = `verify-${modeIndex}-${Date.now().toString(36)}`;
+	const separator = mode.url.includes("?") ? "&" : "?";
+
 	for (let i = 0; i < mode.tabs; i++) {
 		const p = await ctx.newPage();
-		await p.goto(BASE + mode.url);
+		await p.goto(`${BASE + mode.url + separator}room=${room}`);
 		await p.waitForFunction(() => typeof window.__gameState === "function", {
 			timeout: 20000,
 		});

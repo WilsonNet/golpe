@@ -90,6 +90,47 @@ export const HUD_CSS = `
 	min-height: 1em;
 }
 
+/* ---- the invitation ----
+   Rooms are addressed by id rather than matchmade, so this link is the only way
+   one player reaches another. It is part of the prompt, not a detail under it. */
+.vd-share {
+	margin-top: 20px;
+	padding-top: 16px;
+	border-top: 1px solid rgba(255, 255, 255, 0.14);
+}
+.vd-share-label {
+	font-size: 11px;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	opacity: 0.5;
+	margin-bottom: 8px;
+}
+.vd-share-row {
+	display: flex;
+	gap: 8px;
+}
+.vd-share-link {
+	font-size: 12px;
+	padding: 9px 10px;
+	opacity: 0.85;
+}
+.vd-copy {
+	flex: 0 0 auto;
+	font-size: 13px;
+	padding: 9px 16px;
+}
+.vd-share-note {
+	font-size: 12px;
+	color: #7ff0f4;
+	min-height: 1.2em;
+	margin-top: 8px;
+}
+.vd-room {
+	opacity: 0.45;
+	text-transform: none;
+	letter-spacing: 0;
+}
+
 /* ---- scoreboard ---- */
 .vd-board {
 	position: fixed;

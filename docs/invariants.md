@@ -315,6 +315,27 @@ sixteen fighters breaks things two never could.
   `attackerId === myId` was correct in a duel and wrong the instant a third fighter
   existed: every hit between two other players punched the local fighter's sprite.
 
+## Rooms
+
+- **Presence in a room is decided by an id, never by a queue.** No `?room=` means
+  a new room. The consequence that bites: **two tabs at the same URL are in two
+  different matches** unless that URL names a room, so every multi-client script
+  must pass one — and a *fresh* one per run, or consecutive runs join the room the
+  previous one has not finished leaving.
+- **The client proposes a room id; the server decides.** It arrives from a client,
+  becomes a `Map` key and is logged, so it is validated and replaced if malformed.
+  The address bar is rewritten from what came back, never from what was asked for.
+- **The room id has to reach the address bar** — before connecting, not after.
+  Sharing the link *is* the matchmaking, and a host who cannot copy their own URL
+  cannot invite anybody.
+- **`crypto.randomUUID` and `navigator.clipboard` both require a secure context**,
+  and a LAN game is served over plain HTTP. Reaching for either alone would leave
+  every guest on `http://192.168.x.x:8080` unable to start or share a match.
+  `getRandomValues` and `execCommand` are the fallbacks.
+- **Size and rules are fixed when the room is created.** Reading them from every
+  arriving client let the last person through the door resize a match already in
+  progress.
+
 ## The training room
 
 Full detail in [specs/training-room.md](../specs/training-room.md); these are the

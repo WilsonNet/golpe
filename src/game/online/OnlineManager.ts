@@ -28,9 +28,20 @@ export interface OnlineHandlers {
 	onRoster: (msg: RosterMsg) => void;
 	onRespawn: (msg: RespawnMsg) => void;
 	onMatchOver: (msg: MatchOverMsg) => void;
+	/** Seated, in the room the server actually put us in. */
+	onSeated: (roomId: string) => void;
+	/** The room asked for is full of humans. Nothing more will arrive. */
+	onRoomFull: (roomId: string) => void;
 }
 
 export interface JoinOptions {
+	/**
+	 * Which room to play in.
+	 *
+	 * A proposal: the server validates it and answers with the id it used. Absent
+	 * means "make me a new one", which is also what a malformed one gets.
+	 */
+	room?: string;
 	/** Play this room against server-hosted bots instead of waiting for humans. */
 	solo?: boolean;
 	/** The second slot is a scriptable dummy rather than a bot. */
@@ -51,6 +62,7 @@ export class OnlineManager {
 	private _connected = false;
 	private _matched = false;
 	private _myId = "";
+	private _roomId = "";
 
 	constructor(
 		private serverUrl: string,
@@ -77,6 +89,11 @@ export class OnlineManager {
 		return this._myId;
 	}
 
+	/** The room the server put us in — not necessarily the one we asked for. */
+	get roomId() {
+		return this._roomId;
+	}
+
 	private onTrainingState: TrainingStateHandler | null = null;
 
 	connect(handlers: OnlineHandlers, join: JoinOptions = {}) {
@@ -95,6 +112,7 @@ export class OnlineManager {
 			channel.emit("join", {
 				solo: Boolean(join.solo),
 				training: Boolean(join.training),
+				...(join.room === undefined ? {} : { room: join.room }),
 				...(join.name === undefined ? {} : { name: join.name }),
 				...(join.bots === undefined ? {} : { bots: join.bots }),
 				...(join.fill === undefined ? {} : { fill: join.fill }),
@@ -118,7 +136,18 @@ export class OnlineManager {
 			const msg = data as MatchMessage;
 			this._matched = true;
 			if (msg?.youId) this._myId = msg.youId;
+			if (msg?.roomId) {
+				this._roomId = msg.roomId;
+				handlers.onSeated(msg.roomId);
+			}
 			handlers.onStatus("");
+		});
+
+		// Sixteen humans already. Said out loud rather than left as a client that
+		// connects, receives nothing and looks broken.
+		channel.on("room-full", (data: unknown) => {
+			const msg = data as { roomId?: string } | null;
+			handlers.onRoomFull(msg?.roomId ?? "");
 		});
 
 		channel.on("state", (data: unknown) => {
