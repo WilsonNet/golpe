@@ -5,13 +5,14 @@ import {
 	type AIOutput,
 	EnemyBrain,
 } from "../src/game/characters/EnemyBrain.js";
-import type {
-	GameSnapshot,
-	MatchStatus,
-	MeleeEventMsg,
-	PlayerInput,
-	RosterMsg,
-	SnapshotPlayer,
+import {
+	type GameSnapshot,
+	type MatchStatus,
+	type MeleeEventMsg,
+	type PlayerInput,
+	RELIABLE,
+	type RosterMsg,
+	type SnapshotPlayer,
 } from "../src/game/online/types.js";
 import { packIntent, packState } from "../src/game/online/wire.js";
 import { pickSpawn, type SpawnPoint } from "../src/game/simulation/Arena.js";
@@ -33,7 +34,7 @@ import type {
 	TrainingFighterStats,
 	TrainingStateMsg,
 } from "../src/game/training/types.js";
-import { botName, sanitiseName } from "./BotNames.js";
+import { botName, sanitiseName, uniqueName } from "./BotNames.js";
 import {
 	applyMeleeResult,
 	BULLET_DAMAGE,
@@ -320,7 +321,14 @@ export class GameRoom {
 		if (this.isFull && !this.freeBotSlot()) return false;
 
 		const id = channel.id as string;
-		const name = sanitiseName(rawName, `Player${this.channelIds.length + 1}`);
+		// Deduplicated against the room, exactly as a bot's name is. Two players
+		// called `Wilson` on one scoreboard is indistinguishable from a scoring bug,
+		// and it happens constantly — people pick the same handle, and two tabs on one
+		// machine share the name remembered in `localStorage`.
+		const name = uniqueName(
+			sanitiseName(rawName, `Player${this.channelIds.length + 1}`),
+			this.names,
+		);
 		this.channelIds.push(id);
 		this.players.set(
 			id,
@@ -537,7 +545,7 @@ export class GameRoom {
 		const signature = JSON.stringify([state.config, state.status, state.stats]);
 		if (!force && signature === this.trainingSignature) return;
 		this.trainingSignature = signature;
-		this.broadcast("training-state", state);
+		this.broadcastReliable("training-state", state);
 	}
 
 	/**
@@ -801,7 +809,7 @@ export class GameRoom {
 		// The full standings, once, with names attached. The scoreboard rebuilds
 		// this from the snapshot every frame; the podium is a one-shot announcement
 		// and should not depend on a client having kept up.
-		this.broadcast("match-over", {
+		this.broadcastReliable("match-over", {
 			reason,
 			winnerId: this.winnerId,
 			standings,
@@ -1172,12 +1180,25 @@ export class GameRoom {
 
 		// Tell clients explicitly. A respawn is a legitimate discontinuity, and
 		// announcing it beats every client guessing from a distance threshold.
-		if (announce) this.broadcast("round-reset", { t: Date.now() });
+		if (announce) this.broadcastReliable("round-reset", { t: Date.now() });
 	}
 
 	broadcast(event: string, data: object) {
 		for (const player of this.players.values()) {
 			player.channel?.emit(event, data);
+		}
+	}
+
+	/**
+	 * Broadcast a one-shot announcement until it lands.
+	 *
+	 * For messages with no second chance and no fallback — the podium, a match
+	 * restart, the training room's echo. See `RELIABLE` in `online/types.ts` for
+	 * which messages qualify and, more importantly, which deliberately do not.
+	 */
+	private broadcastReliable(event: string, data: object) {
+		for (const player of this.players.values()) {
+			player.channel?.emit(event, data, RELIABLE);
 		}
 	}
 

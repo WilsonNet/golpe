@@ -11,6 +11,29 @@ import type {
 import type { PackedIntent, PackedState } from "./wire.js";
 
 /**
+ * Send this message until it arrives.
+ *
+ * Geckos datagrams are unreliable by default, which is right for everything that
+ * repeats: a lost input is what the server's starvation freeze exists for, and a
+ * lost snapshot is followed by another one 50ms later. It is wrong for a one-shot
+ * control message with no second chance, and the failures are silent and
+ * session-ruining rather than glitchy:
+ *
+ * - a lost `join` puts a player in **a different room** from the friend who
+ *   invited them, because no `room` means "make a new one";
+ * - a lost `match` means the client never learns the id the server scores it
+ *   under, so it reads somebody else's scoreboard row;
+ * - a lost `match-over` means no podium at the end of a match;
+ * - a lost `training-state` hangs an agent awaiting `__training.set()`.
+ *
+ * Ten sends at 150ms, deduplicated by id on receipt, so a handler still runs
+ * exactly once. Deliberately **not** used for `state`, `input`, `roster` (which
+ * has its own 2s heartbeat) or `respawn` (which a >100px correction covers) — a
+ * message that repeats or self-heals does not need paying for ten times.
+ */
+export const RELIABLE = { reliable: true } as const;
+
+/**
  * One tick of player intent. `seq` is what makes prediction work: the server
  * echoes back the last sequence it consumed so the client knows exactly which
  * of its predicted inputs are still unacknowledged and must be replayed.

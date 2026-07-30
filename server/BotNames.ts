@@ -73,6 +73,26 @@ export function botName(taken: ReadonlySet<string>): string {
 	return `${base}${n}`;
 }
 
+/**
+ * `name`, or `name2` / `name3` if it is already taken in this room.
+ *
+ * Applies to humans, not only bots. Two players called `Wilson` on a scoreboard is
+ * indistinguishable from a scoring bug — the same reason bot names are unique —
+ * and it happens constantly: people pick the same handle, and two tabs on one
+ * machine share the remembered name in `localStorage`.
+ *
+ * The suffix goes on the *second* one through the door, so a player who was
+ * already in the match keeps the name they have been playing under.
+ */
+export function uniqueName(base: string, taken: ReadonlySet<string>): string {
+	if (!taken.has(base)) return base;
+	// Trimmed so the suffix fits inside the cap rather than pushing past it.
+	const stem = base.slice(0, MAX_NAME - 2);
+	let n = 2;
+	while (taken.has(`${stem}${n}`) && n < 99) n++;
+	return `${stem}${n}`;
+}
+
 /** Printable, in the sense a scoreboard cares about. */
 function isPrintable(ch: string): boolean {
 	const code = ch.codePointAt(0) ?? 0;

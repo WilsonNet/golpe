@@ -1,12 +1,13 @@
 import geckos from "@geckos.io/client";
 import type { TrainingConfigMsg, TrainingStateMsg } from "../training/types";
-import type {
-	GameSnapshot,
-	MatchMessage,
-	MatchOverMsg,
-	PlayerInput,
-	RespawnMsg,
-	RosterMsg,
+import {
+	type GameSnapshot,
+	type MatchMessage,
+	type MatchOverMsg,
+	type PlayerInput,
+	RELIABLE,
+	type RespawnMsg,
+	type RosterMsg,
 } from "./types";
 
 export type OnlineStateHandler = (state: GameSnapshot) => void;
@@ -48,11 +49,15 @@ export interface JoinOptions {
 	training?: boolean;
 	/** What the scoreboard should call this player. */
 	name?: string;
-	/** Bots to seat in a solo room. */
+	/** Bots to seat. `0` is a legitimate empty room. */
 	bots?: number;
-	/** Fighters a public deathmatch is topped up to with bots. */
+	/** Fighters the room is topped up to with bots. */
 	fill?: number;
-	/** Shortened rules. Honoured in a private room only — see the server. */
+	/**
+	 * Shortened rules. Along with `fill`, honoured only for the client that
+	 * *creates* the room — a latecomer cannot resize or shorten a match already in
+	 * progress.
+	 */
 	scoreLimit?: number;
 	timeLimitMs?: number;
 }
@@ -109,20 +114,29 @@ export class OnlineManager {
 			this._connected = true;
 			this._myId = channel.id as string;
 			// The server holds placement until it knows which kind of match we want.
-			channel.emit("join", {
-				solo: Boolean(join.solo),
-				training: Boolean(join.training),
-				...(join.room === undefined ? {} : { room: join.room }),
-				...(join.name === undefined ? {} : { name: join.name }),
-				...(join.bots === undefined ? {} : { bots: join.bots }),
-				...(join.fill === undefined ? {} : { fill: join.fill }),
-				...(join.scoreLimit === undefined
-					? {}
-					: { scoreLimit: join.scoreLimit }),
-				...(join.timeLimitMs === undefined
-					? {}
-					: { timeLimitMs: join.timeLimitMs }),
-			});
+			//
+			// Reliable, because this one has no second chance: lose it and the server
+			// falls back to placing this client with no `room` at all, which now means
+			// a brand-new room — so a player who followed an invitation ends up alone
+			// in a different match, with nothing on screen to say why.
+			channel.emit(
+				"join",
+				{
+					solo: Boolean(join.solo),
+					training: Boolean(join.training),
+					...(join.room === undefined ? {} : { room: join.room }),
+					...(join.name === undefined ? {} : { name: join.name }),
+					...(join.bots === undefined ? {} : { bots: join.bots }),
+					...(join.fill === undefined ? {} : { fill: join.fill }),
+					...(join.scoreLimit === undefined
+						? {}
+						: { scoreLimit: join.scoreLimit }),
+					...(join.timeLimitMs === undefined
+						? {}
+						: { timeLimitMs: join.timeLimitMs }),
+				},
+				RELIABLE,
+			);
 			handlers.onStatus(
 				join.training
 					? "Connected — training room..."
@@ -197,9 +211,14 @@ export class OnlineManager {
 		this.onTrainingState = handler;
 	}
 
+	/**
+	 * Reliable: an agent's `__training.set()` returns a promise that resolves on
+	 * the server's echo, so a lost config message does not degrade a scenario — it
+	 * hangs the caller.
+	 */
 	sendTrainingConfig(msg: TrainingConfigMsg) {
 		if (this.channel && this._connected) {
-			this.channel.emit("training-config", msg);
+			this.channel.emit("training-config", msg, RELIABLE);
 		}
 	}
 

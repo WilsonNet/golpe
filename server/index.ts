@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import geckos, { type ServerChannel } from "@geckos.io/server";
+import { RELIABLE } from "../src/game/online/types.js";
 import { GameRoom } from "./GameRoom.js";
 
 const io = geckos({ iceServers: [] });
@@ -101,11 +102,18 @@ function createRoom(
  * what it proposed.
  */
 function seated(room: GameRoom, channel: ServerChannel) {
-	channel.emit("match", {
-		roomId: room.id,
-		playerCount: room.playerCount,
-		youId: String(channel.id),
-	});
+	// Reliable: there is no second one. Lose it and the client never learns the id
+	// the server scores it under — so it reads somebody else's scoreboard row — and
+	// never puts the room in its address bar, so it cannot invite anybody.
+	channel.emit(
+		"match",
+		{
+			roomId: room.id,
+			playerCount: room.playerCount,
+			youId: String(channel.id),
+		},
+		RELIABLE,
+	);
 }
 
 io.onConnection((channel) => {
@@ -172,7 +180,9 @@ io.onConnection((channel) => {
 		}
 
 		console.log(`[MATCH] Room ${room.id} is full — ${channel.id} turned away`);
-		channel.emit("room-full", { roomId: room.id });
+		// Reliable: losing this leaves a client connected, receiving nothing, with no
+		// way to tell a full room from a broken one.
+		channel.emit("room-full", { roomId: room.id }, RELIABLE);
 	};
 
 	channel.on("join", (data: unknown) => {

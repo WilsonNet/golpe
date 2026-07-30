@@ -25,12 +25,23 @@ Every way to launch Vento Áureo, and what each one is for.
 npm install
 ```
 
-Node.js is required. Two ports are used:
+Node.js is required. Two ports are used, and **both bind every interface**, so
+either is reachable from another machine on the network:
 
 | Port | Process | Needed for |
 |---|---|---|
 | 8080 | Vite dev server | everything |
 | 9208 | Geckos.io game server | every mode except `?offline=true` |
+
+The client connects to the game server at `location.hostname:9208`, so whatever
+address a player loads the page from is the address their game traffic uses too.
+That is why `localhost` works only on the host machine.
+
+Your LAN address:
+
+```bash
+ip -4 addr show scope global | grep inet     # Linux
+```
 
 ---
 

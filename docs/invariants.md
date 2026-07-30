@@ -317,6 +317,23 @@ sixteen fighters breaks things two never could.
 
 ## Rooms
 
+- **A one-shot control message must be reliable.** Geckos datagrams are
+  unreliable by default, which is right for anything that repeats — a lost input
+  is what the starvation freeze exists for, a lost snapshot is followed by another
+  in 50ms. It is wrong for a message with no second chance, and the failures are
+  silent rather than glitchy: a lost `join` puts a player in a *different room*
+  from the friend who invited them, a lost `match` means the client never learns
+  the id it is scored under, a lost `match-over` means no podium, a lost
+  `training-state` hangs an agent awaiting `set()`. `RELIABLE` in
+  `online/types.ts` names the set — and names what is deliberately left out.
+- **Both halves of the game must bind every interface.** The game server already
+  did; Vite's default is localhost, so a LAN game failed before any netcode was
+  involved, with nothing but a browser timeout to explain it.
+- **Names are deduplicated for humans, not only bots.** Two rows reading
+  `Wilson 4/2` and `Wilson 0/5` is indistinguishable from a scoring bug, and it
+  happens constantly — people pick the same handle, and two tabs on one machine
+  share the name remembered in `localStorage`.
+
 - **Presence in a room is decided by an id, never by a queue.** No `?room=` means
   a new room. The consequence that bites: **two tabs at the same URL are in two
   different matches** unless that URL names a room, so every multi-client script
