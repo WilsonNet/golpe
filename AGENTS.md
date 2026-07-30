@@ -24,6 +24,11 @@ once happened. Every metric exists because a bug was invisible without it.
 is the canonical run. An offline PASS proves nothing about prediction,
 reconciliation or projectiles, which is where the real bugs live.
 
+**And test in a room full of AI.** `node scripts/deathmatch-probe.mjs` plays
+sixteen bots to a winner. A duel cannot see what only breaks at scale — snapshot
+size, a quadratic hitbox pass, fighters joining mid-match, or a metric that
+silently assumed there was exactly one opponent.
+
 ```
 skill({ name: "feedback-loop" })    # the full workflow
 ```
@@ -44,7 +49,8 @@ stated in English survives. **Change behaviour, change the spec, in the same
 commit** — and tuning a constant counts as changing behaviour. Read the relevant
 spec before implementing: [movement](specs/movement.md) ·
 [combat](specs/combat.md) · [melee](specs/melee.md) · [arena](specs/arena.md) ·
-[netcode](specs/netcode.md) · [training room](specs/training-room.md).
+[deathmatch](specs/deathmatch.md) · [netcode](specs/netcode.md) ·
+[training room](specs/training-room.md).
 
 ## Tech Stack
 
@@ -76,7 +82,22 @@ One line each; the war story behind every one is in
   bodies are top-left, sprites are centre-origin.
 - **The server is the only judge of a hit**, bullet or sword. The client predicts
   the swing, never the outcome.
-- **Never simulate a tick the client did not send.**
+- **Never simulate a tick the client did not send.** That includes a *remote*
+  fighter: `input: null` in a snapshot means the server froze it, so freeze it too.
+- **Every fighter is simulated at the present instant.** Remotes carry their last
+  known input forward and are rewound on each snapshot; nothing is interpolated
+  into the past. Rollback depth is the local player's pending input count.
+- **Anything drawn from a position the simulation did not produce is
+  depenetrated first.** The render smoother offsets sprites off their bodies on
+  purpose, and that offset can put one inside a ledge.
+- **The snapshot is the only authority on who is present.** `roster` carries names
+  and nothing else — datagrams are unordered, and a stale roster deleted fighters
+  the newest snapshot contained.
+- **A metric about "the opponent" must pin which opponent**, or the subject
+  changes between frames and the metric reports the gap between two fighters as
+  jitter. Check `rollback.primarySwitches` before believing `enemy_x`/`enemy_y`.
+- **Add a field to `PlayerPosition` and the wire packer stops compiling.** That is
+  deliberate: see `src/game/online/wire.ts`.
 - **Anything `server/` reaches through must be an explicit named export** — both
   `export default` and `export *` silently resolve to the wrong thing, and `tsc`
   cannot see either.
@@ -105,7 +126,8 @@ npm run dev:herdr:down
 
 npm run verify           # typecheck (client AND server) + tests + build
 npm run lint             # biome, across src/ server/ scripts/
-node scripts/diagnose.mjs --mode=online --runs=3       # the feedback loop
+node scripts/diagnose.mjs --mode=online --runs=3       # the feedback loop, in a duel
+node scripts/deathmatch-probe.mjs                      # sixteen AI fighters, to a winner
 node scripts/verify-modes.mjs                          # smoke-check every mode
 node scripts/aim-probe.mjs                             # cursor, facing and shot direction
 node scripts/training-probe.mjs                        # one interaction, against a scripted dummy
@@ -126,8 +148,18 @@ node scripts/training-probe.mjs                        # one interaction, agains
 ## Controls
 
 **WASD** move/jump · **LMB** slash (hold 420ms then release = Massive Strike) ·
-**RMB** block · **F** uppercut · **Q/E** sword/gun stance · **P** toggle AI vs AI.
-Sword is the default stance.
+**RMB** block · **F** uppercut · **Q/E** sword/gun stance · **P** toggle AI vs AI ·
+**hold Tab** scoreboard. Sword is the default stance.
+
+**A human client asks for a name before it connects** and remembers it in
+`localStorage`. A script answers with `window.__setPlayerName(name)` — the same
+event the modal fires. A client with `?ai=true` names itself and never blocks,
+which is why every probe runs that way.
+
+**Deathmatch is the mode.** Sixteen fighters, 21 frags or 5 minutes, individual
+respawns, bots filling the empty seats. `?bots=N` sizes a private room (`0` is a
+legitimate empty one), `?fill=N` sizes a public one, `?scoreLimit`/`?timeLimit`
+shorten a private match for a probe. See [specs/deathmatch.md](specs/deathmatch.md).
 
 **`?training=true`** opens the training room: a scriptable practice dummy, a DOM
 menu over the canvas, and `window.__training` for agents. No key toggles the

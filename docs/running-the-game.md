@@ -4,6 +4,7 @@ Every way to launch Vento Áureo, and what each one is for.
 
 - [Prerequisites](#prerequisites)
 - [Starting the dev servers](#starting-the-dev-servers)
+- [Playing with real people](#playing-with-real-people)
 - [Game modes](#game-modes)
   - [Player vs AI (solo)](#1-player-vs-ai-solo)
   - [AI vs AI](#2-ai-vs-ai)
@@ -69,6 +70,39 @@ Restart the game server after editing anything in `server/` or
 
 ---
 
+## Playing with real people
+
+The deathmatch is the mode: **sixteen fighters, first to 21 frags, or the best
+score in five minutes.** Full rules in
+[specs/deathmatch.md](../specs/deathmatch.md).
+
+1. Start both servers, and make sure port **8080** and port **9208** are both
+   reachable from wherever the players are. The client connects to the game server
+   at `location.hostname:9208`, so anyone typing your machine's address or hostname
+   in the browser gets there — but `localhost` will not work from another machine.
+2. Send everyone `http://<your-host>:8080/?online=true`.
+3. Each player **types a name** in the popup and presses *Enter the arena*. It is
+   remembered, so they only do it once per browser.
+4. Empty seats are filled with named bots, and each bot leaves as a human takes its
+   place. Nobody ever waits for a match to start.
+
+While playing:
+
+- **Hold Tab** for the scoreboard — every fighter, frags and deaths, your own row
+  highlighted, bots marked `BOT`.
+- The canvas HUD keeps your HP, your frags against the limit, and the clock.
+- When the match ends, a **podium** shows first, second and third by name and the
+  rest of the field in a table. The next match starts 15 seconds later, with scores
+  zeroed and fresh bot personalities.
+
+Sizing a room, if you want something other than sixteen:
+
+```
+http://<host>:8080/?online=true&fill=8    # a public room held at 8 fighters
+http://<host>:8080/?bots=3                # your own private room, 3 bots
+http://<host>:8080/?bots=0                # your own private empty room
+```
+
 ## Game modes
 
 **This game is online first.** Every mode below except the escape hatch runs
@@ -121,10 +155,15 @@ Waits for a second human rather than spawning a bot. You'll see
 `[ONLINE] Matched in room room-N!` and the "Connecting..." overlay clears once
 both are present.
 
-Your fighter is predicted locally and reconciled by rewind-and-replay, so it
-responds instantly; the opponent is interpolated 150ms in the past for
-smoothness. Measured client/server disagreement is 0.00px. At 0 HP the server
-waits 1.5s, resets both fighters and broadcasts `round-reset`.
+This is the **public deathmatch**: the room holds sixteen fighters and is topped
+up with bots, so it is never empty, and a bot gives up its seat as each human
+arrives. Everyone shares the same room until it fills.
+
+Every fighter is predicted locally and rolled back when the server disagrees —
+yours from your own input, everyone else's from the last input the server reported
+for them — so nothing on screen is drawn in the past. Measured client/server
+disagreement for your own fighter is 0.00px. At 0 HP you are down for 2s and then
+respawn at the point furthest from anyone alive; nobody else is interrupted.
 
 > Local same-keyboard hotseat is **not** supported — PvP is online only. Two
 > tabs on one machine is fine for testing.
@@ -207,10 +246,18 @@ Full frame data and the reasoning behind every number is in
 
 | Parameter | Effect |
 |---|---|
-| *(none)* | Solo match against a server-hosted bot |
-| `?online=true` | Wait for a human opponent instead of a bot |
-| `?ai=true` | Make **your** fighter AI-driven |
+| *(none)* | Your own room, one server-hosted bot |
+| `?online=true` | The public 16-fighter deathmatch, shared with other humans |
+| `?bots=N` | Bots in your own room, 0-15. `0` is an empty room |
+| `?fill=N` | Hold a public room at N fighters instead of 16 |
+| `?ai=true` | Make **your** fighter AI-driven (and skip the name prompt) |
+| `?scoreLimit=N` | Frags to win. **Private rooms only** |
+| `?timeLimit=S` | Match length in seconds. **Private rooms only** |
+| `?training=true` | A scriptable practice dummy and its menu |
 | `?offline=true` | Escape hatch: no server, no netcode (unsupported) |
+
+`scoreLimit` and `timeLimit` are refused on a public room on purpose — one client
+must not be able to end everybody else's match early.
 
 ---
 
@@ -220,6 +267,8 @@ Open DevTools (F12):
 
 ```js
 window.__gameState()            // HP, AI states, full playerPhys / enemyPhys
+window.__matchState()           // scores, clock, winner, rollback and bandwidth
+window.__setPlayerName("Bob")   // answer the name prompt from a script
 window.__toggleAIVsAI()         // same as pressing P
 window.__physicsDiagnostic(5000) // collect 5s of frames, print a JSON report
 ```
@@ -232,7 +281,8 @@ The feedback-loop harness drives real browsers, handles two-tab matchmaking and
 prints a digest:
 
 ```bash
-node scripts/diagnose.mjs --mode=online --runs=3  # the canonical run
+node scripts/diagnose.mjs --mode=online --runs=3  # the canonical duel
+node scripts/deathmatch-probe.mjs                 # 16 AI fighters, played to a winner
 npm run diagnose                                  # offline + online, 8s each
 node scripts/verify-modes.mjs                     # smoke-check every launch mode
 node scripts/probe-online.mjs                     # raw console from one online client

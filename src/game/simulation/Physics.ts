@@ -31,15 +31,17 @@ import {
 	tickMelee,
 } from "./Melee.js";
 
-export type { Rect } from "./Arena.js";
+export type { Rect, SpawnPoint } from "./Arena.js";
 export {
 	hasLineOfSight,
 	PLAYER_HEIGHT,
 	PLAYER_WIDTH,
 	penetrationDepth,
+	pickSpawn,
 	platforms,
 	playerBox,
 	rectsOverlap,
+	SPAWN_POINTS,
 	WORLD_BOTTOM,
 	WORLD_LEFT,
 	WORLD_RIGHT,

@@ -341,7 +341,18 @@ export class PhysicsDiagnostics {
 	private lastGroundY = 0;
 	private wasGrounded = false;
 
-	constructor(private readonly modeLabel: () => string) {}
+	constructor(
+		private readonly modeLabel: () => string,
+		/**
+		 * Bandwidth and rollback quality, read at report time.
+		 *
+		 * A supplier rather than accumulated counters, because the netcode already
+		 * keeps these and a second copy fed by a second code path is how two
+		 * measurements of the same thing start disagreeing. Absent offline, where
+		 * there is no wire to measure.
+		 */
+		private readonly netSummary: (() => object | null) | undefined = undefined,
+	) {}
 
 	get isActive(): boolean {
 		return this.active;
@@ -573,8 +584,10 @@ export class PhysicsDiagnostics {
 
 		this.trackMovement(p);
 		this.trackBullets(sample);
-		// Only the local fighter is predicted, so only it can have had its sword
-		// state replaced by a reconciliation.
+		// Only the local fighter's *predicted* sword state is judged here, so only it
+		// can have had that state replaced by a reconciliation. Every other fighter
+		// is predicted too now, but `sample.enemyState` is deliberately the
+		// authoritative state rather than the prediction — see `Match.record`.
 		const replacement = this.pendingMeleeReplacement;
 		this.pendingMeleeReplacement = null;
 		this.trackMelee("local", p, sample.dt, FRAME_TOLERANCE_MS, replacement);
@@ -1158,6 +1171,15 @@ export class PhysicsDiagnostics {
 				maxSeverity: this.jitter.reduce((m, j) => Math.max(m, j.severity), 0),
 				byType,
 			},
+			/**
+			 * The wire, and how well remote fighters are predicted.
+			 *
+			 * Rollback trades a fixed visual delay for occasional misprediction, and
+			 * the only way to know that trade came out ahead is to measure how often
+			 * it mispredicts and by how much. `snapshots: 0` means nothing arrived and
+			 * every number above describes a client simulating alone.
+			 */
+			netSummary: this.netSummary?.() ?? undefined,
 			reconciliationSummary:
 				this.recon.length > 0
 					? {

@@ -111,13 +111,13 @@ export function spriteSyncSystem(queries: Queries) {
  */
 export function meleeFxSystem(queries: Queries, fx: MeleeFx, dtMs: number) {
 	for (const e of queries.fighters) {
-		fx.updateFighter(e.fighter.side, e.body, dtMs);
+		fx.updateFighter(e.fighter.id, e.body, dtMs);
 	}
 }
 
 /** Bind fighter sprites to the effects layer so impacts can punch their scale. */
 export function bindFxBodies(queries: Queries, fx: MeleeFx) {
 	for (const e of queries.drawnFighters) {
-		fx.registerBody(e.fighter.side, e.sprite);
+		fx.registerBody(e.fighter.id, e.sprite);
 	}
 }

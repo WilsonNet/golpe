@@ -73,15 +73,22 @@ with a parry window that guard-breaks the attacker; and slash-into-block
 cancelling that produces the butterfly. The server is the sole judge of a melee
 hit, exactly as it is for bullets.
 
-## Damage and rounds
+## Damage and death
 
 - Fighters start at **100 HP**. Bullet damage **10**, so ten clean hits is a KO;
   melee damage ranges from 7 (slash) to 24 (Massive Strike).
 - HP is clamped at 0; a dead fighter is drawn at **0.3 alpha**.
-- **Online:** at 0 HP the server waits **1.5s**, resets both fighters to their
-  spawns at full HP, clears all bullets, and broadcasts `round-reset`. Damage is
-  applied server-side and is **not** logged as `[FIGHT]` — read HP from
+- Damage is applied server-side and is **not** logged as `[FIGHT]` — read HP from
   `window.__gameState()` to confirm an online fight is happening.
+- **A deathmatch respawns the fighter, not the arena.** At 0 HP the server credits
+  a frag, holds that fighter down for **2s** as an ordinary stun, and returns it to
+  a spawn point. Nobody else is touched. See [deathmatch.md](deathmatch.md).
+- **A training room keeps the round.** At 0 HP it waits **1.5s**, resets both
+  fighters to their scenario spawns at full HP, clears all bullets and broadcasts
+  `round-reset` — because a scenario is the unit of measurement, and one that
+  respawned a single fighter mid-run while the other kept its score would measure
+  nothing. Suppressed entirely by `disableRoundReset`.
+- **A whole-arena reset also starts a new match**, after the podium.
 - **Offline escape hatch:** reset after **2s**, logged as `=== FIGHT RESET ===`.
 
 ## AI fighters
@@ -90,10 +97,15 @@ hit, exactly as it is for bullets.
 fighter and the server-hosted bots — with a state machine: IDLE, CHASE, RETREAT,
 ATTACK, EVADE, ZONE. Tuned via `AIConfig`
 (`skillLevel`, `reactionTime`, `accuracy`, `aggressiveness`, `dodgeChance`),
-randomised per round so no two fights are identical.
+randomised per match so no two fights are identical.
 
 - Aim is jittered by accuracy; a perfect bot would be unplayable.
 - The brain will not fire without line of sight.
+- **It reasons about exactly one enemy.** That was the whole world at two
+  fighters; at sixteen the caller chooses, and the choice is *the nearest living
+  opponent* — recomputed every tick, on the server for bots and on the client for
+  `?ai=true`. Any fixed choice reads as commuting across the arena rather than
+  fighting.
 - **It picks its stance by range**: sword inside melee reach, gun outside it. A
   bot that never drew its sword would leave the entire system in
   [melee.md](melee.md) untested by the AI-vs-AI feedback loop, which is the only

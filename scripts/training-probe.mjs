@@ -258,23 +258,51 @@ const BATTERY = [
 	},
 	{
 		name: "uppercut beats a block and launches",
-		scenario: {
-			name: "uppercut beats a block",
-			config: { behaviour: "blockAll", facing: "foe" },
-			steps: [UPPERCUT],
-			settleMs: 300,
+		/**
+		 * A launch is an *event*, so it is measured by watching, not by asking once
+		 * afterwards.
+		 *
+		 * This used to read `__training.state().dummy.vy` after the settle, and that
+		 * is the wrong instrument twice over. `training-state` is sent on change and
+		 * its change signature deliberately excludes position — so the velocity in it
+		 * is from whenever the config, script status or stats last moved, not from
+		 * now. And a -620 launch is spent in ~340ms, so even a live single sample is a
+		 * coin flip on where in the arc it lands.
+		 *
+		 * The snapshot is the live source: `enemyPhys` is the dummy's authoritative
+		 * state, predicted every tick and corrected every snapshot. Polling it for
+		 * the minimum answers the question actually being asked — did this fighter
+		 * ever leave the ground?
+		 */
+		async run(page) {
+			const running = page.evaluate((s) => window.__training.run(s), {
+				name: "uppercut beats a block",
+				config: { behaviour: "blockAll", facing: "foe" },
+				steps: [UPPERCUT],
+				settleMs: 900,
+			});
+
+			let minVy = Number.POSITIVE_INFINITY;
+			for (let i = 0; i < 45; i++) {
+				const vy = await page.evaluate(
+					() => window.__gameState?.().enemyPhys?.vy ?? 0,
+				);
+				minVy = Math.min(minVy, vy);
+				await page.waitForTimeout(20);
+			}
+
+			return { report: await running, extra: minVy };
 		},
-		async after(page) {
-			// Sampled immediately after the settle: a launch is a velocity, and it is
-			// gone a few hundred ms later.
-			return page.evaluate(() => window.__training.state().dummy.vy);
-		},
-		verify(report, vy) {
+		verify(report, minVy) {
 			const c = checks(report);
 			c.swung("uppercut");
 			c.outcome("hit", "uppercut");
 			c.damage(DAMAGE.uppercut);
-			if (!(vy < 0)) c.fails.push(`dummy vy ${vy}, expected a launch (vy < 0)`);
+			if (!(minVy < 0)) {
+				c.fails.push(
+					`dummy never rose (lowest vy ${minVy}), expected a launch`,
+				);
+			}
 			return c.fails;
 		},
 	},

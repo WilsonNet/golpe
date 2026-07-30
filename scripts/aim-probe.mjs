@@ -273,9 +273,21 @@ async function runOne(browser, dpr) {
 
 	// No `ai=true`: the local fighter must be human-controlled, or the brain
 	// overwrites the aim angle and the probe measures nothing.
-	const url = MODE === "offline" ? `${BASE_URL}/?offline=true` : BASE_URL;
+	// `bots=0`: an empty room, still fully served, predicted and reconciled.
+	//
+	// Aim is measured against a cursor, and a server bot that closes to melee range
+	// within seconds stuns the fighter, kills it, and eats the shots this probe
+	// needs to see leave — so half the runs failed for reasons that had nothing to
+	// do with aim. An empty room removes the noise without removing the netcode.
+	const url =
+		MODE === "offline" ? `${BASE_URL}/?offline=true` : `${BASE_URL}/?bots=0`;
 	await page.goto(url);
 	await waitForGame(page);
+	// A human-controlled client is asked for a name before it connects, and the
+	// prompt is a DOM modal over the canvas — so an unanswered prompt means both
+	// no match and no cursor reaching the game. Answering it is the same event the
+	// modal fires, so this is the path a player takes, not a bypass.
+	await page.evaluate(() => window.__setPlayerName?.("AimProbe"));
 	await page.waitForTimeout(MODE === "offline" ? 1000 : 3000);
 
 	const rect = await canvasRect(page);

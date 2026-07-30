@@ -215,6 +215,13 @@ A Massive Strike is armed (`massiveReady`) two ways:
 An armed Massive fires on the next attack press, replacing the slash. It is
 unblockable, deals 24, stuns for 650ms and throws the target 420 px/s away.
 
+**A parry-granted Massive is one of the few things a client cannot predict**, and
+it is doubly awkward because throwing it *consumes* the arming. Only the server
+knows a parry landed, so the client predicts a plain slash on release and the
+replay lands on a Massive with `massiveReady` already spent — which reads as the
+state machine diverging unless the reconciler recognises both spellings of the
+event. See [netcode.md](netcode.md).
+
 It is also the single most punishable action in the game: **190ms of startup you
 cannot cancel, and 420ms of recovery you cannot cancel.** Charging in an
 opponent's face is a gift.

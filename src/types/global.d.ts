@@ -13,6 +13,11 @@
  */
 
 import type { AIState } from "../game/characters/EnemyBrain";
+import type {
+	MatchEndReason,
+	MatchPhase,
+	Standing,
+} from "../game/simulation/Deathmatch";
 import type { MeleePhase, PlayerPosition } from "../game/simulation/Physics";
 import type { TrainingApi } from "../game/training/report";
 
@@ -28,9 +33,73 @@ export interface GameStateSnapshot {
 	playerState: AIState | undefined;
 	enemyState: AIState | undefined;
 	playerPhys: PlayerPosition;
-	enemyPhys: PlayerPosition;
+	/**
+	 * The nearest thing to "the opponent" in a match that may have fifteen.
+	 *
+	 * Nullable, because a sixteen-fighter room legitimately has moments with no
+	 * remote fighter yet — the first snapshot has not landed. A duel never did, so
+	 * this used to be non-null and a probe would have crashed on the connecting
+	 * frame rather than reporting it.
+	 */
+	enemyPhys: PlayerPosition | null;
 	remote: { x: number; y: number } | null | undefined;
+	/** Fighters in the room, the local one included. */
+	fighterCount: number;
 	bulletCount: number;
+}
+
+/**
+ * The deathmatch's contract with the harness.
+ *
+ * `__gameState` describes two fighters, because that is what a duel is. A
+ * sixteen-player match is a scoreboard and a clock, and those need saying
+ * separately — `scripts/deathmatch-probe.mjs` asserts on exactly this.
+ */
+export interface MatchStateSnapshot {
+	connected: boolean;
+	/** The id the server scores this client under. */
+	myId: string;
+	myName: string;
+	fighterCount: number;
+	phase: MatchPhase;
+	elapsedMs: number;
+	timeLeftMs: number;
+	scoreLimit: number;
+	timeLimitMs: number;
+	endReason: MatchEndReason;
+	winnerId: string | null;
+	winnerName: string;
+	/** Ranked, by the same pure function the server ranks with. */
+	standings: Standing[];
+	/**
+	 * Rollback quality: how often a remote fighter's prediction was wrong, and by
+	 * how much. `rollbacks: 0` means no snapshots landed and nothing else here
+	 * means anything.
+	 */
+	rollback: RollbackSummary | null;
+	/** Snapshot bandwidth, plus the same rollback numbers. */
+	net: {
+		snapshots: number;
+		fightersInSnapshot: number;
+		avgSnapshotBytes: number;
+		maxSnapshotBytes: number;
+		estBytesPerSec: number;
+		rollback: RollbackSummary;
+	} | null;
+}
+
+export interface RollbackSummary {
+	rollbacks: number;
+	avgErrorPx: number;
+	maxErrorPx: number;
+	visibleCorrections: number;
+	avgResimTicks: number;
+	maxResimTicks: number;
+	frozenRemoteTicks: number;
+	teleports: number;
+	avgLeadTicks: number;
+	maxLeadTicks: number;
+	primarySwitches: number;
 }
 
 /**
@@ -75,6 +144,15 @@ declare global {
 		__toggleAIVsAI?: () => void;
 		/** HP, AI states and full simulation state for both fighters. */
 		__gameState?: () => GameStateSnapshot;
+		/** Scores, clock, winner and rollback quality for a deathmatch. */
+		__matchState?: () => MatchStateSnapshot;
+		/**
+		 * Answer the name prompt from a script.
+		 *
+		 * Deliberately the same event the React modal fires, so an automated run
+		 * exercises the path a human takes instead of a bypass nobody plays.
+		 */
+		__setPlayerName?: (name: string) => void;
 		/** Collect frames for `durationMs`, then print `__DIAGNOSTIC_RESULT__…__END__`. */
 		__physicsDiagnostic?: (durationMs?: number) => string;
 		/** Where the cursor points, where the fighter looks, and where its shots go. */

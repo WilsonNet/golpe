@@ -90,6 +90,23 @@ export class MeleeFx {
 		this.fx(key).body = sprite;
 	}
 
+	/**
+	 * Release a fighter's effect sprites.
+	 *
+	 * Fighters are transient now: sixteen slots, and somebody leaves every match.
+	 * Three sprites per fighter that are created on first sight and never
+	 * destroyed is a leak that only shows up after an hour of a busy server, which
+	 * is exactly the kind of leak nobody finds.
+	 */
+	forget(key: string) {
+		const f = this.fighters.get(key);
+		if (!f) return;
+		f.arc.destroy();
+		f.blade.destroy();
+		f.guard.destroy();
+		this.fighters.delete(key);
+	}
+
 	private fx(key: string): FighterFx {
 		let f = this.fighters.get(key);
 		if (f) return f;

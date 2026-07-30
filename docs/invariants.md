@@ -205,17 +205,63 @@ Verified: `teleportFrames` 0, `frozenFrames` 0, `maxPathDeviationPx` 0,
 - **The server keeps the whole `PlayerPosition`.** It used to rebuild it each tick
   with `wallTouch: "none", wallJumpTimer: 0`, so the server could never wall jump
   while the client could.
-- **Remote entities are interpolated, never predicted.** 150ms delay (3 snapshot
-  intervals at 20Hz); 2 intervals emptied the buffer on a single dropped datagram
-  and the remote teleported ~100px. Interpolated positions are depenetrated with
-  `resolveOverlap` before drawing — a straight line between two legal snapshots
-  can still clip a corner.
-- **Remote *combat* state is not interpolated.** Position must be, or the remote
-  stutters between updates; sword state must not be, because a swing rendered
-  150ms late is a swing you cannot react to.
+- **Remote fighters are rolled back, never interpolated.** They carry their last
+  known input forward, are simulated on the client's own fixed step, and are
+  rewound to the authoritative state and re-simulated on every snapshot. The old
+  150ms interpolation delay was smooth and correct and drew every swing too late
+  to react to — which in a game about reading a swing is the only thing that
+  mattered. This also retired the split where position came from the interpolator
+  and combat state came from the snapshot: one simulated state, one clock, and the
+  two can no longer disagree.
+- **Rollback depth is the local player's pending input count**, not a latency
+  estimate. The server reported its state at seq *N* and the client holds *N+1..N+k*,
+  so advancing remotes by *k* puts every fighter on one tick by construction.
+  Capped at 9 ticks (150ms).
+- **A snapshot's `input: null` means the server froze that fighter.** Reproduce
+  the freeze. Inventing a tick of motion for it is the same mistake as the server
+  inventing one, and costs the same permanent error.
+- **Anything drawn from a position the simulation did not produce is
+  depenetrated first** (`legaliseDrawn`). The render smoother offsets a sprite off
+  its body deliberately, and that offset can put it inside a ledge the body never
+  touched. The interpolator needed this for the same reason; forgetting it while
+  replacing the interpolator turned zero jitter into six collision penetrations in
+  one run.
+- **The snapshot is the only authority on who is present.** `roster` supplies
+  names and nothing else. Presence taken from the roster let a stale, unordered
+  datagram delete a fighter the newest snapshot contained — destroying its entity
+  and sprite, rebuilding them a frame later, and discarding its prediction. It
+  showed up as `rollback.primarySwitches` counting more changes than anybody had
+  joined or left, which is the only reason it was found.
+- **A metric about "the opponent" must pin which opponent.** Sixteen fighters
+  means "the first remote" is a choice, and deriving it per call from a list that
+  gets rebuilt made the subject change between frames. `enemy_x`/`enemy_y` compare
+  this frame to the last, so they reported the gap between two fighters standing in
+  different parts of the arena as 45-75px of jitter from a fighter that had not
+  moved. The metric was wrong, not the netcode — and every fix aimed at the netcode
+  would have been aimed at nothing.
+- **Judge a state machine's frame data against the authoritative state, never a
+  predicted one.** The melee tracker asks whether a move honoured the MOVES table,
+  which is only answerable about the state machine that *is* authoritative — a
+  prediction being wrong is what prediction is. Once remote fighters became
+  predicted, feeding the tracker their predicted state made a mispredicted uppercut
+  read as an uncancellable move ending 500ms early, and reported correct netcode as
+  a frame data violation. `DiagnosticSample.enemyState` is the snapshot's state;
+  `DiagnosticSample.enemy` is the drawn position. The split is load-bearing.
+- **A server-granted Massive is consumed by throwing it.** A parry the client had
+  not been told about arms a Massive server-side; the client predicts a plain slash
+  on release, the replay lands on a Massive, and `massiveReady` is *already spent*.
+  A reason check that only looks for the flag being newly set finds nothing and
+  calls it an unexplained desync. Landing on a Massive the client did not know it
+  had is the same event, one tick later — both spellings must be excused.
+- **Wire packing is proved, not trusted.** `STATE_FIELDS` is asserted at compile
+  time to cover every key of `PlayerPosition`, and a test replays 30 ticks from
+  both a state and its round trip and requires them identical. A round-trip test
+  alone is not enough: a fresh `createPlayerState` has every timer at zero and
+  survives a packer that forgot half the fields.
 - **Respawns are announced, not inferred — but an announcement can lose a race.**
-  The server broadcasts `round-reset` and the client drops all interpolation
-  history; blending across a respawn drew the remote sliding through the arena.
+  The server broadcasts `respawn { id }` for one fighter or `round-reset` for the
+  arena, and the client drops that fighter's prediction outright; smoothing across
+  a respawn drew the remote sliding through the arena.
   What that announcement cannot be trusted to do is *arrive first*: it is a
   datagram, and the snapshot carrying the respawned state races it. Melee
   tracking relied on it alone, so when the snapshot won it observed a fighter
@@ -230,6 +276,44 @@ Verified: `teleportFrames` 0, `frozenFrames` 0, `maxPathDeviationPx` 0,
   diagnosable, and the call site passed three of the four arguments — so the
   `[DESYNC]` log could only ever print nothing, and the metric it was meant to
   explain went unexplained for as long as it existed.
+
+## The deathmatch
+
+Full detail in [specs/deathmatch.md](../specs/deathmatch.md); these are the ways
+sixteen fighters breaks things two never could.
+
+- **Death is a stun, not a flag.** A killed fighter gets
+  `stunTimer = RESPAWN_DELAY_MS`. Stun already discards intent identically on both
+  sides, already replays correctly through reconciliation, and is already the one
+  legitimate way state changes without the client predicting it. A `dead` field in
+  `PlayerPosition` would have needed all three built again.
+- **Respawn one fighter, not the arena.** Resetting sixteen fighters because one
+  of them lost a duel is precisely what a deathmatch is not. The whole-arena reset
+  survives for a new match and for the training room, which still runs rounds
+  because a scenario is the unit of measurement there.
+- **The standings tie-break chain must be total** — frags, deaths, name, id.
+  Anything less leaves the order dependent on iteration order, which differs
+  between the server's `Map` and a client's rebuild, so two clients would draw two
+  different podiums from identical data. One pure `rankScores` both sides call.
+- **A bot is a scoreboard row like anyone else.** It has a generated, unique name,
+  it gives up its seat to a human (`rebalanceBots` works in both directions), and
+  it targets the nearest living opponent. Filling up without evicting left a
+  leftover bot in a room asked for two fighters, so a test that wanted a clean duel
+  silently measured a three-way fight.
+- **`bots=0` is a supported mode.** An empty room is fully served, predicted and
+  reconciled, and it is the only way to measure the local fighter's aim without a
+  bot closing to melee range and eating the measurement. Half the aim probe's runs
+  used to fail for reasons that had nothing to do with aim.
+- **A fighter is transient, so its sprites must be destroyed.** Sixteen slots on a
+  server that runs for hours means churn; three leaked effect sprites per departure
+  is a leak nobody finds. `MeleeFx.forget` exists for that.
+- **`fighter.side` was `"local" | "remote"` and was also the effects key.** At
+  sixteen that means every remote fighter's swing trail, guard and impact punch
+  land on one shared set of sprites. Fighters are keyed by the id the server scores
+  them under.
+- **A melee event carries its victim.** Deriving it from
+  `attackerId === myId` was correct in a duel and wrong the instant a third fighter
+  existed: every hit between two other players punched the local fighter's sprite.
 
 ## The training room
 

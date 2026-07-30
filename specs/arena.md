@@ -60,8 +60,30 @@ These are enforced by tests, because each was violated by a real bug.
 
 ## Spawns
 
-- Player A: **x = 100**, Player B: **x = 668**, both at **y = 480**, facing each
-  other. Symmetric about the arena centre.
+**Seventeen spawn points for sixteen slots** (`SPAWN_POINTS`), so a respawn always
+has somewhere to go that nobody is standing on. Eight on the ground, two on each
+low ledge pair, two on mid, one on each high ledge, one on the peak. Every point
+faces the middle of the arena.
+
+Two rules they must satisfy, both asserted by tests:
+
+- **Nothing spawns inside geometry.** A spawn inside a solid is depenetrated on
+  the first tick, which every *other* client sees as a teleport — from a fighter
+  that has not done anything yet.
+- **Sixteen fighters placed at once never overlap.** Otherwise the depenetrator
+  shoves one of them sideways on tick one, on every client, simultaneously, before
+  anybody has pressed a button. That is why the pillars have no spawn on them and
+  why the ground points are spread wider than `PLAYER_WIDTH`.
+
+`pickSpawn(occupied)` returns **the point furthest from the nearest fighter in
+`occupied`**, ties going to the earlier point in the list. It is pure and
+deterministic, so client and server agree on where a fighter came back and a test
+can assert the choice rather than eyeballing it. Spawning inside somebody's swing
+is the one death a player cannot do anything about.
+
+A whole-arena reset hands spawns out one at a time against the points already
+taken, so the *set* is spread rather than each fighter independently choosing the
+same "best" point.
 
 ## Not implemented
 

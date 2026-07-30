@@ -38,6 +38,7 @@
     "dev:herdr:status": "node scripts/dev-herdr.mjs status",
     "dev:herdr:logs": "node scripts/dev-herdr.mjs logs",
     "diagnose": "node scripts/diagnose.mjs",
+    "deathmatch": "node scripts/deathmatch-probe.mjs",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json",
     "verify": "npm run typecheck && npm run test && npm run build"
   },
@@ -47,7 +48,8 @@
     "miniplex": "^2.0.0",
     "pixi.js": "^8.19.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "unique-names-generator": "^4.7.1"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.15",

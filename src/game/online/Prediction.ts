@@ -143,12 +143,25 @@ export class PredictedPlayer {
 		// The server telling us we were hit is the one legitimate way a sword state
 		// can change without the client having seen it coming. Stun, fresh
 		// invulnerability and a newly armed Massive are the three tells.
+		//
+		// The Massive tell has to be read two ways, because arming is *consumed* by
+		// striking. A parry the client had not been told about arms a Massive
+		// server-side; the client predicts a plain slash on release; the replay lands
+		// on a Massive and `massiveReady` is already spent — so looking only for the
+		// flag being newly set finds nothing and reports correct netcode as an
+		// unexplained desync. Landing on a Massive the client did not know it had is
+		// the same event, seen one tick later.
+		const grantedMassive =
+			this.state.meleeAction === "massive" &&
+			predictedAction !== "massive" &&
+			!predictedMassiveReady;
 		const reason: ReconcileResult["replaceReason"] =
 			this.state.stunTimer > 0
 				? "stun"
 				: this.state.iframeTimer > 0
 					? "iframe"
-					: this.state.massiveReady && !predictedMassiveReady
+					: (this.state.massiveReady && !predictedMassiveReady) ||
+							grantedMassive
 						? "massive-armed"
 						: null;
 		const interrupted = reason !== null;

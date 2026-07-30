@@ -19,8 +19,9 @@ it.
 | [movement.md](movement.md) | Walking, jumping, dashing, wall jumps, the feel constants and why they hold |
 | [combat.md](combat.md) | Stances, ranged attacks, damage, round lifecycle |
 | [melee.md](melee.md) | Sword combat: frame data, blocking, parries, the butterfly, the Massive Strike |
-| [arena.md](arena.md) | World bounds, platform layout, reachability rules |
-| [netcode.md](netcode.md) | Online-first model, prediction, reconciliation, projectiles, bots |
+| [arena.md](arena.md) | World bounds, platform layout, reachability rules, spawn points |
+| [deathmatch.md](deathmatch.md) | 16 fighters, frags, respawns, the win condition, names, the podium |
+| [netcode.md](netcode.md) | Online-first model, rollback, reconciliation, the wire format, projectiles, bots |
 | [training-room.md](training-room.md) | The scriptable practice dummy, its beat format, and the agent API |
 
 ## Rules

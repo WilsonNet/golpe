@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { GameCanvas } from "./GameCanvas";
-import { EventBus } from "./game/EventBus";
+import { MatchOver } from "./ui/MatchOver";
+import { NamePrompt } from "./ui/NamePrompt";
+import { Scoreboard } from "./ui/Scoreboard";
 import { TrainingPanel } from "./ui/TrainingPanel";
 
 /**
@@ -17,37 +19,27 @@ function isTrainingMode(): boolean {
 	);
 }
 
+/**
+ * The DOM overlay.
+ *
+ * Everything here is UI the canvas is the wrong tool for — a text field, a
+ * sixteen-row table, a podium. The canvas HUD keeps only the two numbers a
+ * player reads without looking away from the fight. See the `pixi-text-and-ui`
+ * skill for the split.
+ *
+ * The deathmatch overlays render in every mode, including training: they draw
+ * nothing until the game emits a match status, and a training room never does.
+ */
 function App() {
-	const [bulletCount, setBulletCount] = useState(0);
 	const [training] = useState(isTrainingMode);
-
-	// Subscribed in an effect, not in the render body. Subscribing during render
-	// added a fresh listener on every state change, so each shot was counted once
-	// more than the one before it.
-	useEffect(
-		() => EventBus.on("bullet-fired", () => setBulletCount((c) => c + 1)),
-		[],
-	);
 
 	return (
 		<div id="app">
 			<GameCanvas />
 			{training ? <TrainingPanel /> : null}
-			<div
-				style={{
-					position: "absolute",
-					top: 0,
-					right: 0,
-					padding: "8px 16px",
-					background: "rgba(0,0,0,0.7)",
-					color: "#fff",
-					fontFamily: "monospace",
-					fontSize: "18px",
-					borderRadius: "0 0 0 8px",
-				}}
-			>
-				Bullets fired: {bulletCount}
-			</div>
+			<Scoreboard />
+			<MatchOver />
+			<NamePrompt />
 		</div>
 	);
 }

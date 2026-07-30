@@ -111,11 +111,12 @@ through the authoritative server, so the netcode is exercised whenever anyone
 plays. Testing must follow the same rule.
 
 ```bash
-node scripts/diagnose.mjs --mode=online --runs=3   # the canonical run
+node scripts/diagnose.mjs --mode=online --runs=3   # the canonical duel
+node scripts/deathmatch-probe.mjs                  # a room full of AI, to a winner
 ```
 
 - **Online AI vs AI is the reference mode.** Two AI fighters over the real
-  server exercise prediction, reconciliation, remote interpolation, projectile
+  server exercise prediction, reconciliation, remote rollback, projectile
   rendering and the arena at once, with no human needed.
 - **An offline PASS proves almost nothing.** It bypasses prediction,
   reconciliation and server-owned bullets — precisely where the bugs have been.
@@ -126,6 +127,43 @@ node scripts/diagnose.mjs --mode=online --runs=3   # the canonical run
   is deliberate: it means playing the game is dogfooding the netcode.
 - `?offline=true` exists only for working without a server. Never diagnose it and
   conclude anything about the netcode.
+
+### What a duel cannot test: everything that only breaks at sixteen
+
+`--mode=online` seats two fighters (`fill=2`). That is the cleanest place to read
+prediction, reconciliation and projectile flight — and it is blind to every bug
+that needs a crowd.
+
+```bash
+node scripts/deathmatch-probe.mjs                                   # to the frag limit
+node scripts/deathmatch-probe.mjs --scoreLimit=999 --timeLimit=20   # to the clock
+```
+
+Every one of these was found by the sixteen-fighter run and was invisible to the
+duel:
+
+- **A metric that assumed one opponent.** `enemy_x`/`enemy_y` follow "the primary
+  remote". Derived per call from a list that gets rebuilt, the *subject* changed
+  between frames, and the metric reported the gap between two fighters standing in
+  different parts of the arena as 45-75px of jitter. Check
+  `net.rollback.primarySwitches` before believing those two numbers, and before
+  trying to fix the netcode they are accusing.
+- **A stale roster deleting live fighters.** Presence taken from an unordered
+  datagram destroyed and rebuilt entities a frame later, throwing away their
+  prediction. The only visible symptom was `primarySwitches` counting more changes
+  than anybody had joined or left.
+- **The victim of a hit.** Deriving it from `attackerId === myId` is correct in a
+  duel and punches the local fighter's sprite for every hit between two other
+  players.
+- **A snapshot too big for a datagram.** Sixteen verbatim `PlayerPosition`
+  objects is ~128 KB/s. `net.avgSnapshotBytes` is in the report because that is
+  what forced the packed wire format.
+
+**Read `net.rollback` on any online run.** Rollback trades a fixed visual delay
+for occasional misprediction, so `avgErrorPx` and `visibleCorrections` are how you
+know the trade came out ahead. `jitterSummary` measures the *drawn* position and
+should be 0; the raw corrections live in `net.rollback`, so smoothing them hides
+nothing.
 
 ### What AI vs AI cannot test: aim
 
@@ -215,7 +253,8 @@ Jump is **edge-triggered** (`up && !jumpHeld`), so anything driving it must rele
 between jumps.
 
 Netcode: input sequencing + rewind-and-replay reconciliation, a starvation freeze on
-the server, 150ms remote interpolation delay, and an explicit `round-reset` broadcast.
+the server, GGPO-style rollback for remote fighters (carry their last input forward,
+rewind on every snapshot), and explicit `respawn` / `round-reset` broadcasts.
 See [`docs/invariants.md`](../../../docs/invariants.md) for the reasoning behind
 each.
 

@@ -6,12 +6,34 @@ import {
 	EnemyBrain,
 } from "../src/game/characters/EnemyBrain.js";
 import type {
+	GameSnapshot,
+	MatchStatus,
+	MeleeEventMsg,
+	PlayerInput,
+	RosterMsg,
+	SnapshotPlayer,
+} from "../src/game/online/types.js";
+import { packIntent, packState } from "../src/game/online/wire.js";
+import { pickSpawn, type SpawnPoint } from "../src/game/simulation/Arena.js";
+import {
+	MATCH_OVER_LINGER_MS,
+	type MatchEndReason,
+	type MatchPhase,
+	matchEndReason,
+	matchWinner,
+	RESPAWN_DELAY_MS,
+	SCORE_LIMIT,
+	type ScoreEntry,
+	TIME_LIMIT_MS,
+} from "../src/game/simulation/Deathmatch.js";
+import type {
 	TrainingConfig,
 	TrainingConfigMsg,
 	TrainingConfigPatch,
 	TrainingFighterStats,
 	TrainingStateMsg,
 } from "../src/game/training/types.js";
+import { botName, sanitiseName } from "./BotNames.js";
 import {
 	applyMeleeResult,
 	BULLET_DAMAGE,
@@ -24,8 +46,6 @@ import {
 	createPlayerState,
 	hasLineOfSight,
 	isBulletOutOfBounds,
-	type MeleeMove,
-	type MeleeOutcome,
 	meleePhase,
 	PLAYER_HEIGHT,
 	PLAYER_WIDTH,
@@ -37,26 +57,15 @@ import {
 } from "./physics.js";
 import { TrainingDummy } from "./TrainingDummy.js";
 
-export interface PlayerInput extends PlayerIntent {
-	seq: number;
-	aimAngle: number;
-}
-
-export interface MeleeEventMsg {
-	attackerId: string;
-	move: MeleeMove;
-	outcome: MeleeOutcome;
-	x: number;
-	y: number;
-	dir: number;
-}
-
 /** Per-fighter counters. Only the server sees a bullet connect, or a hit land through invincibility. */
 function newStats(): Omit<TrainingFighterStats, "hp"> {
 	return { bulletsFired: 0, bulletHits: 0, damageDealt: 0, damageTaken: 0 };
 }
 
 interface ConnectedPlayer {
+	id: string;
+	/** What the scoreboard calls this fighter. Never empty. */
+	name: string;
 	/** null for a server-hosted bot or a training dummy, which have no channel. */
 	channel: ServerChannel | null;
 	/** Set only for bots: the fighter logic driving this player. */
@@ -72,6 +81,21 @@ interface ConnectedPlayer {
 	/** Full simulation state — never rebuilt per tick, or wall state is lost. */
 	state: PlayerPosition;
 	hp: number;
+	/** Deathmatch score. */
+	kills: number;
+	deaths: number;
+	/**
+	 * Down and waiting to respawn.
+	 *
+	 * A dead fighter is still simulated — it is held still by an ordinary stun, so
+	 * both sides discard its intent through the same code path — but it cannot be
+	 * hit and cannot score.
+	 */
+	alive: boolean;
+	/** ms until this fighter returns to the arena. Only meaningful while dead. */
+	respawnTimer: number;
+	/** Who last damaged this fighter, for kill credit. */
+	lastHurtBy: string | null;
 	lastAttackTime: number;
 	/** Inputs received but not yet simulated, in arrival order. */
 	queue: PlayerInput[];
@@ -90,34 +114,33 @@ interface ConnectedPlayer {
 	tickInput: PlayerInput | null;
 	/** What to simulate this tick — including a repeat of `lastInput` when starved. */
 	pendingInput: PlayerInput | null;
+	/**
+	 * The intent this fighter was actually advanced with this tick, for the
+	 * snapshot.
+	 *
+	 * This is what lets every other client roll this fighter forward to the
+	 * present instead of drawing it in the past. `null` means it was frozen, which
+	 * clients must reproduce rather than paper over.
+	 */
+	simulatedIntent: PlayerIntent | null;
 	stats: ReturnType<typeof newStats>;
 }
 
-export interface SnapshotPlayer {
-	id: string;
-	hp: number;
-	facingDir: number;
-	lastSeq: number;
-	state: PlayerPosition;
-}
-
-export interface SnapshotBullet {
-	id: number;
-	ownerId: string;
-	x: number;
-	y: number;
-	vx: number;
-	vy: number;
-}
-
-const START_X_A = 100;
-const START_X_B = 668;
 const START_Y = 480;
 
-const MAX_PLAYERS = 2;
+/**
+ * Sixteen fighters per room.
+ *
+ * The arena has seventeen spawn points, one more than the cap, so a respawn
+ * always has somewhere to go that nobody is standing on.
+ */
+const MAX_PLAYERS = 16;
 const TICK_RATE = 1000 / 60;
 const BROADCAST_RATE = 1000 / 20;
 const RESET_DELAY_MS = 1500;
+
+/** How often the roster is re-sent even when nothing changed. See `tick`. */
+const ROSTER_HEARTBEAT_MS = 2000;
 
 /**
  * Cap on buffered input. A client that floods or lags must not be able to make
@@ -176,14 +199,37 @@ export class GameRoom {
 	private tickAccumulator = 0;
 	private broadcastAccumulator = 0;
 	private lastTime = 0;
+	/**
+	 * Monotonic simulation tick. The anchor every client rolls back to.
+	 *
+	 * Never reset, not even between matches: it is a clock, and a clock that goes
+	 * backwards would make every client re-simulate the whole match.
+	 */
+	private tickCount = 0;
 	private resetTimer = -1;
 	/** ms of training simulated since the last `reset`, for the report's window. */
 	private trainingElapsedMs = 0;
 	/** What was last sent as `training-state`, so it can be sent on change only. */
 	private trainingSignature = "";
+	/** ms since the roster was last sent. */
+	private rosterAccumulator = 0;
 
-	constructor(id: string) {
+	/** Deathmatch clock and lifecycle. */
+	private phase: MatchPhase = "live";
+	private matchElapsedMs = 0;
+	private endReason: MatchEndReason = null;
+	private winnerId: string | null = null;
+	private overTimer = 0;
+	private readonly scoreLimit: number;
+	private readonly timeLimitMs: number;
+
+	constructor(
+		id: string,
+		rules: { scoreLimit?: number; timeLimitMs?: number } = {},
+	) {
 		this.id = id;
+		this.scoreLimit = rules.scoreLimit ?? SCORE_LIMIT;
+		this.timeLimitMs = rules.timeLimitMs ?? TIME_LIMIT_MS;
 	}
 
 	get playerCount(): number {
@@ -195,26 +241,48 @@ export class GameRoom {
 		return [...this.players.values()].filter((p) => p.channel !== null).length;
 	}
 
+	get botCount(): number {
+		return [...this.players.values()].filter((p) => p.brain !== null).length;
+	}
+
 	get isFull(): boolean {
 		return this.channelIds.length >= MAX_PLAYERS;
 	}
 
-	addPlayer(channel: ServerChannel): boolean {
-		if (this.isFull) return false;
+	/** Room for one more human, counting a bot as a seat that can be freed. */
+	get hasHumanSlot(): boolean {
+		return !this.isFull || this.botCount > 0;
+	}
 
-		const isFirst = this.channelIds.length === 0;
-		const id = channel.id as string;
-		this.channelIds.push(id);
-		this.players.set(id, {
-			channel,
-			brain: null,
-			dummy: null,
-			state: createPlayerState(
-				isFirst ? START_X_A : START_X_B,
-				START_Y,
-				isFirst ? 1 : -1,
-			),
-			hp: 100,
+	get names(): ReadonlySet<string> {
+		return new Set([...this.players.values()].map((p) => p.name));
+	}
+
+	/** Every field a new slot needs, so the three seating paths cannot drift. */
+	private newSlot(
+		id: string,
+		name: string,
+		spawn: SpawnPoint,
+		hp: number,
+		sources: {
+			channel?: ServerChannel | null;
+			brain?: EnemyBrain | null;
+			dummy?: TrainingDummy | null;
+		},
+	): ConnectedPlayer {
+		return {
+			id,
+			name,
+			channel: sources.channel ?? null,
+			brain: sources.brain ?? null,
+			dummy: sources.dummy ?? null,
+			state: createPlayerState(spawn.x, spawn.y, spawn.facing),
+			hp,
+			kills: 0,
+			deaths: 0,
+			alive: true,
+			respawnTimer: 0,
+			lastHurtBy: null,
 			lastAttackTime: 0,
 			queue: [],
 			lastInput: idleInput(),
@@ -222,8 +290,32 @@ export class GameRoom {
 			starvedTicks: 0,
 			tickInput: null,
 			pendingInput: null,
+			simulatedIntent: null,
 			stats: newStats(),
-		});
+		};
+	}
+
+	/** Where the living currently stand, for spawn selection. */
+	private occupiedPoints(): { x: number; y: number }[] {
+		return [...this.players.values()]
+			.filter((p) => p.alive)
+			.map((p) => ({ x: p.state.x, y: p.state.y }));
+	}
+
+	addPlayer(channel: ServerChannel, rawName?: unknown): boolean {
+		// A room full of bots still has room for a human: bots exist to keep the
+		// arena busy, not to hold a seat against the people the arena is for.
+		if (this.isFull && !this.freeBotSlot()) return false;
+
+		const id = channel.id as string;
+		const name = sanitiseName(rawName, `Player${this.channelIds.length + 1}`);
+		this.channelIds.push(id);
+		this.players.set(
+			id,
+			this.newSlot(id, name, pickSpawn(this.occupiedPoints()), 100, {
+				channel,
+			}),
+		);
 
 		channel.join(this.id);
 		channel.userData = { roomId: this.id };
@@ -253,6 +345,16 @@ export class GameRoom {
 			this.removePlayer(id);
 		});
 
+		this.broadcastRoster();
+		return true;
+	}
+
+	/** Evict one bot so a human can sit down. Returns false if there was none. */
+	private freeBotSlot(): boolean {
+		const bot = [...this.players.values()].find((p) => p.brain !== null);
+		if (!bot) return false;
+		this.removePlayer(bot.id);
+		console.log(`[MATCH] ${this.id}: bot ${bot.name} left to seat a human`);
 		return true;
 	}
 
@@ -260,35 +362,48 @@ export class GameRoom {
 	 * Fill a slot with a server-hosted bot.
 	 *
 	 * The bot is an ordinary player from the simulation's point of view — same
-	 * state, same tickPlayer, same bullets. Only its input source differs, so a
-	 * solo match exercises the entire netcode path instead of bypassing it.
+	 * state, same tickPlayer, same bullets, same scoreboard row. Only its input
+	 * source differs, so a match against bots exercises the entire netcode path
+	 * instead of bypassing it. That is what makes a room full of AI a real test.
 	 */
 	addBot(): boolean {
 		if (this.isFull) return false;
 
-		const isFirst = this.channelIds.length === 0;
 		const id = `bot-${this.id}-${this.channelIds.length}`;
 		this.channelIds.push(id);
-		this.players.set(id, {
-			channel: null,
-			brain: new EnemyBrain(botConfig()),
-			dummy: null,
-			state: createPlayerState(
-				isFirst ? START_X_A : START_X_B,
-				START_Y,
-				isFirst ? 1 : -1,
+		this.players.set(
+			id,
+			this.newSlot(
+				id,
+				botName(this.names),
+				pickSpawn(this.occupiedPoints()),
+				100,
+				{
+					brain: new EnemyBrain(botConfig()),
+				},
 			),
-			hp: 100,
-			lastAttackTime: 0,
-			queue: [],
-			lastInput: idleInput(),
-			lastSeq: 0,
-			starvedTicks: 0,
-			tickInput: null,
-			pendingInput: null,
-			stats: newStats(),
-		});
+		);
+		this.broadcastRoster();
 		return true;
+	}
+
+	/**
+	 * Make the room hold exactly `target` fighters, using bots as the ballast.
+	 *
+	 * Both directions, which is the part that matters. Filling up only was not
+	 * enough: two humans joining a room asked for two fighters got three, because
+	 * the bot seated for the first human was never asked to leave — so a test that
+	 * wanted a clean duel silently measured a three-way fight.
+	 *
+	 * Humans are never evicted. A room with more humans than the target keeps all
+	 * of them and simply has no bots.
+	 */
+	rebalanceBots(target: number): number {
+		const want = Math.max(1, Math.min(target, MAX_PLAYERS));
+		let changed = 0;
+		while (this.playerCount > want && this.freeBotSlot()) changed++;
+		while (this.playerCount < want && this.addBot()) changed++;
+		return changed;
 	}
 
 	/**
@@ -303,31 +418,22 @@ export class GameRoom {
 	addDummy(patch: TrainingConfigPatch = {}): boolean {
 		if (this.isFull) return false;
 
-		const isFirst = this.channelIds.length === 0;
 		const id = `dummy-${this.id}-${this.channelIds.length}`;
 		const dummy = new TrainingDummy(patch);
 		this.channelIds.push(id);
-		this.players.set(id, {
-			channel: null,
-			brain: null,
-			dummy,
-			state: createPlayerState(
-				isFirst ? START_X_A : START_X_B,
-				START_Y,
-				isFirst ? 1 : -1,
+		this.players.set(
+			id,
+			this.newSlot(
+				id,
+				"Dummy",
+				{ x: 668, y: START_Y, facing: -1 },
+				dummy.config.dummyHp,
+				{ dummy },
 			),
-			hp: dummy.config.dummyHp,
-			lastAttackTime: 0,
-			queue: [],
-			lastInput: idleInput(),
-			lastSeq: 0,
-			starvedTicks: 0,
-			tickInput: null,
-			pendingInput: null,
-			stats: newStats(),
-		});
+		);
 		// Place both fighters where the config asks before anyone sees a snapshot.
 		this.resetPlayers(false);
+		this.broadcastRoster();
 		return true;
 	}
 
@@ -388,9 +494,7 @@ export class GameRoom {
 			config: dummy.config,
 			status: dummy.status,
 			dummy: {
-				id:
-					[...this.players.keys()].find((k) => this.players.get(k) === slot) ??
-					"",
+				id: slot.id,
 				hp: slot.hp,
 				x: slot.state.x,
 				y: slot.state.y,
@@ -437,7 +541,7 @@ export class GameRoom {
 		dtMs: number,
 		now: number,
 	): PlayerInput {
-		const foe = [...this.players.values()].find((p) => p !== bot);
+		const foe = this.nearestFoe(bot);
 		if (!foe) return idleInput();
 
 		const perception = this.perceive(bot, foe);
@@ -467,6 +571,31 @@ export class GameRoom {
 			dash: out.dash,
 			aimAngle: out.aimAngle,
 		};
+	}
+
+	/**
+	 * The living opponent closest to `self`.
+	 *
+	 * `EnemyBrain` reasons about exactly one enemy, which was the whole world at
+	 * two players. At sixteen, somebody has to choose which one — and "the nearest
+	 * one still standing" is the choice that makes a bot fight whoever is actually
+	 * threatening it rather than sprinting across the arena at a fixed rival.
+	 */
+	private nearestFoe(self: ConnectedPlayer): ConnectedPlayer | undefined {
+		let best: ConnectedPlayer | undefined;
+		let bestDist = Number.POSITIVE_INFINITY;
+		for (const p of this.players.values()) {
+			if (p === self || !p.alive) continue;
+			const dist = Math.hypot(
+				p.state.x - self.state.x,
+				p.state.y - self.state.y,
+			);
+			if (dist < bestDist) {
+				bestDist = dist;
+				best = p;
+			}
+		}
+		return best;
 	}
 
 	/** Everything an input source is allowed to see, built from simulation state only. */
@@ -511,28 +640,204 @@ export class GameRoom {
 		player?.channel?.leave();
 		this.players.delete(id);
 		this.channelIds = this.channelIds.filter((c) => c !== id);
+		// Bullets outlive their owner's slot otherwise, and one of them would
+		// eventually be credited to an id nobody holds.
+		this.bullets = this.bullets.filter((b) => b.ownerId !== id);
+		this.broadcastRoster();
 	}
 
-	get snapshot(): {
-		t: number;
-		players: SnapshotPlayer[];
-		bullets: SnapshotBullet[];
-		melee: MeleeEventMsg[];
-	} {
+	// =========================================================
+	//  DEATHMATCH
+	// =========================================================
+
+	private scoreEntries(): ScoreEntry[] {
+		return [...this.players.values()].map((p) => ({
+			id: p.id,
+			name: p.name,
+			kills: p.kills,
+			deaths: p.deaths,
+			bot: p.brain !== null,
+		}));
+	}
+
+	private matchStatus(): MatchStatus {
+		return {
+			phase: this.phase,
+			elapsedMs: Math.round(this.matchElapsedMs),
+			scoreLimit: this.scoreLimit,
+			timeLimitMs: this.timeLimitMs,
+			endReason: this.endReason,
+			winnerId: this.winnerId,
+			nextMatchInMs:
+				this.phase === "over" ? Math.max(0, Math.round(this.overTimer)) : 0,
+		};
+	}
+
+	/**
+	 * Credit a kill and put the victim down.
+	 *
+	 * Death is expressed as an ordinary stun rather than a flag the simulation
+	 * would have to learn about. That is not a shortcut: stun is already the one
+	 * legitimate way a fighter's state changes without the client predicting it,
+	 * it is already replayed correctly through reconciliation, and it already
+	 * discards intent identically on both sides. A `dead` field in
+	 * `PlayerPosition` would have needed all of that built again.
+	 */
+	private killPlayer(victim: ConnectedPlayer) {
+		victim.alive = false;
+		victim.deaths++;
+		victim.respawnTimer = RESPAWN_DELAY_MS;
+		victim.hp = 0;
+		victim.state.stunTimer = RESPAWN_DELAY_MS;
+		victim.state.blocking = false;
+		victim.state.meleeAction = "none";
+		victim.state.meleeTimer = 0;
+
+		const killer =
+			victim.lastHurtBy && victim.lastHurtBy !== victim.id
+				? this.players.get(victim.lastHurtBy)
+				: undefined;
+		if (killer) killer.kills++;
+		victim.lastHurtBy = null;
+
+		console.log(
+			`[FRAG] ${killer?.name ?? "the arena"} killed ${victim.name} (${killer?.kills ?? 0})`,
+		);
+	}
+
+	/** Damage one fighter, crediting `sourceId`, and score the kill if it lands. */
+	private damage(victim: ConnectedPlayer, amount: number, sourceId: string) {
+		if (!victim.alive || amount <= 0) return;
+		// Scores are frozen once the podium is decided; the fight is allowed to
+		// keep going, because freezing the simulation is what desyncs it.
+		if (this.phase === "over") return;
+
+		victim.lastHurtBy = sourceId;
+		victim.hp = Math.max(0, victim.hp - amount);
+		victim.stats.damageTaken += amount;
+
+		const source = this.players.get(sourceId);
+		if (source && source !== victim) source.stats.damageDealt += amount;
+
+		if (victim.hp <= 0) this.killPlayer(victim);
+	}
+
+	private tickRespawns(dt: number) {
+		for (const player of this.players.values()) {
+			if (player.alive) continue;
+			player.respawnTimer -= dt * 1000;
+			if (player.respawnTimer > 0) continue;
+			this.respawn(player);
+		}
+	}
+
+	/**
+	 * Put one fighter back in the arena.
+	 *
+	 * Announced, never inferred — the same rule the round reset follows. The
+	 * message races the snapshot that carries the respawned state, so a client
+	 * must also treat a correction past the teleport threshold as a discontinuity;
+	 * the announcement is what lets it drop this fighter's rollback history
+	 * immediately rather than a frame late.
+	 */
+	private respawn(player: ConnectedPlayer) {
+		const spawn = pickSpawn(
+			this.occupiedPoints().filter(
+				(p) => p.x !== player.state.x || p.y !== player.state.y,
+			),
+		);
+		player.state = createPlayerState(spawn.x, spawn.y, spawn.facing);
+		player.hp = 100;
+		player.alive = true;
+		player.respawnTimer = 0;
+		player.lastHurtBy = null;
+		player.queue.length = 0;
+		player.pendingInput = null;
+		player.tickInput = null;
+		player.simulatedIntent = null;
+		this.broadcast("respawn", { id: player.id, t: Date.now() });
+	}
+
+	private tickMatchClock(dt: number) {
+		if (this.phase === "over") {
+			this.overTimer -= dt * 1000;
+			if (this.overTimer <= 0) this.restartMatch();
+			return;
+		}
+
+		this.matchElapsedMs += dt * 1000;
+		const reason = matchEndReason(
+			this.scoreEntries(),
+			this.matchElapsedMs,
+			this.scoreLimit,
+			this.timeLimitMs,
+		);
+		if (reason) this.endMatch(reason);
+	}
+
+	private endMatch(reason: MatchEndReason) {
+		const standings = this.scoreEntries();
+		const winner = matchWinner(standings);
+		this.phase = "over";
+		this.endReason = reason;
+		this.winnerId = winner?.id ?? null;
+		this.overTimer = MATCH_OVER_LINGER_MS;
+
+		console.log(
+			`[MATCH] ${this.id} over by ${reason}: ${winner?.name ?? "nobody"} wins with ${winner?.kills ?? 0}`,
+		);
+		// The full standings, once, with names attached. The scoreboard rebuilds
+		// this from the snapshot every frame; the podium is a one-shot announcement
+		// and should not depend on a client having kept up.
+		this.broadcast("match-over", {
+			reason,
+			winnerId: this.winnerId,
+			standings,
+		});
+	}
+
+	private restartMatch() {
+		for (const player of this.players.values()) {
+			player.kills = 0;
+			player.deaths = 0;
+			player.stats = newStats();
+			// A fresh personality per match, so sixteen bots do not replay the same
+			// fight every five minutes.
+			if (player.brain) player.brain = new EnemyBrain(botConfig());
+		}
+		this.phase = "live";
+		this.matchElapsedMs = 0;
+		this.endReason = null;
+		this.winnerId = null;
+		this.overTimer = 0;
+		console.log(`[MATCH] ${this.id}: new match`);
+		this.resetPlayers();
+	}
+
+	// =========================================================
+	//  SNAPSHOT
+	// =========================================================
+
+	get snapshot(): GameSnapshot {
 		const playerArr: SnapshotPlayer[] = [];
-		for (const [id, p] of this.players) {
+		for (const p of this.players.values()) {
 			playerArr.push({
-				id,
+				id: p.id,
 				hp: p.hp,
-				// Facing lives in the simulation now, because the melee hitbox is
-				// built from it and both sides must agree on which way a swing points.
-				facingDir: p.state.facing,
 				lastSeq: p.lastSeq,
-				state: p.state,
+				// Packed rather than sent as an object: sixteen verbatim
+				// `PlayerPosition` objects is ~6KB a snapshot, which is both a lot of
+				// bandwidth and a datagram nobody's MTU wants. See `online/wire.ts`.
+				state: packState(p.state),
+				input: p.simulatedIntent ? packIntent(p.simulatedIntent) : null,
+				kills: p.kills,
+				deaths: p.deaths,
+				alive: p.alive,
 			});
 		}
 		return {
 			t: Date.now(),
+			tick: this.tickCount,
 			players: playerArr,
 			bullets: this.bullets.map((b) => ({
 				id: b.id,
@@ -543,7 +848,23 @@ export class GameRoom {
 				vy: b.vy,
 			})),
 			melee: this.meleeEvents.slice(),
+			match: this.matchStatus(),
 		};
+	}
+
+	private roster(): RosterMsg {
+		return {
+			players: [...this.players.values()].map((p) => ({
+				id: p.id,
+				name: p.name,
+				bot: p.brain !== null,
+			})),
+		};
+	}
+
+	private broadcastRoster() {
+		this.rosterAccumulator = 0;
+		this.broadcast("roster", this.roster());
 	}
 
 	tick(time: number) {
@@ -567,6 +888,15 @@ export class GameRoom {
 			this.broadcastAccumulator = 0;
 			this.broadcastState();
 		}
+
+		// Names are sent on change *and* on a slow heartbeat.
+		//
+		// On change alone is not enough: these are unreliable datagrams, so a lost
+		// roster leaves a client showing raw ids on its scoreboard for the rest of
+		// the match with nothing to trigger a retry. Sixteen names every two seconds
+		// is ~300 B/s — cheap enough that self-healing is the obvious trade.
+		this.rosterAccumulator += elapsed;
+		if (this.rosterAccumulator >= ROSTER_HEARTBEAT_MS) this.broadcastRoster();
 	}
 
 	/**
@@ -596,6 +926,8 @@ export class GameRoom {
 	}
 
 	private fixedTick(dt: number, now: number) {
+		this.tickCount++;
+
 		// Human slots first, so a dummy's `mirror` and `record` see the player's
 		// input for *this* tick. The map is in insertion order and the human is
 		// always seated before the dummy, but relying on that would make a
@@ -606,19 +938,25 @@ export class GameRoom {
 			}
 		}
 
-		for (const [id, player] of this.players) {
+		for (const player of this.players.values()) {
 			const input =
 				player.brain || player.dummy
 					? this.scriptedInput(player, dt * 1000, now)
 					: player.pendingInput;
-			if (!input) continue;
+			if (!input) {
+				// Frozen. Recorded as frozen, so every other client freezes it too
+				// rather than inventing a tick of motion for it.
+				player.simulatedIntent = null;
+				continue;
+			}
 
+			player.simulatedIntent = input;
 			player.state = tickPlayer(player.state, input, dt);
 
 			// A fighter holds a sword or a gun, never both: firing is gated on the
 			// stance the simulation says they are actually in.
 			if (
-				player.hp > 0 &&
+				player.alive &&
 				player.state.stance === "gun" &&
 				input.attack &&
 				canFire(player.lastAttackTime, now)
@@ -627,7 +965,7 @@ export class GameRoom {
 				player.stats.bulletsFired++;
 				this.bullets.push({
 					id: this.nextBulletId++,
-					ownerId: id,
+					ownerId: player.id,
 					x: player.state.x + PLAYER_WIDTH / 2,
 					y: player.state.y + PLAYER_HEIGHT / 2,
 					vx: Math.cos(input.aimAngle) * BULLET_SPEED,
@@ -640,15 +978,25 @@ export class GameRoom {
 		this.tickBullets(dt);
 		this.applyTrainingRules(dt);
 
+		// A training session is not a deathmatch. It keeps the old round lifecycle:
+		// the scenario is the unit of measurement, and a scenario that respawned one
+		// fighter mid-run while the other kept its score would measure nothing.
+		if (this.isTrainingRoom) {
+			this.tickTrainingRound(dt);
+			return;
+		}
+
+		this.tickRespawns(dt);
+		this.tickMatchClock(dt);
+	}
+
+	private tickTrainingRound(dt: number) {
 		if (this.resetTimer > 0) {
 			this.resetTimer -= dt * 1000;
 			if (this.resetTimer <= 0) this.resetPlayers();
 			return;
 		}
 
-		// A training session is not a round. Ending one every time the practising
-		// player loses their HP bar would restart the scenario mid-measurement,
-		// which is worse than useless when the scenario *is* the measurement.
 		if (this.trainingConfig?.disableRoundReset) return;
 
 		for (const player of this.players.values()) {
@@ -690,29 +1038,29 @@ export class GameRoom {
 	 * *both* fighters, and only the server sees both authoritatively — so the
 	 * client predicts the swing's timing and nothing about its outcome.
 	 *
-	 * The consequences are written straight into `state`, which is the whole
-	 * reason stun and launch live in the simulation: they replay through
-	 * reconciliation with no special case.
+	 * Quadratic in fighters, which at sixteen is 240 hitbox tests a tick — but
+	 * `resolveMelee` early-outs on "this fighter has no live hitbox", so all but a
+	 * handful cost one null check. A swing still hits at most one fighter, because
+	 * `hitLatch` closes it on the first connection; that is a combat rule, not an
+	 * optimisation, and it is why the iteration order below does not change who
+	 * gets hit by more than which of two simultaneous overlaps wins.
 	 */
 	private resolveMeleeHits() {
-		for (const [attackerId, attacker] of this.players) {
-			if (attacker.hp <= 0) continue;
+		for (const attacker of this.players.values()) {
+			if (!attacker.alive) continue;
 
-			for (const [defenderId, defender] of this.players) {
-				if (defenderId === attackerId || defender.hp <= 0) continue;
+			for (const defender of this.players.values()) {
+				if (defender === attacker || !defender.alive) continue;
 
 				const result = resolveMelee(attacker.state, defender.state);
 				if (!result) continue;
 
 				const damage = applyMeleeResult(attacker.state, defender.state, result);
-				defender.hp = Math.max(0, defender.hp - damage);
-				// Counted before invincibility refills the bar, so a practice session
-				// still reports what actually connected.
-				attacker.stats.damageDealt += damage;
-				defender.stats.damageTaken += damage;
+				this.damage(defender, damage, attacker.id);
 
 				this.meleeEvents.push({
-					attackerId,
+					attackerId: attacker.id,
+					victimId: defender.id,
 					move: result.move,
 					outcome: result.outcome,
 					x: result.x,
@@ -735,8 +1083,8 @@ export class GameRoom {
 			if (isBulletOutOfBounds(b) || bulletHitsPlatform(b)) continue;
 
 			let consumed = false;
-			for (const [id, player] of this.players) {
-				if (b.ownerId === id || player.hp <= 0) continue;
+			for (const player of this.players.values()) {
+				if (b.ownerId === player.id || !player.alive) continue;
 				if (!bulletHitsPlayer(b, player.state.x, player.state.y)) continue;
 
 				// A guard covers the side you face, bullets included. The shot is
@@ -747,15 +1095,11 @@ export class GameRoom {
 					break;
 				}
 
-				player.hp = Math.max(0, player.hp - BULLET_DAMAGE);
-				player.stats.damageTaken += BULLET_DAMAGE;
 				// A client never learns why a projectile vanished, so this counter is
 				// the only honest source for the training report's bullet numbers.
 				const owner = this.players.get(b.ownerId);
-				if (owner) {
-					owner.stats.bulletHits++;
-					owner.stats.damageDealt += BULLET_DAMAGE;
-				}
+				if (owner) owner.stats.bulletHits++;
+				this.damage(player, BULLET_DAMAGE, b.ownerId);
 				consumed = true;
 				break;
 			}
@@ -765,36 +1109,49 @@ export class GameRoom {
 		this.bullets.length = kept;
 	}
 
+	/**
+	 * Put everyone back at a spawn point at once.
+	 *
+	 * The whole-arena reset: a new match, or a training scenario restarting. An
+	 * individual death goes through `respawn` instead — resetting sixteen fighters
+	 * because one of them lost a duel is exactly what a deathmatch is not.
+	 */
 	private resetPlayers(announce = true) {
 		const cfg = this.trainingConfig;
-		this.channelIds.forEach((id, i) => {
+		// Spawns are chosen one at a time against the points already handed out, so
+		// a match never starts with two fighters inside each other — which the
+		// depenetrator would resolve by shoving one of them sideways on tick one, on
+		// every client, at once.
+		const taken: { x: number; y: number }[] = [];
+		this.channelIds.forEach((id) => {
 			const p = this.players.get(id);
 			if (!p) return;
 			// In a training room the spawns are part of the scenario: a backstab test
 			// needs a known separation, and a determinism check needs two runs to
 			// start from the same two points.
-			const spawn = cfg
+			const spawn: SpawnPoint = cfg
 				? p.dummy
-					? cfg.spawn.dummy
-					: cfg.spawn.player
-				: { x: i === 0 ? START_X_A : START_X_B, y: START_Y };
-			const facing = cfg
-				? p.dummy
-					? cfg.spawn.dummy.x >= cfg.spawn.player.x
-						? -1
-						: 1
-					: cfg.spawn.player.x <= cfg.spawn.dummy.x
-						? 1
-						: -1
-				: i === 0
-					? 1
-					: -1;
-			p.state = createPlayerState(spawn.x, spawn.y, facing);
+					? {
+							...cfg.spawn.dummy,
+							facing: cfg.spawn.dummy.x >= cfg.spawn.player.x ? -1 : 1,
+						}
+					: {
+							...cfg.spawn.player,
+							facing: cfg.spawn.player.x <= cfg.spawn.dummy.x ? 1 : -1,
+						}
+				: pickSpawn(taken);
+			taken.push({ x: spawn.x, y: spawn.y });
+
+			p.state = createPlayerState(spawn.x, spawn.y, spawn.facing);
 			p.hp = p.dummy ? (cfg?.dummyHp ?? 100) : 100;
+			p.alive = true;
+			p.respawnTimer = 0;
+			p.lastHurtBy = null;
 			p.lastAttackTime = 0;
 			p.queue.length = 0;
 			p.pendingInput = null;
 			p.tickInput = null;
+			p.simulatedIntent = null;
 			if (p.brain) p.brain = new EnemyBrain(botConfig());
 		});
 		this.bullets = [];

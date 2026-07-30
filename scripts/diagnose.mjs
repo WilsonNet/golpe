@@ -40,6 +40,10 @@ async function waitForGame(page) {
 			timeout: 20000,
 		},
 	);
+	// A human-controlled client waits for a name before it connects. Answering
+	// through the same event the modal fires keeps this on the path a player
+	// takes; a client running as AI has already named itself and ignores this.
+	await page.evaluate(() => window.__setPlayerName?.("Diagnostic"));
 }
 
 /** Poll __gameState() during a run, to see what the fighters were actually doing. */
@@ -143,7 +147,11 @@ async function assertServerUp() {
 async function onlineRun(browser, durationMs) {
 	await assertServerUp();
 	const ctx = await browser.newContext();
-	const url = `${BASE_URL}/?online=true&ai=true`;
+	// `fill=2` keeps this a duel. A public room is a sixteen-fighter deathmatch
+	// now, and this run's job is the *netcode* — prediction, reconciliation,
+	// projectiles — which is cleanest to read with exactly one opponent.
+	// `scripts/deathmatch-probe.mjs` is the sixteen-fighter measurement.
+	const url = `${BASE_URL}/?online=true&ai=true&fill=2`;
 
 	const a = await ctx.newPage();
 	const linesA = sinkConsole(a);
@@ -186,6 +194,7 @@ function digest(r) {
 		bullets: r.bulletSummary,
 		melee: r.meleeSummary,
 		recon: r.reconciliationSummary,
+		net: r.netSummary,
 		collisions: r.collisionSummary,
 		penetrations: r.penetrationEvents?.slice(0, 3),
 		activity: r.activity,

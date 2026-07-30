@@ -16,8 +16,15 @@ import type { Sprite } from "pixi.js";
 import type { PlayerPosition } from "../simulation/Physics";
 import type { ClipName } from "./systems";
 
-/** Which side of the match a fighter is on. Also its effects key. */
-export type Side = "local" | "remote";
+/**
+ * What identifies a fighter.
+ *
+ * This used to be `"local" | "remote"`, which was the whole world at two
+ * fighters and is a bug at sixteen: it was also the effects key, so every remote
+ * fighter's swing trail, guard and impact punch would land on one shared set of
+ * sprites. A fighter is identified by the id the server scores it under.
+ */
+export type FighterId = string;
 
 export interface AnimState {
 	clip: ClipName;
@@ -36,7 +43,10 @@ export interface Entity {
 
 	/** A duellist. */
 	fighter?: {
-		side: Side;
+		/** The id the server knows this fighter by, and its effects key. */
+		id: FighterId;
+		/** True for the one fighter this client predicts and owns the input of. */
+		local: boolean;
 		hp: number;
 	};
 
@@ -75,9 +85,10 @@ export interface Entity {
 /**
  * A fighter, with the components it is guaranteed to have.
  *
- * Archetype queries narrow types at the iteration site, but the two duellists
- * are also held directly by `Match` for their whole lifetime. Naming that
- * guarantee once beats a non-null assertion at every use.
+ * Archetype queries narrow types at the iteration site, but `Match` also holds
+ * fighters directly — the local one for the whole match, each remote one for as
+ * long as it is in the room. Naming that guarantee once beats a non-null
+ * assertion at every use.
  */
 export type FighterEntity = Entity &
 	Required<Pick<Entity, "fighter" | "body" | "sprite" | "anim">>;
@@ -105,11 +116,3 @@ export function createQueries(world: GameWorld) {
 }
 
 export type Queries = ReturnType<typeof createQueries>;
-
-/** Find a fighter by side. There are only ever two, so a scan is fine. */
-export function fighterOf(queries: Queries, side: Side): Entity | undefined {
-	for (const e of queries.fighters) {
-		if (e.fighter.side === side) return e;
-	}
-	return undefined;
-}

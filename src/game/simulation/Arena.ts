@@ -75,6 +75,81 @@ export const platforms: readonly Rect[] = [
 	PILLAR_RIGHT,
 ];
 
+/**
+ * Where fighters enter the arena.
+ *
+ * Seventeen points for sixteen slots, so a respawn always has somewhere to go
+ * that is not the point somebody is standing on. Every one sits on top of a
+ * platform and clear of the pillars — a spawn inside geometry is depenetrated on
+ * the first tick, which reads as a teleport on every other client.
+ *
+ * A deathmatch picks the point furthest from the nearest living fighter rather
+ * than the next one in the list: spawning inside somebody's swing is the one
+ * death a player cannot do anything about.
+ */
+export interface SpawnPoint {
+	x: number;
+	y: number;
+	/** Which way to look on arrival — toward the middle of the arena. */
+	facing: number;
+}
+
+export const SPAWN_POINTS: readonly SpawnPoint[] = [
+	// Ground, avoiding the two pillars at x=280..304 and x=496..520.
+	{ x: 40, y: 518, facing: 1 },
+	{ x: 120, y: 518, facing: 1 },
+	{ x: 200, y: 518, facing: 1 },
+	{ x: 350, y: 518, facing: 1 },
+	{ x: 450, y: 518, facing: -1 },
+	{ x: 600, y: 518, facing: -1 },
+	{ x: 680, y: 518, facing: -1 },
+	{ x: 760, y: 518, facing: -1 },
+	// Low ledges.
+	{ x: 110, y: 400, facing: 1 },
+	{ x: 175, y: 400, facing: 1 },
+	{ x: 600, y: 400, facing: -1 },
+	{ x: 665, y: 400, facing: -1 },
+	// Mid.
+	{ x: 345, y: 310, facing: 1 },
+	{ x: 425, y: 310, facing: -1 },
+	// High ledges.
+	{ x: 85, y: 200, facing: 1 },
+	{ x: 645, y: 200, facing: -1 },
+	// The peak.
+	{ x: 375, y: 120, facing: 1 },
+];
+
+/**
+ * The spawn point furthest from everyone in `occupied`.
+ *
+ * Pure and deterministic, so client and server agree on where a fighter came
+ * back — and so a test can assert the choice instead of eyeballing it. Ties go
+ * to the earlier point in the list rather than to chance.
+ */
+export function pickSpawn(
+	occupied: readonly { x: number; y: number }[],
+): SpawnPoint {
+	let best = SPAWN_POINTS[0] as SpawnPoint;
+	let bestScore = -1;
+
+	for (const point of SPAWN_POINTS) {
+		let nearest = Number.POSITIVE_INFINITY;
+		for (const other of occupied) {
+			nearest = Math.min(
+				nearest,
+				Math.hypot(point.x - other.x, point.y - other.y),
+			);
+		}
+		// An empty arena scores every point equally; take the first.
+		const score = occupied.length === 0 ? 0 : nearest;
+		if (score > bestScore) {
+			bestScore = score;
+			best = point;
+		}
+	}
+	return best;
+}
+
 export function rectsOverlap(a: Rect, b: Rect): boolean {
 	return (
 		a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y

@@ -22,12 +22,64 @@ the full workflow** — this file is the reference for the tool itself.
 ```bash
 npm run dev:herdr                               # both servers in visible panes
 node scripts/diagnose.mjs                       # offline + online, 8s each
-node scripts/diagnose.mjs --mode=online --runs=3  # the canonical run
+node scripts/diagnose.mjs --mode=online --runs=3  # the canonical duel
+node scripts/deathmatch-probe.mjs               # sixteen AI fighters, played to a winner
 node scripts/probe-online.mjs                   # dump one online client's console
 node scripts/verify-modes.mjs                   # smoke-check every launch mode
 node scripts/aim-probe.mjs                      # cursor, facing and shot direction, at dpr 1 and 2
 node scripts/training-probe.mjs                 # one interaction at a time, against a scripted dummy
 ```
+
+## The deathmatch probe
+
+`diagnose.mjs` runs a duel. `deathmatch-probe.mjs` runs **a room full of AI, to a
+winner** — and it exists because a duel cannot ask the questions that only have
+answers at scale:
+
+| Question | Tool |
+|---|---|
+| Is prediction, reconciliation, projectile flight clean? | `diagnose.mjs --mode=online` |
+| Does a sixteen-fighter room stay consistent, score honestly, and end? | `deathmatch-probe.mjs` |
+
+It shortens the rules so a win condition is observable in seconds rather than five
+minutes — `--scoreLimit`, `--timeLimit` — and everything else is the real path:
+real server, real snapshots, real prediction, real bots. Shortened rules are
+refused on a public room, so one client cannot end everybody else's match.
+
+```bash
+node scripts/deathmatch-probe.mjs                                   # to the frag limit
+node scripts/deathmatch-probe.mjs --scoreLimit=999 --timeLimit=20   # to the clock
+node scripts/deathmatch-probe.mjs --fighters=8                      # a smaller room
+```
+
+It fails on: a room that did not fill, a match that never ended, a winner who is
+not ranked first, places that are not a total order 1..n, a duplicated or missing
+name, frags exceeding deaths, no snapshots, no rollbacks — **and nobody scoring**.
+That last one is the important one: every other check passes in a room where
+sixteen fighters stood still.
+
+## Rollback and bandwidth: `netSummary`
+
+Online reports carry a `netSummary`, because rollback trades a fixed visual delay
+for occasional misprediction and a trade has to be measured or it is a preference.
+
+| Field | Meaning |
+|---|---|
+| `snapshots` | **0 means the client simulated alone** — every other number is about nothing |
+| `avgSnapshotBytes` / `estBytesPerSec` | what forced the packed wire format; ~800B/16KBps for a duel, ~3.4KB/66KBps at sixteen |
+| `rollback.avgErrorPx` | how wrong remote prediction usually is. 2-8px observed |
+| `rollback.maxErrorPx` | worst single correction. 57-99px observed; past 100px is a discontinuity, not an error |
+| `rollback.visibleCorrections` | corrections over 1px. ~12% of rollbacks in a duel, ~20% at sixteen |
+| `rollback.avgResimTicks` / `maxLeadTicks` | prediction depth, in 60Hz ticks. Capped at 9 |
+| `rollback.frozenRemoteTicks` | ticks the server had starved a fighter, and so did we |
+| `rollback.teleports` | announced discontinuities — respawns and spawns. Not errors |
+| `rollback.primarySwitches` | **check this first** when `enemy_x`/`enemy_y` look wrong |
+
+`primarySwitches` counts how often the fighter those metrics *describe* changed. A
+change of subject reads exactly like a fighter teleporting, and it is what turned
+out to be behind every remote jitter event in this mode. `jitterSummary` measures
+the *drawn* position and should be **0**; the raw corrections live here, so nothing
+is hidden by smoothing them.
 
 ## The aim probe
 
@@ -201,11 +253,24 @@ Healthy for the canonical 14s online AI-vs-AI run:
 | `meleeSummary` move counters | all non-zero across a few runs |
 | every violation counter | **0, every run** |
 
+Healthy for a sixteen-fighter deathmatch run:
+
+| Metric | Healthy |
+|---|---|
+| `verdict` | `PASS` |
+| `match.frags` == `match.deaths` | or deaths slightly higher (unattributed) |
+| `jitterSummary.total` | **0** |
+| `collisionSummary.penetrationFrames` | **0** |
+| `net.rollback.avgErrorPx` | 2-8px |
+| `net.rollback.primarySwitches` | 2 in a duel; low and explainable at sixteen |
+| `net.estBytesPerSec` | ~66,000 at sixteen fighters |
+| `meleeSummary` hits/backstabs/parries | all non-zero — sixteen fighters should produce a lot of each |
+
 Healthy for the training battery:
 
 | Metric | Healthy |
 |---|---|
-| `verdict` | `PASS`, all 12 rows |
+| `verdict` | `PASS`, all 13 rows |
 | `activity.impacts` | > 0 — a battery that judged no impact proves nothing |
 | `activity.playerMoves` / `dummyMoves` | both > 0 |
 

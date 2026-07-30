@@ -13,6 +13,7 @@ src/game/
     Collision.ts    swept axis-separated AABB: moveAndCollide, probeWall, resolveOverlap
     Physics.ts      tuning constants, PlayerPosition, tickPlayer, bullets
     Melee.ts        sword combat: the MOVES frame-data table, tickMelee, hitboxes, resolveMelee
+    Deathmatch.ts   scoring limits, the win condition, and the one ranking both sides use
   ecs/            miniplex world, entity components, and the per-frame systems
     world.ts        Entity shape, archetype queries, FighterEntity
     systems.ts      animation, sprite sync, melee effects
@@ -22,8 +23,12 @@ src/game/
   combat/         BulletSystem.ts — the only simulated source of bullets offline
   input/          Input.ts — raw keyboard and pointer state, dash gestures, and the
                   cursor->world conversion (logical view + camera, never canvas.width)
-  online/         OnlineManager (channel), OnlineSession (owns netcode),
-                  Prediction.ts, Interpolation.ts, types.ts
+  online/         OnlineManager (channel), OnlineSession (owns netcode)
+    Prediction.ts   the local fighter: predict, rewind, replay, and render smoothing
+    Rollback.ts     every *other* fighter: carry its input forward, rewind on snapshot
+    Interpolation.ts what is left of it — the server clock, for dead-reckoning bullets
+    wire.ts         packs PlayerPosition and PlayerIntent for the snapshot
+    types.ts        the wire messages, shared with the server
   render/         Stage.ts (layers + camera), ArenaRenderer.ts (draws from collider
                   data), assets.ts, SpritePool.ts, Particles.ts, MeleeFx.ts
   diagnostics/    PhysicsDiagnostics.ts — the measurement half of the feedback loop
@@ -36,14 +41,21 @@ src/game/
 
 src/ui/           React overlays drawn over the canvas
   TrainingPanel.tsx the training menu — DOM, and a client of window.__training
+  NamePrompt.tsx    the name a player enters before their client connects
+  Scoreboard.tsx    the held-Tab scoreboard, and the table the podium reuses
+  MatchOver.tsx     the winner podium
+  useMatch.ts       EventBus subscriptions and the held-key hook
+  hudStyles.ts      the overlay's own CSS, injected per component
 
 server/           Geckos.io authoritative server
   physics.ts        re-exports src/game/simulation/Physics
-  GameRoom.ts       authoritative tick, bullets, melee resolution, round lifecycle
+  GameRoom.ts       authoritative tick, bullets, melee resolution, match lifecycle
+  BotNames.ts       gamertags for bots, and sanitising the ones humans type
   TrainingDummy.ts  the scriptable practice dummy: an input source, like EnemyBrain
-  index.ts          matchmaking and deferred placement
+  index.ts          matchmaking, room sizing and deferred placement
 
-scripts/          diagnose.mjs (Playwright harness), aim-probe.mjs (drives a real
+scripts/          diagnose.mjs (Playwright harness), deathmatch-probe.mjs (sixteen
+                  AI fighters played to a winner), aim-probe.mjs (drives a real
                   cursor — the only thing that can test aim), training-probe.mjs
                   (one interaction at a time), dev-herdr.mjs, probe-online.mjs,
                   verify-modes.mjs
@@ -62,8 +74,9 @@ Everything else is a consumer of it:
 
 - **The server** owns truth. It ticks `tickPlayer` at 60Hz, resolves bullets and
   melee, and broadcasts snapshots at 20Hz.
-- **The client** predicts its own fighter with the same `tickPlayer`, interpolates
-  the remote one, and draws. It never decides an outcome.
+- **The client** predicts *every* fighter with the same `tickPlayer` — its own
+  from its own input, the other fifteen from the last input the server reported for
+  them — rewinds them all on each snapshot, and draws. It never decides an outcome.
 - **The renderer** reads simulation state and writes nothing back.
 
 ## Where ECS sits

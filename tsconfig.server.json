@@ -7,5 +7,11 @@
     "moduleResolution": "NodeNext",
     "types": ["node"]
   },
-  "include": ["server", "src/game/simulation", "src/game/characters"]
+  "include": [
+    "server",
+    "src/game/simulation",
+    "src/game/characters",
+    "src/game/online/wire.ts",
+    "src/game/online/types.ts"
+  ]
 }

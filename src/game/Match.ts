@@ -6,6 +6,12 @@
  * state and write presentation; the netcode owns truth; the simulation is pure.
  * Keeping the crossings in one file is what stops those responsibilities leaking
  * into each other — which is exactly how the old scene grew to 800 lines.
+ *
+ * A match holds **one local fighter and up to fifteen remote ones**. Remote
+ * fighters come and go with the room's roster, and every one of them is an
+ * ordinary entity whose `body` points at rolled-back simulation state — so the
+ * same animation, sprite-sync and effect systems draw all sixteen with no second
+ * code path.
  */
 
 import { type Container, Sprite, Text } from "pixi.js";
@@ -32,7 +38,6 @@ import {
 	type FighterEntity,
 	type GameWorld,
 	type Queries,
-	type Side,
 } from "./ecs/world";
 import { Input } from "./input/Input";
 import { OnlineSession } from "./online/OnlineSession";
@@ -40,6 +45,7 @@ import { bodyCentre, drawArena } from "./render/ArenaRenderer";
 import { dudeFrames, TEX, tex } from "./render/assets";
 import { type ImpactEvent, MeleeFx } from "./render/MeleeFx";
 import type { Stage } from "./render/Stage";
+import { timeLeftMs } from "./simulation/Deathmatch";
 import {
 	applyMeleeResult,
 	BULLET_DAMAGE,
@@ -64,6 +70,13 @@ const START_PLAYER_X = 100;
 const START_PLAYER_Y = 480;
 const START_ENEMY_X = 668;
 const START_ENEMY_Y = 480;
+
+/** The offline escape hatch's single opponent. Never used in an online match. */
+const OFFLINE_FOE_ID = "offline-foe";
+const LOCAL_ID = "local";
+
+/** Where a returning player's name is kept, so they only type it once. */
+const NAME_KEY = "vento.playerName";
 
 const NO_INTENT: PlayerIntent = { ...NEUTRAL_INTENT };
 
@@ -92,6 +105,12 @@ function fightConfig(): AIConfig {
 	};
 }
 
+/** A name for a client whose fighter is a bot, so the scoreboard is readable. */
+function aiClientName(): string {
+	const n = 100 + Math.floor(Math.random() * 900);
+	return `AI-${n}`;
+}
+
 export class Match {
 	private readonly world: GameWorld = createWorld();
 	private readonly queries: Queries;
@@ -101,10 +120,14 @@ export class Match {
 	private readonly bullets: BulletSystem;
 
 	private readonly local: FighterEntity;
-	private readonly remote: FighterEntity;
+	/** Every other fighter in the room, keyed by the id the server scores it under. */
+	private readonly remotes = new Map<string, FighterEntity>();
+	/** The offline escape hatch's opponent. Created only when there is no server. */
+	private offlineFoe: FighterEntity | undefined;
 
 	private hpText!: Text;
-	private enemyHpText!: Text;
+	private scoreText!: Text;
+	private timeText!: Text;
 	private statusText!: Text;
 
 	/**
@@ -114,7 +137,7 @@ export class Match {
 	private onlineMode = true;
 	/** The local fighter is AI-driven (`?ai=true`), online or not. */
 	private aiMode = false;
-	/** Solo: the server fills the other slot with a bot instead of a human. */
+	/** Solo: the server fills the room with bots instead of matching humans. */
 	private soloMatch = true;
 	/**
 	 * Training: the server fills the other slot with a *scriptable dummy*.
@@ -125,6 +148,11 @@ export class Match {
 	 * training room is used to test other things through.
 	 */
 	private trainingMode = false;
+	/** Bots to seat in a solo room, and fighters to top a public room up to. */
+	private botCount: number | undefined;
+	private fillCount: number | undefined;
+	private scoreLimit: number | undefined;
+	private timeLimitMs: number | undefined;
 	private online: OnlineSession | undefined;
 	private training: TrainingRoom | undefined;
 
@@ -138,6 +166,9 @@ export class Match {
 	private diagSteps = 0;
 	private resetAt = -1;
 	private elapsed = 0;
+	private playerName = "";
+	/** Torn down on destroy, so a remounted match does not connect twice. */
+	private nameUnsubscribe: (() => void) | undefined;
 
 	constructor(
 		private readonly stage: Stage,
@@ -150,13 +181,18 @@ export class Match {
 		this.queries = createQueries(this.world);
 		this.fx = new MeleeFx(stage.effects, stage);
 		this.bullets = new BulletSystem(stage.projectiles, tex(TEX.fireball));
-		this.diagnostics = new PhysicsDiagnostics(() =>
-			this.onlineMode ? "online" : "offline",
+		this.diagnostics = new PhysicsDiagnostics(
+			() => (this.onlineMode ? "online" : "offline"),
+			() => this.online?.netSummary() ?? null,
 		);
 
-		this.local = this.spawnFighter("local", START_PLAYER_X, START_PLAYER_Y, 1);
-		this.remote = this.spawnFighter("remote", START_ENEMY_X, START_ENEMY_Y, -1);
-		bindFxBodies(this.queries, this.fx);
+		this.local = this.spawnFighter(
+			LOCAL_ID,
+			true,
+			START_PLAYER_X,
+			START_PLAYER_Y,
+			1,
+		);
 
 		this.buildHud(stage.hud);
 		this.input = new Input(
@@ -183,8 +219,9 @@ export class Match {
 
 		const params = new URLSearchParams(window.location.search);
 		this.aiMode = params.get("ai") === "true";
-		// `?online=true` asks for a human opponent; otherwise the server supplies a
-		// bot. Either way the match is served, predicted and reconciled.
+		// `?online=true` asks for a public deathmatch; otherwise the server gives
+		// this client its own room. Either way the match is served, predicted and
+		// reconciled.
 		this.soloMatch = params.get("online") !== "true";
 		// `?offline=true` is an escape hatch for working without a game server. It
 		// is not the supported path — it bypasses the netcode entirely.
@@ -193,6 +230,16 @@ export class Match {
 		this.trainingMode =
 			params.get("training") === "true" ||
 			params.get("training-room") === "true";
+		// `bots=0` is meaningful — an empty room — so it cannot go through the
+		// positive-integer parser the other counts use.
+		this.botCount = countParam(params, "bots");
+		this.fillCount = numberParam(params, "fill");
+		// Shortened rules, for a probe. Refused server-side on a public room, so one
+		// client cannot end everybody else's match early.
+		this.scoreLimit = numberParam(params, "scoreLimit");
+		const timeLimitSec = numberParam(params, "timeLimit");
+		this.timeLimitMs =
+			timeLimitSec === undefined ? undefined : timeLimitSec * 1000;
 
 		if (this.trainingMode) {
 			// A training room is an ordinary online, single-human match by
@@ -202,12 +249,18 @@ export class Match {
 			this.soloMatch = true;
 		}
 
-		if (this.onlineMode) this.startOnline();
-		else if (this.aiMode) this.startOfflineAi();
+		if (this.onlineMode) this.beginOnline();
+		else {
+			this.offlineFoe = this.spawnFighter(
+				OFFLINE_FOE_ID,
+				false,
+				START_ENEMY_X,
+				START_ENEMY_Y,
+				-1,
+			);
+			if (this.aiMode) this.startOfflineAi();
+		}
 
-		EventBus.on("enemy-hp-changed", (hp: number) => {
-			this.enemyHpText.text = `enemy hp: ${Math.max(0, hp)}`;
-		});
 		EventBus.emit("current-scene-ready", this);
 	}
 
@@ -216,7 +269,8 @@ export class Match {
 	// =========================================================
 
 	private spawnFighter(
-		side: Side,
+		id: string,
+		local: boolean,
 		x: number,
 		y: number,
 		facing: number,
@@ -225,22 +279,49 @@ export class Match {
 		sprite.anchor.set(0.5);
 		this.stage.actors.addChild(sprite);
 
-		return this.world.add({
-			key: side,
-			fighter: { side, hp: 100 },
+		const entity = this.world.add({
+			key: id,
+			fighter: { id, local, hp: 100 },
 			body: createPlayerState(x, y, facing),
 			sprite,
 			anim: { clip: "right-idle", frame: 0, elapsedMs: 0 },
-		});
+		}) as FighterEntity;
+
+		// Bind the new fighter's sprite for impact punches. Re-binding every fighter
+		// is cheap and keeps one code path, rather than a special case for the ones
+		// that existed at construction time.
+		bindFxBodies(this.queries, this.fx);
+		return entity;
+	}
+
+	/**
+	 * A fighter left the room.
+	 *
+	 * Sprites and effect sprites are destroyed rather than hidden. Sixteen slots
+	 * on a server that runs for hours means fighters churn, and three leaked
+	 * effect sprites per departure is the kind of leak that only shows up long
+	 * after anyone is looking.
+	 */
+	private despawnFighter(id: string) {
+		const entity = this.remotes.get(id);
+		if (!entity) return;
+		this.remotes.delete(id);
+		entity.sprite.destroy();
+		this.world.remove(entity);
+		this.fx.forget(id);
 	}
 
 	private buildHud(hud: Container) {
-		const style = { fontFamily: "monospace", fontSize: 26, fill: 0x000000 };
+		const style = { fontFamily: "monospace", fontSize: 22, fill: 0x000000 };
 		this.hpText = new Text({ text: "hp: 100", style });
 		this.hpText.position.set(16, 16);
 
-		this.enemyHpText = new Text({ text: "enemy hp: 100", style });
-		this.enemyHpText.position.set(560, 16);
+		this.scoreText = new Text({ text: "frags: 0/21", style });
+		this.scoreText.position.set(16, 44);
+
+		this.timeText = new Text({ text: "5:00", style });
+		this.timeText.anchor.set(1, 0);
+		this.timeText.position.set(784, 16);
 
 		this.statusText = new Text({
 			text: "",
@@ -249,10 +330,41 @@ export class Match {
 		this.statusText.anchor.set(0.5);
 		this.statusText.position.set(400, 300);
 
-		hud.addChild(this.hpText, this.enemyHpText, this.statusText);
+		hud.addChild(this.hpText, this.scoreText, this.timeText, this.statusText);
 	}
 
-	private startOnline() {
+	/**
+	 * Decide what this client is called, then connect.
+	 *
+	 * A human types their name once and it is remembered; an AI-driven client
+	 * generates one, because `?ai=true` is how every probe and diagnostic runs and
+	 * a modal waiting on a keyboard would hang all of them. That is also why the
+	 * gate is here rather than in React: the *connection* is what needs a name, so
+	 * the connection is what waits for it.
+	 */
+	private beginOnline() {
+		const stored = readStoredName();
+		if (stored) {
+			this.startOnline(stored);
+			return;
+		}
+		if (this.aiMode || this.trainingMode) {
+			this.startOnline(this.aiMode ? aiClientName() : "Trainee");
+			return;
+		}
+
+		this.statusText.text = "";
+		EventBus.emit("need-player-name");
+		this.nameUnsubscribe = EventBus.on("player-name", ((name: string) => {
+			this.nameUnsubscribe?.();
+			this.nameUnsubscribe = undefined;
+			storeName(name);
+			this.startOnline(name);
+		}) as never);
+	}
+
+	private startOnline(name: string) {
+		this.playerName = name;
 		this.statusText.text = "Connecting...";
 
 		this.online = new OnlineSession(
@@ -268,10 +380,6 @@ export class Match {
 				onLocalHp: (hp) => {
 					this.local.fighter.hp = hp;
 					this.hpText.text = `hp: ${Math.max(0, hp)}`;
-				},
-				onRemoteHp: (hp) => {
-					this.remote.fighter.hp = hp;
-					this.enemyHpText.text = `enemy hp: ${Math.max(0, hp)}`;
 				},
 				onReconcile: (result) => {
 					// A correction this large is a respawn, not a misprediction. The
@@ -302,22 +410,66 @@ export class Match {
 					}
 				},
 				onTeleport: () => this.diagnostics.markTeleport(),
-				onRoundReset: () => this.diagnostics.markRoundReset(),
+				onRoundReset: () => {
+					this.diagnostics.markRoundReset();
+					// Takes the podium down. Without this the previous match's winner
+					// screen would sit over a live fight forever.
+					EventBus.emit("match-reset");
+				},
 				onMeleeEvent: (event) => {
-					const byLocal = event.attackerId === this.online?.manager.myId;
-					const victim: Side = byLocal ? "remote" : "local";
-					this.fx.impact(event, victim);
+					// The victim comes from the event now. Deriving it from
+					// `attackerId === myId` was correct in a duel and wrong the moment a
+					// third fighter existed: every hit between two other players punched
+					// the local fighter's sprite.
+					this.fx.impact(event, event.victimId);
 					this.diagnostics.recordMeleeEvent(event.move, event.outcome);
-					this.training?.recordMeleeEvent(event, byLocal);
+					this.training?.recordMeleeEvent(
+						event,
+						event.attackerId === this.online?.manager.myId,
+					);
 					// A hit is an announced discontinuity, exactly like a respawn. Only
 					// the server can know a swing connected, so the client necessarily
 					// mispredicts the stun and knockback and then rewinds into them —
 					// tens of pixels in one frame, from correct netcode.
 					this.diagnostics.markTeleport(2);
 				},
+				onFighterAdded: (id) => this.addRemoteFighter(id),
+				onFighterRemoved: (id) => this.despawnFighter(id),
+				onMatch: (status, standings) => {
+					const mine = standings.find(
+						(s) => s.id === this.online?.manager.myId,
+					);
+					this.scoreText.text = `frags: ${mine?.kills ?? 0}/${status.scoreLimit}`;
+					this.timeText.text = formatClock(
+						timeLeftMs(status.elapsedMs, status.timeLimitMs),
+					);
+					// The React overlay owns the scoreboard and the podium; the canvas
+					// HUD stays to the two numbers a player reads mid-fight.
+					EventBus.emit("match-status", {
+						status,
+						standings,
+						myId: this.online?.manager.myId ?? "",
+					});
+				},
+				onMatchOver: (msg) => {
+					console.log(
+						`[MATCH] over by ${msg.reason}, winner ${msg.winnerId ?? "nobody"}`,
+					);
+					EventBus.emit("match-over", msg);
+				},
 			},
 		);
-		this.online.connect(this.soloMatch, this.trainingMode);
+		this.online.connect({
+			solo: this.soloMatch,
+			training: this.trainingMode,
+			name,
+			...(this.botCount === undefined ? {} : { bots: this.botCount }),
+			...(this.fillCount === undefined ? {} : { fill: this.fillCount }),
+			...(this.scoreLimit === undefined ? {} : { scoreLimit: this.scoreLimit }),
+			...(this.timeLimitMs === undefined
+				? {}
+				: { timeLimitMs: this.timeLimitMs }),
+		});
 
 		if (this.trainingMode) {
 			this.training = new TrainingRoom({
@@ -334,6 +486,21 @@ export class Match {
 			this.localBrain = new EnemyBrain(fightConfig());
 			console.log("[AI-ONLINE] AI brain created for local player");
 		}
+	}
+
+	/** A fighter appeared in a snapshot. Give it something to be drawn with. */
+	private addRemoteFighter(id: string) {
+		if (this.remotes.has(id)) return;
+		const state = this.online?.remotes.get(id)?.state;
+		const entity = this.spawnFighter(
+			id,
+			false,
+			state?.x ?? START_ENEMY_X,
+			state?.y ?? START_ENEMY_Y,
+			state?.facing ?? -1,
+		);
+		this.remotes.set(id, entity);
+		console.log(`[ONLINE] fighter joined: ${this.online?.nameOf(id) ?? id}`);
 	}
 
 	private startOfflineAi() {
@@ -355,21 +522,60 @@ export class Match {
 			trainingMode: this.trainingMode,
 			playerHP: this.local.fighter.hp,
 			enemyHP: this.onlineMode
-				? (this.online?.remoteHp ?? this.remote.fighter.hp)
-				: this.remote.fighter.hp,
+				? (this.online?.remoteHp ?? 100)
+				: (this.offlineFoe?.fighter.hp ?? 100),
 			playerState: this.localBrain?.getCurrentState(),
 			enemyState: this.remoteBrain?.getCurrentState(),
 			playerPhys: this.local.body,
-			enemyPhys: this.remote.body,
+			enemyPhys: this.onlineMode
+				? (this.online?.remoteState ?? null)
+				: (this.offlineFoe?.body ?? null),
 			remote: this.onlineMode
 				? this.online?.remotePosition
-				: { x: this.remote.body.x, y: this.remote.body.y },
+				: this.offlineFoe
+					? { x: this.offlineFoe.body.x, y: this.offlineFoe.body.y }
+					: null,
+			fighterCount: this.onlineMode ? 1 + this.remotes.size : 2,
 			bulletCount: this.onlineMode
 				? (this.online?.bullets.length ?? 0)
 				: this.bullets.count,
 		});
+		// The deathmatch's own contract. `__gameState` describes two fighters
+		// because that is what a duel is; a sixteen-player match is a scoreboard and
+		// a clock, and `scripts/deathmatch-probe.mjs` reads exactly this.
+		window.__matchState = () => {
+			const status = this.online?.matchStatus;
+			const standings = this.online?.standings() ?? [];
+			const winnerId = status?.winnerId ?? null;
+			return {
+				connected: this.online?.connected ?? false,
+				myId: this.online?.manager.myId ?? "",
+				myName: this.playerName,
+				fighterCount: 1 + this.remotes.size,
+				phase: status?.phase ?? "live",
+				elapsedMs: status?.elapsedMs ?? 0,
+				timeLeftMs: status
+					? timeLeftMs(status.elapsedMs, status.timeLimitMs)
+					: 0,
+				scoreLimit: status?.scoreLimit ?? 0,
+				timeLimitMs: status?.timeLimitMs ?? 0,
+				endReason: status?.endReason ?? null,
+				winnerId,
+				winnerName: winnerId
+					? (standings.find((s) => s.id === winnerId)?.name ?? "")
+					: "",
+				standings,
+				rollback: this.online?.rollbackStats.summary() ?? null,
+				net: this.online?.netSummary() ?? null,
+			};
+		};
 		window.__physicsDiagnostic = (durationMs = 5000) =>
 			this.diagnostics.start(durationMs);
+		// Supplying the name from a probe, so an automated run can exercise the same
+		// path a human does instead of a bypass nobody plays.
+		window.__setPlayerName = (name: string) => {
+			EventBus.emit("player-name", name);
+		};
 		// Aim is the one system AI vs AI cannot exercise — the brains hand the
 		// simulation an angle and never touch a cursor. `scripts/aim-probe.mjs`
 		// drives a real mouse and reads this.
@@ -447,14 +653,37 @@ export class Match {
 			dt: dtMs,
 			physicsSteps: this.diagSteps,
 			player: this.local.body,
+			// Where the opponent is *drawn*, not where its simulation state sits.
+			//
+			// The two differ now, and the difference is the point. A remote fighter is
+			// predicted from its last known input and corrected on every snapshot, so
+			// its raw state legitimately jumps tens of pixels the moment the server
+			// reports something no client could have predicted — a hit landing, a
+			// respawn. The render smoother exists to turn that into a glide, and
+			// measuring the state instead of the sprite reported a pop nobody could
+			// see, on a metric that therefore could never reach zero.
+			//
+			// The correction itself is not hidden: `netSummary.rollback` reports every
+			// one of them, with magnitudes. This metric answers the other question —
+			// whether what a player *watched* was continuous.
 			enemy: this.onlineMode
-				? (this.online?.remotePosition ?? null)
-				: { x: this.remote.body.x, y: this.remote.body.y },
-			// The full opponent state, so blocks and parries the local fighter is on
-			// the receiving end of are measured too.
+				? this.primaryRemoteDrawnAt()
+				: this.offlineFoe
+					? { x: this.offlineFoe.body.x, y: this.offlineFoe.body.y }
+					: null,
+			// The opponent's state **as the server sent it**, not as this client
+			// predicted it.
+			//
+			// This feeds the melee frame-data tracker, which asks whether a state
+			// machine kept the contracts in the MOVES table — and that is only
+			// answerable about the authoritative state machine. A remote fighter is
+			// predicted now, and prediction being wrong is what prediction *is*: fed
+			// the predicted state, the tracker read a mispredicted uppercut as an
+			// uncancellable move ending 500ms early, and reported correct netcode as a
+			// frame data violation.
 			enemyState: this.onlineMode
-				? (this.online?.remoteState ?? null)
-				: this.remote.body,
+				? (this.online?.remoteAuthoritativeState ?? null)
+				: (this.offlineFoe?.body ?? null),
 			bullets: this.onlineMode
 				? [...(this.online?.bullets ?? [])]
 				: this.bullets.snapshot(),
@@ -463,6 +692,22 @@ export class Match {
 			cameraX: this.stage.cameraX,
 			cameraY: this.stage.cameraY,
 		});
+	}
+
+	/**
+	 * Where the primary remote fighter was drawn this frame.
+	 *
+	 * Read off the entity rather than by calling `renderRemote` again: the smoother
+	 * decays on every call, so asking twice in one frame would advance it twice and
+	 * report a position nothing was ever drawn at.
+	 */
+	private primaryRemoteDrawnAt(): { x: number; y: number } | null {
+		const id = this.online?.primaryRemoteId;
+		if (id === undefined) return null;
+		const entity = this.remotes.get(id);
+		if (!entity) return null;
+		const at = entity.renderPos ?? entity.body;
+		return { x: at.x, y: at.y };
 	}
 
 	/** Run the fixed-timestep accumulator, calling `step` once per 1/60s. */
@@ -518,10 +763,13 @@ export class Match {
 		if (!session?.connected) return;
 
 		if (this.aiMode && this.localBrain) {
-			// The remote fighter's full authoritative state, not just a position: the
-			// brain has to see what the opponent's sword is doing to block, punish or
-			// uppercut a guard.
-			const foe = session.remoteState;
+			// The nearest living opponent's full authoritative state, not just a
+			// position: the brain has to see what that fighter's sword is doing to
+			// block, punish or uppercut a guard. `EnemyBrain` reasons about exactly
+			// one enemy, so somebody has to choose which — and in a sixteen-fighter
+			// arena "whoever is closest" is the only choice that reads as fighting
+			// rather than as commuting.
+			const foe = session.nearestFoe(this.local.body);
 			if (foe) {
 				const output = this.localBrain.decide(
 					this.perceive(
@@ -546,14 +794,20 @@ export class Match {
 		});
 
 		// The predicted state object is replaced every tick, so the entity has to
-		// be re-pointed at the current one rather than holding a stale copy.
+		// be re-pointed at the current one rather than holding a stale copy. Same
+		// for every remote: `tickPlayer` is pure, so rolling one forward hands back
+		// a new object.
 		this.local.body = session.predicted.state;
-
 		this.local.renderPos = session.render(dtSec);
 
-		const remoteState = session.remoteState;
-		if (remoteState) this.remote.body = remoteState;
-		this.remote.fighter.hp = session.remoteHp;
+		for (const [id, entity] of this.remotes) {
+			const fighter = session.remotes.get(id);
+			if (!fighter) continue;
+			entity.body = fighter.state;
+			const at = session.renderRemote(id, dtSec);
+			if (at) entity.renderPos = at;
+			entity.fighter.hp = session.hpOf(id);
+		}
 	}
 
 	// =========================================================
@@ -561,32 +815,35 @@ export class Match {
 	// =========================================================
 
 	private updateOffline(dtSec: number) {
-		this.gatherOfflineIntents(dtSec);
+		const foe = this.offlineFoe;
+		if (!foe) return;
+
+		this.gatherOfflineIntents(dtSec, foe);
 
 		this.diagSteps = this.runFixedSteps(dtSec, (dt) => {
 			if (this.local.fighter.hp > 0) {
 				this.local.body = tickPlayer(this.local.body, this.localIntent, dt);
 			}
-			if (this.remote.fighter.hp > 0) {
-				this.remote.body = tickPlayer(this.remote.body, this.remoteIntent, dt);
+			if (foe.fighter.hp > 0) {
+				foe.body = tickPlayer(foe.body, this.remoteIntent, dt);
 			}
 			this.bullets.step(dt);
 		});
 
-		this.handleOfflineAttacks();
+		this.handleOfflineAttacks(foe);
 		this.tickReset(dtSec);
 	}
 
-	private gatherOfflineIntents(dtSec: number) {
+	private gatherOfflineIntents(dtSec: number, foe: FighterEntity) {
 		const dtMs = dtSec * 1000;
 
 		if (this.localBrain) {
 			const output = this.localBrain.decide(
 				this.perceive(
 					this.local.body,
-					this.remote.body,
+					foe.body,
 					this.local.fighter.hp,
-					this.remote.fighter.hp,
+					foe.fighter.hp,
 				),
 				this.elapsed,
 				dtMs,
@@ -601,9 +858,9 @@ export class Match {
 		if (this.remoteBrain) {
 			const output = this.remoteBrain.decide(
 				this.perceive(
-					this.remote.body,
+					foe.body,
 					this.local.body,
-					this.remote.fighter.hp,
+					foe.fighter.hp,
 					this.local.fighter.hp,
 				),
 				this.elapsed,
@@ -614,7 +871,7 @@ export class Match {
 		}
 	}
 
-	private handleOfflineAttacks() {
+	private handleOfflineAttacks(foe: FighterEntity) {
 		const now = this.elapsed;
 
 		// A fighter holds a sword or a gun, never both.
@@ -630,19 +887,19 @@ export class Match {
 		}
 
 		if (
-			this.remote.fighter.hp > 0 &&
-			this.remote.body.stance === "gun" &&
+			foe.fighter.hp > 0 &&
+			foe.body.stance === "gun" &&
 			this.remoteIntent.attack &&
 			canFire(this.remoteAttackAt, now)
 		) {
 			this.remoteAttackAt = now;
-			const c = bodyCentre(this.remote.body.x, this.remote.body.y);
+			const c = bodyCentre(foe.body.x, foe.body.y);
 			this.bullets.fire(c.x, c.y, this.remoteBrainAim, "enemy");
 			EventBus.emit("bullet-fired");
 		}
 
-		this.resolveOfflineMelee();
-		this.bullets.resolve(this.bulletTargets());
+		this.resolveOfflineMelee(foe);
+		this.bullets.resolve(this.bulletTargets(foe));
 	}
 
 	private localAttackAt = 0;
@@ -656,10 +913,10 @@ export class Match {
 	 * code — the escape hatch must not become a second, divergent set of combat
 	 * rules, since it is the one path nobody dogfoods.
 	 */
-	private resolveOfflineMelee() {
+	private resolveOfflineMelee(foe: FighterEntity) {
 		const sides: [FighterEntity, FighterEntity][] = [
-			[this.local, this.remote],
-			[this.remote, this.local],
+			[this.local, foe],
+			[foe, this.local],
 		];
 
 		for (const [attacker, defender] of sides) {
@@ -669,21 +926,20 @@ export class Match {
 			if (!result) continue;
 
 			const damage = applyMeleeResult(attacker.body, defender.body, result);
-			this.fx.impact(result as ImpactEvent, defender.fighter.side);
+			this.fx.impact(result as ImpactEvent, defender.fighter.id);
 			if (damage > 0) this.applyOfflineDamage(defender, damage, "sword");
 		}
 	}
 
-	private bulletTargets(): BulletTarget[] {
+	private bulletTargets(foe: FighterEntity): BulletTarget[] {
 		return [
 			{
 				owner: "enemy",
-				x: this.remote.body.x,
-				y: this.remote.body.y,
-				alive: this.remote.fighter.hp > 0,
-				state: this.remote.body,
-				onHit: () =>
-					this.applyOfflineDamage(this.remote, BULLET_DAMAGE, "bullet"),
+				x: foe.body.x,
+				y: foe.body.y,
+				alive: foe.fighter.hp > 0,
+				state: foe.body,
+				onHit: () => this.applyOfflineDamage(foe, BULLET_DAMAGE, "bullet"),
 			},
 			{
 				owner: "player",
@@ -703,13 +959,11 @@ export class Match {
 		kind: string,
 	) {
 		victim.fighter.hp = Math.max(0, victim.fighter.hp - damage);
-		const who = victim.fighter.side === "local" ? "Player" : "Enemy";
+		const who = victim.fighter.local ? "Player" : "Enemy";
 		console.log(`[FIGHT] ${who} hit by ${kind}! HP: ${victim.fighter.hp}`);
 
-		if (victim.fighter.side === "local") {
+		if (victim.fighter.local) {
 			this.hpText.text = `hp: ${victim.fighter.hp}`;
-		} else {
-			this.enemyHpText.text = `enemy hp: ${victim.fighter.hp}`;
 		}
 
 		if (victim.fighter.hp <= 0 && this.resetAt < 0) {
@@ -735,11 +989,18 @@ export class Match {
 		this.resetAt = -1;
 
 		this.local.body = createPlayerState(START_PLAYER_X, START_PLAYER_Y, 1);
-		this.remote.body = createPlayerState(START_ENEMY_X, START_ENEMY_Y, -1);
 		this.local.fighter.hp = 100;
-		this.remote.fighter.hp = 100;
 		this.localIntent = { ...NO_INTENT };
 		this.remoteIntent = { ...NO_INTENT };
+
+		if (this.offlineFoe) {
+			this.offlineFoe.body = createPlayerState(
+				START_ENEMY_X,
+				START_ENEMY_Y,
+				-1,
+			);
+			this.offlineFoe.fighter.hp = 100;
+		}
 
 		if (this.localBrain) this.localBrain = new EnemyBrain(fightConfig());
 		if (this.remoteBrain) this.remoteBrain = new EnemyBrain(fightConfig());
@@ -748,7 +1009,6 @@ export class Match {
 		this.fx.reset();
 		this.stage.reset();
 		this.hpText.text = "hp: 100";
-		this.enemyHpText.text = "enemy hp: 100";
 	}
 
 	private toggleAiVsAi() {
@@ -766,8 +1026,50 @@ export class Match {
 	}
 
 	destroy() {
+		this.nameUnsubscribe?.();
 		this.input.destroy();
 		this.training?.destroy();
 		this.online?.disconnect();
+	}
+}
+
+/** A positive integer URL parameter, or undefined when absent or nonsense. */
+function numberParam(params: URLSearchParams, key: string): number | undefined {
+	const raw = params.get(key);
+	if (raw === null) return undefined;
+	const n = Number.parseInt(raw, 10);
+	return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
+/** Like `numberParam`, but zero is a legitimate answer. */
+function countParam(params: URLSearchParams, key: string): number | undefined {
+	const raw = params.get(key);
+	if (raw === null) return undefined;
+	const n = Number.parseInt(raw, 10);
+	return Number.isFinite(n) && n >= 0 ? n : undefined;
+}
+
+function formatClock(ms: number): string {
+	const total = Math.ceil(ms / 1000);
+	const minutes = Math.floor(total / 60);
+	const seconds = total % 60;
+	return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function readStoredName(): string | null {
+	try {
+		return window.localStorage.getItem(NAME_KEY);
+	} catch {
+		// Private browsing, or storage disabled. A name prompt every session is a
+		// far better failure than a game that will not start.
+		return null;
+	}
+}
+
+function storeName(name: string) {
+	try {
+		window.localStorage.setItem(NAME_KEY, name);
+	} catch {
+		/* not fatal — see readStoredName */
 	}
 }
