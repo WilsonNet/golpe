@@ -16,7 +16,7 @@
  */
 
 import { Container, Sprite, Text, Texture } from "pixi.js";
-import { PLAYER_WIDTH, WORLD_RIGHT } from "../simulation/Physics";
+import { WORLD_RIGHT } from "../simulation/Physics";
 
 /** Wider than the fighter (32px), so a nearly-empty bar is still readable. */
 const BAR_WIDTH = 40;
@@ -185,6 +185,3 @@ export class Nameplates {
 		for (const key of [...this.plates.keys()]) this.forget(key);
 	}
 }
-
-/** Half a body, for placing a plate from a body's top-left corner. */
-export const PLATE_HALF_WIDTH = PLAYER_WIDTH / 2;
