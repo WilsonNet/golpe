@@ -147,9 +147,19 @@ node scripts/training-probe.mjs                        # one interaction, agains
 
 ## Controls
 
-**WASD** move/jump · **LMB** slash (hold 420ms then release = Massive Strike) ·
-**RMB** block · **F** uppercut · **Q/E** sword/gun stance · **P** toggle AI vs AI ·
-**hold Tab** scoreboard. Sword is the default stance.
+**WASD** move/jump (**W again in the air** = double jump) · **double-tap A/D**
+dash · **LMB** slash (hold 420ms then release = Massive Strike) · **RMB** block ·
+**F** uppercut · **Q/E** sword/gun stance · **P** toggle AI vs AI · **hold Tab**
+scoreboard. Sword is the default stance.
+
+**An airborne dash is a flat line** — no gravity, same Y throughout — and the
+**air jump refills only on landing**. Both change reachability, which is a rule
+that bites: see [specs/movement.md](specs/movement.md).
+
+**Every fighter carries a nameplate** — name and health bar, drawn in the world
+above its head, keyed by the id the server scores it under. It reads the *drawn*
+position, not the body, or it drifts by exactly the correction the render
+smoother is hiding.
 
 **A human client asks for a name before it connects** and remembers it in
 `localStorage`. A script answers with `window.__setPlayerName(name)` — the same

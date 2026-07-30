@@ -24,6 +24,13 @@ export class Stage {
 	readonly actors = new Container();
 	readonly projectiles = new Container();
 	readonly effects = new Container();
+	/**
+	 * Names and health bars, above everything else in the world.
+	 *
+	 * Inside the camera, because a plate tracks a moving fighter — but drawn last,
+	 * because a label buried behind a sprite or a spark is worse than no label.
+	 */
+	readonly nameplates = new Container();
 	/** Screen-space, outside the camera, so shake never moves the HUD. */
 	readonly hud = new Container();
 
@@ -39,6 +46,7 @@ export class Stage {
 			this.actors,
 			this.projectiles,
 			this.effects,
+			this.nameplates,
 		);
 		root.addChild(this.scroll, this.hud);
 	}

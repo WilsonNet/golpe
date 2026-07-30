@@ -12,6 +12,8 @@ import {
 	platforms,
 } from "./Arena.js";
 import {
+	AIR_JUMP_VELOCITY,
+	AIR_JUMPS,
 	COYOTE_TIME_MS,
 	createPlayerState,
 	DASH_DURATION_MS,
@@ -193,8 +195,10 @@ describe("jump feel", () => {
 		expect(apex(3)).toBeLessThan(apex(60) * 0.75);
 	});
 
-	it("cannot jump in mid-air without coyote time", () => {
-		const r = tick(state({ x: 300, y: 100, vy: 100 }), { up: true });
+	it("cannot jump in mid-air once the air jump is spent", () => {
+		const r = tick(state({ x: 300, y: 100, vy: 100, airJumps: 0 }), {
+			up: true,
+		});
 		expect(r.vy).toBeCloseTo(100 + GRAVITY * FALL_GRAVITY_MULTIPLIER * DT, 6);
 	});
 
@@ -208,7 +212,8 @@ describe("jump feel", () => {
 
 	it("coyote time expires", () => {
 		const stale = ticks(
-			state({ x: 300, y: 200, coyoteTimer: COYOTE_TIME_MS }),
+			// Air jump already spent, so this measures coyote time and nothing else.
+			state({ x: 300, y: 200, coyoteTimer: COYOTE_TIME_MS, airJumps: 0 }),
 			{},
 			Math.ceil(COYOTE_TIME_MS / (DT * 1000)) + 1,
 		);
@@ -217,9 +222,22 @@ describe("jump feel", () => {
 		expect(r.vy).toBeGreaterThan(0);
 	});
 
-	it("a jump pressed just before landing is buffered", () => {
+	/**
+	 * The buffer and the air jump want the same press, and the air jump wins.
+	 *
+	 * That is the honest resolution: a press in the air should always do something
+	 * *now*, and a player who still has a double jump is not asking to land. The
+	 * buffer keeps its job for the case it was built for — a press while falling
+	 * with nothing left to spend.
+	 */
+	it("a jump pressed just before landing is buffered, once the air jump is spent", () => {
 		// Press while still falling, then release: the press must survive to the ground.
-		let s = state({ x: OPEN_X, y: standingOn(GROUND.y) - 30, vy: 400 });
+		let s = state({
+			x: OPEN_X,
+			y: standingOn(GROUND.y) - 30,
+			vy: 400,
+			airJumps: 0,
+		});
 		s = tick(s, { up: true });
 		expect(s.jumpBufferTimer).toBeGreaterThan(0);
 		expect(s.grounded).toBe(false);
@@ -234,6 +252,73 @@ describe("jump feel", () => {
 	it("does not buffer a jump held from before (needs a fresh press)", () => {
 		const r = tick(state({ x: 300, y: 300, jumpHeld: true }), { up: true });
 		expect(r.jumpBufferTimer).toBe(0);
+	});
+
+	it("air jump launches from a standing fall", () => {
+		const r = tick(state({ x: 300, y: 100, vy: 200 }), { up: true });
+		expect(r.airJumps).toBe(0);
+		expect(r.vy).toBeCloseTo(AIR_JUMP_VELOCITY + GRAVITY * DT, 6);
+	});
+
+	it("gives exactly one air jump, not a flight mode", () => {
+		let s = state({ x: 300, y: 100, vy: 200 });
+		// Press, release, press again — two distinct gestures.
+		s = tick(s, { up: true });
+		expect(s.airJumps).toBe(0);
+		s = tick(s, {});
+		const before = s.vy;
+		s = tick(s, { up: true });
+		expect(s.vy).toBeGreaterThan(before);
+	});
+
+	it("is weaker than a ground jump, so timing the first one still matters", () => {
+		expect(Math.abs(AIR_JUMP_VELOCITY)).toBeLessThan(Math.abs(JUMP_VELOCITY));
+	});
+
+	it("comes back on landing", () => {
+		let s = state({ x: OPEN_X, y: standingOn(GROUND.y) - 40, vy: 300 });
+		s = tick(s, { up: true });
+		expect(s.airJumps).toBe(0);
+		s = until(s, {}, (p) => p.grounded).state;
+		expect(s.airJumps).toBe(AIR_JUMPS);
+	});
+
+	/**
+	 * A wall jump must **not** refill it, or a fighter alternates the two up a
+	 * single flat wall forever.
+	 */
+	it("is not refilled by a wall jump", () => {
+		const s = tick(
+			state({
+				x: 300,
+				y: 200,
+				vy: 100,
+				airJumps: 0,
+				wallTouch: "left",
+				wallCoyoteTimer: 50,
+			}),
+			{ up: true },
+		);
+		expect(s.vy).toBeCloseTo(WALL_JUMP_VERTICAL + GRAVITY * DT, 6);
+		expect(s.airJumps).toBe(0);
+	});
+
+	it("prefers the ground jump when both are available", () => {
+		const s = tick(
+			state({ x: OPEN_X, y: standingOn(GROUND.y), grounded: true }),
+			{ up: true },
+		);
+		expect(s.vy).toBeCloseTo(JUMP_VELOCITY + GRAVITY * DT, 6);
+		// The ground jump must not have spent the air jump on the way out.
+		expect(s.airJumps).toBe(AIR_JUMPS);
+	});
+
+	it("can be cut short like any other jump", () => {
+		let s = tick(state({ x: 300, y: 200, vy: 100 }), { up: true });
+		const rising = s.vy;
+		s = tick(s, {});
+		expect(s.vy).toBeGreaterThan(rising * JUMP_CUT_MULTIPLIER * 0.99);
+		expect(Math.abs(s.vy)).toBeLessThan(Math.abs(rising));
 	});
 
 	it("buffer expires if you never land", () => {

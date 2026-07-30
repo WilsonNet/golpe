@@ -70,7 +70,29 @@ cursor — which is why `scripts/aim-probe.mjs` exists and why it runs at
   again.
 - **Coyote time: 100ms.** You can still jump just after walking off a ledge.
 - **Jump buffer: 120ms.** A jump pressed just before landing is honoured on
-  touchdown.
+  touchdown — **once the air jump is spent**; see below.
+
+### The double jump
+
+**One extra jump while airborne** (`AIR_JUMPS = 1`), at **−620 px/s** — a 108px
+rise against the ground jump's 136px.
+
+- **Weaker than the first on purpose.** Equal jumps would make timing the ground
+  jump pointless, because you would simply always have two of them. A shorter
+  second one keeps the choice live: spend it to reach, or save it to recover.
+- **Only landing refills it.** Notably *not* a wall jump, or a fighter could
+  alternate the two up a single flat wall forever.
+- **It is last in the chain.** A ground jump, then coyote time, then a wall jump,
+  then this — so none of the better options ever spends it by accident, and a
+  ground jump leaves it untouched.
+- **It is cuttable**, like any other jump: release while rising for a shorter hop.
+- **The air jump beats the jump buffer for the same press.** They want the same
+  input and something has to win. A press in the air should always do something
+  *now*, and a player who still has a double jump is not asking to land — so the
+  buffer keeps its job only for a press made with nothing left to spend.
+- Reachability goes up, as it must for anything that moves a fighter: every ledge
+  is now trivially reachable. The arena's "within one jump of the surface below"
+  rule is a floor, not a ceiling, so it still holds.
 
 ## Dash
 

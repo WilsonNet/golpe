@@ -11,6 +11,8 @@
 import { syncSpriteToBody } from "../render/ArenaRenderer";
 import { dudeFrames } from "../render/assets";
 import type { MeleeFx } from "../render/MeleeFx";
+import type { Nameplates } from "../render/Nameplates";
+import { PLAYER_WIDTH } from "../simulation/Physics";
 import type { AnimState, Queries } from "./world";
 
 /**
@@ -112,6 +114,28 @@ export function spriteSyncSystem(queries: Queries) {
 export function meleeFxSystem(queries: Queries, fx: MeleeFx, dtMs: number) {
 	for (const e of queries.fighters) {
 		fx.updateFighter(e.fighter.id, e.body, dtMs);
+	}
+}
+
+/**
+ * Place each fighter's name and health bar.
+ *
+ * Reads the *drawn* position, not the body: a plate that used simulation state
+ * while the sprite used a smoothed one would drift away from the fighter it
+ * belongs to by exactly the correction the smoother is hiding.
+ */
+export function nameplateSystem(queries: Queries, plates: Nameplates) {
+	for (const e of queries.drawnFighters) {
+		const at = e.renderPos ?? e.body;
+		plates.sync(
+			e.fighter.id,
+			at.x + PLAYER_WIDTH / 2,
+			at.y,
+			e.fighter.hp,
+			e.fighter.maxHp,
+			e.fighter.name,
+			e.fighter.local,
+		);
 	}
 }
 

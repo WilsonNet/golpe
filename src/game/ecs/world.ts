@@ -48,6 +48,10 @@ export interface Entity {
 		/** True for the one fighter this client predicts and owns the input of. */
 		local: boolean;
 		hp: number;
+		/** Full health, for the bar's fraction. Not always 100 — a training dummy differs. */
+		maxHp: number;
+		/** What the nameplate says. Empty until the roster names this fighter. */
+		name: string;
 	};
 
 	/** A server-owned projectile, keyed by the id the server assigned. */

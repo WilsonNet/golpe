@@ -114,6 +114,7 @@ const NUMBER_FIELDS = [
 	"wallCoyoteTimer",
 	"dashTimer",
 	"dashActiveTimer",
+	"airJumps",
 	"facing",
 	"meleeTimer",
 	"blockTimer",

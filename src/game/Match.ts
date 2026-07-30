@@ -30,6 +30,7 @@ import {
 	animationSystem,
 	bindFxBodies,
 	meleeFxSystem,
+	nameplateSystem,
 	spriteSyncSystem,
 } from "./ecs/systems";
 import {
@@ -45,6 +46,7 @@ import { requestedRoomId, showRoomInUrl } from "./online/room";
 import { bodyCentre, drawArena } from "./render/ArenaRenderer";
 import { dudeFrames, TEX, tex } from "./render/assets";
 import { type ImpactEvent, MeleeFx } from "./render/MeleeFx";
+import { Nameplates } from "./render/Nameplates";
 import type { Stage } from "./render/Stage";
 import { timeLeftMs } from "./simulation/Deathmatch";
 import {
@@ -116,6 +118,7 @@ export class Match {
 	private readonly world: GameWorld = createWorld();
 	private readonly queries: Queries;
 	private readonly fx: MeleeFx;
+	private readonly plates: Nameplates;
 	private readonly input: Input;
 	private readonly diagnostics: PhysicsDiagnostics;
 	private readonly bullets: BulletSystem;
@@ -188,6 +191,7 @@ export class Match {
 
 		this.queries = createQueries(this.world);
 		this.fx = new MeleeFx(stage.effects, stage);
+		this.plates = new Nameplates(stage.nameplates);
 		this.bullets = new BulletSystem(stage.projectiles, tex(TEX.fireball));
 		this.diagnostics = new PhysicsDiagnostics(
 			() => (this.onlineMode ? "online" : "offline"),
@@ -270,6 +274,9 @@ export class Match {
 				START_ENEMY_Y,
 				-1,
 			);
+			// No server, so no roster to be named by.
+			this.offlineFoe.fighter.name = "Rival";
+			this.local.fighter.name = "You";
 			if (this.aiMode) this.startOfflineAi();
 		}
 
@@ -293,7 +300,10 @@ export class Match {
 
 		const entity = this.world.add({
 			key: id,
-			fighter: { id, local, hp: 100 },
+			// The name is filled in from the roster once it arrives; until then a
+			// plate shows a bar and no label, which is honest — nobody has told this
+			// client who that is yet.
+			fighter: { id, local, hp: 100, maxHp: 100, name: "" },
 			body: createPlayerState(x, y, facing),
 			sprite,
 			anim: { clip: "right-idle", frame: 0, elapsedMs: 0 },
@@ -321,6 +331,7 @@ export class Match {
 		entity.sprite.destroy();
 		this.world.remove(entity);
 		this.fx.forget(id);
+		this.plates.forget(id);
 	}
 
 	private buildHud(hud: Container) {
@@ -386,6 +397,7 @@ export class Match {
 
 	private startOnline(name: string) {
 		this.playerName = name;
+		this.local.fighter.name = name;
 		this.statusText.text = "Connecting...";
 
 		this.online = new OnlineSession(
@@ -675,6 +687,7 @@ export class Match {
 		// the sprites, effects read the same state, then the camera settles.
 		animationSystem(this.queries, dtMs);
 		spriteSyncSystem(this.queries);
+		nameplateSystem(this.queries, this.plates);
 		meleeFxSystem(this.queries, this.fx, dtMs);
 		this.fx.update(dtMs);
 		this.stage.update(dtMs);
@@ -844,6 +857,9 @@ export class Match {
 			const at = session.renderRemote(id, dtSec);
 			if (at) entity.renderPos = at;
 			entity.fighter.hp = session.hpOf(id);
+			// Cheap, and it means a name appears the moment the roster names it —
+			// including when a bot gives up its seat and a human inherits the slot.
+			entity.fighter.name = session.nameOf(id);
 		}
 	}
 

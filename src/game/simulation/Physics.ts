@@ -121,6 +121,23 @@ export const JUMP_HEIGHT_PX = (JUMP_VELOCITY * JUMP_VELOCITY) / (2 * GRAVITY);
 export const JUMP_CUT_MULTIPLIER = 0.45;
 /** Grace period to still jump just after walking off a ledge. */
 export const COYOTE_TIME_MS = 100;
+
+/**
+ * Jumps available *after* leaving the ground. One, so a double jump.
+ *
+ * Refilled by landing and by nothing else — in particular **not by a wall jump**,
+ * or a fighter could alternate the two up a single wall forever.
+ */
+export const AIR_JUMPS = 1;
+/**
+ * The second jump is deliberately weaker than the first (89% of the launch, so
+ * ~108px against 136px).
+ *
+ * Equal jumps would make the ground jump pointless to time — you would simply
+ * always have two of them. Making the airborne one shorter keeps the decision
+ * interesting: spend it to reach, or save it to recover.
+ */
+export const AIR_JUMP_VELOCITY = -620;
 /** Grace period for a jump pressed just before landing. */
 export const JUMP_BUFFER_MS = 120;
 
@@ -224,6 +241,13 @@ export interface PlayerPosition extends MeleeState {
 	jumping: boolean;
 	/** Jump button state last tick, for press-edge detection. */
 	jumpHeld: boolean;
+	/**
+	 * Jumps left before touching the ground again. See `AIR_JUMPS`.
+	 *
+	 * A count rather than a flag, so the number is a tuning constant instead of a
+	 * shape change.
+	 */
+	airJumps: number;
 	/** ms until another dash is allowed. */
 	dashTimer: number;
 	/**
@@ -255,6 +279,7 @@ export function createPlayerState(
 		wallCoyoteTimer: 0,
 		jumping: false,
 		jumpHeld: false,
+		airJumps: AIR_JUMPS,
 		dashTimer: 0,
 		dashActiveTimer: 0,
 		...createMeleeState(facing),
@@ -278,6 +303,7 @@ export function copyPlayerState(
 	target.wallCoyoteTimer = source.wallCoyoteTimer;
 	target.jumping = source.jumping;
 	target.jumpHeld = source.jumpHeld;
+	target.airJumps = source.airJumps;
 	target.dashTimer = source.dashTimer;
 	target.dashActiveTimer = source.dashActiveTimer;
 	copyMeleeState(source, target);
@@ -411,6 +437,17 @@ export function tickPlayer(
 			s.jumpBufferTimer = 0;
 			s.jumping = true;
 			s.dashActiveTimer = 0;
+			// Deliberately does *not* refill `airJumps`: a fighter that regained its
+			// air jump from a wall could alternate the two up a single flat wall
+			// forever. Landing is the only refill.
+		} else if (s.airJumps > 0) {
+			// The double jump. Last in the chain on purpose — a ground jump and a wall
+			// jump are both better, so neither should ever spend this by accident.
+			s.airJumps--;
+			s.vy = AIR_JUMP_VELOCITY;
+			s.jumpBufferTimer = 0;
+			s.jumping = true;
+			s.dashActiveTimer = 0;
 		}
 	}
 
@@ -466,6 +503,8 @@ export function tickPlayer(
 	if (s.grounded) {
 		s.coyoteTimer = COYOTE_TIME_MS;
 		s.jumping = false;
+		// Landing is the only thing that gives the air jump back.
+		s.airJumps = AIR_JUMPS;
 	}
 
 	const wall = contacts.wall !== "none" ? contacts.wall : probeWall(box);
