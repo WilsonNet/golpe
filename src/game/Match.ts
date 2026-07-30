@@ -230,9 +230,10 @@ export class Match {
 		// Which room, from the URL — or a new one. There is no matchmaking queue:
 		// sharing the link is how two people end up in the same match.
 		this.roomId = requestedRoomId();
-		// `?online=true` asks for a full sixteen-fighter room; otherwise the room is
-		// sized for one player plus bots. Either way the match is served, predicted
-		// and reconciled, and either way it is a room somebody else can be sent to.
+		// Vestigial, and kept only for the status line and the debug hooks. Rooms are
+		// addressed by id, so there is no "solo" placement to choose — and bots are
+		// opt-in, so this no longer decides how a room is filled either. Every room is
+		// served, predicted, reconciled, and a room somebody else can be sent to.
 		this.soloMatch = params.get("online") !== "true";
 		// `?offline=true` is an escape hatch for working without a game server. It
 		// is not the supported path — it bypasses the netcode entirely.

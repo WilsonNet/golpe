@@ -153,11 +153,13 @@ async function onlineRun(browser, durationMs) {
 	// report would be about a client fighting a bot on its own.
 	//
 	// A fresh id per run, so consecutive runs cannot land in each other's room.
-	// `fill=2` keeps it a duel: this run's job is the *netcode* — prediction,
-	// reconciliation, projectiles — which is cleanest to read with one opponent.
+	//
+	// No `fill`: bots are opt-in, so two clients in one room *are* two fighters.
+	// That keeps this run a duel, which is what it is for — prediction,
+	// reconciliation and projectiles are cleanest to read against one opponent.
 	// `scripts/deathmatch-probe.mjs` is the sixteen-fighter measurement.
 	const room = `diag-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-	const url = `${BASE_URL}/?online=true&ai=true&fill=2&room=${room}`;
+	const url = `${BASE_URL}/?online=true&ai=true&room=${room}`;
 
 	const a = await ctx.newPage();
 	const linesA = sinkConsole(a);

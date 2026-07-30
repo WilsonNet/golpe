@@ -23,8 +23,8 @@ const rooms = new Map<string, GameRoom>();
  */
 const JOIN_GRACE_MS = 1500;
 
-/** Default size of a deathmatch: full, with bots making up the numbers. */
-const DEFAULT_FILL = 16;
+/** A room's ceiling, and what `?fill` alone means. Matches `MAX_PLAYERS`. */
+const MAX_FILL = 16;
 
 /**
  * What a room id may look like.
@@ -43,12 +43,17 @@ interface JoinMsg {
 	 * This is the whole of matchmaking: to play together, share the link.
 	 */
 	room?: string;
+	/**
+	 * Vestigial. Rooms are addressed by id now, so there is no "solo" placement
+	 * left to choose — and bots are opt-in, so it no longer decides how a room is
+	 * filled either. Still accepted so an older client keeps working.
+	 */
 	solo?: boolean;
 	training?: boolean;
 	name?: string;
-	/** Bots to seat in a solo room. */
+	/** Bots to play against. **Absent means none** — see `botFill`. */
 	bots?: number;
-	/** Fighters a deathmatch is topped up to with bots. */
+	/** Fighters to keep the room topped up to with bots. Absent means none. */
 	fill?: number;
 	/**
 	 * Shortened rules.
@@ -78,6 +83,29 @@ function clamp(
 
 function roomId(raw: unknown): string {
 	return typeof raw === "string" && ROOM_ID_RE.test(raw) ? raw : randomUUID();
+}
+
+/**
+ * How many fighters this room keeps topped up with bots. **Zero unless asked.**
+ *
+ * Bots are opt-in. A room is for the people in it, and seating fifteen strangers
+ * nobody asked for is a decision rather than a default — it also meant that
+ * opening the game to check something put you in a brawl you did not want, and
+ * that a probe measuring one fighter had to remember to say `bots=0`.
+ *
+ * Two ways to ask, because two questions get asked:
+ *
+ * - `?bots=N` — "give me N opponents". Total becomes `1 + N`.
+ * - `?fill=N` — "keep this room at N fighters", whoever they turn out to be. What
+ *   a sixteen-fighter test wants.
+ *
+ * Either way bots are ballast: `rebalanceBots` evicts them as humans arrive, so
+ * the target is a floor on activity, never a cap on people.
+ */
+function botFill(msg: JoinMsg): number {
+	if (msg.fill !== undefined) return clamp(msg.fill, 1, MAX_FILL, MAX_FILL);
+	if (msg.bots !== undefined) return 1 + clamp(msg.bots, 0, MAX_FILL - 1, 0);
+	return 0;
 }
 
 /** Create a room and register it. Its rules and size are fixed here, for good. */
@@ -149,16 +177,9 @@ io.onConnection((channel) => {
 		const id = roomId(msg.room);
 		let room = rooms.get(id);
 		if (!room) {
-			// First one through the door sets the rules and the size. `bots=0` is
-			// allowed and useful: an empty room is still a fully served, predicted,
-			// reconciled match, and it is the only way to measure something about the
-			// local fighter — aim, facing, a shot's heading — without a bot closing to
-			// melee range and turning the measurement into noise.
-			const fillTarget = msg.solo
-				? 1 + clamp(msg.bots, 0, 15, 1)
-				: clamp(msg.fill, 1, DEFAULT_FILL, DEFAULT_FILL);
+			// First one through the door sets the rules and the size.
 			room = createRoom(id, {
-				fillTarget,
+				fillTarget: botFill(msg),
 				...(msg.scoreLimit === undefined
 					? {}
 					: { scoreLimit: clamp(msg.scoreLimit, 1, 999, 21) }),

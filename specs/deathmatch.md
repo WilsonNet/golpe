@@ -76,14 +76,27 @@ that built a second time.
   somebody's swing is the one death a player cannot do anything about. The choice
   is a pure, deterministic function — see [arena.md](arena.md).
 
-## Bots fill the empty seats
+## Bots are opt-in
 
-An empty arena is worse than a bot-filled one, so a public room is topped up to
-sixteen fighters with server-hosted bots.
+**A room has no bots unless somebody asked for them.** A room is for the people in
+it, and seating fifteen strangers nobody requested is a decision rather than a
+default — it also meant opening the game to check something dropped you into a
+brawl, and a probe measuring one fighter had to remember to opt *out*.
+
+| | |
+|---|---|
+| `?bots=N` | "Give me N opponents." Room is topped up to `1 + N` fighters |
+| `?fill=N` | "Keep this room at N fighters", whoever they turn out to be |
+| neither | **No bots.** Humans only, still up to sixteen of them |
+
+Asking for none does not make the room smaller: `MAX_PLAYERS` humans can always
+join. The target is a floor on activity, never a cap on people.
 
 - **A bot gives up its seat the moment a human wants it.** `rebalanceBots`
   works in both directions: it evicts surplus bots and adds missing ones, so a
   room holds exactly its target number of fighters with humans always kept.
+  Zero is a real target and must not be clamped up to one — that would quietly
+  seat a bot in every humans-only room, which is the entire thing being avoided.
 - **Bots are named** by `unique-names-generator`, gamertag-shaped and unique
   within a room. Two `SilentWolf`s on a scoreboard is indistinguishable from a
   scoring bug.
@@ -137,10 +150,9 @@ mechanics in [netcode.md](netcode.md).
 
 | URL | Room |
 |---|---|
-| `/` | A new room, one bot |
-| `/?bots=N` | A new room, N bots (0-15). `bots=0` is an empty room |
-| `/?online=true` | A new room sized to 16, topped up with bots |
-| `/?online=true&fill=N` | Sized to N fighters |
+| `/` | A new, empty room. No bots |
+| `/?bots=N` | A new room with N bots to fight (1-15) |
+| `/?fill=N` | A new room held at N fighters, bots as ballast |
 | `/?room=<id>` | That room, and whoever is already in it |
 | `/?ai=true&bots=15` | A room full of AI — the canonical deathmatch test |
 | `/?scoreLimit=N&timeLimit=S` | Shortened rules. **Only when creating the room** |

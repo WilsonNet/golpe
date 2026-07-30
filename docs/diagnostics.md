@@ -43,8 +43,9 @@ answers at scale:
 
 It shortens the rules so a win condition is observable in seconds rather than five
 minutes — `--scoreLimit`, `--timeLimit` — and everything else is the real path:
-real server, real snapshots, real prediction, real bots. Shortened rules are
-refused on a public room, so one client cannot end everybody else's match.
+real server, real snapshots, real prediction, real bots. Shortened rules apply only
+to the client that *creates* the room, so nobody can end a match already in
+progress.
 
 ```bash
 node scripts/deathmatch-probe.mjs                                   # to the frag limit

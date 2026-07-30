@@ -130,7 +130,8 @@ node scripts/deathmatch-probe.mjs                  # a room full of AI, to a win
 
 ### What a duel cannot test: everything that only breaks at sixteen
 
-`--mode=online` seats two fighters (`fill=2`). That is the cleanest place to read
+`--mode=online` seats two fighters — two clients in one room, and bots are opt-in,
+so that is all there is in it. That is the cleanest place to read
 prediction, reconciliation and projectile flight — and it is blind to every bug
 that needs a crowd.
 

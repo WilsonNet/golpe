@@ -156,10 +156,13 @@ node scripts/training-probe.mjs                        # one interaction, agains
 event the modal fires. A client with `?ai=true` names itself and never blocks,
 which is why every probe runs that way.
 
-**Deathmatch is the mode.** Sixteen fighters, 21 frags or 5 minutes, individual
-respawns, bots filling the empty seats. `?bots=N` seats bots (`0` is a legitimate
-empty room), `?fill=N` sizes the room, `?scoreLimit`/`?timeLimit` shorten a match
-for a probe — and all three are honoured only for the client that *creates* the
+**Deathmatch is the mode.** Up to sixteen fighters, 21 frags or 5 minutes,
+individual respawns.
+
+**Bots are opt-in.** A room has none unless asked: `?bots=N` seats N to fight,
+`?fill=N` keeps the room at N fighters with bots as ballast, and neither means
+humans only — still up to sixteen of them. `?scoreLimit`/`?timeLimit` shorten a
+match for a probe. All four are honoured only for the client that *creates* the
 room. See [specs/deathmatch.md](specs/deathmatch.md).
 
 **Rooms are addressed, not matchmade.** `?room=<uuid>` joins that room; no

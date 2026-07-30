@@ -15,25 +15,52 @@ const BASE = process.env.VENTO_URL ?? "http://localhost:8080";
  * control, not that damage is dealt.
  */
 const MODES = [
+	/**
+	 * An empty room. **The default now that bots are opt-in**, and worth checking
+	 * on its own: it is a fully served, predicted, reconciled match with nobody
+	 * else in it, and it is what a player sees for the second before their friends
+	 * arrive.
+	 */
 	{
-		label: "solo vs server bot",
+		label: "empty room (no bots)",
 		url: "/",
 		tabs: 1,
 		needsFight: false,
-		solo: true,
+		alone: true,
+		fighters: 1,
 	},
-	{ label: "AI vs AI (one tab)", url: "/?ai=true", tabs: 1, needsFight: true },
+	{
+		label: "vs one server bot",
+		url: "/?bots=1",
+		tabs: 1,
+		needsFight: false,
+		solo: true,
+		fighters: 2,
+	},
+	{
+		label: "AI vs AI (one tab)",
+		url: "/?ai=true&bots=1",
+		tabs: 1,
+		needsFight: true,
+		fighters: 2,
+	},
+	/**
+	 * Two humans and **no `fill`**: with bots opt-in, a room of two clients is a
+	 * room of two fighters, so there is nothing to evict and nothing to ask for.
+	 */
 	{
 		label: "PvP (two tabs)",
-		url: "/?online=true&fill=2",
+		url: "/?online=true",
 		tabs: 2,
 		needsFight: false,
+		fighters: 2,
 	},
 	{
 		label: "AI vs AI online (two tabs)",
-		url: "/?online=true&ai=true&fill=2",
+		url: "/?online=true&ai=true",
 		tabs: 2,
 		needsFight: true,
+		fighters: 2,
 	},
 	/**
 	 * A room full of AI. The mode the deathmatch exists for, and the one where
@@ -78,9 +105,9 @@ for (const [modeIndex, mode] of MODES.entries()) {
 	//
 	// Both halves matter. Rooms are addressed rather than matchmade, so two tabs
 	// opened without a `room` land in two *different* rooms and a PvP check can
-	// never pass. And a fresh id per mode is what finally stopped each mode joining
-	// the room the previous one had not finished leaving — which used to report four
-	// fighters in a room that asked for two.
+	// never pass. And a fresh id per mode is what stopped each mode joining the room
+	// the previous one had not finished leaving, which used to report four fighters
+	// in a room that asked for two.
 	const room = `verify-${modeIndex}-${Date.now().toString(36)}`;
 	const separator = mode.url.includes("?") ? "&" : "?";
 
@@ -119,37 +146,40 @@ for (const [modeIndex, mode] of MODES.entries()) {
 			)
 		: false;
 	const fighting = hps.size > 1;
-	// A room that was asked for sixteen fighters and seated three is a matchmaking
-	// failure that every other check here would pass right through.
-	const roomFull = mode.fighters ? s.fighterCount >= mode.fighters : true;
+	// Exact, not "at least".
+	//
+	// A room asked for sixteen and seated three is a matchmaking failure every
+	// other check here passes right through — and now that bots are opt-in, a room
+	// that seated a bot *nobody asked for* is the failure worth catching, which
+	// only an exact count can see.
+	const roomFull = mode.fighters ? s.fighterCount === mode.fighters : true;
 	// Two idle humans legitimately stand still, so presence is the signal there;
 	// a server bot should actually move.
 	const opponentPresent = remotes.size >= 1;
 	const opponentMoved = remotes.size > 1;
-	const ok =
-		roomFull &&
-		(mode.training
-			? training && opponentPresent
-			: mode.needsFight
-				? fighting
-				: mode.solo
-					? opponentMoved
-					: opponentPresent);
+	// An empty room legitimately has nobody in it, so "no opponent" is the pass
+	// condition rather than the failure — and the exact fighter count above is what
+	// proves the room really is empty rather than merely quiet.
+	const ok = mode.alone
+		? roomFull && !opponentPresent
+		: roomFull &&
+			(mode.training
+				? training && opponentPresent
+				: mode.needsFight
+					? fighting
+					: mode.solo
+						? opponentMoved
+						: opponentPresent);
 	console.log(
 		`${ok ? "OK  " : "FAIL"} ${mode.label.padEnd(28)} online=${s.onlineMode} solo=${s.soloMatch} ai=${s.onlineAIMode} training=${s.trainingMode}${mode.training ? `/${training ? "seated" : "EMPTY"}` : ""} fighters=${s.fighterCount} opponent=${opponentMoved ? "moving" : opponentPresent ? "present" : "MISSING"} bullets=${sawBullet} hp=${[...hps].join(" -> ")}`,
 	);
 	await ctx.close();
 	// Let the server notice the disconnects before the next mode connects.
 	//
-	// Public rooms are shared, which is the whole point of them — so tabs opened
-	// immediately after a context closes join the room the previous mode was still
-	// sitting in, and the next line of output reports four fighters in a room that
-	// asked for two. The room was right; the test was too fast.
-	// Four seconds, not one: a closed browser context does not tear its WebRTC
-	// channel down instantly, and until the server notices, the *public* room is
-	// still occupied — so the next mode's tabs join it and the line above reports
-	// four fighters in a room that asked for two. The room is behaving correctly;
-	// only the reading is wrong.
+	// Each mode has its own room id now, so this is belt and braces rather than the
+	// load-bearing fix it once was — a closed browser context does not tear its
+	// WebRTC channel down instantly, and a room is only reaped once the server has
+	// noticed its last human leave.
 	await new Promise((done) => setTimeout(done, 4000));
 }
 

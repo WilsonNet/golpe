@@ -300,10 +300,14 @@ sixteen fighters breaks things two never could.
   it targets the nearest living opponent. Filling up without evicting left a
   leftover bot in a room asked for two fighters, so a test that wanted a clean duel
   silently measured a three-way fight.
-- **`bots=0` is a supported mode.** An empty room is fully served, predicted and
-  reconciled, and it is the only way to measure the local fighter's aim without a
-  bot closing to melee range and eating the measurement. Half the aim probe's runs
-  used to fail for reasons that had nothing to do with aim.
+- **Bots are opt-in, and zero is a real target.** A room has none unless asked,
+  and `rebalanceBots(0)` must not clamp up to one — that would quietly seat a bot in
+  every humans-only room. An empty room is fully served, predicted and reconciled,
+  and it is the only way to measure the local fighter's aim without a bot closing to
+  melee range and eating the measurement; half the aim probe's runs used to fail for
+  reasons that had nothing to do with aim.
+- **A count assertion must be exact.** `>=` passes a room that seated a bot nobody
+  asked for, which is precisely the regression worth catching once bots are opt-in.
 - **A fighter is transient, so its sprites must be destroyed.** Sixteen slots on a
   server that runs for hours means churn; three leaked effect sprites per departure
   is a leak nobody finds. `MeleeFx.forget` exists for that.

@@ -225,7 +225,13 @@ export class GameRoom {
 	private readonly timeLimitMs: number;
 
 	/**
-	 * How many fighters this room holds, bots included.
+	 * How many fighters this room keeps topped up with bots.
+	 *
+	 * **Zero by default: bots are opt-in.** A room is for the people in it, and
+	 * seating seven strangers nobody asked for is a decision, not a default — the
+	 * room still holds up to `MAX_PLAYERS` humans either way. Ask for bots with
+	 * `?bots=N` (N to play against) or `?fill=N` (this many fighters, whoever they
+	 * turn out to be).
 	 *
 	 * Fixed when the room is created and never changed. Reading it from each
 	 * arriving client's request instead would let the last person through the door
@@ -244,10 +250,7 @@ export class GameRoom {
 		this.id = id;
 		this.scoreLimit = rules.scoreLimit ?? SCORE_LIMIT;
 		this.timeLimitMs = rules.timeLimitMs ?? TIME_LIMIT_MS;
-		this.fillTarget = Math.max(
-			1,
-			Math.min(rules.fillTarget ?? MAX_PLAYERS, MAX_PLAYERS),
-		);
+		this.fillTarget = Math.max(0, Math.min(rules.fillTarget ?? 0, MAX_PLAYERS));
 	}
 
 	get playerCount(): number {
@@ -419,7 +422,10 @@ export class GameRoom {
 	 * of them and simply has no bots.
 	 */
 	rebalanceBots(target: number): number {
-		const want = Math.max(1, Math.min(target, MAX_PLAYERS));
+		// Zero is a real target, not a missing one: it means "this room has no bots",
+		// which is the default. Clamping it up to one would quietly seat a bot in
+		// every humans-only room, which is the whole thing being fixed.
+		const want = Math.max(0, Math.min(target, MAX_PLAYERS));
 		let changed = 0;
 		while (this.playerCount > want && this.freeBotSlot()) changed++;
 		while (this.playerCount < want && this.addBot()) changed++;

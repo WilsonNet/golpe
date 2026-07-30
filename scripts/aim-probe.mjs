@@ -273,14 +273,15 @@ async function runOne(browser, dpr) {
 
 	// No `ai=true`: the local fighter must be human-controlled, or the brain
 	// overwrites the aim angle and the probe measures nothing.
-	// `bots=0`: an empty room, still fully served, predicted and reconciled.
+	// An empty room, which is now simply the default: bots are opt-in, so asking
+	// for none means asking for nothing.
 	//
-	// Aim is measured against a cursor, and a server bot that closes to melee range
-	// within seconds stuns the fighter, kills it, and eats the shots this probe
-	// needs to see leave — so half the runs failed for reasons that had nothing to
-	// do with aim. An empty room removes the noise without removing the netcode.
-	const url =
-		MODE === "offline" ? `${BASE_URL}/?offline=true` : `${BASE_URL}/?bots=0`;
+	// It matters here. Aim is measured against a cursor, and a server bot that
+	// closes to melee range within seconds stuns the fighter, kills it, and eats the
+	// shots this probe needs to see leave — half the runs used to fail for reasons
+	// that had nothing to do with aim. An empty room removes the noise and none of
+	// the netcode: it is still served, predicted and reconciled.
+	const url = MODE === "offline" ? `${BASE_URL}/?offline=true` : BASE_URL;
 	await page.goto(url);
 	await waitForGame(page);
 	// A human-controlled client is asked for a name before it connects, and the

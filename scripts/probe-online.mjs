@@ -4,9 +4,10 @@ import { chromium } from "playwright";
 const browser = await chromium.launch();
 const ctx = await browser.newContext();
 // One `room` for both tabs. Without it each client makes its own room and the
-// two never meet, which reads as a netcode failure and is a URL mistake.
+// two never meet, which reads as a netcode failure and is a URL mistake. No
+// `fill` — bots are opt-in, so two clients in one room are two fighters.
 const room = `probe-${Date.now().toString(36)}`;
-const url = `http://localhost:8080/?online=true&ai=true&fill=2&room=${room}`;
+const url = `http://localhost:8080/?online=true&ai=true&room=${room}`;
 const lines = [];
 
 const a = await ctx.newPage();

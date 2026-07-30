@@ -29,13 +29,12 @@ simulation is deterministic.
 
 | URL | Opponent |
 |---|---|
-| `/` | One server-hosted bot, in a new room |
-| `/?bots=N` | N bots (0-15). `bots=0` is an empty room — see below |
-| `/?ai=true` | Server bots, and your own fighter is AI too |
-| `/?online=true` | A new 16-fighter deathmatch, topped up with bots |
-| `/?online=true&fill=N` | A room sized to N fighters |
-| `/?room=<id>` | **That** room — this is how two people play together |
-| `/?online=true&ai=true&fill=2&room=x` | Two AI clients in one room — the canonical netcode test |
+| `/` | **Nobody.** A new, empty room — bots are opt-in |
+| `/?bots=N` | N server-hosted bots to fight |
+| `/?fill=N` | Whoever turns up, topped up to N with bots |
+| `/?ai=true&bots=1` | A bot, and your own fighter is AI too |
+| `/?room=<id>` | Whoever is in **that** room — this is how two people play together |
+| `/?online=true&ai=true&room=x` | Two AI clients in one room — the canonical netcode test |
 | `/?ai=true&bots=15` | A room full of AI — the canonical deathmatch test |
 | `/?offline=true` | None. Escape hatch, bypasses all of this. Unsupported. |
 | `/?training=true` | A scriptable practice dummy — see [training-room.md](training-room.md) |
@@ -82,12 +81,17 @@ opened the game landed in the same match whether they meant to or not.
   one had not finished leaving, which used to report four fighters in a room that
   asked for two.
 
-**`bots=0` is a supported mode, not a degenerate one.** An empty room is still
-fully served, predicted and reconciled, and it is the only way to measure
-something about the local fighter — aim, facing, a shot's heading — without a bot
-closing to melee range and turning the measurement into noise. `aim-probe.mjs`
-uses it, and half its runs used to fail for reasons that had nothing to do with
-aim.
+**An empty room is a supported mode, not a degenerate one** — and it is now the
+default, because bots are opt-in. It is still fully served, predicted and
+reconciled, and it is the only way to measure something about the local fighter —
+aim, facing, a shot's heading — without a bot closing to melee range and turning
+the measurement into noise. `aim-probe.mjs` relies on it, and half its runs used to
+fail for reasons that had nothing to do with aim.
+
+**`?online=true` is vestigial**, along with the `solo` flag it sets. Rooms are
+addressed by id, so there is no placement left for it to choose, and bots are
+opt-in, so it no longer decides how a room is filled. It survives for the status
+line and for older clients.
 
 **A bot is an ordinary player** to the simulation: same `PlayerPosition`, same
 `tickPlayer`, same bullets. Only its input source differs — it reads
@@ -341,8 +345,9 @@ nothing.
 
 ## Not implemented
 
-- More than 16 fighters per room, and more than one room's worth of matchmaking
-  (a full public room simply creates the next one).
+- More than 16 fighters per room. A room that is full turns a client away with
+  `room-full`; there is no queue, and no overflow into a second room.
+- Any matchmaking at all. Rooms are addressed by id — see above.
 - Lag compensation / rewind for hit detection (the server hits against present
   positions).
 - Reconnection to an in-progress match.

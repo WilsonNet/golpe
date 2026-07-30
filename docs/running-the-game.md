@@ -103,8 +103,18 @@ hosts and everyone else follows their link.
    mistake to watch for, and holding Tab shows the room id so it is easy to check.
 4. Each player **types a name** and presses *Enter the arena*. It is remembered, so
    they only do it once per browser.
-5. Empty seats are filled with named bots, and each bot leaves as a human takes its
-   place. Nobody ever waits for a match to start.
+
+**Bots are opt-in**, so the room holds exactly the people in it. If you would
+rather not wait around for a full arena, the host adds bots when they create the
+room — they are named, they play like anyone else, and each one leaves as a human
+takes its seat:
+
+```
+http://<host>:8080/?fill=16     # keep the arena at 16 fighters, bots as ballast
+http://<host>:8080/?fill=8      # ...or 8
+```
+
+Only the host's link decides. Everyone else just follows it.
 
 > On a plain-HTTP address the browser blocks the modern clipboard API, so **Copy**
 > falls back to selecting the link — press Ctrl+C if it says to. The link in the
@@ -120,15 +130,6 @@ While playing:
   rest of the field in a table. The next match starts 15 seconds later, with scores
   zeroed and fresh bot personalities.
 
-Sizing a room, if you want something other than sixteen. **Only the person who
-creates the room decides** — a latecomer's `fill` is ignored, so nobody can resize
-a match in progress:
-
-```
-http://<host>:8080/?online=true&fill=8    # a room sized to 8 fighters
-http://<host>:8080/?bots=3                # a new room, 3 bots
-http://<host>:8080/?bots=0                # a new empty room
-```
 
 ## Game modes
 
@@ -141,50 +142,62 @@ for everything except `?offline=true`.
 
 | Mode | URL | Tabs |
 |---|---|---|
-| Player vs AI (solo) | `http://localhost:8080/` | 1 |
-| AI vs AI | `http://localhost:8080/?ai=true` | 1 |
-| Player vs Player | `http://localhost:8080/?online=true` | 2 |
-| AI vs AI, two clients | `http://localhost:8080/?online=true&ai=true` | 2 |
+| Empty room | `http://localhost:8080/` | 1 |
+| Player vs AI (solo) | `http://localhost:8080/?bots=1` | 1 |
+| AI vs AI | `http://localhost:8080/?ai=true&bots=1` | 1 |
+| Sixteen-fighter deathmatch | `http://localhost:8080/?ai=true&bots=15` | 1 |
+| Player vs Player | `http://localhost:8080/?online=true` + the room link | 2 |
+| AI vs AI, two clients | `?online=true&ai=true&room=x` | 2 |
 | Offline escape hatch | `http://localhost:8080/?offline=true` | 1 |
 
-`?ai=true` makes *your* fighter AI-driven. `?online=true` asks for a human
-opponent; without it the server supplies a bot.
+`?ai=true` makes *your* fighter AI-driven. **`?bots=N` is what puts bots in the
+room** — without it there are none, so the bare URL is an empty arena. Two tabs
+only share a match if they share a `?room=`.
 
 ### 1. Player vs AI (solo)
 
 ```
-http://localhost:8080/
+http://localhost:8080/?bots=1
 ```
 
-The default. You control the left fighter; the right one is a **server-hosted
-bot** running the same `EnemyBrain`. This is a real online match — same rooms,
-same authoritative tick, same prediction and reconciliation as PvP — so playing
-solo exercises the whole netcode path.
+You control your fighter; the other is a **server-hosted bot** running the same
+`EnemyBrain`. This is a real online match — same rooms, same authoritative tick,
+same prediction and reconciliation as PvP — so playing solo exercises the whole
+netcode path.
+
+**`?bots=1` is required, not decoration.** Bots are opt-in, so the bare URL gives
+you an empty room. That is a legitimate mode of its own — fully served, predicted
+and reconciled, with nobody else in it — and it is what `aim-probe.mjs` measures
+in, because a bot closing to melee range eats the measurement.
 
 ### 2. AI vs AI
 
 ```
-http://localhost:8080/?ai=true
+http://localhost:8080/?ai=true&bots=1
 ```
 
 Your fighter is AI-driven and the opponent is a server bot, so you get a full
 AI vs AI match **in a single tab**. Both brains use randomised configs, so each
-round plays differently. Press **P** to toggle your own fighter's AI, or call
+match plays differently. Press **P** to toggle your own fighter's AI, or call
 `window.__toggleAIVsAI()`.
+
+For a whole arena of it, ask for more: `?ai=true&bots=15` is the canonical
+sixteen-fighter test.
 
 ### 3. Player vs Player
 
 ```
-http://localhost:8080/?online=true      # open in two tabs or two browsers
+http://localhost:8080/?online=true                       # the host opens this
+http://localhost:8080/?online=true&room=<the same uuid>   # everyone else follows
 ```
 
-Waits for a second human rather than spawning a bot. You'll see
-`[ONLINE] Matched in room room-N!` and the "Connecting..." overlay clears once
-both are present.
+The host's address bar gains a `?room=<uuid>`; **that link is the invitation.**
+Two tabs at the bare URL are two separate rooms, because rooms are addressed
+rather than matchmade. No bots unless the host asked for them.
 
-This is the **public deathmatch**: the room holds sixteen fighters and is topped
-up with bots, so it is never empty, and a bot gives up its seat as each human
-arrives. Everyone shares the same room until it fills.
+The room holds up to sixteen fighters. Add `&fill=16` when creating it if you want
+bots making up the numbers until people arrive — each one gives up its seat as a
+human takes it.
 
 Every fighter is predicted locally and rolled back when the server disagrees —
 yours from your own input, everyone else's from the last input the server reported
@@ -198,12 +211,13 @@ respawn at the point furthest from anyone alive; nobody else is interrupted.
 ### 4. AI vs AI across two clients
 
 ```
-http://localhost:8080/?online=true&ai=true    # two tabs
+http://localhost:8080/?online=true&ai=true&room=duel    # both tabs, same room
 ```
 
 Two real clients, each with an AI fighter. **This is the canonical mode for the
-physics harness** — it exercises prediction, reconciliation, interpolation and
-projectile rendering across two connections at once.
+physics harness** — it exercises prediction, reconciliation, remote rollback and
+projectile rendering across two connections at once. No bots, so the room holds
+exactly the two clients.
 
 ### 5. Offline escape hatch
 
@@ -275,9 +289,9 @@ Full frame data and the reasoning behind every number is in
 |---|---|
 | *(none)* | A new room, one server-hosted bot |
 | `?room=<id>` | Play in that room. **This is how two people meet** |
-| `?online=true` | A new 16-fighter deathmatch, filled with bots |
-| `?bots=N` | Bots to seat, 0-15. `0` is an empty room |
-| `?fill=N` | Size the room to N fighters instead of 16 |
+| `?online=true` | Vestigial — every room is online. Kept for older links |
+| `?bots=N` | **N bots to fight. Absent means none** |
+| `?fill=N` | Keep the room at N fighters, bots as ballast |
 | `?ai=true` | Make **your** fighter AI-driven (and skip the name prompt) |
 | `?scoreLimit=N` | Frags to win |
 | `?timeLimit=S` | Match length in seconds |
