@@ -58,13 +58,20 @@ A fighter holds either a **sword** or a **gun**, never both.
 |---|---|---|
 | **LMB** tap | Slash — and, on the ground, the next link of the chain | Fire |
 | **LMB** hold ≥ 420ms, then release | **Massive Strike** | Fire (charge ignored) |
-| **RMB** hold | **Block** | — |
+| **Shift** hold | **Block** | — |
 | **F** | **Uppercut** | — |
 
-Uppercut is on its own key rather than sharing a mouse button. In GunZ it lived
-on right-click because the weapon it belonged to had no block; here both matter
-at once, and a hold/tap split on one button would make the two moves ambiguous
-at exactly the moment precision counts.
+**Block is on Shift rather than right-click.** A guard is held through a whole
+exchange while the same hand aims and slashes, and holding a mouse button down
+takes away the button the other half of the fight is fought with.
+
+Uppercut is on its own key rather than sharing a button with block. In GunZ it
+lived on right-click because the weapon it belonged to had no block; here both
+matter at once, and a hold/tap split on one button would make the two moves
+ambiguous at exactly the moment precision counts.
+
+Every one of these is rebindable, and the table is the default rather than the
+law — see [controls.md](controls.md).
 
 ## Frame data
 
@@ -203,7 +210,7 @@ from the snapshot with no animation logic of its own.
 
 ## Blocking
 
-Hold **RMB**. The guard is up on the very next simulation tick and drops the
+Hold **Shift**. The guard is up on the very next simulation tick and drops the
 instant the button is released — no startup cost, and no forgiveness window on
 either side.
 
@@ -252,7 +259,7 @@ what stops the butterfly being unconditionally safe. Blocking *late* still
 absorbs the hit but grants nothing, so mashing block is not the same as reading
 the swing.
 
-**The window belongs to the press, not to the block.** Holding RMB down does not
+**The window belongs to the press, not to the block.** Holding block down does not
 re-arm it, and neither does interrupting your own block with a slash — the timer
 only resets when the button is released. A fighter who simply holds block gets
 one parry attempt and then a plain, rewardless guard for as long as they crouch

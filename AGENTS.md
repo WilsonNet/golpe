@@ -50,7 +50,7 @@ commit** — and tuning a constant counts as changing behaviour. Read the releva
 spec before implementing: [movement](specs/movement.md) ·
 [combat](specs/combat.md) · [melee](specs/melee.md) · [arena](specs/arena.md) ·
 [deathmatch](specs/deathmatch.md) · [netcode](specs/netcode.md) ·
-[training room](specs/training-room.md).
+[controls](specs/controls.md) · [training room](specs/training-room.md).
 
 ## Tech Stack
 
@@ -152,10 +152,18 @@ node scripts/training-probe.mjs                        # one interaction, agains
 
 ## Controls
 
-**WASD** move/jump (**W again in the air** = double jump) · **double-tap A/D**
-dash · **LMB** slash (hold 420ms then release = Massive Strike) · **RMB** block ·
-**F** uppercut · **Q/E** sword/gun stance · **P** toggle AI vs AI · **hold Tab**
-scoreboard. Sword is the default stance.
+**WASD/Space** move/jump (**jump again in the air** = double jump) ·
+**double-tap A/D** dash · **LMB** slash (hold 420ms then release = Massive
+Strike) · **Shift** block · **F** uppercut · **Q/E** sword/gun stance · **P**
+toggle AI vs AI · **hold Tab** scoreboard · **Esc** menu. Sword is the default
+stance.
+
+**Every button is rebindable, and these are only the defaults.** Esc → Controls
+captures the key you press. Bindings live in `localStorage`, never on the wire —
+the simulation is handed `block`, never `ShiftLeft`. A DOM overlay that takes the
+keyboard must emit `input-suspended`, or the canvas keeps playing the game with
+keys meant for the dialog. Nothing in AI vs AI presses a key, so bindings are
+measured with `scripts/controls-probe.mjs`. See [specs/controls.md](specs/controls.md).
 
 **A slash is the first of three.** Tap again as each swing's hitbox closes and the
 chain runs right-to-left diagonal → left-to-right diagonal → overhead finisher,

@@ -16,6 +16,7 @@ it.
 
 | Spec | Covers |
 |---|---|
+| [controls.md](controls.md) | Default bindings, rebinding, the Esc menu, and what a binding may never touch |
 | [movement.md](movement.md) | Walking, jumping, dashing, wall jumps, the feel constants and why they hold |
 | [combat.md](combat.md) | Stances, ranged attacks, damage, round lifecycle |
 | [melee.md](melee.md) | Sword combat: frame data, blocking, parries, the butterfly, the Massive Strike |

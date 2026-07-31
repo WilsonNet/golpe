@@ -8,24 +8,10 @@
  * server disagreed about what a given frame's input was.
  */
 
+import { EventBus } from "../EventBus";
 import { bodyCentre } from "../render/ArenaRenderer";
 import { NEUTRAL_INTENT, type PlayerIntent } from "../simulation/Physics";
-
-export const KEYS = {
-	up: "KeyW",
-	left: "KeyA",
-	down: "KeyS",
-	right: "KeyD",
-	sword: "KeyQ",
-	gun: "KeyE",
-	/**
-	 * Uppercut. On its own key rather than sharing right-click with block: a
-	 * hold/tap split on one button would make the two moves ambiguous at exactly
-	 * the moment precision matters. See specs/melee.md.
-	 */
-	uppercut: "KeyF",
-	toggleAi: "KeyP",
-} as const;
+import { type Action, bindings, mouseCode } from "./Bindings";
 
 /**
  * Two taps inside this window are a dash rather than two steps.
@@ -56,17 +42,25 @@ export class DoubleTapDash {
 
 	constructor(private readonly windowMs: number = DASH_DOUBLE_TAP_MS) {}
 
-	/** Note a *press* — not a repeat, and not a release. */
-	press(code: string, nowMs: number) {
-		const previous = this.lastPress[code] ?? Number.NEGATIVE_INFINITY;
+	/**
+	 * Note a *press* — not a repeat, and not a release.
+	 *
+	 * Keyed by direction rather than by key code, because both are rebindable and
+	 * an action can hold two of them: a player with left on both A and the left
+	 * arrow is tapping "left" whichever one their finger lands on, and keying by
+	 * code would refuse the pair.
+	 */
+	press(direction: -1 | 1, nowMs: number) {
+		const key = String(direction);
+		const previous = this.lastPress[key] ?? Number.NEGATIVE_INFINITY;
 		if (nowMs - previous < this.windowMs) {
-			this.pending = code === KEYS.left ? -1 : 1;
+			this.pending = direction;
 			// Consume the pair, so a third tap has to start a fresh gesture rather
 			// than chaining a dash off every subsequent press.
-			this.lastPress[code] = Number.NEGATIVE_INFINITY;
+			this.lastPress[key] = Number.NEGATIVE_INFINITY;
 			return;
 		}
-		this.lastPress[code] = nowMs;
+		this.lastPress[key] = nowMs;
 	}
 
 	/** Take the dash direction, if one was gestured since the last call. */
@@ -157,9 +151,26 @@ function isEditable(target: EventTarget | null): boolean {
 }
 
 export class Input {
+	/**
+	 * Every code currently held — keys and mouse buttons in one set.
+	 *
+	 * The pointer used to have its own two booleans, which was fine while attack
+	 * was left-click and block was right-click by definition. It stops being fine
+	 * the moment a player can put block on Shift or attack on a mouse button that
+	 * is not button 0: an action asks "is any of my codes down", and that question
+	 * has one answer only if keys and buttons share a namespace. See Bindings.ts.
+	 */
 	private readonly down = new Set<string>();
-	private leftMouse = false;
-	private rightMouse = false;
+
+	/**
+	 * True while a DOM overlay owns the keyboard — the Esc menu, chiefly.
+	 *
+	 * Without it, rebinding block to `S` would walk the fighter into a corner
+	 * while the player was choosing the key, and clicking "Reset to defaults"
+	 * would swing the sword. Driven by `input-suspended` on the EventBus, which
+	 * is the same bridge the rest of the React overlay talks over.
+	 */
+	private suspended = false;
 
 	/**
 	 * Cursor as a fraction of the canvas, resolved to world coordinates on read.
@@ -201,13 +212,15 @@ export class Input {
 			// setting a walk bound to "500" also walked the fighter, and every WASD
 			// character typed into a field was a movement command as well.
 			if (isEditable(e.target)) return;
+			if (this.suspended) return;
+			const action = bindings.actionFor(e.code);
+			// Space scrolls the page and Shift can start a text selection. A code
+			// somebody bound to a move is a game input, not a browser one.
+			if (action) e.preventDefault();
+			this.down.add(e.code);
 			// Browsers repeat a held key. A repeat is not a press, and treating it
 			// as one would make simply holding a direction read as a dash.
-			if (!e.repeat) this.notePress(e.code);
-			this.down.add(e.code);
-			if (e.code === KEYS.sword) this.swordStance = true;
-			if (e.code === KEYS.gun) this.swordStance = false;
-			if (e.code === KEYS.toggleAi) this.onToggleAi?.();
+			if (!e.repeat) this.notePress(action);
 		};
 		const keyup = (e: KeyboardEvent) => this.down.delete(e.code);
 
@@ -216,8 +229,6 @@ export class Input {
 		// forever, and the fighter would keep swinging at nothing.
 		const clearAll = () => {
 			this.down.clear();
-			this.leftMouse = false;
-			this.rightMouse = false;
 			this.dashGesture.reset();
 		};
 
@@ -232,14 +243,22 @@ export class Input {
 		};
 
 		const pointerDown = (e: PointerEvent) => {
-			if (e.button === 0) this.leftMouse = true;
-			if (e.button === 2) this.rightMouse = true;
+			if (this.suspended) return;
+			const code = mouseCode(e.button);
+			this.down.add(code);
+			this.notePress(bindings.actionFor(code));
 		};
 		const pointerUp = (e: PointerEvent) => {
-			if (e.button === 0) this.leftMouse = false;
-			if (e.button === 2) this.rightMouse = false;
+			this.down.delete(mouseCode(e.button));
 		};
 		const contextMenu = (e: Event) => e.preventDefault();
+
+		// A modal took the keyboard. Everything held is released, because a key
+		// held when the menu opened will never deliver its keyup to the game.
+		const suspend = (on: boolean) => {
+			this.suspended = on;
+			if (on) clearAll();
+		};
 
 		window.addEventListener("keydown", keydown);
 		window.addEventListener("keyup", keyup);
@@ -248,6 +267,8 @@ export class Input {
 		window.addEventListener("pointerdown", pointerDown);
 		window.addEventListener("pointerup", pointerUp);
 		canvas.addEventListener("contextmenu", contextMenu);
+		const offSuspend = EventBus.on("input-suspended", ((on: boolean) =>
+			suspend(on)) as never);
 
 		this.disposers.push(
 			() => window.removeEventListener("keydown", keydown),
@@ -257,11 +278,20 @@ export class Input {
 			() => window.removeEventListener("pointerdown", pointerDown),
 			() => window.removeEventListener("pointerup", pointerUp),
 			() => canvas.removeEventListener("contextmenu", contextMenu),
+			offSuspend,
 		);
 	}
 
 	isDown(code: string): boolean {
 		return this.down.has(code);
+	}
+
+	/** True while any code bound to `action` is held. */
+	actionDown(action: Action): boolean {
+		for (const code of bindings.codesFor(action)) {
+			if (this.down.has(code)) return true;
+		}
+		return false;
 	}
 
 	/**
@@ -276,9 +306,20 @@ export class Input {
 	 */
 	private readonly dashGesture = new DoubleTapDash();
 
-	private notePress(code: string) {
-		if (code !== KEYS.left && code !== KEYS.right) return;
-		this.dashGesture.press(code, performance.now());
+	/**
+	 * A press edge, routed by what the button *means* rather than which one it is.
+	 *
+	 * Stance and the AI toggle are edge-triggered here because they are not part
+	 * of `PlayerIntent`'s per-tick button state — stance is absolute and the
+	 * toggle is a debug switch, so neither can be re-derived by the simulation.
+	 */
+	private notePress(action: Action | undefined) {
+		if (action === undefined) return;
+		if (action === "left") this.dashGesture.press(-1, performance.now());
+		if (action === "right") this.dashGesture.press(1, performance.now());
+		if (action === "sword") this.swordStance = true;
+		if (action === "gun") this.swordStance = false;
+		if (action === "toggleAi") this.onToggleAi?.();
 	}
 
 	/** Take the dash direction, if one was gestured since the last call. */
@@ -368,12 +409,12 @@ export class Input {
 		}
 		return {
 			...NEUTRAL_INTENT,
-			left: this.isDown(KEYS.left),
-			right: this.isDown(KEYS.right),
-			up: this.isDown(KEYS.up),
-			attack: this.leftMouse,
-			block: this.rightMouse,
-			uppercut: this.isDown(KEYS.uppercut),
+			left: this.actionDown("left"),
+			right: this.actionDown("right"),
+			up: this.actionDown("jump"),
+			attack: this.actionDown("attack"),
+			block: this.actionDown("block"),
+			uppercut: this.actionDown("uppercut"),
 			swordStance: this.swordStance,
 			// You face where you aim. That is what lets a player retreat while still
 			// guarding the side the attacker is coming from.

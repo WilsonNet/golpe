@@ -350,6 +350,24 @@ sixteen fighters breaks things two never could.
   not logic, so `DoubleTapDash` is separated from the DOM specifically to be
   testable — otherwise the only check is a human saying it feels wrong, which is
   how it got too tight in the first place.
+- **An overlay that owns the keyboard must say so**, by emitting
+  `input-suspended` — and everything held has to be released when it does. Half
+  of a controls dialog is asking the player to press keys, and without the
+  suspension binding block to `S` walks the fighter across the arena while they
+  are choosing it, and clicking *Reset to defaults* swings the sword. A key that
+  was already down when the overlay opened never delivers its keyup to the game
+  and stays down forever.
+- **A binding is a client fact and must never reach the wire.** The simulation is
+  handed `block`, not `ShiftLeft`. The moment a key name travels, two clients
+  with different keyboards are two clients running different games — and the
+  packer would not even complain.
+- **One code belongs to one action.** Binding a key that another action already
+  holds has to *take* it, visibly. Two owners means the loser is silently
+  unbound, and the player finds out mid-fight that jump does nothing.
+- **Nothing in AI vs AI presses a key.** The brains hand the simulation an intent
+  directly, so every binding in the game can be wrong while `diagnose.mjs`
+  reports PASS — the same blind spot that made `aim-probe.mjs` necessary.
+  `scripts/controls-probe.mjs` is the instrument for this one.
 
 ## Rooms
 

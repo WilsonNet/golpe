@@ -23,6 +23,7 @@ src/game/
   combat/         BulletSystem.ts — the only simulated source of bullets offline
   input/          Input.ts — raw keyboard and pointer state, dash gestures, and the
                   cursor->world conversion (logical view + camera, never canvas.width)
+    Bindings.ts     which button means what: defaults, rebinding, persistence
   online/         OnlineManager (channel), OnlineSession (owns netcode)
     Prediction.ts   the local fighter: predict, rewind, replay, and render smoothing
     Rollback.ts     every *other* fighter: carry its input forward, rewind on snapshot
@@ -44,6 +45,7 @@ src/ui/           React overlays drawn over the canvas
   TrainingPanel.tsx the training menu — DOM, and a client of window.__training
   NamePrompt.tsx    the name a player enters before their client connects
   Scoreboard.tsx    the held-Tab scoreboard, and the table the podium reuses
+  PauseMenu.tsx     the Esc menu and the controls dialog (suspends input, never pauses)
   MatchOver.tsx     the winner podium
   useMatch.ts       EventBus subscriptions and the held-key hook
   hudStyles.ts      the overlay's own CSS, injected per component
@@ -103,6 +105,7 @@ those pieces are explicit files rather than framework config:
 | Scenes / lifecycle | none — `app.ts` initialises in a straight line |
 | Camera, layers, screen shake | `render/Stage.ts` |
 | Input | `input/Input.ts` |
+| Key bindings | `input/Bindings.ts` — `Input` knows no key names of its own |
 | Particles | `render/Particles.ts` |
 | Animation | `ecs/systems.ts` + frame slices in `render/assets.ts` |
 | Physics | `simulation/` — and it always was |
@@ -138,6 +141,9 @@ Run modes are listed in [running-the-game.md](running-the-game.md).
   everywhere else.** It is stored normalised and resolved against the *logical*
   view plus the camera on read — see the Input and aim section of
   [invariants.md](invariants.md) for why the canvas backing store is the trap.
+- **Actions, not keys.** `Input` asks `Bindings` what a code means and hands the
+  simulation `block`, never `ShiftLeft`. A binding is a client fact and never
+  reaches the wire, so rebinding cannot desync anything.
 - **Buttons are passed to the simulation raw.** It does its own press-edge
   detection (jump height is analogue, a slash needs an edge, a Massive fires on
   release); edge-detecting in the scene as well would desync client and server.

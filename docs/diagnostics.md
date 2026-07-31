@@ -28,6 +28,7 @@ node scripts/probe-online.mjs                   # dump one online client's conso
 node scripts/verify-modes.mjs                   # smoke-check every launch mode
 node scripts/aim-probe.mjs                      # cursor, facing and shot direction, at dpr 1 and 2
 node scripts/training-probe.mjs                 # one interaction at a time, against a scripted dummy
+node scripts/controls-probe.mjs                 # key bindings, the Esc menu and a rebind
 ```
 
 ## The deathmatch probe
@@ -99,6 +100,24 @@ drives a real mouse instead and reports:
 **Run it at `--dpr=2`.** The bug it was built for — dividing by the canvas
 backing store rather than the logical view — is exactly invisible at device pixel
 ratio 1, which is the only ratio a default headless browser has.
+
+## The controls probe
+
+`diagnose.mjs` is blind to bindings for the same reason it is blind to aim: the
+brains hand the simulation an *intent*, so no key is ever pressed. Every button
+in the game could be bound to nothing and the canonical run would still report
+PASS. `controls-probe.mjs` presses real keys at a real browser and reads the
+simulation state back:
+
+| Check | Why it is there |
+|---|---|
+| Shift blocks, right-click does not | the default moved, and a binding that quietly still works is the same bug as one that quietly does not |
+| Space and W both clear a jump | one action, two slots — the alternate slot is only real if it reaches `tickPlayer` |
+| the Esc menu stops a held key moving the fighter | a dialog that asks for keypresses must not also play the game with them |
+| a rebind reaches the simulation, survives a reload, and resets | the whole feature, end to end, through the DOM a player actually clicks |
+
+Every check reports what it measured, not just a verdict — `blocking=false` on a
+line that expected a guard says which half of the chain broke.
 
 ## The training probe
 

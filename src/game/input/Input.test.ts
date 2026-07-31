@@ -11,7 +11,6 @@ import { describe, expect, it } from "vitest";
 import {
 	DASH_DOUBLE_TAP_MS,
 	DoubleTapDash,
-	KEYS,
 	normalisePointer,
 	type Viewport,
 	viewToWorld,
@@ -72,28 +71,28 @@ describe("viewToWorld", () => {
 describe("DoubleTapDash", () => {
 	it("does not dash on a single tap", () => {
 		const g = new DoubleTapDash();
-		g.press(KEYS.right, 0);
+		g.press(1, 0);
 		expect(g.consume()).toBe(0);
 	});
 
 	it("dashes on two taps inside the window", () => {
 		const g = new DoubleTapDash();
-		g.press(KEYS.right, 0);
-		g.press(KEYS.right, DASH_DOUBLE_TAP_MS - 1);
+		g.press(1, 0);
+		g.press(1, DASH_DOUBLE_TAP_MS - 1);
 		expect(g.consume()).toBe(1);
 	});
 
 	it("reports the direction of the key that was tapped", () => {
 		const g = new DoubleTapDash();
-		g.press(KEYS.left, 0);
-		g.press(KEYS.left, 50);
+		g.press(-1, 0);
+		g.press(-1, 50);
 		expect(g.consume()).toBe(-1);
 	});
 
 	it("ignores two taps that straddle the window", () => {
 		const g = new DoubleTapDash();
-		g.press(KEYS.right, 0);
-		g.press(KEYS.right, DASH_DOUBLE_TAP_MS);
+		g.press(1, 0);
+		g.press(1, DASH_DOUBLE_TAP_MS);
 		expect(g.consume()).toBe(0);
 	});
 
@@ -104,8 +103,8 @@ describe("DoubleTapDash", () => {
 	 */
 	it("accepts a comfortable, unhurried double-tap", () => {
 		const g = new DoubleTapDash();
-		g.press(KEYS.right, 0);
-		g.press(KEYS.right, 260);
+		g.press(1, 0);
+		g.press(1, 260);
 		expect(g.consume()).toBe(1);
 	});
 
@@ -116,31 +115,31 @@ describe("DoubleTapDash", () => {
 	 */
 	it("still reads deliberate stepping as steps, not a dash", () => {
 		const g = new DoubleTapDash();
-		for (const t of [0, 350, 700, 1050]) g.press(KEYS.right, t);
+		for (const t of [0, 350, 700, 1050]) g.press(1, t);
 		expect(g.consume()).toBe(0);
 	});
 
 	it("does not chain a dash off every subsequent tap", () => {
 		const g = new DoubleTapDash();
-		g.press(KEYS.right, 0);
-		g.press(KEYS.right, 100);
+		g.press(1, 0);
+		g.press(1, 100);
 		expect(g.consume()).toBe(1);
 		// The third tap starts a fresh gesture rather than completing another pair.
-		g.press(KEYS.right, 200);
+		g.press(1, 200);
 		expect(g.consume()).toBe(0);
 	});
 
 	it("keeps the two directions apart", () => {
 		const g = new DoubleTapDash();
-		g.press(KEYS.left, 0);
-		g.press(KEYS.right, 50);
+		g.press(-1, 0);
+		g.press(1, 50);
 		expect(g.consume()).toBe(0);
 	});
 
 	it("hands the gesture over exactly once", () => {
 		const g = new DoubleTapDash();
-		g.press(KEYS.right, 0);
-		g.press(KEYS.right, 100);
+		g.press(1, 0);
+		g.press(1, 100);
 		expect(g.consume()).toBe(1);
 		expect(g.consume()).toBe(0);
 	});
@@ -148,8 +147,8 @@ describe("DoubleTapDash", () => {
 	/** A dash held over a window switch would fire whenever the player came back. */
 	it("forgets a landed gesture on reset", () => {
 		const g = new DoubleTapDash();
-		g.press(KEYS.right, 0);
-		g.press(KEYS.right, 100);
+		g.press(1, 0);
+		g.press(1, 100);
 		g.reset();
 		expect(g.consume()).toBe(0);
 	});

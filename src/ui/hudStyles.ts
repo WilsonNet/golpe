@@ -267,6 +267,77 @@ export const HUD_CSS = `
 	opacity: 0.55;
 	text-align: center;
 }
+/* ---- esc menu and the controls dialog ----
+   Darker veil than the name prompt's: this one goes over a live fight, and the
+   fight staying visible behind it was reading as "the game is still taking my
+   input", which is exactly what it is not doing. */
+.vd-menu-veil {
+	background: rgba(0, 0, 0, 0.82);
+	z-index: 45;
+}
+.vd-menu-card {
+	min-width: 420px;
+	/* Capped, or the binding table's full-width rule lets the card fill the whole
+	   veil and strands each action's label a screen away from its own slots. */
+	max-width: 560px;
+}
+.vd-menu-list {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+.vd-bind-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 13px;
+}
+.vd-bind-table th {
+	text-align: left;
+	font-weight: normal;
+	opacity: 0.75;
+	padding: 4px 12px 4px 0;
+	white-space: nowrap;
+}
+.vd-bind-table td {
+	padding: 4px 0 4px 8px;
+	width: 9.5em;
+}
+.vd-slot {
+	width: 100%;
+	background: #000;
+	color: inherit;
+	font: inherit;
+	font-size: 13px;
+	padding: 7px 8px;
+	border: 1px solid rgba(255, 255, 255, 0.3);
+	border-radius: 5px;
+	cursor: pointer;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.vd-slot:hover {
+	border-color: #0ec3c9;
+	color: #0ec3c9;
+}
+.vd-slot-empty {
+	opacity: 0.4;
+}
+/* Listening. The colour is the whole feedback: nothing else on screen changes
+   while the next button press is being waited for — and the hover rule has to be
+   restated, because a pseudo-class beats a bare class on specificity and the
+   cursor is by definition sitting on the slot that was just clicked. */
+.vd-slot-live,
+.vd-slot-live:hover {
+	border-color: #ffd166;
+	color: #ffd166;
+}
+.vd-note {
+	font-size: 12px;
+	color: #7ff0f4;
+	min-height: 1.2em;
+	margin-top: 12px;
+}
 .vd-hint {
 	position: fixed;
 	bottom: 10px;

@@ -27,7 +27,9 @@ Retuning the jump silently retunes what being launched feels like — see
 
 ## Basic movement
 
-- **WASD**: W = jump, A = left, D = right, S = down.
+- **WASD**: W or **Space** = jump, A = left, D = right. **Every button is
+  rebindable** from the Esc menu, and the dash follows whatever left and right
+  are bound to — see [controls.md](controls.md).
 - Walk speed: **220 px/s** — reached through acceleration, not assigned directly.
 - Ground acceleration **2600 px/s²**, air acceleration **1800 px/s²**. Air
   control is deliberately weaker, so a jump is a commitment.

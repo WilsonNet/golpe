@@ -35,7 +35,7 @@ export function Scoreboard() {
 		return (
 			<div className="vd-hint">
 				<style>{HUD_CSS}</style>
-				hold Tab for scores
+				hold Tab for scores · Esc for controls
 			</div>
 		);
 	}

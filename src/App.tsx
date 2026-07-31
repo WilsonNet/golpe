@@ -2,6 +2,7 @@ import { useState } from "react";
 import { GameCanvas } from "./GameCanvas";
 import { MatchOver } from "./ui/MatchOver";
 import { NamePrompt } from "./ui/NamePrompt";
+import { PauseMenu } from "./ui/PauseMenu";
 import { Scoreboard } from "./ui/Scoreboard";
 import { TrainingPanel } from "./ui/TrainingPanel";
 
@@ -40,6 +41,10 @@ function App() {
 			<Scoreboard />
 			<MatchOver />
 			<NamePrompt />
+			{/* Last, so it draws over the podium: a player who wants to rebind
+			    something at the end of a match should not have to wait for the next
+			    one to start. */}
+			<PauseMenu />
 		</div>
 	);
 }

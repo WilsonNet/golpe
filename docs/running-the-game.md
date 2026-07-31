@@ -240,11 +240,12 @@ here says nothing about the netcode.
 
 | Input | Action |
 |---|---|
-| **W** | Jump — hold for height, release early to cut the arc |
+| **W** / **Space** | Jump — hold for height, release early to cut the arc |
 | **A** / **D** | Move left / right |
 | Double-tap **A** / **D** | Dash |
 | **Mouse** | Aim — **you face where you aim**, which is how you keep your guard toward an attacker while retreating |
 | **P** | Toggle AI vs AI |
+| **Esc** | Menu — and the controls dialog, where every button here can be rebound |
 
 Jumping is forgiving on both sides of a ledge: 100ms of coyote time after
 walking off, and a 120ms jump buffer before landing. While airborne and touching
@@ -260,7 +261,7 @@ game, and the gun answers a range problem.
 |---|---|---|
 | **Left click** (tap) | Slash | Fire |
 | **Left click** (hold ~420ms, then release) | **Massive Strike** | Fire |
-| **Right click** (hold) | **Block** | — |
+| **Shift** (hold) | **Block** | — |
 | **F** | **Uppercut** | — |
 
 The three things worth knowing before your first match:
@@ -280,6 +281,20 @@ cancelled and root you where you stand, so whiffing one loses the exchange.
 
 Full frame data and the reasoning behind every number is in
 [`specs/melee.md`](../specs/melee.md).
+
+### Rebinding
+
+**Esc** opens the menu, and *Controls* opens the binding dialog: click a slot,
+press the key or mouse button you want, and that is the binding. Escape cancels a
+capture, right-click clears a slot, and *Reset to defaults* puts everything back.
+Bindings are kept in `localStorage` per browser.
+
+The menu **does not pause the match** — the server is authoritative and the other
+fifteen fighters are still swinging. What it does is take the keyboard away from
+the game, so choosing a key does not also play the game with it.
+
+Defaults and the reasoning behind them are in
+[`specs/controls.md`](../specs/controls.md).
 
 ---
 
