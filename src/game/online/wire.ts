@@ -91,6 +91,11 @@ const MELEE_ACTIONS: readonly MeleeAction[] = [
 	"slash",
 	"uppercut",
 	"massive",
+	// Appended rather than slotted in beside "slash": the index *is* the wire
+	// value, so inserting in the middle would silently renumber every move for
+	// any client or server still running the old build.
+	"slash2",
+	"slash3",
 ];
 
 /**
@@ -119,7 +124,10 @@ const NUMBER_FIELDS = [
 	"meleeTimer",
 	"blockTimer",
 	"chargeTimer",
+	"comboStep",
+	"comboTimer",
 	"stunTimer",
+	"knockdownTimer",
 	"iframeTimer",
 ] as const;
 

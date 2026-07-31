@@ -19,10 +19,25 @@ import {
 	rectsOverlap,
 } from "./Arena.js";
 
-export type MeleeMove = "slash" | "uppercut" | "massive";
+export type MeleeMove = "slash" | "slash2" | "slash3" | "uppercut" | "massive";
 export type MeleeAction = "none" | MeleeMove;
 export type MeleePhase = "none" | "startup" | "active" | "recovery";
 export type Stance = "sword" | "gun";
+
+/**
+ * The three-hit ground chain, in order.
+ *
+ * A slash is not one move any more, it is the opening of a sequence: right-to-left
+ * diagonal, then left-to-right diagonal, then an overhead finisher. The list is
+ * the chain — `comboStep` indexes it, so the length of the combo is a property of
+ * this array and not a number written down in three places.
+ */
+export const COMBO_CHAIN = ["slash", "slash2", "slash3"] as const;
+export type ComboSlash = (typeof COMBO_CHAIN)[number];
+
+export function isComboSlash(move: MeleeAction): move is ComboSlash {
+	return (COMBO_CHAIN as readonly string[]).includes(move);
+}
 
 /**
  * One attack's complete definition. This table *is* the balance of the game —
@@ -46,12 +61,31 @@ export interface MoveDef {
 	blockable: boolean;
 	/** Can block or a stance switch cut the recovery short? Only the slash can. */
 	cancellable: boolean;
+	/**
+	 * Does this connect through melee invulnerability?
+	 *
+	 * Only the follow-ups of the ground chain. A combo hits faster than
+	 * `MELEE_IFRAME_MS`, so without this the second and third swings would pass
+	 * harmlessly through the fighter the first one just staggered — the combo
+	 * would play its animations and deal seven damage. The opener never pierces,
+	 * which is what keeps the invulnerability doing its real job of capping
+	 * butterfly DPS.
+	 */
+	piercesIframes: boolean;
 	/** Stun applied to whoever it lands on. */
 	hitstunMs: number;
 	/** Upward impulse on hit. Only the uppercut launches. */
 	launchVy: number;
 	/** Horizontal impulse on hit, away from the attacker. */
 	knockbackVx: number;
+	/**
+	 * Does it put the target on the floor? Only the chain's finisher.
+	 *
+	 * A knockdown is a stun that also spikes an airborne target down and reads as
+	 * a distinct state on screen — the reason the finisher is worth chaining into
+	 * rather than just more damage.
+	 */
+	knockdown: boolean;
 }
 
 export const MOVES: Record<MeleeMove, MoveDef> = {
@@ -81,9 +115,70 @@ export const MOVES: Record<MeleeMove, MoveDef> = {
 		boxHeight: 36,
 		blockable: true,
 		cancellable: true,
-		hitstunMs: 130,
+		piercesIframes: false,
+		/**
+		 * 190ms, and it is the *link* that sets it rather than feel.
+		 *
+		 * The follow-up can be chained from the moment this move enters recovery
+		 * (160ms) and lands after its own 75ms of startup, so the second hitbox
+		 * opens ~157ms after the first one did. Any hitstun shorter than that gap
+		 * hands the defender free frames in the middle of a combo, which is not a
+		 * combo — it is two swings that happen to be near each other.
+		 */
+		hitstunMs: 190,
 		launchVy: 0,
 		knockbackVx: 130,
+		knockdown: false,
+	},
+	/**
+	 * The second link: the mirror diagonal, left-to-right.
+	 *
+	 * Same frame data as the opener on purpose. The chain is meant to be a rhythm
+	 * you can hold in your hands, not three separate timings to learn, and the
+	 * difference between the two is the *angle* — which is what the defender reads
+	 * to know whether the finisher is coming next.
+	 */
+	slash2: {
+		startupMs: 75,
+		activeMs: 85,
+		recoveryMs: 170,
+		damage: 7,
+		reachPx: 44,
+		boxTopOffset: 4,
+		boxHeight: 38,
+		blockable: true,
+		cancellable: true,
+		piercesIframes: true,
+		/** Longer than the opener's, because the finisher's startup is longer. */
+		hitstunMs: 210,
+		launchVy: 0,
+		knockbackVx: 150,
+		knockdown: false,
+	},
+	/**
+	 * The finisher: an overhead that knocks the target down.
+	 *
+	 * The one link that cannot be cancelled — the chain has to end in a commitment
+	 * or it would be a free three-hit string with an escape hatch on every frame.
+	 * What it commits to is *neutral*, not a punish: see `KNOCKDOWN_MS`.
+	 */
+	slash3: {
+		startupMs: 85,
+		activeMs: 100,
+		recoveryMs: 420,
+		/** A little more than a link, well under a Massive. 7+7+11 = 25 for the chain. */
+		damage: 11,
+		reachPx: 48,
+		boxTopOffset: -6,
+		boxHeight: 52,
+		blockable: true,
+		cancellable: false,
+		piercesIframes: true,
+		/** Equal to the knockdown it causes, by construction. */
+		hitstunMs: 520,
+		launchVy: 0,
+		knockbackVx: 300,
+		knockdown: true,
 	},
 	/**
 	 * The answer to a turtle. Unblockable and launching, but the shortest reach of
@@ -100,6 +195,7 @@ export const MOVES: Record<MeleeMove, MoveDef> = {
 		boxHeight: 62,
 		blockable: false,
 		cancellable: false,
+		piercesIframes: false,
 		hitstunMs: 260,
 		/**
 		 * Deliberately weaker than JUMP_VELOCITY (-700): a launched fighter rises
@@ -108,6 +204,7 @@ export const MOVES: Record<MeleeMove, MoveDef> = {
 		 */
 		launchVy: -620,
 		knockbackVx: 90,
+		knockdown: false,
 	},
 	/**
 	 * The payoff for a charge or a parry. Biggest damage, biggest stun, biggest
@@ -124,11 +221,30 @@ export const MOVES: Record<MeleeMove, MoveDef> = {
 		boxHeight: 56,
 		blockable: false,
 		cancellable: false,
+		piercesIframes: false,
 		hitstunMs: 650,
 		launchVy: 0,
 		knockbackVx: 420,
+		knockdown: false,
 	},
 };
+
+/** Every move there is, derived from the table so it can never fall behind it. */
+export const MELEE_MOVES = Object.keys(MOVES) as MeleeMove[];
+
+/**
+ * A fresh per-move tally.
+ *
+ * Every counter keyed by move builds itself from `MOVES` rather than writing the
+ * moves out again: a hand-written `{ slash: 0, uppercut: 0, massive: 0 }` is a
+ * second copy of the move list that the compiler only catches where the type is
+ * annotated, and silently accepts everywhere it is inferred.
+ */
+export function zeroMoveCounts(): Record<MeleeMove, number> {
+	const out = {} as Record<MeleeMove, number>;
+	for (const move of MELEE_MOVES) out[move] = 0;
+	return out;
+}
 
 export function moveDuration(move: MeleeMove): number {
 	const d = MOVES[move];
@@ -145,6 +261,42 @@ export function moveDuration(move: MeleeMove): number {
  * and it is safe and it hurts.
  */
 export const SLASH_CANCELLED_MS = MOVES.slash.startupMs + MOVES.slash.activeMs;
+
+/**
+ * How long the chain stays alive after a link *ends*.
+ *
+ * The link itself needs no window at all — the next slash can be started from the
+ * moment the previous one enters recovery, which is what "very little delay"
+ * means. This is only the grace afterwards, so a player who lets a swing finish,
+ * or cancels one into a block and comes back out of it, is still in the same
+ * combo. Wide on purpose: a dropped chain costs a whole combo, and there is
+ * nothing to exploit in it — the chain is three moves long however slowly you
+ * walk down it, and it dies the moment you leave the ground.
+ */
+export const COMBO_LINK_MS = 260;
+
+/**
+ * How long the chain's finisher keeps its victim on the floor.
+ *
+ * **Equal to the finisher's own active-plus-recovery, by construction**, and
+ * `Melee.test.ts` asserts it. The attacker's swing ends at
+ * `startup + active + recovery` and the victim's knockdown ends at
+ * `hit + KNOCKDOWN_MS`, so if the hitbox connects on its first live frame the two
+ * end on the same tick: a landed combo ends in *neutral*, not in free pressure.
+ * That is what pays for the chain being uninterruptible once it reaches the
+ * finisher.
+ */
+export const KNOCKDOWN_MS = 520;
+
+/**
+ * Downward velocity a knockdown forces on its victim.
+ *
+ * Only ever applied as a floor (`max`), so a target already falling faster keeps
+ * its own speed. It exists so the finisher looks like what it is when it catches
+ * somebody in the air — an uppercut's victim comes back down *hard* rather than
+ * drifting through their own knockdown.
+ */
+export const KNOCKDOWN_SLAM_VY = 520;
 
 /** Hold the attack button this long to arm a Massive Strike. */
 export const MASSIVE_CHARGE_MS = 420;
@@ -221,13 +373,40 @@ export interface MeleeState {
 	chargeTimer: number;
 	/** A Massive Strike is armed, from a full charge or a parry. */
 	massiveReady: boolean;
+	/**
+	 * How far down the ground chain this fighter is: 0 for none, 1-3 for the link
+	 * that is running or was last thrown. An index into `COMBO_CHAIN`, plus one.
+	 */
+	comboStep: number;
+	/**
+	 * ms left of the grace period after a link ended. Zero while one is running —
+	 * a live link is chained out of its recovery phase, not out of this timer.
+	 */
+	comboTimer: number;
 	/** ms of stun remaining. While non-zero, all intent is discarded. */
 	stunTimer: number;
+	/**
+	 * ms of the knockdown remaining. Always ≤ `stunTimer` while it runs, because a
+	 * knockdown *is* a stun — this exists so the renderer can tell "staggered" from
+	 * "on the floor", and so the two states can be told apart in a diagnostic.
+	 */
+	knockdownTimer: number;
 	/** ms of melee damage immunity remaining. */
 	iframeTimer: number;
 	attackHeld: boolean;
 	blockHeld: boolean;
 	uppercutHeld: boolean;
+}
+
+/**
+ * What `tickMelee` needs: melee state, plus whether the feet are on the floor.
+ *
+ * `grounded` is optional because it is *physics* state that `tickPlayer` owns —
+ * `PlayerPosition` satisfies this for free, and a bare `MeleeState` still ticks.
+ * A fighter with no floor under it simply cannot chain, which is the rule.
+ */
+export interface MeleeTickState extends MeleeState {
+	grounded?: boolean;
 }
 
 /** What `resolveMelee` needs of a fighter: melee state plus a body. */
@@ -282,7 +461,10 @@ export function createMeleeState(facing: number): MeleeState {
 		blockTimer: 0,
 		chargeTimer: 0,
 		massiveReady: false,
+		comboStep: 0,
+		comboTimer: 0,
 		stunTimer: 0,
+		knockdownTimer: 0,
 		iframeTimer: 0,
 		attackHeld: false,
 		blockHeld: false,
@@ -303,7 +485,10 @@ export function copyMeleeState<T extends MeleeState>(
 	target.blockTimer = source.blockTimer;
 	target.chargeTimer = source.chargeTimer;
 	target.massiveReady = source.massiveReady;
+	target.comboStep = source.comboStep;
+	target.comboTimer = source.comboTimer;
 	target.stunTimer = source.stunTimer;
+	target.knockdownTimer = source.knockdownTimer;
 	target.iframeTimer = source.iframeTimer;
 	target.attackHeld = source.attackHeld;
 	target.blockHeld = source.blockHeld;
@@ -342,7 +527,27 @@ export function isStunned(s: MeleeState): boolean {
 	return s.stunTimer > 0;
 }
 
+/** On the floor: stunned, and drawn lying down. */
+export function isKnockedDown(s: MeleeState): boolean {
+	return s.knockdownTimer > 0;
+}
+
+/** Forget the chain entirely — the next attack press opens a fresh one. */
+function resetCombo(s: MeleeState) {
+	s.comboStep = 0;
+	s.comboTimer = 0;
+}
+
 function endMove(s: MeleeState) {
+	// A chain outlives the move that was carrying it: that grace is what lets a
+	// link be thrown after the previous one has fully recovered, or after it was
+	// cancelled into a block. The finisher ends the chain because there is nothing
+	// left to link into.
+	if (isComboSlash(s.meleeAction) && s.comboStep < COMBO_CHAIN.length) {
+		s.comboTimer = COMBO_LINK_MS;
+	} else {
+		resetCombo(s);
+	}
 	s.meleeAction = "none";
 	s.meleeTimer = 0;
 	s.hitLatch = false;
@@ -356,6 +561,37 @@ function startMove(s: MeleeState, move: MeleeMove) {
 	// butterfly, so this must not be an error case.
 	s.blocking = false;
 	if (move === "massive") s.massiveReady = false;
+	// Anything that is not a link breaks the chain. An uppercut in the middle of a
+	// combo is a different decision, not the second hit of this one.
+	if (isComboSlash(move)) {
+		s.comboStep = COMBO_CHAIN.indexOf(move) + 1;
+		s.comboTimer = 0;
+	} else {
+		resetCombo(s);
+	}
+}
+
+/**
+ * Can an attack press right now continue the chain instead of opening a new one?
+ *
+ * Two ways in, and the first is the one that makes a combo feel like a combo:
+ *
+ * 1. **Out of the previous link's recovery.** No waiting for the move to end —
+ *    the moment the hitbox closes, the next swing is available. This is the
+ *    "very little delay" the whole feature is about, and it is why the links'
+ *    hitstun is tuned to cover the gap.
+ * 2. **Inside `COMBO_LINK_MS` of the previous link ending**, cancelled or not.
+ *
+ * Both require **both feet on the floor**. An airborne chain would turn the
+ * butterfly's jump-in into a guaranteed three hits from a position the defender
+ * cannot walk out of, and the ground requirement is what keeps the combo a
+ * commitment rather than a mobility option.
+ */
+function canChain(s: MeleeTickState): boolean {
+	if (s.grounded !== true) return false;
+	if (s.comboStep < 1 || s.comboStep >= COMBO_CHAIN.length) return false;
+	if (s.meleeAction === "none") return s.comboTimer > 0;
+	return isComboSlash(s.meleeAction) && meleePhase(s) === "recovery";
 }
 
 function decay(ms: number, dtMs: number): number {
@@ -373,16 +609,29 @@ function decay(ms: number, dtMs: number): number {
  * guard, which is exactly the butterfly. Reversing the two would make the
  * technique impossible to perform with the block button held.
  */
-export function tickMelee(s: MeleeState, input: MeleeIntent, dt: number): void {
+export function tickMelee(
+	s: MeleeTickState,
+	input: MeleeIntent,
+	dt: number,
+): void {
 	const dtMs = dt * 1000;
 
 	s.stunTimer = decay(s.stunTimer, dtMs);
+	s.knockdownTimer = decay(s.knockdownTimer, dtMs);
 	s.iframeTimer = decay(s.iframeTimer, dtMs);
+	s.comboTimer = decay(s.comboTimer, dtMs);
+	// The grace ran out with nothing thrown into it, so the chain is over. Only
+	// checked between moves: a running link carries the chain in `meleeAction`.
+	if (s.meleeAction === "none" && s.comboTimer <= 0) s.comboStep = 0;
 
 	if (isStunned(s)) {
 		// Everything is taken away, including a charge that was nearly ready.
 		// Getting hit out of a charge is meant to cost you the charge.
 		endMove(s);
+		// Being hit drops the chain. A combo that survived its own author being
+		// staggered would let a fighter trade into the middle of one and come out
+		// of the stun holding the finisher.
+		resetCombo(s);
 		s.blocking = false;
 		s.blockTimer = 0;
 		s.chargeTimer = 0;
@@ -438,21 +687,27 @@ export function tickMelee(s: MeleeState, input: MeleeIntent, dt: number): void {
 	}
 
 	// ---- start a move ----
-	// Moves start from neutral only. A cancel returns to neutral first, so the
-	// butterfly still works — it just has to go through the block.
-	if (sword && s.meleeAction === "none") {
+	// Everything but a chain link starts from neutral. A cancel returns to neutral
+	// first, so the butterfly still works — it just has to go through the block.
+	//
+	// The one exception is the ground chain, which may be started out of the
+	// previous link's recovery. That exception is the combo.
+	if (sword) {
+		const neutral = s.meleeAction === "none";
+		const chaining = canChain(s);
 		const attackPress = input.attack && !s.attackHeld;
 		const attackRelease = !input.attack && s.attackHeld;
 		const uppercutPress = input.uppercut && !s.uppercutHeld;
 
-		if (uppercutPress) {
+		if (neutral && uppercutPress) {
 			startMove(s, "uppercut");
-		} else if (s.massiveReady && (attackPress || attackRelease)) {
+		} else if (neutral && s.massiveReady && (attackPress || attackRelease)) {
 			// Two ways in: a parry arms it and the next press fires it; a full charge
 			// arms it and letting go fires it.
 			startMove(s, "massive");
-		} else if (attackPress) {
-			startMove(s, "slash");
+		} else if (attackPress && (neutral || chaining)) {
+			// `comboStep` is one-based, so it is already the index of the *next* link.
+			startMove(s, (chaining && COMBO_CHAIN[s.comboStep]) || "slash");
 		}
 	}
 
@@ -575,11 +830,14 @@ export function resolveMelee(
 ): MeleeResult | null {
 	const box = meleeHitbox(attacker);
 	if (!box) return null;
-	if (defender.iframeTimer > 0) return null;
-	if (!rectsOverlap(box, bodyRect(defender.x, defender.y))) return null;
 
 	const move = attacker.meleeAction as MeleeMove;
 	const def = MOVES[move];
+	// A chain link connects through the invulnerability its own opener applied.
+	// Nothing else does — see `piercesIframes`.
+	if (defender.iframeTimer > 0 && !def.piercesIframes) return null;
+	if (!rectsOverlap(box, bodyRect(defender.x, defender.y))) return null;
+
 	const behind = isBehind(attacker, defender);
 	const dir = attacker.facing >= 0 ? 1 : -1;
 	const x = box.x + box.w / 2;
@@ -632,6 +890,10 @@ export function applyMeleeResult(
 			attacker.stunTimer = GUARD_BREAK_STUN_MS;
 			attacker.meleeAction = "none";
 			attacker.meleeTimer = 0;
+			// A guard break ends the chain too. Reading one link of a combo is
+			// supposed to end the combo.
+			attacker.comboStep = 0;
+			attacker.comboTimer = 0;
 			// A stunned fighter holds nothing, guard included. Leaving this set left
 			// a fighter both stunned and blocking, which is a state the rules say
 			// cannot exist.
@@ -653,6 +915,13 @@ export function applyMeleeResult(
 				defender.vy = def.launchVy;
 				defender.grounded = false;
 			}
+			if (def.knockdown) {
+				defender.knockdownTimer = KNOCKDOWN_MS;
+				// Spiked, not launched. A knockdown that left an airborne target
+				// floating would read as a weak launch, and the whole point of the
+				// finisher is that it puts somebody on the floor.
+				defender.vy = Math.max(defender.vy, KNOCKDOWN_SLAM_VY);
+			}
 			// Being hit ends whatever the defender was doing. Stun would do this next
 			// tick anyway; doing it now stops a swing that is already active from
 			// trading in the same frame it was interrupted.
@@ -660,6 +929,8 @@ export function applyMeleeResult(
 			defender.meleeTimer = 0;
 			defender.hitLatch = false;
 			defender.blocking = false;
+			defender.comboStep = 0;
+			defender.comboTimer = 0;
 			return def.damage;
 		}
 	}

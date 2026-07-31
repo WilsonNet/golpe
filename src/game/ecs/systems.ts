@@ -9,7 +9,7 @@
  */
 
 import { syncSpriteToBody } from "../render/ArenaRenderer";
-import { dudeFrames } from "../render/assets";
+import { dudeFrames, TEX, tex } from "../render/assets";
 import type { MeleeFx } from "../render/MeleeFx";
 import type { Nameplates } from "../render/Nameplates";
 import { PLAYER_WIDTH } from "../simulation/Physics";
@@ -18,6 +18,12 @@ import type { AnimState, Queries } from "./world";
 /**
  * The `dude` strip has no atlas, so clips are frame ranges into it:
  * 0-3 walk left, 4 face-on, 5-8 walk right.
+ *
+ * `disabled` and `downed` are the exception: their frame lists are empty because
+ * the textures are *generated* from this same strip rather than cut out of it,
+ * and `animationSystem` assigns them directly. They are still clips so that being
+ * hit goes through `playClip` like every other state — a fighter that came out of
+ * a stun mid-walk-cycle used to resume on whatever frame it was interrupted on.
  */
 export const CLIPS = {
 	left: { frames: [0, 1, 2, 3], fps: 10 },
@@ -25,6 +31,8 @@ export const CLIPS = {
 	turn: { frames: [4], fps: 1 },
 	"left-idle": { frames: [0], fps: 1 },
 	"right-idle": { frames: [5], fps: 1 },
+	disabled: { frames: [], fps: 1 },
+	downed: { frames: [], fps: 1 },
 } as const;
 
 /**
@@ -56,6 +64,21 @@ export function animationSystem(queries: Queries, dtMs: number) {
 		const moving = Math.abs(body.vx) > 8;
 		const facingLeft = body.facing < 0;
 
+		// Being hit outranks everything else the fighter could be drawn doing.
+		//
+		// Every sword hit disables its target, and for the whole of that stun the
+		// fighter is not walking, idling or turning — it is reeling. Left to the
+		// velocity-driven clips it kept playing the walk cycle while sliding
+		// backwards on a knockback, which is why the sword read as landing on
+		// nobody through an entire playtest.
+		const downed = body.knockdownTimer > 0;
+		if (downed || body.stunTimer > 0) {
+			playClip(e.anim, downed ? "downed" : "disabled");
+			const hitTexture = tex(downed ? TEX.downed : TEX.disabled);
+			if (e.sprite.texture !== hitTexture) e.sprite.texture = hitTexture;
+			continue;
+		}
+
 		playClip(
 			e.anim,
 			moving
@@ -75,8 +98,11 @@ export function animationSystem(queries: Queries, dtMs: number) {
 			e.anim.frame = (e.anim.frame + 1) % clip.frames.length;
 		}
 
+		// The hit clips carry no frames — they are assigned above and never reach
+		// here — so a missing index means the strip, not the clip, is wrong.
 		const frameIndex = clip.frames[e.anim.frame] ?? clip.frames[0];
-		const texture = dudeFrames[frameIndex];
+		const texture =
+			frameIndex === undefined ? undefined : dudeFrames[frameIndex];
 		if (texture && e.sprite.texture !== texture) e.sprite.texture = texture;
 	}
 }

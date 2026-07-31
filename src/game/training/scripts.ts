@@ -18,6 +18,7 @@
 
 import {
 	MASSIVE_CHARGE_MS,
+	MOVES,
 	SLASH_CANCELLED_MS,
 } from "../simulation/Physics.js";
 import type {
@@ -82,6 +83,31 @@ export function butterflyBeats(): DummyBeat[] {
 	];
 }
 
+/**
+ * The ground chain: three presses, each landing the instant the link before it
+ * becomes chainable.
+ *
+ * The gaps are the technique, and they are derived rather than typed: a link
+ * opens when the previous one enters recovery — `startup + active` — so the press
+ * has to arrive after that and before the grace window closes. Written as
+ * literals they would silently stop being a combo the first time the frame data
+ * moved, which is the failure mode this whole file exists to avoid.
+ */
+export function comboBeats(periodMs: number): DummyBeat[] {
+	const link = (from: "slash" | "slash2") =>
+		MOVES[from].startupMs + MOVES[from].activeMs;
+	const used =
+		PRESS_MS * 3 + (link("slash") - PRESS_MS) + (link("slash2") - PRESS_MS);
+	return [
+		{ ms: PRESS_MS, hold: { attack: true } },
+		{ ms: Math.max(1, link("slash") - PRESS_MS) },
+		{ ms: PRESS_MS, hold: { attack: true } },
+		{ ms: Math.max(1, link("slash2") - PRESS_MS) },
+		{ ms: PRESS_MS, hold: { attack: true } },
+		{ ms: rest(periodMs, used) },
+	];
+}
+
 /** A single committed swing, then the rest of the period doing nothing. */
 export function slashBeats(periodMs: number): DummyBeat[] {
 	return [
@@ -137,6 +163,8 @@ export function scriptFor(
 			return { beats: [{ ms: 1000, hold: { block: true } }], loop: true };
 		case "butterfly":
 			return { beats: butterflyBeats(), loop: true };
+		case "combo":
+			return { beats: comboBeats(timing.periodMs), loop: true };
 		case "slash":
 			return { beats: slashBeats(timing.periodMs), loop: true };
 		case "uppercut":

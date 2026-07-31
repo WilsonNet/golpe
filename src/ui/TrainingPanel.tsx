@@ -48,6 +48,11 @@ const BEHAVIOURS: { value: DummyBehaviour; label: string; hint: string }[] = [
 		hint: "Slash cancelled into block, repeatedly.",
 	},
 	{
+		value: "combo",
+		label: "Combo",
+		hint: "The three-hit ground chain, ending in a knockdown.",
+	},
+	{
 		value: "counterAttack",
 		label: "Counter-attack",
 		hint: "Swings delayMs after your move goes active.",

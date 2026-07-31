@@ -213,9 +213,39 @@ describe("TrainingDummy: scripted rhythms", () => {
 			new TrainingDummy({ behaviour: "butterfly" }),
 			3000,
 		);
-		// The cancel is the point: a chain of slashes far shorter than 330ms each.
-		expect(moves.length).toBeGreaterThanOrEqual(8);
+		// The cancel is the point: swings far shorter than the 330ms they declare.
+		expect(moves.length).toBeGreaterThanOrEqual(6);
 		expect(blockedFrames).toBeGreaterThan(0);
+
+		/**
+		 * On the ground, the butterfly *is* the combo.
+		 *
+		 * Cancelling a link into a block keeps the chain alive, so the same rhythm
+		 * that used to emit an endless run of identical slashes now walks the chain
+		 * and commits to the finisher every third swing. That is the technique
+		 * having a shape instead of being free forever — and it is exactly what a
+		 * grounded butterfly is supposed to cost.
+		 */
+		expect(moves.slice(0, 3)).toEqual(["slash", "slash2", "slash3"]);
+	});
+
+	/**
+	 * The chain, thrown deliberately rather than as a side effect of butterflying.
+	 *
+	 * This is the rhythm a player has to find: press, wait for the hitbox to close,
+	 * press again. A dummy that could not perform it would mean the window is too
+	 * tight to hit on purpose, which is the difference between a combo and a
+	 * coincidence.
+	 */
+	it("throws the whole three-hit chain, on its period", () => {
+		const { moves } = simulate(
+			new TrainingDummy({ behaviour: "combo", timing: { periodMs: 1200 } }),
+			3000,
+		);
+		expect(moves.slice(0, 3)).toEqual(["slash", "slash2", "slash3"]);
+		expect(moves.filter((m) => m === "slash3").length).toBeGreaterThanOrEqual(
+			2,
+		);
 	});
 
 	/**

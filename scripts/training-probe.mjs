@@ -24,7 +24,7 @@ import { chromium } from "playwright";
 const BASE_URL = process.env.VENTO_URL ?? "http://localhost:8080";
 
 /** Frame data from specs/melee.md. Duplicated on purpose — see `expectedDamage`. */
-const DAMAGE = { slash: 7, uppercut: 11, massive: 24 };
+const DAMAGE = { slash: 7, slash2: 7, slash3: 11, uppercut: 11, massive: 24 };
 
 /**
  * How far a measured phase may sit from its declared length.
@@ -84,6 +84,18 @@ function dummyEvents(report) {
 }
 
 /** Every check a row can make, expressed once. */
+/**
+ * Every swing of the ground chain, as one number.
+ *
+ * A slash is the first link of three, so any count that says "slashes" and reads
+ * `moves.slash` is really counting *combos started*. Rows that care about how many
+ * times the sword was swung have to add the links up.
+ */
+function chainSwings(side) {
+	const m = side.moves ?? {};
+	return (m.slash ?? 0) + (m.slash2 ?? 0) + (m.slash3 ?? 0);
+}
+
 function checks(report) {
 	const fails = [];
 	const mine = playerEvents(report);
@@ -146,6 +158,9 @@ function universalChecks(report) {
 	if (m.blockedUnblockables > 0) {
 		fails.push(`${m.blockedUnblockables} unblockables blocked`);
 	}
+	if (m.airborneChainLinks > 0) {
+		fails.push(`${m.airborneChainLinks} combo links thrown airborne`);
+	}
 	if (m.frameDataViolations > 0) {
 		fails.push(`${m.frameDataViolations} frame data violations`);
 	}
@@ -184,6 +199,22 @@ const UPPERCUT = {
 const MASSIVE = { intent: { attack: true }, holdMs: 470, aimAngle: AIM_RIGHT };
 /** A move's full duration, so the next step is not swallowed by its recovery. */
 const REST = 500;
+
+/**
+ * The ground chain, as three presses.
+ *
+ * The gap is the whole point: a link becomes available when the previous swing
+ * enters recovery, at `startup + active` = 160ms. Pressing at 170ms catches that
+ * with a frame to spare — and a probe that pressed any earlier would measure a
+ * swallowed input and call the combo broken.
+ */
+const CHAIN = [
+	{ intent: { attack: true }, holdMs: 60, aimAngle: AIM_RIGHT },
+	{ intent: {}, holdMs: 110, aimAngle: AIM_RIGHT },
+	{ intent: { attack: true }, holdMs: 60, aimAngle: AIM_RIGHT },
+	{ intent: {}, holdMs: 110, aimAngle: AIM_RIGHT },
+	{ intent: { attack: true }, holdMs: 60, aimAngle: AIM_RIGHT },
+];
 
 /**
  * The battery.
@@ -231,6 +262,41 @@ const BATTERY = [
 			c.swung("slash");
 			c.outcome("hit", "slash");
 			c.damage(DAMAGE.slash);
+			return c.fails;
+		},
+	},
+	{
+		/**
+		 * The feature this whole chain exists for, measured end to end: three
+		 * different cuts, three landed hits, and the target on the floor.
+		 *
+		 * Worth its own row because every part of it can fail silently. A link
+		 * window one tick too tight swallows the second press; invulnerability that
+		 * the links do not pierce lets all three animations play for seven damage;
+		 * a knockdown that never sets its timer looks exactly like a long stun.
+		 */
+		name: "the ground chain lands three hits and knocks down",
+		scenario: {
+			name: "ground chain",
+			config: { behaviour: "idle" },
+			steps: CHAIN,
+			settleMs: 900,
+		},
+		verify(report) {
+			const c = checks(report);
+			c.swung("slash");
+			c.swung("slash2");
+			c.swung("slash3");
+			c.eq(
+				"chain outcomes",
+				playerEvents(report)
+					.map((e) => `${e.move}:${e.outcome}`)
+					.join(","),
+				"slash:hit,slash2:hit,slash3:hit",
+			);
+			c.damage(DAMAGE.slash + DAMAGE.slash2 + DAMAGE.slash3);
+			c.atLeast("knockdowns", report.melee?.knockdowns ?? 0, 1);
+			c.atLeast("combos finished", report.melee?.combosFinished ?? 0, 1);
 			return c.fails;
 		},
 	},
@@ -523,9 +589,13 @@ const BATTERY = [
 		verify(_r, { recording, status, playback }) {
 			const c = checks(recording);
 			c.atLeast("frames recorded", status.recordedFrames, 60);
-			c.atLeast("player slashes recorded", recording.player.moves.slash, 3);
-			// The dummy replays the same buttons, so it must produce the same move.
-			c.atLeast("dummy slashes on playback", playback.dummy.moves.slash, 3);
+			// Counted across the whole chain, not just its opener. A grounded
+			// butterfly walks slash → slash2 → slash3, so asking for three of the
+			// *first* link measures how deep the combo went rather than how many
+			// swings were recorded — which is not what this row is about.
+			c.atLeast("player slashes recorded", chainSwings(recording.player), 3);
+			// The dummy replays the same buttons, so it must produce the same moves.
+			c.atLeast("dummy slashes on playback", chainSwings(playback.dummy), 3);
 			c.atLeast("dummy blocks on playback", playback.dummy.blocks, 1);
 			return c.fails;
 		},

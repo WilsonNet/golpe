@@ -4,7 +4,11 @@ import {
 	platforms,
 	type Rect,
 } from "../simulation/Arena.js";
-import type { MeleeAction, MeleePhase } from "../simulation/Melee.js";
+import {
+	isComboSlash,
+	type MeleeAction,
+	type MeleePhase,
+} from "../simulation/Melee.js";
 import { JUMP_HEIGHT_PX } from "../simulation/Physics.js";
 import type { AIConfig } from "./AIConfig.js";
 
@@ -166,6 +170,25 @@ const BUTTERFLY: MeleeBeat[] = [
 
 /** A plain committed swing, for when there is no need to be safe. */
 const LONE_SLASH: MeleeBeat[] = [{ ms: 55, attack: true }, { ms: 90 }];
+
+/**
+ * The ground chain: three presses, spaced to land the moment each link is
+ * chainable.
+ *
+ * The gaps are the technique. A link becomes available when the previous one
+ * enters recovery — 160ms after it started — so a press at 170ms catches the
+ * window with a frame to spare, and a press any earlier is simply swallowed by
+ * the swing already running. Mashing does not produce a combo; this rhythm does,
+ * which is the same thing a human has to learn.
+ */
+const COMBO: MeleeBeat[] = [
+	{ ms: 55, attack: true },
+	{ ms: 115 },
+	{ ms: 55, attack: true },
+	{ ms: 115 },
+	{ ms: 55, attack: true },
+	{ ms: 120 },
+];
 
 const UPPERCUT_BEATS: MeleeBeat[] = [{ ms: 60, uppercut: true }, { ms: 120 }];
 
@@ -409,7 +432,11 @@ export class EnemyBrain {
 		// the punish window the heavy moves exist to create.
 		const punishable =
 			input.enemyPhase === "recovery" &&
-			(input.enemyAction === "massive" || input.enemyAction === "uppercut");
+			(input.enemyAction === "massive" ||
+				input.enemyAction === "uppercut" ||
+				// The chain's finisher recovers for 420ms and cannot be cancelled out
+				// of, so a whiffed one is the same gift a whiffed Massive is.
+				input.enemyAction === "slash3");
 		if (punishable && distance < STRIKE_RANGE_PX) {
 			return LONE_SLASH;
 		}
@@ -421,7 +448,9 @@ export class EnemyBrain {
 		// 190ms of startup against a slash that connects in 75, so answering a
 		// swing with one loses the exchange *and* the charge.
 		const incoming =
-			input.enemyAction === "slash" &&
+			// Any link of the chain, not just its opener: reading only the first
+			// swing would leave a bot standing still through the two that follow it.
+			isComboSlash(input.enemyAction) &&
 			(input.enemyPhase === "startup" || input.enemyPhase === "active") &&
 			distance < STRIKE_RANGE_PX + 30;
 		// A hurt fighter answers a read by covering up rather than by timing a
@@ -439,6 +468,24 @@ export class EnemyBrain {
 		// Since a heavy move forbids blocking for its whole 720ms, that left both
 		// fighters unable to guard for most of the match, and not one slash was
 		// ever blocked or parried.
+		// Already in sword range with the target reeling: this is what the chain is
+		// *for*, and it beats charging from here. A Massive from inside strike range
+		// spends 190ms of startup to deal 24; the chain spends 75 to open and deals
+		// 25 with a knockdown at the end of it.
+		//
+		// Ordering this above the charge is also what keeps the match a sword fight:
+		// longer hitstun made the stun-punish branch fire far more often, and every
+		// one of those became a Massive — 11 Massives to 10 slashes in a measured
+		// match, with one hit landing all game.
+		if (
+			input.enemyStunned &&
+			input.touchingDown &&
+			distance < STRIKE_RANGE_PX &&
+			!input.selfMassiveReady
+		) {
+			return COMBO;
+		}
+
 		if (this.willPunishStun(input.enemyStunned) && distance < CHARGE_RANGE_PX) {
 			return input.selfMassiveReady ? RELEASE_MASSIVE : CHARGE_BEATS;
 		}
@@ -509,8 +556,15 @@ export class EnemyBrain {
 			if (hurt && Math.random() < 0.4 - 0.2 * skill) return TURTLE;
 
 			// Close quarters. The butterfly is the default because it is safe *and*
-			// it hurts; a lone slash is the greedier option when the opponent is
-			// already reeling.
+			// it hurts; the ground chain is what a reeling opponent is *for*, and a
+			// lone slash is the greedy option when there is no time for either.
+			//
+			// The chain needs the floor — `canChain` refuses in the air — so a bot
+			// that started one mid-jump would throw one slash and then press twice
+			// into nothing.
+			if (input.touchingDown && Math.random() < 0.35 + 0.2 * skill) {
+				return COMBO;
+			}
 			const greedy = input.enemyAction === "none" && Math.random() < 0.25;
 			return greedy ? LONE_SLASH : BUTTERFLY;
 		}

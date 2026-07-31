@@ -56,7 +56,7 @@ A fighter holds either a **sword** or a **gun**, never both.
 
 | Input | Sword stance | Gun stance |
 |---|---|---|
-| **LMB** tap | Slash | Fire |
+| **LMB** tap | Slash — and, on the ground, the next link of the chain | Fire |
 | **LMB** hold ≥ 420ms, then release | **Massive Strike** | Fire (charge ignored) |
 | **RMB** hold | **Block** | — |
 | **F** | **Uppercut** | — |
@@ -74,20 +74,37 @@ table in `src/game/simulation/Melee.ts` and nowhere else.
 
 | Move | Startup | Active | Recovery | Total | Damage | Reach | Blockable | Cancellable |
 |---|---|---|---|---|---|---|---|---|
-| **Slash** | 75ms | 85ms | 170ms | 330ms | 7 | 42px | **yes** | **yes** |
+| **Slash** (link 1) | 75ms | 85ms | 170ms | 330ms | 7 | 42px | **yes** | **yes** |
+| **Slash 2** (link 2) | 75ms | 85ms | 170ms | 330ms | 7 | 44px | **yes** | **yes** |
+| **Slash 3** (finisher) | 85ms | 100ms | 420ms | 605ms | 11 | 48px | **yes** | **no** |
 | **Uppercut** | 110ms | 100ms | 340ms | 550ms | 11 | 34px | **no** | **no** |
 | **Massive Strike** | 190ms | 110ms | 420ms | 720ms | 24 | 56px | **no** | **no** |
 
 On hit:
 
-| Move | Hitstun | Launch | Knockback |
-|---|---|---|---|
-| Slash | 130ms | — | 130 px/s |
-| Uppercut | 260ms | **−620 px/s** | 90 px/s |
-| Massive Strike | 650ms | — | 420 px/s |
+| Move | Hitstun | Launch | Knockback | Knockdown |
+|---|---|---|---|---|
+| Slash | 190ms | — | 130 px/s | — |
+| Slash 2 | 210ms | — | 150 px/s | — |
+| Slash 3 | 520ms | — | 300 px/s | **yes** |
+| Uppercut | 260ms | **−620 px/s** | 90 px/s | — |
+| Massive Strike | 650ms | — | 420 px/s | — |
 
 **Why these hold:**
 
+- **Every landed sword hit disables its target.** That is what the hitstun column
+  is, and it is drawn: a staggered fighter is a different sprite, and a knocked
+  down one is on the floor. This is a fix, not a flourish — through a whole LAN
+  playtest the sword landed, the target kept walking its walk cycle, and the hit
+  read as *nothing happening*. A mechanic nobody can see is a mechanic nobody
+  believes in.
+- **A link's hitstun is set by the link that follows it, not by feel.** The next
+  slash becomes available when the previous one enters recovery and lands after
+  its own startup, so hit *n+1* opens `active + startup` after hit *n* — 160ms
+  into the chain, then 170ms. Hitstun shorter than that gap hands the defender
+  free frames in the middle of a combo, which is not a combo but two swings that
+  happened to be near each other. 190 and 210 are those gaps plus a couple of
+  ticks.
 - **Slash total (330ms) is more than double its cancelled length (160ms).** That
   gap *is* the butterfly's reward. Shrink slash recovery and the technique stops
   mattering; grow it and unskilled play becomes unplayable.
@@ -106,6 +123,83 @@ On hit:
   duration.** Missing a Massive is meant to lose you the exchange outright.
 - **Massive damage (24) is a bit over three slashes** but takes more than twice
   as long and cannot be cancelled or protected. The trade is deliberate.
+- **The whole chain deals 25** — a shade more than a Massive, for three separate
+  hits that each have to connect, on the ground, off an opener that respects
+  invulnerability like anything else. The finisher's own 11 is the "little bonus"
+  for having got that far.
+- **Slash 3's recovery (420ms) equals its knockdown minus its active frames.**
+  This is a construction, not a coincidence, and `Melee.test.ts` asserts it: the
+  attacker's swing ends `active + recovery` after its hitbox opened, and the
+  victim gets up `KNOCKDOWN_MS` after being hit by it, so **a landed combo ends in
+  neutral**. See *The ground chain* below.
+
+## The ground chain
+
+A slash is not one move. It is the opening of a **three-hit chain**, and each link
+is a different cut:
+
+| Link | The cut | Cancellable |
+|---|---|---|
+| 1 — **Slash** | diagonal, top-down, right to left | **yes** |
+| 2 — **Slash 2** | diagonal, top-down, left to right | **yes** |
+| 3 — **Slash 3** | straight overhead, top-down | **no** |
+
+**The link costs nothing but the press.** The next slash is available from the
+moment the previous one enters *recovery* — the frame its hitbox closes — so the
+chain is as fast as a player can tap, and there is no waiting through a recovery
+that has nothing left to do. A press earlier than that is swallowed by the swing
+already running, which is what stops mashing from being the same as timing.
+
+After a link *ends*, the chain stays alive for another **260ms** (`COMBO_LINK_MS`).
+That grace is what lets a link be cancelled into a block and picked up again on
+the other side, so **on the ground the butterfly and the combo are the same
+technique**.
+
+Three rules pay for it:
+
+- **Both feet on the floor.** A link thrown airborne is refused outright. An
+  airborne chain would turn the butterfly's jump-in into three guaranteed hits
+  from a position the defender cannot walk out of — and, read the other way, *an
+  airborne butterfly still repeats link 1 forever*. That is the choice: commit to
+  the chain on the ground, or keep the old endless pressure in the air.
+- **The finisher cannot be cancelled.** Links 1 and 2 cancel into a block like any
+  slash; link 3 is 605ms you are committed to. A chain that could be abandoned on
+  its last frame would be a free three-hit string with an escape hatch.
+- **Getting hit, guard-broken or stunned ends the chain.** So does anything that
+  is not a link — an uppercut in the middle of a combo is a different decision,
+  not the second hit of this one.
+
+**A chain link connects through the invulnerability its own opener applied**, and
+it is the only thing in the game that does. `MELEE_IFRAME_MS` is 180ms and the
+links land ~160ms apart, so without this the second and third swings would pass
+harmlessly through the fighter the first one just staggered: every animation would
+play and the combo would deal seven damage. The opener never pierces, which keeps
+invulnerability doing its real job of capping butterfly DPS.
+
+### The knockdown
+
+The finisher puts its target **on the floor for 520ms** — stunned, drawn lying
+down, and spiked downward if it was caught in the air.
+
+**`KNOCKDOWN_MS` equals the finisher's active plus recovery frames.** The attacker
+is free `active + recovery` after the hitbox opened; the victim gets up
+`KNOCKDOWN_MS` after being hit by it. They are the same number, so **a landed
+combo ends in neutral** — position and damage, never a free follow-up. That is
+what pays for the finisher being uninterruptible, and it is asserted in
+`Melee.test.ts` rather than left as a comment.
+
+### What it looks like
+
+The three cuts are told apart by **perspective**, not just by angle. Each swing
+declares how far it travels *through* the screen, and the blade is drawn longer,
+thicker, brighter and further from the body as it comes toward the camera —
+foreshortened and dimmed as it goes away. The two diagonals use opposite depths,
+so they read as mirror images rather than as the same swing twice, and the trail
+takes the same perspective as the blade that drew it.
+
+All of it is renderer-side (`MeleeFx`), driven from `PlayerPosition` like every
+other effect, so the local fighter's chain is predicted and the remote's comes
+from the snapshot with no animation logic of its own.
 
 ## Blocking
 
@@ -198,6 +292,13 @@ promise: steering a live hitbox would make blocking unreadable, and turning
 during the wind-up would erase the tell the defender is reading. Recovery has no
 hitbox and no tell left to give.
 
+**The chain is the one place that adds up.** Each link's recovery is skipped by
+the link after it, so a full three-hit combo is facing-locked for most of its
+~600ms. That is a cost the player *chooses* three separate times, and it ends —
+unlike the old bug below, which charged it for simply holding a button.
+`scripts/aim-probe.mjs` measures the single-press case, which is unchanged at
+44ms worst.
+
 Locking the whole move instead — which is what this said originally — meant a
 player holding the attack button chained slashes and **went 332ms at a time
 without obeying the cursor**, measured by `scripts/aim-probe.mjs`. That is the
@@ -241,8 +342,9 @@ being whiffed.
 
 ## Cancels and the butterfly
 
-**Only a slash is cancellable, and only after its startup.** Once a slash is in
-its active or recovery phase, either of these ends it instantly:
+**Only the first two links of the chain are cancellable, and only after their
+startup.** Once one is in its active or recovery phase, either of these ends it
+instantly:
 
 - pressing **block** — the butterfly,
 - **switching stance** — the slash-shot.
@@ -260,18 +362,38 @@ Each cycle costs about **160ms** instead of 330ms, moves you forward, and leaves
 you blocking between swings. It is the correct default way to approach and to
 apply pressure — and it loses cleanly to a parry.
 
+**In the air it repeats link 1 forever. On the ground it walks the chain**, so
+the third cycle is the finisher and its 420ms of uncancellable recovery. That is
+deliberate: a grounded butterfly now has a shape and a cost, and the pilot
+chooses between the endless airborne version and the grounded one that ends in a
+knockdown.
+
 **Damage is capped by invulnerability, not by cooldown.** After taking melee
 damage a fighter is immune to further melee for **180ms**. Without this the
 butterfly would simply be the highest-DPS option as well as the safest; with it,
 faster swinging stops paying and the technique stays a *positioning* tool.
 
-## Stun
+## Stun, and the disabled state
 
-A stunned fighter:
+**Every landed sword hit disables its target**, for the hitstun in the frame data
+table. A disabled fighter:
 
 - takes no input at all — no movement, jump, attack, block or stance change,
-- has any in-progress melee move cancelled,
-- still falls, still collides, and can still be hit.
+- has any in-progress melee move cancelled, and loses any chain it was in,
+- still falls, still collides, and can still be hit,
+- **is drawn as disabled** — a distinct sprite, not the walk cycle. A knocked down
+  fighter gets its own, lying on the surface it is standing on.
+
+Both hit sprites are **generated from the shipped character strip** at boot
+(`createHitTextures`): the same fighter, flushed and rocked off balance for a
+stagger, rotated flat with a puff of dust for a knockdown. They are placeholders
+in the honest sense — they line up perfectly with the walk cycle they came from,
+and the real art replaces them by deleting one function.
+
+`knockdownTimer` is separate from `stunTimer` even though a knockdown is always
+also a stun: the renderer has to tell "staggered" from "on the floor", and a
+diagnostic has to be able to count knockdowns without counting every hit. The two
+coming apart — down but not stunned — is an `illegalActions` violation.
 
 Stun is stored in the simulation state and therefore replays through
 reconciliation like everything else.
@@ -284,12 +406,14 @@ fire illegally**:
 
 | Metric | Target |
 |---|---|
-| `illegalActions` | **0** — nobody acts while stunned |
+| `illegalActions` | **0** — nobody acts while stunned, nobody is down without being stunned |
+| `airborneChainLinks` | **0** — the chain is a ground technique |
 | `blockedUnblockables` | **0** — a block never stops a Massive or uppercut |
 | `frameDataViolations` | **0** — every phase lasts what the table says |
 | `stuckActionFrames` | **0** — no move outlives its own duration |
 | `meleeDesyncFrames` | **0** — predicted move matches the authoritative one |
 | `slashes`, `massives`, `uppercuts`, `blocks`, `parries`, `backstabs`, `stuns`, `butterflyChains` | **> 0** across a few runs |
+| `comboLinks`, `combosFinished`, `knockdowns` | **> 0** across a few runs |
 
 The second row matters as much as the first. Every must-be-zero metric is
 trivially satisfied by a build where melee never happens, so a run that reports
@@ -311,6 +435,11 @@ ambiguous: it reads identically whether guards are failing or whether everything
 that connected happened to be unblockable by design, and those need opposite
 fixes.
 
+**`comboLinks: 0` beside a healthy `slashes` is the signature of a chain nobody
+can reach** — a link window too tight to hit, or a ground check that is never
+true. It is also exactly what the metric was added to catch, since every
+must-be-zero row stays clean in a build where the combo simply never happens.
+
 Healthy ranges for one 8s AI-vs-AI match, as a sanity check rather than a
 threshold: 10-20 slashes, 2-8 massives, 1-8 uppercuts, 9-15 blocks, 3-9 hits,
 0-5 backstabs, 2-12 butterfly chains. **Backstabs outnumbering clean hits is a
@@ -322,9 +451,10 @@ node scripts/diagnose.mjs --mode=online --runs=3
 
 ## Not implemented
 
-- **Combos with distinct follow-up animations.** A slash is one move, not the
-  first of a chain; GunZ's rule that the final hit of a combo pierces a block has
-  no equivalent here yet.
+- **A finisher that pierces a block.** GunZ ends a combo with a hit the guard
+  cannot stop; here all three links are blockable, so reading any one of them ends
+  the chain. Deliberate for now — the chain already beats invulnerability, and
+  giving it the guard as well would leave nothing to read.
 - **Directional blocking** beyond front/back. There is no high/low split, so
   GunZ's "cannot block the lower half of your body" does not apply.
 - **Wall-slash deflection** — GunZ stuns an opponent who slashes into a wall in

@@ -49,6 +49,7 @@ export {
 } from "./Arena.js";
 export type { WallSide } from "./Collision.js";
 export type {
+	ComboSlash,
 	MeleeAction,
 	MeleeBody,
 	MeleeIntent,
@@ -57,6 +58,7 @@ export type {
 	MeleePhase,
 	MeleeResult,
 	MeleeState,
+	MeleeTickState,
 	MoveDef,
 	Stance,
 } from "./Melee.js";
@@ -78,15 +80,22 @@ export {
 	BLOCK_STARTUP_MS,
 	blocksBullet,
 	bodyRect,
+	COMBO_CHAIN,
+	COMBO_LINK_MS,
 	copyMeleeState,
 	createMeleeState,
 	GUARD_BREAK_STUN_MS,
 	isBehind,
 	isCancellable,
+	isComboSlash,
 	isCommitted,
+	isKnockedDown,
 	isStunned,
+	KNOCKDOWN_MS,
+	KNOCKDOWN_SLAM_VY,
 	MASSIVE_CHARGE_MS,
 	MELEE_IFRAME_MS,
+	MELEE_MOVES,
 	MOVES,
 	meleeHitbox,
 	meleePhase,
@@ -95,6 +104,7 @@ export {
 	resolveMelee,
 	SLASH_CANCELLED_MS,
 	tickMelee,
+	zeroMoveCounts,
 } from "./Melee.js";
 
 /** @deprecated use `Rect` — kept so existing imports keep compiling. */

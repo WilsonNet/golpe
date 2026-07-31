@@ -97,6 +97,10 @@ export interface TrainingReport {
  */
 export interface MeleeSummaryView {
 	slashes: number;
+	/** The ground chain: continuations thrown, chains that reached the finisher. */
+	comboLinks: number;
+	combosFinished: number;
+	knockdowns: number;
 	uppercuts: number;
 	massives: number;
 	blocks: number;
@@ -105,6 +109,7 @@ export interface MeleeSummaryView {
 	blockedHits: number;
 	parries: number;
 	illegalActions: number;
+	airborneChainLinks: number;
 	blockedUnblockables: number;
 	frameDataViolations: number;
 	stuckActionFrames: number;

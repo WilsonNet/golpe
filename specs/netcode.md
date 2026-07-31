@@ -107,7 +107,7 @@ At two fighters a snapshot could afford to be the state objects verbatim. At
 sixteen it cannot: a full `PlayerPosition` is ~400 bytes of JSON, so sixteen of
 them at 20Hz is ~128 KB/s per client and a datagram well past any sane MTU.
 
-- **A fighter's state is nineteen numbers**, and its intent is one integer.
+- **A fighter's state is twenty-two numbers**, and its intent is one integer.
   `online/wire.ts` packs and unpacks; measured cost is ~800 bytes a snapshot for a
   duel (~16 KB/s) and ~3.4 KB for sixteen fighters (~66 KB/s).
 - **The field list is checked by the compiler.** `STATE_FIELDS` is asserted to

@@ -5,14 +5,18 @@ import {
 	BACKSTAB_MIN_SEPARATION_PX,
 	BLOCK_STARTUP_MS,
 	blocksBullet,
+	COMBO_CHAIN,
+	COMBO_LINK_MS,
 	createMeleeState,
 	GUARD_BREAK_STUN_MS,
 	isBehind,
 	isCancellable,
 	isCommitted,
+	KNOCKDOWN_MS,
 	MASSIVE_CHARGE_MS,
 	MELEE_IFRAME_MS,
 	type MeleeIntent,
+	type MeleeMove,
 	type MeleeResult,
 	type MeleeState,
 	MOVES,
@@ -195,6 +199,218 @@ describe("attack inputs", () => {
 	it("fires an uppercut on its own key", () => {
 		const s = melee(fighter(), { uppercut: true });
 		expect(s.meleeAction).toBe("uppercut");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// The ground chain
+//
+// Three slashes, linked out of each other's recovery. The rules that make it a
+// technique rather than a mash: it needs the floor, the first two links can be
+// cancelled and the finisher cannot, and it ends in a knockdown that leaves both
+// fighters neutral.
+// ---------------------------------------------------------------------------
+
+describe("the ground chain", () => {
+	/** A fighter standing on something, which is what the chain requires. */
+	function standing(overrides: Partial<PlayerPosition> = {}): PlayerPosition {
+		return fighter({ grounded: true, ...overrides });
+	}
+
+	/** Advance to the current move's recovery, then press attack once. */
+	function linkOut(s: PlayerPosition): PlayerPosition {
+		const recovering = tickUntil(s, {}, (x) => meleePhase(x) === "recovery");
+		return melee(recovering.state, { attack: true });
+	}
+
+	it("walks slash into slash2 into slash3 out of each recovery", () => {
+		let s = melee(standing(), { attack: true });
+		expect(s.meleeAction).toBe("slash");
+		expect(s.comboStep).toBe(1);
+
+		s = linkOut(s);
+		expect(s.meleeAction).toBe("slash2");
+		expect(s.comboStep).toBe(2);
+		// Linked, not queued: the previous move's timer is gone, not paused.
+		expect(s.meleeTimer).toBeLessThanOrEqual(DT_MS);
+
+		s = linkOut(s);
+		expect(s.meleeAction).toBe("slash3");
+		expect(s.comboStep).toBe(3);
+	});
+
+	/**
+	 * The link costs nothing but the press.
+	 *
+	 * "Very little delay" is the whole feature, and the number that delivers it is
+	 * the moment the previous link's hitbox closes — not a window that opens some
+	 * time after the move is over.
+	 */
+	it("makes the next link available the instant the hitbox closes", () => {
+		const s = melee(standing(), { attack: true });
+		const recovering = tickUntil(s, {}, (x) => meleePhase(x) === "recovery");
+		expect(recovering.elapsedMs).toBeLessThanOrEqual(
+			MOVES.slash.startupMs + MOVES.slash.activeMs + DT_MS,
+		);
+		expect(melee(recovering.state, { attack: true }).meleeAction).toBe(
+			"slash2",
+		);
+	});
+
+	/**
+	 * The frame data has to make the chain a *combo*, not three swings that happen
+	 * to be near each other.
+	 *
+	 * A link's hitbox opens `active + startup` after the previous one did, so the
+	 * previous link's hitstun has to outlast exactly that. Get this wrong and the
+	 * defender gets free frames in the middle of a combo, which is invisible in
+	 * every metric except a defender who blocks the second hit.
+	 */
+	it("keeps each link inside the previous one's hitstun", () => {
+		const toSecond = MOVES.slash.activeMs + MOVES.slash2.startupMs;
+		expect(MOVES.slash.hitstunMs).toBeGreaterThan(toSecond);
+
+		const toThird = MOVES.slash2.activeMs + MOVES.slash3.startupMs;
+		expect(MOVES.slash2.hitstunMs).toBeGreaterThan(toThird);
+	});
+
+	it("refuses to chain with no floor underfoot", () => {
+		let s = melee(fighter({ grounded: false }), { attack: true });
+		expect(s.meleeAction).toBe("slash");
+
+		s = linkOut(s);
+		// The press was refused outright rather than queued: an airborne butterfly
+		// still swings, it just never reaches the finisher.
+		expect(s.meleeAction).toBe("slash");
+		expect(s.comboStep).toBe(1);
+
+		s = tickUntil(s, {}, (x) => x.meleeAction === "none").state;
+		expect(melee(s, { attack: true }).meleeAction).toBe("slash");
+	});
+
+	it("survives a link being cancelled into a block", () => {
+		// The butterfly and the combo are the same technique on the ground: cancel
+		// the link, come out of the guard, and the chain is still yours.
+		let s = melee(standing(), { attack: true });
+		s = tickUntil(s, {}, (x) => meleePhase(x) === "active").state;
+		s = melee(s, { block: true });
+		expect(s.meleeAction).toBe("none");
+		expect(s.comboTimer).toBeGreaterThan(0);
+
+		s = melee(s, {});
+		expect(melee(s, { attack: true }).meleeAction).toBe("slash2");
+	});
+
+	it("lets the chain lapse once the link window runs out", () => {
+		let s = melee(standing(), { attack: true });
+		s = tickUntil(s, {}, (x) => x.meleeAction === "none").state;
+		s = melee(s, {}, Math.ceil(COMBO_LINK_MS / DT_MS) + 2);
+		expect(s.comboStep).toBe(0);
+		expect(melee(s, { attack: true }).meleeAction).toBe("slash");
+	});
+
+	it("starts over after the finisher", () => {
+		let s = melee(standing(), { attack: true });
+		s = linkOut(s);
+		s = linkOut(s);
+		expect(s.meleeAction).toBe("slash3");
+
+		s = tickUntil(s, {}, (x) => x.meleeAction === "none").state;
+		expect(s.comboStep).toBe(0);
+		expect(melee(s, { attack: true }).meleeAction).toBe("slash");
+	});
+
+	it("cancels the first two links and commits to the third", () => {
+		expect(MOVES.slash.cancellable).toBe(true);
+		expect(MOVES.slash2.cancellable).toBe(true);
+		expect(MOVES.slash3.cancellable).toBe(false);
+
+		let s = melee(standing(), { attack: true });
+		s = linkOut(s);
+		s = linkOut(s);
+		s = tickUntil(s, {}, (x) => meleePhase(x) === "active").state;
+		// Blocking out of the finisher is not on offer, at any point in it.
+		expect(melee(s, { block: true }).meleeAction).toBe("slash3");
+	});
+
+	it("drops the chain when the attacker is stunned", () => {
+		let s = melee(standing(), { attack: true });
+		s = { ...s, stunTimer: 200 };
+		s = melee(s, {});
+		expect(s.comboStep).toBe(0);
+		expect(s.meleeAction).toBe("none");
+	});
+
+	/**
+	 * The finisher ends in neutral, by construction.
+	 *
+	 * The attacker's swing runs `active + recovery` past the frame its hitbox
+	 * opened; the victim is on the floor for `KNOCKDOWN_MS` from that same frame.
+	 * Equal means a landed combo buys position and damage, not a free follow-up —
+	 * which is what pays for the finisher being uninterruptible.
+	 */
+	it("recovers exactly as fast as the knockdown it causes", () => {
+		expect(MOVES.slash3.activeMs + MOVES.slash3.recoveryMs).toBe(KNOCKDOWN_MS);
+		expect(MOVES.slash3.hitstunMs).toBe(KNOCKDOWN_MS);
+	});
+
+	it("knocks the target down, for a little more damage", () => {
+		const { attacker, defender } = duel({ move: "slash3" });
+		const result = connects(resolveMelee(attacker, defender));
+		expect(result.outcome).toBe("hit");
+
+		const damage = applyMeleeResult(attacker, defender, result);
+		expect(damage).toBe(MOVES.slash3.damage);
+		expect(damage).toBeGreaterThan(MOVES.slash.damage);
+		expect(defender.knockdownTimer).toBe(KNOCKDOWN_MS);
+		// A knockdown is a stun as well, or a downed fighter could act.
+		expect(defender.stunTimer).toBeGreaterThanOrEqual(KNOCKDOWN_MS);
+		// Spiked, not launched.
+		expect(defender.vy).toBeGreaterThan(0);
+	});
+
+	it("only knocks down on the finisher", () => {
+		for (const move of ["slash", "slash2", "uppercut", "massive"] as const) {
+			const { attacker, defender } = duel({ move });
+			applyMeleeResult(
+				attacker,
+				defender,
+				connects(resolveMelee(attacker, defender)),
+			);
+			expect(defender.knockdownTimer).toBe(0);
+		}
+	});
+
+	/**
+	 * A combo has to beat the invulnerability its own opener applied.
+	 *
+	 * `MELEE_IFRAME_MS` is 180 and a link lands ~160ms after the one before it, so
+	 * without piercing the second and third swings would pass through the fighter
+	 * the first one just staggered: the animations would all play and the combo
+	 * would deal seven damage.
+	 */
+	it("connects through the invulnerability the opener applied", () => {
+		for (const move of ["slash2", "slash3"] as const) {
+			const { attacker, defender } = duel({ move });
+			defender.iframeTimer = MELEE_IFRAME_MS;
+			expect(resolveMelee(attacker, defender)).not.toBeNull();
+		}
+	});
+
+	it("still lets invulnerability stop everything else", () => {
+		for (const move of ["slash", "uppercut", "massive"] as const) {
+			const { attacker, defender } = duel({ move });
+			defender.iframeTimer = MELEE_IFRAME_MS;
+			expect(resolveMelee(attacker, defender)).toBeNull();
+		}
+	});
+
+	it("is blockable at every link, including the finisher", () => {
+		for (const move of COMBO_CHAIN) {
+			expect(MOVES[move].blockable).toBe(true);
+			const { attacker, defender } = duel({ move, defenderBlockMs: 400 });
+			expect(resolveMelee(attacker, defender)?.outcome).toBe("blocked");
+		}
 	});
 });
 
@@ -575,7 +791,7 @@ describe("determinism", () => {
 // ---------------------------------------------------------------------------
 
 interface DuelOptions {
-	move?: "slash" | "uppercut" | "massive";
+	move?: MeleeMove;
 	/** How long the defender has been holding block. Omit for no block at all. */
 	defenderBlockMs?: number;
 	/** Defaults to facing the attacker. */

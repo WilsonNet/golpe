@@ -102,6 +102,11 @@ One line each; the war story behind every one is in
   `export default` and `export *` silently resolve to the wrong thing, and `tsc`
   cannot see either.
 - **Never freeze frames on impact.** Hitstop desyncs; fake it in the renderer.
+- **A link's hitstun is set by the gap to the next link's hitbox.** Shorten one and
+  the combo silently stops being a combo — nothing reports it but a defender who
+  blocks the second hit. The chain also pierces melee iframes, and only the chain.
+- **A landed hit must be visible on the fighter that took it.** A disabled state
+  with no sprite for it read as nothing happening for an entire playtest.
 - **Changing gravity or jump velocity changes level reachability** — and retunes
   combat, because the uppercut's launch is derived from the jump.
 - **Anything that moves a fighter travels in the intent.** A dash applied
@@ -151,6 +156,13 @@ node scripts/training-probe.mjs                        # one interaction, agains
 dash · **LMB** slash (hold 420ms then release = Massive Strike) · **RMB** block ·
 **F** uppercut · **Q/E** sword/gun stance · **P** toggle AI vs AI · **hold Tab**
 scoreboard. Sword is the default stance.
+
+**A slash is the first of three.** Tap again as each swing's hitbox closes and the
+chain runs right-to-left diagonal → left-to-right diagonal → overhead finisher,
+which knocks down for a little bonus damage. **The chain needs both feet on the
+floor**, the first two links cancel into a block and the finisher does not, and it
+ends in neutral by construction. Every landed sword hit disables its target and is
+drawn that way. See [specs/melee.md](specs/melee.md).
 
 **An airborne dash is a flat line** — no gravity, same Y throughout — and the
 **air jump refills only on landing**. Both change reachability, which is a rule

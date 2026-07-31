@@ -38,6 +38,7 @@ export type DummyBehaviour =
 	| "uppercut"
 	| "massive"
 	| "butterfly"
+	| "combo"
 	| "counterAttack"
 	| "mirror"
 	| "record"

@@ -20,6 +20,7 @@ const TIMING = DEFAULT_TRAINING_TIMING;
 const SCRIPTED: DummyBehaviour[] = [
 	"blockAll",
 	"butterfly",
+	"combo",
 	"slash",
 	"uppercut",
 	"massive",

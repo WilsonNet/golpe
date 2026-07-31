@@ -18,14 +18,27 @@ import {
 } from "../simulation/Arena";
 import {
 	BULLET_SPEED,
+	COMBO_CHAIN,
+	isComboSlash,
 	MAX_FALL_SPEED,
+	MELEE_MOVES,
 	type MeleeAction,
 	type MeleeMove,
 	type MeleeOutcome,
 	MOVES,
 	moveDuration,
 	type PlayerPosition,
+	zeroMoveCounts,
 } from "../simulation/Physics";
+
+/** A fresh outcome tally per move, built from the move list. */
+function zeroOutcomesByMove(): Record<MeleeMove, Record<MeleeOutcome, number>> {
+	const out = {} as Record<MeleeMove, Record<MeleeOutcome, number>>;
+	for (const move of MELEE_MOVES) {
+		out[move] = { hit: 0, backstab: 0, blocked: 0, parried: 0 };
+	}
+	return out;
+}
 
 /**
  * Jitter thresholds are derived from the simulation constants and the *actual*
@@ -214,6 +227,7 @@ interface MeleeTrack {
 	/** ms since a slash was cancelled short, for butterfly chaining. */
 	sinceCancelMs: number;
 	chainLength: number;
+	wasKnockedDown: boolean;
 }
 
 function newMeleeTrack(): MeleeTrack {
@@ -225,6 +239,7 @@ function newMeleeTrack(): MeleeTrack {
 		wasMassiveReady: false,
 		sinceCancelMs: Number.POSITIVE_INFINITY,
 		chainLength: 0,
+		wasKnockedDown: false,
 	};
 }
 
@@ -290,32 +305,32 @@ export class PhysicsDiagnostics {
 	 */
 	private movesByFighter: Record<string, Record<MeleeMove, number>> = {};
 	private blocksByFighter: Record<string, number> = {};
-	private moveCounts: Record<MeleeMove, number> = {
-		slash: 0,
-		uppercut: 0,
-		massive: 0,
-	};
+	private moveCounts: Record<MeleeMove, number> = zeroMoveCounts();
 	private outcomeCounts: Record<MeleeOutcome, number> = {
 		hit: 0,
 		backstab: 0,
 		blocked: 0,
 		parried: 0,
 	};
-	private outcomeByMove: Record<MeleeMove, Record<MeleeOutcome, number>> = {
-		slash: { hit: 0, backstab: 0, blocked: 0, parried: 0 },
-		uppercut: { hit: 0, backstab: 0, blocked: 0, parried: 0 },
-		massive: { hit: 0, backstab: 0, blocked: 0, parried: 0 },
-	};
+	private outcomeByMove: Record<MeleeMove, Record<MeleeOutcome, number>> =
+		zeroOutcomesByMove();
 	/** What broke the frame data contract, so a count is actionable. */
 	private meleeViolations: object[] = [];
 	private blocksRaised = 0;
 	private cancels = 0;
 	private butterflyChains = 0;
+	/** Chain continuations thrown — the second and third links of a combo. */
+	private comboLinks = 0;
+	/** Chains that reached the finisher. */
+	private combosFinished = 0;
+	private knockdowns = 0;
 	private longestChain = 0;
 	private stunsTaken = 0;
 	private massivesArmed = 0;
 	/** Rule violations. Every one of these must end the run at zero. */
 	private illegalActions = 0;
+	/** Links thrown with no floor underfoot. Must be zero: the chain is grounded. */
+	private airborneChainLinks = 0;
 	private blockedUnblockables = 0;
 	private frameDataViolations = 0;
 	private stuckActionFrames = 0;
@@ -410,23 +425,23 @@ export class PhysicsDiagnostics {
 		this.highestY = Number.POSITIVE_INFINITY;
 
 		this.meleeTracks.clear();
-		this.moveCounts = { slash: 0, uppercut: 0, massive: 0 };
+		this.moveCounts = zeroMoveCounts();
 		this.outcomeCounts = { hit: 0, backstab: 0, blocked: 0, parried: 0 };
-		this.outcomeByMove = {
-			slash: { hit: 0, backstab: 0, blocked: 0, parried: 0 },
-			uppercut: { hit: 0, backstab: 0, blocked: 0, parried: 0 },
-			massive: { hit: 0, backstab: 0, blocked: 0, parried: 0 },
-		};
+		this.outcomeByMove = zeroOutcomesByMove();
 		this.meleeViolations = [];
 		this.meleeReplacements = [];
 		this.pendingMeleeReplacement = null;
 		this.blocksRaised = 0;
 		this.cancels = 0;
 		this.butterflyChains = 0;
+		this.comboLinks = 0;
+		this.combosFinished = 0;
+		this.knockdowns = 0;
 		this.longestChain = 0;
 		this.stunsTaken = 0;
 		this.massivesArmed = 0;
 		this.illegalActions = 0;
+		this.airborneChainLinks = 0;
 		this.blockedUnblockables = 0;
 		this.frameDataViolations = 0;
 		this.stuckActionFrames = 0;
@@ -843,10 +858,33 @@ export class PhysicsDiagnostics {
 			this.moveCounts[s.meleeAction]++;
 			let mine = this.movesByFighter[who];
 			if (!mine) {
-				mine = { slash: 0, uppercut: 0, massive: 0 };
+				mine = zeroMoveCounts();
 				this.movesByFighter[who] = mine;
 			}
 			mine[s.meleeAction]++;
+
+			// ---- the ground chain ----
+			//
+			// A link is a *continuation*: `comboStep` past 1 means this swing came out
+			// of another one. Counting starts rather than hits, because a chain that
+			// is never thrown and a chain that is thrown and whiffed are different
+			// defects with different fixes.
+			if (isComboSlash(s.meleeAction) && s.comboStep > 1) {
+				this.comboLinks++;
+				if (s.comboStep >= COMBO_CHAIN.length) this.combosFinished++;
+				// The chain is a *ground* technique. A link thrown in the air means
+				// `canChain` let go of the one rule that keeps a combo from being a
+				// free three-hit string out of a jump-in.
+				if (!s.grounded) {
+					this.airborneChainLinks++;
+					this.noteViolation({
+						who,
+						kind: "chained_in_the_air",
+						move: s.meleeAction,
+						comboStep: s.comboStep,
+					});
+				}
+			}
 
 			// A slash landing inside the butterfly window after a cancelled one is a
 			// chain: the technique working as intended.
@@ -888,6 +926,15 @@ export class PhysicsDiagnostics {
 			}
 		}
 
+		// On the floor. Counted on the rising edge, like a stun — a knockdown lasts
+		// half a second, and per-frame counting would report one as thirty.
+		const downed = s.knockdownTimer > 0;
+		if (downed && !t.wasKnockedDown) this.knockdowns++;
+		// A knockdown is a stun that also puts you down. If the two ever come apart,
+		// a fighter is lying on the floor and allowed to act.
+		if (downed && !stunned) this.illegalActions++;
+		t.wasKnockedDown = downed;
+
 		if (s.blocking && !t.wasBlocking) {
 			this.blocksRaised++;
 			this.blocksByFighter[who] = (this.blocksByFighter[who] ?? 0) + 1;
@@ -908,14 +955,20 @@ export class PhysicsDiagnostics {
 	}
 
 	private summariseMelee() {
-		const moves =
-			this.moveCounts.slash +
-			this.moveCounts.uppercut +
-			this.moveCounts.massive;
+		const moves = MELEE_MOVES.reduce((n, move) => n + this.moveCounts[move], 0);
 
 		return {
 			/** Did the mechanics fire at all? Zeroes here are a failed run. */
 			slashes: this.moveCounts.slash,
+			/**
+			 * The ground chain. `comboLinks: 0` alongside a healthy `slashes` count
+			 * means every combo is being dropped at the first swing — which is what
+			 * a link window that is too tight and a chain that never becomes
+			 * available both look like from the outside.
+			 */
+			comboLinks: this.comboLinks,
+			combosFinished: this.combosFinished,
+			knockdowns: this.knockdowns,
 			uppercuts: this.moveCounts.uppercut,
 			massives: this.moveCounts.massive,
 			blocks: this.blocksRaised,
@@ -932,6 +985,7 @@ export class PhysicsDiagnostics {
 			totalMoves: moves,
 			/** Rule violations. Every one of these must be 0. */
 			illegalActions: this.illegalActions,
+			airborneChainLinks: this.airborneChainLinks,
 			blockedUnblockables: this.blockedUnblockables,
 			frameDataViolations: this.frameDataViolations,
 			stuckActionFrames: this.stuckActionFrames,
@@ -1069,6 +1123,9 @@ export class PhysicsDiagnostics {
 		}
 		if (m.blockedUnblockables > 0) {
 			failures.push(`${m.blockedUnblockables} unblockables blocked`);
+		}
+		if (m.airborneChainLinks > 0) {
+			failures.push(`${m.airborneChainLinks} combo links thrown airborne`);
 		}
 		if (m.frameDataViolations > 0) {
 			failures.push(`${m.frameDataViolations} frame data violations`);

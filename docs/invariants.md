@@ -144,6 +144,20 @@ stops the butterfly being the only option.
   silently disabled blocking entirely.
 - **You cannot guard and swing at once**, or the butterfly would be strictly free
   rather than merely safe.
+- **A slash is the first link of a three-hit ground chain**, and every rule about
+  it is load-bearing. A link is available the moment the previous one enters
+  recovery; a link's hitstun is set by the gap to the next link's hitbox, not by
+  feel; links 2 and 3 pierce melee invulnerability because 180ms of iframes would
+  otherwise swallow a combo that lands every 160ms; and **the chain requires both
+  feet on the floor**, or the butterfly's jump-in becomes three guaranteed hits.
+- **The finisher's recovery equals its knockdown minus its active frames.** Both
+  fighters come out of a landed combo on the same tick — that neutral is what pays
+  for the finisher being uncancellable, and `Melee.test.ts` asserts the identity
+  rather than trusting the two numbers to stay in step.
+- **A landed hit must be visible on the fighter that took it.** Hitstun with no
+  sprite for it read as nothing happening for a whole LAN playtest. The disabled
+  and knocked-down poses are generated from the character strip at boot, so they
+  cannot drift from the art they are standing in for.
 - **AI reactions must be able to interrupt.** `EnemyBrain` plays melee as scripted
   rhythms of presses and releases, because inputs are edge-triggered and holding a
   button does nothing. A rhythm that ran to completion left the bot deaf for up to

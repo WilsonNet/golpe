@@ -37,6 +37,10 @@ import type { Stage } from "./Stage";
  */
 const COLOR = {
 	slash: 0xffffff,
+	// The links warm up as the chain progresses, so how deep into a combo you are
+	// is readable from across the arena.
+	slash2: 0xffe9c4,
+	slash3: 0xffc46b,
 	uppercut: 0x8ff0ff,
 	massive: 0xffb238,
 	charge: 0xffd166,
@@ -46,12 +50,69 @@ const COLOR = {
 	stun: 0xffe066,
 } as const satisfies Record<MeleeMove | string, number>;
 
+/**
+ * How one move's blade travels, in the fighter's own frame.
+ *
+ * Angles are radians with 0 pointing forward and negative pointing up; the
+ * renderer mirrors them for a left-facing fighter. Keyed on `MeleeMove` for the
+ * same reason `COLOR` is — adding a move to the frame data table fails to compile
+ * until somebody has decided what it looks like.
+ */
+interface SwingArc {
+	/** Blade angle at the start of the wind-up. */
+	from: number;
+	/** Blade angle as the active window closes. */
+	to: number;
+	/**
+	 * How far the cut travels *through* the screen, from -depth to +depth.
+	 *
+	 * This is the whole perspective trick, and it is what makes the chain's two
+	 * diagonals read as opposites rather than as the same swing twice. Positive
+	 * depth means the blade starts on the far side of the fighter and finishes
+	 * near the camera — so it lengthens, thickens and brightens as it comes
+	 * through. Negative is the same cut going the other way.
+	 */
+	depth: number;
+	/** Where on the body the swing is anchored, relative to its centre. */
+	lift: number;
+}
+
+const SWING = {
+	/** First link: a kesa cut, high on the sword side down across to the far one. */
+	slash: { from: -1.25, to: 2.1, depth: 0.85, lift: -6 },
+	/** Second link: the mirror, over the shoulder and down the other diagonal. */
+	slash2: { from: -2.24, to: 1.05, depth: -0.85, lift: -4 },
+	/** The finisher: straight overhead, no diagonal, and it comes at you. */
+	slash3: { from: -1.62, to: 1.57, depth: 0.45, lift: -12 },
+	/** Upward, so the arc runs the other way and the depth stays flat. */
+	uppercut: { from: 1.5, to: -1.5, depth: 0, lift: 0 },
+	massive: { from: -0.95, to: 0.95, depth: 0.35, lift: -6 },
+} as const satisfies Record<MeleeMove, SwingArc>;
+
+/**
+ * Foreshortening: how much longer and thicker the blade is drawn at the near end
+ * of its travel than at the far end.
+ */
+const PERSPECTIVE_GAIN = 0.34;
+
 export interface ImpactEvent {
 	move: MeleeMove;
 	outcome: MeleeOutcome;
 	x: number;
 	y: number;
 	dir: number;
+}
+
+/**
+ * Steel at depth `z`: full white near the camera, dimmed toward the back.
+ *
+ * Aerial perspective, cheaply — the far half of a swing sits behind the fighter,
+ * and a blade that stayed the same brightness through the whole arc flattens the
+ * cut back into two dimensions no matter what its scale is doing.
+ */
+function depthTint(z: number): number {
+	const level = Math.round(178 + 77 * Math.max(-1, Math.min(1, z)));
+	return (level << 16) | (level << 8) | level;
 }
 
 /** An expanding ring, tracked by hand so it needs no tween library. */
@@ -127,6 +188,10 @@ export class MeleeFx {
 			emitAccMs: 0,
 			punch: 0,
 		};
+		// A sword pivots at the hand, not at the middle of its own blade. With the
+		// default centre anchor the tip and the grip swapped ends through a swing,
+		// which no amount of perspective can make look like a cut.
+		f.blade.anchor.set(0.12, 0.5);
 		this.fighters.set(key, f);
 		return f;
 	}
@@ -173,19 +238,32 @@ export class MeleeFx {
 		}
 
 		const def = MOVES[s.meleeAction];
+		const arc = SWING[s.meleeAction];
 		const phase = meleePhase(s);
 		// 0 at the start of the wind-up, 1 as the active window closes: the swing
 		// reads as one continuous motion rather than snapping between phases.
 		const swing = Math.min(1, s.meleeTimer / (def.startupMs + def.activeMs));
+		// Smoothstep, so the blade hangs in the wind-up and whips through the frames
+		// where the hitbox is actually live.
+		const eased = swing * swing * (3 - 2 * swing);
+		const angle = arc.from + (arc.to - arc.from) * eased;
 
-		// Slash and Massive cut across; the uppercut travels upward.
-		const from = s.meleeAction === "uppercut" ? 1.5 : -0.95;
-		const to = s.meleeAction === "uppercut" ? -1.5 : 0.95;
-		const angle = from + (to - from) * swing;
+		// Depth this instant: -1 is as far from the camera as this cut goes, +1 as
+		// near. A flat move stays at 0 and none of this does anything.
+		const z = arc.depth * (eased * 2 - 1);
+		const near = 1 + PERSPECTIVE_GAIN * z;
 
 		f.blade.visible = true;
-		f.blade.position.set(cx + dir * 12, cy);
+		// The hand moves with the blade: a cut coming toward the camera reaches
+		// further out of the body than one going away from it.
+		f.blade.position.set(cx + dir * (10 + 7 * z), cy + arc.lift);
 		f.blade.rotation = dir > 0 ? angle : Math.PI - angle;
+		// Length and thickness both grow as it nears, which is what sells a flat
+		// sprite as travelling through the screen rather than across it.
+		f.blade.scale.set(near, 1 + 0.5 * PERSPECTIVE_GAIN * z);
+		// A touch of rake, so the blade is never quite edge-on to the camera.
+		f.blade.skew.x = 0.28 * z * dir;
+		f.blade.tint = depthTint(z);
 
 		if (phase !== "active") {
 			f.arc.visible = false;
@@ -201,11 +279,13 @@ export class MeleeFx {
 		f.arc.visible = true;
 		f.arc.position.set(
 			cx + dir * def.reachPx * 0.55,
-			cy + def.boxTopOffset * 0.5,
+			cy + def.boxTopOffset * 0.5 + arc.lift * 0.5,
 		);
 		f.arc.rotation = dir > 0 ? angle : Math.PI - angle;
-		f.arc.scale.set((def.reachPx / 46) * (0.8 + 0.3 * activeT));
-		f.arc.alpha = 1 - activeT * 0.75;
+		// The trail takes the same perspective as the blade that drew it, or the two
+		// come apart at exactly the moment the swing is most visible.
+		f.arc.scale.set((def.reachPx / 46) * (0.8 + 0.3 * activeT) * near);
+		f.arc.alpha = (1 - activeT * 0.75) * (0.75 + 0.25 * (z + 1) * 0.5);
 		f.arc.tint = COLOR[s.meleeAction];
 	}
 
@@ -300,7 +380,15 @@ export class MeleeFx {
 		const { move, outcome, x, y } = event;
 		const heavy = move === "massive";
 
-		if (victimKey) this.fx(victimKey).punch = heavy ? 1 : 0.55;
+		if (victimKey) {
+			this.fx(victimKey).punch = heavy
+				? 1
+				: move === "slash3"
+					? 0.85
+					: move === "slash2"
+						? 0.7
+						: 0.55;
+		}
 
 		const sparks = (count: number, tint: number, speedMax = 320) =>
 			this.particles.burst({
@@ -353,11 +441,18 @@ export class MeleeFx {
 
 			default: {
 				const tint = COLOR[move];
-				sparks(heavy ? 26 : 12, tint, heavy ? 420 : 320);
-				if (move !== "slash") shards(heavy ? 18 : 8, tint);
-				if (heavy) this.ring(x, y, tint, 1.5, 460);
+				const finisher = move === "slash3";
+				sparks(heavy || finisher ? 26 : 12, tint, heavy ? 420 : 320);
+				if (move !== "slash" && move !== "slash2") {
+					shards(heavy ? 18 : 12, tint);
+				}
+				if (heavy || finisher) this.ring(x, y, tint, 1.5, 460);
 				if (move === "uppercut") this.launchPlume(x, y);
-				this.stage.startShake(heavy ? 240 : 80, heavy ? 9 : 3);
+				// The chain builds: each link shakes harder than the last, and the
+				// finisher lands closer to a Massive than to the slash it started as.
+				const links = { slash: 3, slash2: 5, slash3: 8 };
+				const kick = links[move as keyof typeof links] ?? (heavy ? 9 : 3);
+				this.stage.startShake(heavy ? 240 : 60 + kick * 20, kick);
 				break;
 			}
 		}

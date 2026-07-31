@@ -27,6 +27,7 @@ import {
 	meleePhase,
 	type PlayerIntent,
 	type PlayerPosition,
+	zeroMoveCounts,
 } from "../simulation/Physics";
 import type {
 	DiagnosticView,
@@ -65,10 +66,8 @@ const RESET_SETTLE_MS = 350;
 /** Long enough for the fighter to turn before the buttons land. Three frames. */
 const AIM_LEAD_MS = 50;
 
-const NO_MOVES: MoveCount = { slash: 0, uppercut: 0, massive: 0 };
-
 function moveCount(counts?: MoveCount): MoveCount {
-	return { ...NO_MOVES, ...counts };
+	return { ...zeroMoveCounts(), ...counts };
 }
 
 function declaredTimings(move: MeleeMove): PhaseTimings {
