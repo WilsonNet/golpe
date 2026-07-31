@@ -148,8 +148,12 @@ stops the butterfly being the only option.
   it is load-bearing. A link is available the moment the previous one enters
   recovery; a link's hitstun is set by the gap to the next link's hitbox, not by
   feel; links 2 and 3 pierce melee invulnerability because 180ms of iframes would
-  otherwise swallow a combo that lands every 160ms; and **the chain requires both
-  feet on the floor**, or the butterfly's jump-in becomes three guaranteed hits.
+  otherwise swallow a combo that lands every 160ms; **the chain requires both
+  feet on the floor**, or the butterfly's jump-in becomes three guaranteed hits;
+  and **any cancel — block or stance switch — drops the chain**, so the next press
+  is link 1 again. A cancel that kept the chain made every butterfly cycle advance
+  the combo, which handed the safe loop the uncancellable finisher on its third
+  guard.
 - **The finisher's recovery equals its knockdown minus its active frames.** Both
   fighters come out of a landed combo on the same tick — that neutral is what pays
   for the finisher being uncancellable, and `Melee.test.ts` asserts the identity

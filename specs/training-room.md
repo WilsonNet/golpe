@@ -59,7 +59,7 @@ controller, and a controller cannot see the game.
 | `jump` | Full-height jump every `periodMs`. |
 | `walk` | Paces between `walkLeftX` and `walkRightX`. |
 | `slash` / `uppercut` / `massive` | That move, once per `periodMs`. |
-| `butterfly` | Slash cancelled into block, repeatedly. On the ground this walks the chain — see [melee.md](melee.md). |
+| `butterfly` | Slash cancelled into block, repeatedly. The cancel resets the chain, so this is an endless run of openers — see [melee.md](melee.md). |
 | `combo` | The three-hit ground chain, thrown deliberately, once per `periodMs`. |
 | `counterAttack` | Swings `delayMs` after your move goes *active*. Punish practice. |
 | `mirror` | Repeats your input from `mirrorDelayMs` ago. |

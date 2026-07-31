@@ -540,9 +540,10 @@ function resetCombo(s: MeleeState) {
 
 function endMove(s: MeleeState) {
 	// A chain outlives the move that was carrying it: that grace is what lets a
-	// link be thrown after the previous one has fully recovered, or after it was
-	// cancelled into a block. The finisher ends the chain because there is nothing
-	// left to link into.
+	// link be thrown after the previous one has fully recovered, instead of only
+	// out of its recovery. A block cancel is the exception and clears the chain
+	// itself. The finisher ends the chain because there is nothing left to link
+	// into.
 	if (isComboSlash(s.meleeAction) && s.comboStep < COMBO_CHAIN.length) {
 		s.comboTimer = COMBO_LINK_MS;
 	} else {
@@ -651,7 +652,13 @@ export function tickMelee(
 	if (wantSword !== hasSword) {
 		// GunZ's slash-shot: switching weapons cancels a slash. It is not an escape
 		// from a heavy move.
-		if (isCancellable(s)) endMove(s);
+		if (isCancellable(s)) {
+			endMove(s);
+			// A cancel is a cancel: this drops the chain for the same reason the block
+			// cancel below does. Left in, the slash-shot would be the strictly better
+			// cancel — the only one that keeps the combo alive.
+			resetCombo(s);
+		}
 		s.stance = wantSword ? "sword" : "gun";
 		if (!wantSword) {
 			s.blocking = false;
@@ -667,7 +674,16 @@ export function tickMelee(
 		// block with a slash, must not re-arm the parry window — otherwise
 		// butterflying with block held would hand out a free parry every cycle.
 		s.blockTimer += dtMs;
-		if (!s.blockHeld && isCancellable(s)) endMove(s);
+		if (!s.blockHeld && isCancellable(s)) {
+			endMove(s);
+			// A block cancel *always* drops the chain, so the next press is link 1
+			// again. The butterfly is therefore an endless opener-and-guard loop, and
+			// walking the chain is a separate decision: link into the follow-up out of
+			// recovery, or cancel and start over. Letting the cancel keep the chain
+			// made every butterfly cycle advance the combo, so a player who wanted the
+			// safe loop got the uncancellable finisher on the third guard.
+			resetCombo(s);
+		}
 		// You cannot guard and swing at the same time. Holding block through your
 		// own slash used to leave the guard up for the whole swing, which made the
 		// butterfly not merely safe but strictly free. Cancelling into the block

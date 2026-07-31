@@ -218,15 +218,15 @@ describe("TrainingDummy: scripted rhythms", () => {
 		expect(blockedFrames).toBeGreaterThan(0);
 
 		/**
-		 * On the ground, the butterfly *is* the combo.
+		 * The butterfly is *not* the combo, on the ground or anywhere else.
 		 *
-		 * Cancelling a link into a block keeps the chain alive, so the same rhythm
-		 * that used to emit an endless run of identical slashes now walks the chain
-		 * and commits to the finisher every third swing. That is the technique
-		 * having a shape instead of being free forever — and it is exactly what a
-		 * grounded butterfly is supposed to cost.
+		 * A block cancel drops the chain, so this rhythm emits an endless run of
+		 * identical openers. Letting the cancel carry the chain made the dummy
+		 * commit to the uncancellable finisher every third swing — a move nobody
+		 * asked it to throw, out of the one technique chosen for being safe.
 		 */
-		expect(moves.slice(0, 3)).toEqual(["slash", "slash2", "slash3"]);
+		expect(moves.slice(0, 3)).toEqual(["slash", "slash", "slash"]);
+		expect(moves.every((m) => m === "slash")).toBe(true);
 	});
 
 	/**

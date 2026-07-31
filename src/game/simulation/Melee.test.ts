@@ -288,17 +288,66 @@ describe("the ground chain", () => {
 		expect(melee(s, { attack: true }).meleeAction).toBe("slash");
 	});
 
-	it("survives a link being cancelled into a block", () => {
-		// The butterfly and the combo are the same technique on the ground: cancel
-		// the link, come out of the guard, and the chain is still yours.
+	it("drops the chain when a link is cancelled into a block", () => {
+		// The butterfly is the loop, not the on-ramp to the combo: cancel the link
+		// and the next press opens a fresh chain at link 1.
 		let s = melee(standing(), { attack: true });
 		s = tickUntil(s, {}, (x) => meleePhase(x) === "active").state;
 		s = melee(s, { block: true });
 		expect(s.meleeAction).toBe("none");
-		expect(s.comboTimer).toBeGreaterThan(0);
+		expect(s.comboStep).toBe(0);
+		expect(s.comboTimer).toBe(0);
 
 		s = melee(s, {});
-		expect(melee(s, { attack: true }).meleeAction).toBe("slash2");
+		expect(melee(s, { attack: true }).meleeAction).toBe("slash");
+	});
+
+	it("drops the chain when the second link is cancelled into a block", () => {
+		// Link 2 is cancellable too, so the same rule has to hold there — otherwise
+		// the escape hatch out of link 2 would hand you the uncancellable finisher.
+		let s = melee(standing(), { attack: true });
+		s = linkOut(s);
+		expect(s.meleeAction).toBe("slash2");
+
+		s = tickUntil(s, {}, (x) => meleePhase(x) === "active").state;
+		s = melee(s, { block: true });
+		expect(s.meleeAction).toBe("none");
+		expect(s.comboStep).toBe(0);
+
+		s = melee(s, {});
+		expect(melee(s, { attack: true }).meleeAction).toBe("slash");
+	});
+
+	it("drops the chain when a link is cancelled into a stance switch", () => {
+		// The slash-shot is a cancel like any other. If it kept the chain it would be
+		// the strictly better way to butterfly into a finisher.
+		let s = melee(standing(), { attack: true });
+		s = tickUntil(s, {}, (x) => meleePhase(x) === "active").state;
+		s = melee(s, { swordStance: false });
+		expect(s.meleeAction).toBe("none");
+		expect(s.comboStep).toBe(0);
+
+		s = melee(s, { swordStance: true });
+		expect(melee(s, { attack: true }).meleeAction).toBe("slash");
+	});
+
+	it("repeats the opener forever through a grounded butterfly", () => {
+		// The point of the reset: an endless slash-block loop on the ground, with
+		// the finisher's uncancellable recovery reachable only on purpose.
+		let s = standing();
+		for (let cycle = 0; cycle < 4; cycle += 1) {
+			s = melee(s, { attack: true });
+			expect(s.meleeAction).toBe("slash");
+			s = tickUntil(
+				s,
+				{ attack: true },
+				(x) => meleePhase(x) === "active",
+			).state;
+			s = melee(s, { block: true });
+			expect(s.meleeAction).toBe("none");
+			// Release both buttons so the next press reads as a fresh edge.
+			s = melee(s, {});
+		}
 	});
 
 	it("lets the chain lapse once the link window runs out", () => {

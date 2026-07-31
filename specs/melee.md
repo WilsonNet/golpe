@@ -158,11 +158,17 @@ that has nothing left to do. A press earlier than that is swallowed by the swing
 already running, which is what stops mashing from being the same as timing.
 
 After a link *ends*, the chain stays alive for another **260ms** (`COMBO_LINK_MS`).
-That grace is what lets a link be cancelled into a block and picked up again on
-the other side, so **on the ground the butterfly and the combo are the same
-technique**.
+That grace is for a link thrown after the previous one has fully recovered, so
+the rhythm does not have to be caught inside the recovery window exactly.
 
-Three rules pay for it:
+**A cancel is not a link, and it ends the chain.** Blocking out of link 1 or link
+2 returns you to link 1, not to the next cut — so **the butterfly and the combo
+are different decisions on the ground**. Slash-and-guard is an endless loop you
+can hold forever; walking the chain means declining the cancel three times and
+accepting the finisher's uncancellable 420ms. The player picks the moment they
+feel good about committing, and nothing chooses it for them.
+
+Four rules pay for it:
 
 - **Both feet on the floor.** A link thrown airborne is refused outright. An
   airborne chain would turn the butterfly's jump-in into three guaranteed hits
@@ -172,6 +178,11 @@ Three rules pay for it:
 - **The finisher cannot be cancelled.** Links 1 and 2 cancel into a block like any
   slash; link 3 is 605ms you are committed to. A chain that could be abandoned on
   its last frame would be a free three-hit string with an escape hatch.
+- **A cancel ends the chain** — block or stance switch, from link 1 or link 2
+  alike. Otherwise every
+  butterfly cycle would advance the combo, and a player using the safe loop would
+  be handed the uncancellable finisher on the third guard — the one move they
+  were butterflying to avoid committing to.
 - **Getting hit, guard-broken or stunned ends the chain.** So does anything that
   is not a link — an uppercut in the middle of a combo is a different decision,
   not the second hit of this one.
@@ -357,7 +368,8 @@ instantly:
 - **switching stance** — the slash-shot.
 
 A cancelled slash keeps any hit it already landed. Cancelling does not refund the
-hit, and a swing can only connect once (`hitLatch`).
+hit, and a swing can only connect once (`hitLatch`). **Either cancel drops the
+ground chain** — see *The ground chain* above.
 
 The canonical 2D butterfly is therefore:
 
@@ -369,11 +381,11 @@ Each cycle costs about **160ms** instead of 330ms, moves you forward, and leaves
 you blocking between swings. It is the correct default way to approach and to
 apply pressure — and it loses cleanly to a parry.
 
-**In the air it repeats link 1 forever. On the ground it walks the chain**, so
-the third cycle is the finisher and its 420ms of uncancellable recovery. That is
-deliberate: a grounded butterfly now has a shape and a cost, and the pilot
-chooses between the endless airborne version and the grounded one that ends in a
-knockdown.
+**It repeats link 1 forever, in the air and on the ground alike**, because the
+block cancel resets the chain. The combo is the *other* option: to walk it you
+have to let each link reach its recovery and press again without guarding, which
+means giving up the cancel that made the butterfly safe. Pressure with the loop
+for as long as you like, then spend it on three hits when you have the read.
 
 **Damage is capped by invulnerability, not by cooldown.** After taking melee
 damage a fighter is immune to further melee for **180ms**. Without this the

@@ -168,9 +168,10 @@ measured with `scripts/controls-probe.mjs`. See [specs/controls.md](specs/contro
 **A slash is the first of three.** Tap again as each swing's hitbox closes and the
 chain runs right-to-left diagonal → left-to-right diagonal → overhead finisher,
 which knocks down for a little bonus damage. **The chain needs both feet on the
-floor**, the first two links cancel into a block and the finisher does not, and it
-ends in neutral by construction. Every landed sword hit disables its target and is
-drawn that way. See [specs/melee.md](specs/melee.md).
+floor**, the first two links cancel into a block and the finisher does not, **and
+a cancel always drops the chain** — so the butterfly is an endless opener loop and
+walking the chain is a separate decision. It ends in neutral by construction.
+Every landed sword hit disables its target and is drawn that way. See [specs/melee.md](specs/melee.md).
 
 **An airborne dash is a flat line** — no gravity, same Y throughout — and the
 **air jump refills only on landing**. Both change reachability, which is a rule
