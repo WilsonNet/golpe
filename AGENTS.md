@@ -176,9 +176,11 @@ AI vs AI presses a key, so bindings are measured with
 `scripts/controls-probe.mjs`. See [specs/controls.md](specs/controls.md).
 
 **Aiming is a scheme, and there are two.** *Mouse* points at a place. *Controller*
-is two layers: the d-pad or left stick gives eight Contra directions with the
-same input that moves you, and the right stick — or a **relative mouse**, for a
-trackpad — overrides it with the full 360°, then eases back after **900ms**. The
+is two layers: the d-pad or left stick gives Contra directions with the
+same input that moves you — an analog stick aims at the angle it is pushed,
+more than eight directions; only the d-pad is stuck with eight — and the right
+stick, or a **relative mouse** for a trackpad, overrides it with the full 360°,
+then eases back after **900ms**. The
 virtual stick **rotates along the rim** rather than clamping, which is what lets a
 straight stroke reach the ceiling instead of crawling at 63°; it is Steam Input's
 Mouse Joystick, and it is in `src/game/input/Aim.ts`. Switching scheme mid-match

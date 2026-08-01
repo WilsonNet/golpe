@@ -291,8 +291,10 @@ Full frame data and the reasoning behind every number is in
 **Esc → Controls → Aiming** switches between the two schemes.
 
 - **Mouse** — you face the cursor. The default on anything with a real pointer.
-- **Controller** — the d-pad or left stick aims in eight directions with the same
-  input that moves you, and the right stick overrides it with the full 360° until
+- **Controller** — the d-pad or left stick aims with the same
+  input that moves you. An analog stick aims at the angle it is pushed — more
+  than eight directions — while the d-pad is stuck with eight; and the right
+  stick overrides it with the full 360° until
   you let go. On a laptop with no controller, *sliding the mouse* drives that
   right stick, which is what makes the game playable on a trackpad.
 
@@ -301,14 +303,18 @@ on A, slash on X, uppercut on Y, block on the left trigger and the stances on th
 shoulders, and the controls dialog will capture a pad button into any slot.
 
 **Controller mode draws a beam** out of your fighter showing where it is aiming —
-gold for the eight-direction aim, turning cyan while the right stick (or the
+gold for the Contra aim, turning cyan while the right stick (or the
 thumb pad) is overriding it, and fading back to gold as that hands over. Mouse
 mode has no beam, because the cursor is already telling you the same thing.
 
 **On a phone**, the game starts in controller mode and draws a Game Boy-shaped
 deck in the half of a portrait screen the 4:3 arena leaves empty; turn the phone
 sideways and the controls move into the letterbox margins instead. The deck has
-its own **Menu** button, because a phone has no Escape key.
+its own **Menu** button, because a phone has no Escape key. The left thumb works
+the cross — move, and aim at whatever angle it is held — and the right thumb
+works the aim pad, which overrides the aim with the full 360° *and*, in gun mode,
+fires the gun: there is no spare finger for a fire button, so the pad is the
+trigger too, and a phone gun plays as a twin-stick shooter.
 
 **Attach a Bluetooth keyboard and mouse to that phone** and you can go straight
 back to the normal scheme: set *Aiming* to Mouse, or set *On-screen gamepad* to

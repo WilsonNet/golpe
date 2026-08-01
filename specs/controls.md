@@ -33,7 +33,9 @@ one answer only if every device answers in the same alphabet.
 
 **The d-pad and the left stick produce the same four direction codes.** The stick
 goes through the eight-way quantiser first, so there is one movement path, and
-the double-tap dash gesture works off a stick flick with no extra code.
+the double-tap dash gesture works off a stick flick with no extra code. The stick
+also keeps its raw deflection for the *aim* — see the Contra layer below. A d-pad
+has no deflection, so it stays eight.
 
 **Both halves of a physical d-pad button are never two codes.** Buttons 12–15 in
 the standard mapping become `PadUp`…`PadRight` and never `Pad12`…`Pad15` — two
@@ -104,11 +106,18 @@ and the pixel-ratio trap that hides in it.
 
 Two layers, and the second one wins.
 
-**The Contra layer.** The d-pad or the left stick, quantised to eight directions
-— the same input that *moves* you, so the aim follows the run for free and there
-is nothing extra to hold. Horizontal aim is left/right; vertical is `aimUp` and
-`aimDown`. There is deliberately no `aimLeft`/`aimRight`: that is the whole
-scheme, and aiming away from where you are running is the other layer's job.
+**The Contra layer.** The d-pad, the left stick or the on-screen cross — the same
+input that *moves* you, so the aim follows the run for free and there is nothing
+extra to hold. Horizontal aim is left/right; vertical is `aimUp` and `aimDown`.
+There is deliberately no `aimLeft`/`aimRight`: that is the whole scheme, and
+aiming away from where you are running is the other layer's job.
+
+**An analog source is analog.** The left stick and the deck's cross aim at the
+exact angle they are pushed: a stick tilted at 30° aims at 30°, not at the
+nearest of eight. The *movement* codes stay quantised — walking is still left or
+right — but the aim follows the deflection, so a stick has more directions than a
+d-pad has fingers. Only a d-pad, or the arrow keys feeding the same {-1, 0, 1}
+pairs, resolves to exactly eight.
 
 **Releasing the d-pad keeps the last direction.** Letting go should not make a
 fighter forget which way it was looking. Before anything has been aimed, the aim
@@ -124,16 +133,17 @@ controller is old".
 **The aim is drawn.** A short beam leaves the local fighter's chest along the aim
 angle, with a dot on the end: **gold** for the Contra aim, **cyan** while the fine
 layer is overriding, blending between the two as the handover runs. It exists
-because a controller has no cursor — the only other feedback for eight directions
-and a full 360° was which way the sprite faced, and facing is one bit. It is
-drawn **only in controller mode**; in mouse mode the cursor already is the
+because a controller has no cursor — the only other feedback for the Contra aim
+and a full 360° of fine aim was which way the sprite faced, and facing is one bit.
+It is drawn **only in controller mode**; in mouse mode the cursor already is the
 reticle, and a second one a few hundred pixels away would be worse than none.
 
 **Aiming straight up or down does not turn the fighter.** Within ~4.6° of
 vertical, `face` is 0 — the intent's existing "let the feet decide" — because
 `cos(-90°)` is a positive floating-point crumb and a fighter that snapped to
 facing right every time it aimed at the ceiling would be giving away free hits.
-Straight up is one of the eight directions, so this is a place players sit.
+Straight up is a place players sit — one of the eight on a d-pad, or wherever
+they hold an analog stick — so the dead band is what a controller needs.
 
 #### The handover back
 
@@ -211,12 +221,22 @@ so a rotation cannot drop a button a thumb is holding.
 
 **The cross is one element, not four buttons.** A thumb rolling from left to
 up-left has to stay on the control the whole way, and four adjacent buttons each
-with their own hit test drop the input in the gap between them. The sector comes
-from the same eight-way quantiser the left stick goes through.
+with their own hit test drop the input in the gap between them. It is the deck's
+*left stick*: the movement sector comes from the same eight-way quantiser a
+physical left stick goes through, and the raw thumb position is the analog
+Contra aim — a thumb at 30° aims at 30°, not at the nearest of eight.
 
 **The thumb pad is absolute**, like a real right stick: the vector is where the
 thumb sits relative to the pad's centre, clamped to the rim, and it recentres the
 instant it is let go.
+
+**In gun mode the thumb pad fires too.** On a phone the right thumb lives on it,
+and there is no spare finger for the fire button on the face cluster — so while
+the stance is gun, holding the pad aims *and* fires, and a phone gun plays as a
+twin-stick shooter. It is the on-screen pad only, and gun mode only: a physical
+right stick has a trigger to hand, and in sword mode a touch of the pad must not
+slash. Like everything else here it reaches the simulation as the `attack`
+button, never as a thumb, so it cannot desync anything.
 
 **The deck emits codes, not actions.** A thumb on the slash button sends `Pad2` —
 exactly what a real controller's X button sends — so it is rebindable for free
@@ -307,11 +327,12 @@ dialog reaches the simulation, survives a reload, and is undone by *Reset to
 defaults*.
 
 `pad-probe.mjs` stubs `navigator.getGamepads` — a polled API, so a stub is
-genuinely equivalent from the game's point of view — and measures the four claims
+genuinely equivalent from the game's point of view — and measures the claims
 controller mode is made of: that the d-pad aims in eight directions and moves you
-with the same input, that the right stick overrides it at any angle, that letting
-go falls back, and that a mouse stroke **runs up the arc** past 45° instead of
-crawling at it.
+with the same input while the **left stick aims continuously** (a push at 30° must
+land on 30°, not the nearest diagonal), that the right stick overrides at any
+angle, that letting go falls back, and that a mouse stroke **runs up the arc**
+past 45° instead of crawling at it.
 
 It then runs the deck on a phone-shaped context and taps it, the same way
 `controls-probe.mjs` presses real keys — using **CDP touch events, never

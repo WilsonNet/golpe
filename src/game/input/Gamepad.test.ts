@@ -64,6 +64,24 @@ describe("readPads", () => {
 		]);
 	});
 
+	/**
+	 * The analog half of the same layer. The codes are eight directions, but the
+	 * stick's *deflection* is handed over raw — a stick pushed at 30° aims at
+	 * 30°, not at the nearest of eight. This is what makes a physical stick more
+	 * than a d-pad with extra steps.
+	 */
+	it("hands the left stick over raw for the analog Contra aim", () => {
+		const contra = readPads([pad({ axes: [0.866, 0.5, 0, 0] })]).contra;
+		if (!contra) throw new Error("expected analog contra input");
+		expect(contra.x).toBeCloseTo(0.866);
+		expect(contra.y).toBeCloseTo(0.5);
+		expect(Math.atan2(contra.y, contra.x)).toBeCloseTo(Math.PI / 6);
+	});
+
+	it("reports a resting left stick as no analog contra input", () => {
+		expect(readPads([pad({ axes: [0.15, -0.1, 0, 0] })]).contra).toBeNull();
+	});
+
 	it("ignores a left stick resting inside its deadzone", () => {
 		expect(readPads([pad({ axes: [0.15, -0.1, 0, 0] })]).down.size).toBe(0);
 	});
@@ -83,11 +101,15 @@ describe("readPads", () => {
 	it("merges every connected pad, and lets the largest deflection win", () => {
 		const frame = readPads([
 			pad({ buttons: [0], axes: [0, 0, 0.3, 0] }),
-			pad({ buttons: [2], axes: [0, 0, -0.95, 0] }),
+			pad({ buttons: [2], axes: [-0.95, 0, -0.95, 0] }),
 		]);
-		expect([...frame.down].sort()).toEqual(["Pad0", "Pad2"]);
-		// A second controller sitting at rest must not argue the aim back to centre.
+		// The second pad's left stick is deflected, so its PadLeft code joins the
+		// union — and its larger deflection also wins the analog Contra and fine
+		// aims. A second controller sitting at rest must not argue them back to
+		// centre.
+		expect([...frame.down].sort()).toEqual(["Pad0", "Pad2", PAD_LEFT].sort());
 		expect(frame.fine?.x).toBe(-0.95);
+		expect(frame.contra?.x).toBe(-0.95);
 	});
 });
 

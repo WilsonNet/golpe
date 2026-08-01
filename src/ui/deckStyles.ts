@@ -163,9 +163,10 @@ export const DECK_CSS = `
 /* ---- the cross ----
    One element, not four buttons. A thumb rolling from left to up-left has to
    stay on the control the whole way, and four adjacent buttons each with their
-   own hit test drop the input in the gap between them. The sector is worked out
-   from where the thumb is, by the same eight-way quantiser the left stick uses —
-   so the cross and a real d-pad are the same code. */
+   own hit test drop the input in the gap between them. The movement sector is
+   worked out from where the thumb is, by the same eight-way quantiser the left
+   stick uses — and the raw thumb position is handed over as the analog Contra
+   aim, so the cross is the deck's left stick rather than a d-pad. */
 .vg-cross {
 	position: relative;
 	/* Sized off both axes, because which one runs out first depends entirely on

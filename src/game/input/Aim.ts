@@ -5,9 +5,12 @@
  * gives a *direction*, and a d-pad gives one of eight. So controller mode aims
  * with two layers that this module owns and nothing else does:
  *
- * - **Contra aim.** The d-pad or the left stick, quantised to eight directions,
- *   exactly the way a run-and-gun aims. It is the same input that moves you, so
- *   the aim follows the run for free and there is nothing extra to hold.
+ * - **Contra aim.** The d-pad, the left stick or the on-screen cross — the same
+ *   input that moves you, so the aim follows the run for free and there is
+ *   nothing extra to hold. An analog source is **analog**: a stick tilted at 30°
+ *   aims at 30°, not at the nearest of eight. Only a d-pad — or the arrow keys,
+ *   which feed the same {-1, 0, 1} vectors — resolves to exactly eight. See
+ *   `setContra`.
  * - **Fine aim.** The right stick, full 360°, at whatever angle it is pushed.
  *   It **overrides** the contra aim while it is being touched, which is what lets
  *   a fighter run right and cover the door on the left. Let go and it falls back
@@ -96,11 +99,13 @@ export function quantise8(
 }
 
 /**
- * The eight-direction aim, from a direction pair.
+ * The angle of a direction pair.
  *
  * `null` means "nothing is held" — the caller keeps whatever the last committed
  * direction was, because releasing the d-pad should not make a fighter forget
- * which way it was looking.
+ * which way it was looking. Fed a d-pad or arrow-key pair in {-1, 0, 1} it is
+ * exactly the eight directions; fed an analog vector it is whatever angle the
+ * stick is pushed. The deadzone that separates the two is `setContra`'s job.
  */
 export function contraAngle(x: number, y: number): number | null {
 	if (x === 0 && y === 0) return null;
@@ -174,7 +179,7 @@ export function lerpAngle(from: number, to: number, t: number): number {
 export interface AimReport {
 	/** The angle the simulation is handed, radians, +y down. */
 	angle: number;
-	/** The eight-direction aim underneath, whether or not it is winning. */
+	/** The contra aim underneath, whether or not it is winning. */
 	contra: number;
 	/** The fine stick's angle. Meaningless while `fine` is 0. */
 	fineAngle: number;
@@ -197,7 +202,7 @@ export interface AimReport {
  * stick vector.
  */
 export class AimController {
-	/** The last committed eight-direction angle. Survives releasing the d-pad. */
+	/** The last committed Contra angle. Survives releasing the d-pad. */
 	private contra = RIGHT;
 	/** The fine stick, in the same pixel units `pushStick` accumulates in. */
 	private stick: Vec2 = { x: 0, y: 0 };
@@ -215,16 +220,26 @@ export class AimController {
 	constructor(private readonly radius: number = FINE_AIM_RADIUS_PX) {}
 
 	/**
-	 * Set the eight-direction aim from a direction pair.
+	 * Set the eight-direction aim from a direction pair or an analog vector.
+	 *
+	 * The angle is whatever `atan2(y, x)` says — nothing is quantised here. A
+	 * d-pad or the arrow keys feed vectors in {-1, 0, 1}, which resolve to the
+	 * same eight directions a run-and-gun always aimed with; a left stick or the
+	 * on-screen cross feed the raw deflection, so a stick pushed at 30° aims at
+	 * 30° and there are more directions than a d-pad has fingers. The *movement*
+	 * codes stay quantised downstream — walking is still left or right — but the
+	 * aim follows the analog source.
 	 *
 	 * `facing` is the fallback for a controller that has never pointed anywhere —
 	 * a fighter that spawns facing right should aim right, not at some remembered
 	 * default from a previous match.
 	 */
 	setContra(x: number, y: number, facing: number) {
-		const angle = contraAngle(x, y);
-		if (angle !== null) {
-			this.contra = angle;
+		// Below the deadzone a stick is at rest, and rest means "keep the last
+		// direction" — the same rule as releasing the d-pad. A worn stick resting
+		// at 0.12 would otherwise pin the aim to its own slight tilt forever.
+		if (Math.hypot(x, y) >= STICK_DEADZONE) {
+			this.contra = Math.atan2(y, x);
 			this.contraSet = true;
 			return;
 		}

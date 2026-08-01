@@ -211,9 +211,19 @@ stops the butterfly being the only option.
   Steam Input's *Mouse Joystick*, and Flick Stick's rotation along the gate.
 - **A virtual stick must recentre when it is let go.** A stick that resumed from
   where it was abandoned answers the same flick with a different angle every time.
+- **The Contra aim is analog when the source is, and eight when it is not.** The
+  left stick and the deck's cross hand the raw deflection to `setContra`, so a
+  push at 30° aims at 30°; only the d-pad and the arrow keys — which can feed
+  nothing but {-1, 0, 1} — resolve to exactly eight. The *movement* codes stay
+  quantised either way, so there is still one code path and one dash gesture; the
+  analog stick just gains the angles in between. An analog source wins over the
+  codes while it is held, because it is a superset of the direction its codes
+  resolve to.
 - **Near-vertical aim sets `face: 0`.** `cos(-90°)` is a positive floating-point
   crumb, so without a dead band a fighter aiming at the ceiling snaps to facing
-  right — and facing decides which side a guard covers.
+  right — and facing decides which side a guard covers. With an analog stick,
+  vertical is exactly where a player holds a stick to wait, so the dead band is a
+  place players sit rather than an accident of the cursor.
 - **The suspend rule covers every device.** `input-suspended` has to release the
   gamepad and the on-screen deck as well as the keyboard. A held trigger behind an
   open dialog keeps blocking and has nothing that will ever deliver its release.
@@ -243,11 +253,19 @@ stops the butterfly being the only option.
   holding left while travelling right — is what separates them.
 - **The aim needs to be drawn when there is no cursor to look at.** A mouse
   player's cursor is the reticle; a controller has none, and facing is one bit —
-  so eight Contra directions and 360° of fine aim all collapsed into "left or
+  so the Contra aim and 360° of fine aim all collapsed into "left or
   right", with the fine layer's whole purpose (aiming away from where you run)
   being exactly the case facing cannot show. Draw it from the **drawn** position
   like the nameplates, or the beam detaches from its fighter by however much the
   render smoother is hiding.
+- **On the deck, the aim stick is the fire button in gun mode.** A phone's right
+  thumb lives on the aim pad, and there is no spare finger for the fire button
+  on the face cluster — so while the stance is gun, `Input` reads "aim stick
+  held" as "attack held" and a phone gun becomes a twin-stick shooter. Two
+  limits keep it honest: it is the *on-screen* stick only (a physical right
+  stick has a trigger to hand), and *gun mode* only (in sword mode a touch of
+  the pad must not slash). It travels as the `attack` button in the intent, so
+  the simulation never learns a thumb made it.
 
 ## Projectiles
 

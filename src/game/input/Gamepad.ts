@@ -10,9 +10,12 @@
  * `Bindings.ts`, which made the same argument about the mouse.
  *
  * **The d-pad and the left stick produce the same four codes.** Both are the
- * Contra input — move and aim at once, in eight directions — so quantising the
- * stick to the d-pad's alphabet means there is exactly one movement path, and
- * the double-tap dash gesture works off a stick flick for free.
+ * Contra input — move and aim at once — so quantising the stick to the d-pad's
+ * alphabet means there is exactly one movement path, and the double-tap dash
+ * gesture works off a stick flick for free. But the left stick also keeps its
+ * raw deflection (see `PadFrame.contra`): the *aim* follows the angle the stick
+ * is pushed at, not just the nearest of eight. The d-pad has no deflection, so
+ * it stays eight.
  *
  * **The right stick does not become codes.** It is an angle, not a button, so it
  * goes to `AimController` as a vector. Quantising it would throw away the whole
@@ -78,12 +81,22 @@ export function padLabel(code: string): string | undefined {
 	return PAD_LABELS[code] ?? code.replace("Pad", "Pad ");
 }
 
-/** One frame of gamepad state. */
+/**
+ * One frame of gamepad state.
+ */
 export interface PadFrame {
 	/** True while at least one pad is connected and reporting. */
 	connected: boolean;
 	/** Every code held this frame. */
 	down: Set<string>;
+	/**
+	 * The left stick, as a raw unit-ish vector, or null while it rests in its
+	 * deadzone. The **analog** Contra aim: it is not quantised here, because the
+	 * d-pad already speaks the four direction codes and an analog stick exists to
+	 * say the angles in between. Null means "no analog contra input", not "aim
+	 * right".
+	 */
+	contra: Vec2 | null;
 	/**
 	 * The right stick, as a unit-ish vector, or null while it rests in its
 	 * deadzone. Null means "nobody is fine-aiming", not "aim right".
@@ -91,7 +104,12 @@ export interface PadFrame {
 	fine: Vec2 | null;
 }
 
-const EMPTY: PadFrame = { connected: false, down: new Set(), fine: null };
+const EMPTY: PadFrame = {
+	connected: false,
+	down: new Set(),
+	contra: null,
+	fine: null,
+};
 
 /**
  * Poll every connected pad and fold them into one frame.
@@ -107,6 +125,7 @@ export function readPads(
 	if (!pads) return EMPTY;
 	const down = new Set<string>();
 	let connected = false;
+	let contra: Vec2 | null = null;
 	let fine: Vec2 | null = null;
 
 	for (const pad of pads) {
@@ -123,7 +142,12 @@ export function readPads(
 		}
 
 		// The left stick joins the d-pad rather than replacing it, so a player can
-		// use either — or both, mid-match, without a mode to switch.
+		// use either — or both, mid-match, without a mode to switch. It quantises
+		// to the same four codes for *movement*, so the dash gesture works off a
+		// stick flick and walking stays left or right — and it also keeps its raw
+		// deflection, so the Contra *aim* can be any angle, not just the eight the
+		// codes can name. A d-pad has no deflection to offer, which is the whole
+		// difference between the two inputs.
 		const lx = pad.axes[0] ?? 0;
 		const ly = pad.axes[1] ?? 0;
 		const step = quantise8(lx, ly);
@@ -131,6 +155,11 @@ export function readPads(
 		if (step.x > 0) down.add(PAD_RIGHT);
 		if (step.y < 0) down.add(PAD_UP);
 		if (step.y > 0) down.add(PAD_DOWN);
+		if (Math.hypot(lx, ly) >= STICK_DEADZONE) {
+			if (!contra || Math.hypot(lx, ly) > Math.hypot(contra.x, contra.y)) {
+				contra = { x: lx, y: ly };
+			}
+		}
 
 		const rx = pad.axes[2] ?? 0;
 		const ry = pad.axes[3] ?? 0;
@@ -143,7 +172,7 @@ export function readPads(
 		}
 	}
 
-	return { connected, down, fine };
+	return { connected, down, contra, fine };
 }
 
 /**

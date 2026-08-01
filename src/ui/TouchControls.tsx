@@ -14,9 +14,11 @@
  *
  * **The cross is one element, not four buttons.** A thumb rolling from left to
  * up-left has to stay on the control the whole way, and four adjacent buttons
- * each with their own hit test drop the input in the gap between them. The sector
- * comes from `quantise8` — the same function the left analogue stick goes
- * through — so the cross and a d-pad are literally the same code.
+ * each with their own hit test drop the input in the gap between them. It is the
+ * deck's *left stick*: the sector for the movement codes comes from `quantise8`,
+ * the same function a physical left stick goes through, and the raw thumb
+ * position is emitted as the analog Contra aim — so a thumb at 30° aims at 30°,
+ * not at the nearest of eight.
  *
  * **It is not tied to being a phone.** `inputSettings.deck` is a separate setting
  * from `inputSettings.scheme` precisely because somebody can pair a Bluetooth
@@ -60,6 +62,7 @@ const press = (code: string, down: boolean) =>
 function releaseAll() {
 	for (const code of Object.values(CODES)) press(code, false);
 	EventBus.emit("virtual-aim", null);
+	EventBus.emit("virtual-contra", null);
 }
 
 /**
@@ -114,26 +117,40 @@ function PadButton({
 	);
 }
 
-/** The eight-way cross. One control, eight sectors, two codes at a time. */
+/** The on-screen left stick. One control, two outputs, one thumb. */
 function Cross() {
 	const ref = useRef<HTMLDivElement>(null);
 	const [dir, setDir] = useState({ x: 0, y: 0 });
-	// Kept in a ref as well, because the pointer handlers close over the state
+	// Kept in refs as well, because the pointer handlers close over the state
 	// from the render they were created in and would diff against a stale value.
 	const live = useRef({ x: 0, y: 0 });
+	const liveContra = useRef<{ x: number; y: number } | null>(null);
 
-	const apply = useCallback((next: { x: number; y: number }) => {
+	const apply = useCallback((raw: { x: number; y: number } | null) => {
+		// The movement half stays quantised — walking is still left or right —
+		// while the aim half is the raw deflection, exactly like a physical left
+		// stick. Same deadzone for both, so a thumb resting on the hub neither
+		// moves the fighter nor waves the aim at whatever the hub happens to sit
+		// over.
+		const next = raw ? quantise8(raw.x, raw.y, 0.22) : { x: 0, y: 0 };
 		const was = live.current;
-		if (next.x === was.x && next.y === was.y) return;
-		live.current = next;
-		setDir(next);
-		if (next.x !== was.x) {
-			press(CODES.left, next.x < 0);
-			press(CODES.right, next.x > 0);
+		if (next.x !== was.x || next.y !== was.y) {
+			live.current = next;
+			setDir(next);
+			if (next.x !== was.x) {
+				press(CODES.left, next.x < 0);
+				press(CODES.right, next.x > 0);
+			}
+			if (next.y !== was.y) {
+				press(CODES.up, next.y < 0);
+				press(CODES.down, next.y > 0);
+			}
 		}
-		if (next.y !== was.y) {
-			press(CODES.up, next.y < 0);
-			press(CODES.down, next.y > 0);
+		const contra = raw && Math.hypot(raw.x, raw.y) >= 0.22 ? raw : null;
+		const prev = liveContra.current;
+		if (contra?.x !== prev?.x || contra?.y !== prev?.y) {
+			liveContra.current = contra;
+			EventBus.emit("virtual-contra", contra);
 		}
 	}, []);
 
@@ -146,13 +163,10 @@ function Cross() {
 		// Normalised against the half-size, so the deadzone is a fraction of the
 		// cross rather than a pixel count that means something different on every
 		// screen. A thumb resting on the hub is not a direction.
-		apply(
-			quantise8(
-				(e.clientX - cx) / (rect.width / 2),
-				(e.clientY - cy) / (rect.height / 2),
-				0.22,
-			),
-		);
+		apply({
+			x: (e.clientX - cx) / (rect.width / 2),
+			y: (e.clientY - cy) / (rect.height / 2),
+		});
 	};
 
 	const down = (e: React.PointerEvent) => {
@@ -166,7 +180,7 @@ function Cross() {
 	};
 	const release = (e: React.PointerEvent) => {
 		e.preventDefault();
-		apply({ x: 0, y: 0 });
+		apply(null);
 	};
 
 	return (
@@ -177,7 +191,7 @@ function Cross() {
 			onPointerMove={move}
 			onPointerUp={release}
 			onPointerCancel={release}
-			onLostPointerCapture={() => apply({ x: 0, y: 0 })}
+			onLostPointerCapture={() => apply(null)}
 		>
 			<div className="vg-cross-plate" />
 			<div className={`vg-cross-arm up${dir.y < 0 ? " lit" : ""}`}>▲</div>
@@ -197,6 +211,12 @@ function Cross() {
  * and recentres the instant it is let go. `AimController` treats it exactly the
  * way it treats a physical stick, and the mouse — which has no spring and needs
  * a hold window — goes down the other path.
+ *
+ * It is also the deck's fire button in gun mode. On a phone the right thumb is
+ * on this pad, and there is no spare finger for the Slash button on the face
+ * cluster — so `Input` reads "aim stick held" as "attack held" while the stance
+ * is gun. This component does none of that itself; it only emits `virtual-aim`,
+ * exactly like a physical right stick.
  */
 function AimStick() {
 	const ref = useRef<HTMLDivElement>(null);

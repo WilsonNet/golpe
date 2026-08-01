@@ -50,17 +50,18 @@ along the same angle.
 
 **Where the aim angle comes from is the input layer's business, not the
 simulation's.** With a mouse it is the vector to the cursor; with a controller it
-is eight directions from the d-pad, overridden by the right stick's full 360°.
-The simulation is handed a number with no provenance either way — which is why a
-player can switch scheme mid-match and nothing desyncs. See
-[controls.md](controls.md).
+is the Contra aim — eight directions from the d-pad, or the continuous angle of
+an analog stick — overridden by the right stick's full 360°. The simulation is
+handed a number with no provenance either way — which is why a player can switch
+scheme mid-match and nothing desyncs. See [controls.md](controls.md).
 
 **Within ~4.6° of straight up or down, `face` is 0 and the feet decide.** Without
 the dead band `cos(-90°)` is a positive floating-point crumb and a fighter aiming
 at the ceiling snaps to facing right; facing decides which side a guard covers,
 so that frame is a free hit. It matters far more with a controller, where
-straight up is one of eight directions players actually sit on, than with a mouse
-where it is a pixel-wide accident.
+straight up is a place players actually sit — one of the eight on a d-pad, or
+wherever they hold an analog stick — than with a mouse where it is a pixel-wide
+accident.
 
 **The cursor is a screen fact and everything it is compared against is a world
 fact.** The conversion divides by the *logical* view — 800x600, `app.screen` —

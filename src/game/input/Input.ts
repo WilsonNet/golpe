@@ -161,9 +161,10 @@ export function viewToWorld(
  * existing "let the feet decide", so a fighter aiming straight up keeps looking
  * the way it is walking.
  *
- * It matters far more with a controller than with a mouse: straight up is one of
- * the eight Contra directions and therefore a place players actually sit, rather
- * than a pixel-wide accident of where the cursor landed.
+ * It matters far more with a controller than with a mouse: straight up is a
+ * place players actually sit — one of the eight on a d-pad, or wherever they
+ * hold an analog stick — rather than a pixel-wide accident of where the cursor
+ * landed.
  */
 const VERTICAL_AIM_COS = 0.08;
 
@@ -263,6 +264,14 @@ export class Input {
 	private readonly virtual = new Set<string>();
 	/** The on-screen thumb pad, as a unit vector, or null while nobody holds it. */
 	private touchAim: { x: number; y: number } | null = null;
+	/**
+	 * The on-screen cross, as a raw unit vector, or null while nobody holds it.
+	 *
+	 * Separate from `touchAim` because the cross is the Contra layer — it *moves*
+	 * the fighter too — while the thumb pad is the fine layer that overrides it.
+	 * Both are analog, because a thumb is.
+	 */
+	private touchContra: { x: number; y: number } | null = null;
 
 	/** Cursor in world coordinates. */
 	get pointerX(): number {
@@ -311,6 +320,7 @@ export class Input {
 			this.down.clear();
 			this.virtual.clear();
 			this.touchAim = null;
+			this.touchContra = null;
 			this.mouseDeltaX = 0;
 			this.mouseDeltaY = 0;
 			this.aim.releaseFine();
@@ -409,6 +419,11 @@ export class Input {
 		) => {
 			this.touchAim = this.suspended ? null : vector;
 		}) as never);
+		const offVirtualContra = EventBus.on("virtual-contra", ((
+			vector: { x: number; y: number } | null,
+		) => {
+			this.touchContra = this.suspended ? null : vector;
+		}) as never);
 
 		this.disposers.push(
 			() => window.removeEventListener("keydown", keydown),
@@ -421,6 +436,7 @@ export class Input {
 			offSuspend,
 			offVirtual,
 			offVirtualAim,
+			offVirtualContra,
 		);
 	}
 
@@ -436,6 +452,28 @@ export class Input {
 			if (this.isDown(code)) return true;
 		}
 		return false;
+	}
+
+	/**
+	 * Is the attack / fire button held?
+	 *
+	 * The ordinary path is any code bound to the attack action. There is one
+	 * deck-only extra path on top: on a phone, the right thumb lives on the aim
+	 * stick, and in gun mode a phone has no spare finger for the fire button — so
+	 * the aim stick is the trigger too. Touching it both aims (the fine layer)
+	 * and fires, which is what makes a phone gun a twin-stick shooter rather than
+	 * a trap where aiming and firing are mutually exclusive.
+	 *
+	 * Deliberately the on-screen stick only, and gun mode only. A *physical*
+	 * right stick has a trigger to hand, so it must not fire by itself; and in
+	 * sword mode a touch of the aim stick must not slash. Like every other input
+	 * fact here, this travels as `attack` in the intent — the simulation never
+	 * learns that a thumb made it, so it cannot desync anything.
+	 */
+	private attackDown(): boolean {
+		if (this.actionDown("attack")) return true;
+		if (this.touchAim === null) return false;
+		return inputSettings.scheme === "controller" && !this.swordStance;
 	}
 
 	/**
@@ -522,12 +560,23 @@ export class Input {
 		}
 
 		// The Contra layer: the same buttons that move you also aim you, which is
-		// what makes eight directions cost nothing extra to hold.
-		const x =
-			(this.actionDown("right") ? 1 : 0) - (this.actionDown("left") ? 1 : 0);
-		const y =
-			(this.actionDown("aimDown") ? 1 : 0) - (this.actionDown("aimUp") ? 1 : 0);
-		this.aim.setContra(x, y, facing);
+		// what makes aiming cost nothing extra to hold. An analog source — the left
+		// stick, or a thumb on the deck's cross — aims at the angle it is pushed,
+		// which is more than eight directions; only the d-pad and the arrow keys
+		// are stuck with the eight their {-1, 0, 1} pairs can name. The analog
+		// source wins while it is being held, because it is a superset of the
+		// direction its codes resolve to.
+		const contraVector = this.touchContra ?? frame.contra;
+		if (contraVector) {
+			this.aim.setContra(contraVector.x, contraVector.y, facing);
+		} else {
+			const x =
+				(this.actionDown("right") ? 1 : 0) - (this.actionDown("left") ? 1 : 0);
+			const y =
+				(this.actionDown("aimDown") ? 1 : 0) -
+				(this.actionDown("aimUp") ? 1 : 0);
+			this.aim.setContra(x, y, facing);
+		}
 
 		// The fine layer, in priority order: a real right stick, then a thumb on the
 		// deck, then the mouse. The first two are absolute and recentre themselves;
@@ -653,7 +702,7 @@ export class Input {
 			left: this.actionDown("left"),
 			right: this.actionDown("right"),
 			up: this.actionDown("jump"),
-			attack: this.actionDown("attack"),
+			attack: this.attackDown(),
 			block: this.actionDown("block"),
 			uppercut: this.actionDown("uppercut"),
 			swordStance: this.swordStance,

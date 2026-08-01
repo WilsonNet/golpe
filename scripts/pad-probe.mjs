@@ -9,10 +9,11 @@
  * `navigator.getGamepads` before the page loads and drives the game the way a
  * controller would, exactly as `controls-probe.mjs` presses real keys.
  *
- * It measures the four claims the scheme is made of:
+ * It measures the claims the scheme is made of:
  *
  *   1. the d-pad aims in eight directions, and the horizontal one is the same
- *      input that moves you (Contra),
+ *      input that moves you, while the *left stick* aims continuously — a stick
+ *      pushed at 30° aims at 30°, not at the nearest of eight (Contra),
  *   2. the right stick overrides that, at any angle, so you can run one way and
  *      aim the other,
  *   3. letting go of the right stick falls back to the d-pad's direction,
@@ -145,6 +146,27 @@ async function fineAimAt(page, angleDeg, ms = 400) {
 
 async function recentreStick(page) {
 	await page.evaluate(() => window.__pad.axes([0, 0, 0, 0]));
+}
+
+/**
+ * Tilt the left stick to an angle and report where the game ended up aiming.
+ *
+ * The left stick is the *analog* Contra layer: it moves you through the same
+ * quantised codes a d-pad uses, but it aims at exactly the angle it is pushed.
+ * Sampling this is the only way to separate that from a stick that is just a
+ * d-pad with extra steps.
+ */
+async function contraAimAt(page, angleDeg, ms = 400) {
+	const rad = angleDeg / DEG;
+	await page.evaluate(
+		([x, y]) => window.__pad.axes([x, y, 0, 0]),
+		[Math.cos(rad), Math.sin(rad)],
+	);
+	await page.waitForTimeout(ms);
+	const input = await inputState(page);
+	await page.evaluate(() => window.__pad.axes([0, 0, 0, 0]));
+	await page.waitForTimeout(150);
+	return input;
 }
 
 /**
@@ -359,7 +381,8 @@ async function runTouchDeck(browser, check) {
 	);
 
 	// The thumb pad is the fine layer, and on a touchscreen it is the *only* fine
-	// layer: absolute, full 360, and it recentres.
+	// layer: absolute, full 360, and it recentres. The deck is in sword stance by
+	// default, so a thumb on the pad must aim without slashing.
 	const stick = await page.locator(".vg-stick").boundingBox();
 	await touch.start(stick.x + stick.width / 2, stick.y + stick.height / 2);
 	await touch.move(stick.x + stick.width / 2, stick.y - 40);
@@ -375,12 +398,75 @@ async function runTouchDeck(browser, check) {
 		aiming.aim.blend > 0.9,
 		`blend=${aiming.aim.blend.toFixed(2)}`,
 	);
+	const swordHold = await gameState(page);
+	check(
+		"and does not slash while the stance is sword",
+		swordHold.playerPhys.meleeAction === "none",
+		`meleeAction=${swordHold.playerPhys.meleeAction}`,
+	);
 	await touch.end();
 	await page.waitForTimeout(700);
 	check(
 		"letting go of the thumb pad hands the aim back",
 		(await inputState(page)).aim.overriding === false,
 		"",
+	);
+
+	// ---- in gun mode the aim stick is the trigger too ----
+	// On a phone the right thumb is on this pad, and there is no spare finger for
+	// the fire button — so in gun stance the pad aims *and* fires, which is what
+	// makes a phone gun a twin-stick shooter. The stance pill is real DOM, so a
+	// tap proves the path a player takes.
+	await settle(page);
+	await page.locator(".vg-pill").filter({ hasText: "Gun" }).tap();
+	await page.waitForTimeout(300);
+	const gunBefore = await gameState(page);
+	check(
+		"the deck's Gun pill switched the stance",
+		gunBefore.playerPhys.stance === "gun",
+		`stance=${gunBefore.playerPhys.stance}`,
+	);
+	await touch.start(stick.x + stick.width / 2, stick.y + stick.height / 2);
+	await touch.move(stick.x + stick.width / 2, stick.y - 40);
+	// A bullet is live only while it is inside the world, and the client sees it
+	// once the server's snapshot arrives — so poll a few times and take the peak
+	// rather than gambling on one sample landing inside that window.
+	let peakBullets = gunBefore.bulletCount;
+	for (let i = 0; i < 4; i++) {
+		await page.waitForTimeout(150);
+		peakBullets = Math.max(peakBullets, (await gameState(page)).bulletCount);
+	}
+	await touch.end();
+	await page.waitForTimeout(150);
+	check(
+		"in gun mode the aim stick fires the gun",
+		peakBullets > gunBefore.bulletCount,
+		`bullets ${gunBefore.bulletCount} → ${peakBullets}`,
+	);
+
+	// ---- the cross is the deck's left stick: continuous, not just eight ----
+	// The sector code still *moves* the fighter in eight directions, but the raw
+	// thumb position is the Contra aim, so a thumb at 30° aims at 30° — the same
+	// analog deal a physical left stick gets.
+	await settle(page);
+	const ccx = cross.x + cross.width / 2;
+	const ccy = cross.y + cross.height / 2;
+	const r30 = (Math.PI / 180) * 30;
+	const thumbR = cross.width * 0.3;
+	await touch.start(ccx + Math.cos(r30) * thumbR, ccy - Math.sin(r30) * thumbR);
+	await page.waitForTimeout(500);
+	const crossAim = await inputState(page);
+	await touch.end();
+	await page.waitForTimeout(200);
+	check(
+		"a thumb at 30° on the cross aims at 30°, not the nearest sector",
+		Math.abs(angleGap(crossAim.aim.angle, -Math.PI / 6)) <= ANGLE_TOLERANCE_DEG,
+		`aimed ${deg(crossAim.aim.angle)}°, wanted -30°`,
+	);
+	check(
+		"and it is the Contra layer doing it",
+		crossAim.aim.blend === 0,
+		`blend=${crossAim.aim.blend.toFixed(2)}`,
 	);
 
 	// And the whole thing has to be undoable, or choosing it on a phone is a trap.
@@ -481,6 +567,31 @@ async function run() {
 		released.aim.angle,
 		135,
 		"letting go must not make a fighter forget where it was looking",
+	);
+
+	// ---- the left stick aims continuously, not just in eights ----
+	// A d-pad has eight directions and cannot help it; a stick pushed at 30° must
+	// aim at 30°. The number that separates an analog Contra from a quantised one
+	// is exactly this angle in between two of the eight.
+	await settle(page);
+	const tilted = await contraAimAt(page, 30);
+	checkAngle(
+		"a left stick pushed at 30° aims at 30°, not the nearest diagonal",
+		tilted.aim.angle,
+		30,
+	);
+	check(
+		"and it is the Contra layer doing it",
+		tilted.aim.blend === 0,
+		`blend=${tilted.aim.blend.toFixed(2)}`,
+	);
+
+	await settle(page);
+	const tiltedDown = await contraAimAt(page, -67);
+	checkAngle(
+		"a left stick pushed the other way aims continuously too",
+		tiltedDown.aim.angle,
+		-67,
 	);
 
 	// ---- 2. the fine layer overrides it, at any angle ----

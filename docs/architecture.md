@@ -112,7 +112,7 @@ those pieces are explicit files rather than framework config:
 | Input | `input/Input.ts` |
 | Key bindings | `input/Bindings.ts` — `Input` knows no key names of its own |
 | Gamepad | `input/Gamepad.ts` — polled, and read as codes in the same namespace |
-| Controller aim | `input/Aim.ts` — eight directions, plus a 360° virtual stick |
+| Controller aim | `input/Aim.ts` — the analog Contra aim, plus a 360° virtual stick |
 | On-screen gamepad | `ui/TouchControls.tsx` — DOM, and it emits `Pad…` codes |
 | Aim beam | `render/AimLine.ts` — controller mode's reticle, drawn in the world |
 | Particles | `render/Particles.ts` |

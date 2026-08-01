@@ -29,7 +29,7 @@ const INSET = 12;
 const TIP_RADIUS = 3;
 
 /**
- * Gold for the eight-direction Contra aim, cyan while the fine stick overrides.
+ * Gold for the Contra aim, cyan while the fine stick overrides.
  *
  * The colour *is* the feedback for the handover. `#0ec3c9` is the same "this is
  * live" cyan the scoreboard and the deck's thumb nub already use, so a player

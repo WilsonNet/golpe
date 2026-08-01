@@ -132,6 +132,7 @@ genuinely equivalent from the game's point of view.
 | Check | Why it is there |
 |---|---|
 | the d-pad aims in eight directions | the Contra layer, and its horizontal half is the same input that moves you |
+| a left stick pushed at 30° aims at 30° | the Contra aim is *analog*: a quantised stick would land on the diagonal at 45° and never say the angle in between |
 | aiming straight up leaves `face: 0` | `cos(-90°)` is a positive crumb, and a fighter that snapped to facing right there gives away free hits |
 | the right stick aims at any angle while running the other way | the whole reason there are two layers |
 | letting go falls back to the Contra aim | a stick that stayed where it was left is a fighter aiming at a wall |
@@ -144,10 +145,16 @@ It then opens a second, phone-shaped context — `hasTouch` is what makes Chromi
 answer `pointer: coarse` the way a phone does, and it cannot be changed on a live
 page — and checks that the deck is drawn, that the game and the deck **both fit
 with no horizontal scroll and the canvas keeps its 4:3**, that the screen reaches
-both edges of the phone, that a thumb on the cross walks the fighter, that the
+both edges of the phone, that a thumb on the cross walks the fighter **and aims
+at whatever angle the thumb is held — 30°, not the nearest sector**, that the
 thumb pad aims and recentres, and that the deck's own menu button can send the
 deck away. The controls are ordinary DOM, so it taps them: an emitted event
 proves the wiring, a tap proves the game.
+
+Two checks exist for the deck's buttons being *ordinary DOM*: the aim pad must
+**aim without slashing** while the stance is sword, and it must **fire the gun**
+in gun mode — a phone's right thumb lives on the pad, so the pad is its trigger.
+It switches stance by tapping the Gun pill, and counts bullets to prove a shot.
 
 **It drives that context with CDP `Input.dispatchTouchEvent`, never
 `page.mouse`.** Playwright's mouse reports `pointerType: "mouse"` even inside a

@@ -5,9 +5,9 @@
  * device the page is running on are different questions:
  *
  * - **`scheme`** decides where the aim angle comes from. `"mouse"` points at the
- *   cursor. `"controller"` uses the two-layer Contra aim in `Aim.ts` — d-pad or
- *   left stick for eight directions, right stick (or a relative mouse) for the
- *   full 360 on top.
+ *   cursor. `"controller"` uses the two-layer aim in `Aim.ts` — the analog
+ *   Contra layer (d-pad or left stick, the same input that moves you), plus the
+ *   right stick (or a relative mouse) for the full 360 on top.
  * - **`deck`** decides whether the on-screen gamepad is drawn. A phone wants one;
  *   a phone with a Bluetooth keyboard and mouse plugged into it does not, and
  *   that player must be able to say so. That is the whole reason this is not

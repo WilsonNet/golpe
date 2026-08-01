@@ -164,6 +164,33 @@ describe("AimController", () => {
 	});
 
 	/**
+	 * The analog Contra aim. A d-pad can only feed {-1, 0, 1}, which resolves to
+	 * eight directions; an analog stick pushes at any angle and the aim follows
+	 * it — 21.8° stays 21.8° instead of snapping to the diagonal at 45°. Nothing
+	 * upstream quantises it anymore: `Gamepad` and the on-screen cross hand the
+	 * raw deflection straight in.
+	 */
+	it("aims at whatever angle an analog stick is pushed, not the nearest of eight", () => {
+		const aim = new AimController();
+		aim.setContra(1, -0.4, 1);
+		aim.update(16);
+		expect(deg(aim.angle)).toBeCloseTo(-21.8, 1);
+		aim.setContra(0.5, 0.866, 1);
+		aim.update(16);
+		expect(deg(aim.angle)).toBeCloseTo(60, 1);
+	});
+
+	it("treats a barely-deflected stick as rest, and keeps the last direction", () => {
+		const aim = new AimController();
+		aim.setContra(1, 0, 1);
+		aim.update(16);
+		// A worn stick resting at 0.12 is not a direction, and must not be.
+		aim.setContra(0.12, -0.05, 1);
+		aim.update(16);
+		expect(deg(aim.angle)).toBeCloseTo(RIGHT);
+	});
+
+	/**
 	 * The point of having two layers: run one way, aim the other. Without the
 	 * override a controller can only ever shoot where it is walking.
 	 */
