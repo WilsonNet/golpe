@@ -266,6 +266,14 @@ stops the butterfly being the only option.
   stick has a trigger to hand), and *gun mode* only (in sword mode a touch of
   the pad must not slash). It travels as the `attack` button in the intent, so
   the simulation never learns a thumb made it.
+- **A deck that draws controls per stance must own the stance change.** `Input`
+  owns `swordStance`, so the deck listens for `stance-changed` rather than
+  guessing — and a button that stops being drawn releases its code, or a
+  fighter would keep blocking while the deck it blocked with has gone away.
+  The drawing of a control and the semantics of a control must never diverge:
+  the left stick is drawn as a round analog pad precisely because it *is* one,
+  and it was drawn as a d-pad for months while behaving analog, which read as
+  a d-pad.
 
 ## Projectiles
 

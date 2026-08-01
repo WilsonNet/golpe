@@ -201,9 +201,11 @@ stick pushed at 30° must aim at 30° (a quantised one lands on the 45° diagona
 and an upward stroke from "aiming right" must **run up the arc past 45°**, where
 a clamping implementation stalls near -63° forever. It then taps the on-screen
 gamepad on a phone-shaped context — including a thumb held at 30° on the cross,
-which is the deck's analog Contra aim, and the aim pad firing the gun in gun
-mode, since on a phone the pad is its trigger. Run it after touching `input/`,
-the aim layers, the Esc menu's controls dialog, or the page layout.
+which is the deck's analog Contra aim, the aim pad firing the gun in gun mode,
+since on a phone the pad is its trigger, and the deck following the stance (it
+draws the left stick as an analog pad, and hides block and uppercut in gun mode
+because they are sword moves). Run it after touching `input/`, the aim layers,
+the Esc menu's controls dialog, the deck, or the page layout.
 
 ### What AI vs AI cannot test: one specific interaction
 

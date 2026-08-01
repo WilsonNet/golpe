@@ -155,6 +155,10 @@ Two checks exist for the deck's buttons being *ordinary DOM*: the aim pad must
 **aim without slashing** while the stance is sword, and it must **fire the gun**
 in gun mode — a phone's right thumb lives on the pad, so the pad is its trigger.
 It switches stance by tapping the Gun pill, and counts bullets to prove a shot.
+It also checks the two ways the deck follows the stance: the left stick is
+**drawn as an analog pad, not a d-pad** (the nub is there, the arms are not), and
+**block and uppercut are hidden in gun mode**, because they are sword moves that
+would otherwise sit there doing nothing.
 
 **It drives that context with CDP `Input.dispatchTouchEvent`, never
 `page.mouse`.** Playwright's mouse reports `pointerType: "mouse"` even inside a

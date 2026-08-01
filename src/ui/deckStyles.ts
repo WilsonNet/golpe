@@ -160,13 +160,16 @@ export const DECK_CSS = `
 	display: none;
 }
 
-/* ---- the cross ----
-   One element, not four buttons. A thumb rolling from left to up-left has to
-   stay on the control the whole way, and four adjacent buttons each with their
-   own hit test drop the input in the gap between them. The movement sector is
-   worked out from where the thumb is, by the same eight-way quantiser the left
-   stick uses — and the raw thumb position is handed over as the analog Contra
-   aim, so the cross is the deck's left stick rather than a d-pad. */
+/* ---- the left stick (was "the cross") ----
+   One element, not four buttons, and a round analog pad, not a d-pad. A thumb
+   rolling from left to up-left has to stay on the control the whole way, and
+   four adjacent buttons each with their own hit test drop the input in the gap
+   between them. The movement sector is worked out from where the thumb is, by
+   the same eight-way quantiser the physical left stick uses — and the raw thumb
+   position is handed over as the analog Contra aim, so it is the deck's left
+   stick rather than a d-pad. It used to be drawn as a d-pad and read as one, so
+   now it looks like what it is: a pad and a nub, the nub gold because gold is
+   the Contra aim's colour and this is the stick that drives it. */
 .vg-cross {
 	position: relative;
 	/* Sized off both axes, because which one runs out first depends entirely on
@@ -174,45 +177,40 @@ export const DECK_CSS = `
 	   width is the constraint in portrait. */
 	width: min(40vw, 30vh, 190px);
 	aspect-ratio: 1;
+	border-radius: 50%;
+	background: radial-gradient(circle at 50% 40%, #221d2e 0%, #14111d 70%);
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	box-shadow: inset 0 3px 8px rgba(0, 0, 0, 0.7);
 	touch-action: none;
 	flex: 0 0 auto;
 }
-.vg-cross-plate {
+.vg-cross-nub {
 	position: absolute;
-	inset: 0;
-	/* The plus shape, cut out of one square with two crossing gradients. */
-	background:
-		linear-gradient(#3f3a4e, #262133) center / 34% 100% no-repeat,
-		linear-gradient(#3f3a4e, #262133) center / 100% 34% no-repeat;
-	filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.55));
-}
-.vg-cross-arm {
-	position: absolute;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	font-size: 13px;
-	color: rgba(255, 255, 255, 0.35);
-	transition: color 0.08s, background-color 0.08s;
-	pointer-events: none;
-	border-radius: 4px;
-}
-.vg-cross-arm.up    { left: 33%; right: 33%; top: 0; height: 33%; }
-.vg-cross-arm.down  { left: 33%; right: 33%; bottom: 0; height: 33%; }
-.vg-cross-arm.left  { top: 33%; bottom: 33%; left: 0; width: 33%; }
-.vg-cross-arm.right { top: 33%; bottom: 33%; right: 0; width: 33%; }
-.vg-cross-arm.lit {
-	color: #0a0910;
-	background: #e8b64c;
-}
-.vg-cross-hub {
-	position: absolute;
-	left: 38%;
-	top: 38%;
-	width: 24%;
-	height: 24%;
+	left: 50%;
+	top: 50%;
+	width: 42%;
+	height: 42%;
+	margin: -21% 0 0 -21%;
 	border-radius: 50%;
-	background: radial-gradient(circle at 35% 30%, #4a4459, #1c1826);
+	background: radial-gradient(circle at 35% 30%, #59526b, #26212f);
+	border: 1px solid rgba(0, 0, 0, 0.6);
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.55);
+	pointer-events: none;
+}
+.vg-cross.live .vg-cross-nub {
+	background: radial-gradient(circle at 35% 30%, #ffe9a8, #a97c1c);
+	border-color: #e8b64c;
+}
+.vg-cross-label {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: -14px;
+	text-align: center;
+	font-size: 8px;
+	letter-spacing: 0.22em;
+	text-transform: uppercase;
+	color: rgba(255, 255, 255, 0.3);
 	pointer-events: none;
 }
 
@@ -420,9 +418,11 @@ export const DECK_CSS = `
 	.vg-speaker {
 		display: none;
 	}
-	/* The label hangs below the pad, and in landscape "below" is off the screen.
-	   The nub says what it is well enough once there is no room to say it. */
-	.vg-stick-label {
+	/* The labels hang below the pads, and in landscape "below" is off the screen.
+	   The nubs say what the pads are well enough once there is no room to say
+	   it. */
+	.vg-stick-label,
+	.vg-cross-label {
 		display: none;
 	}
 }

@@ -12,13 +12,20 @@
  * path with the pad and the keyboard, and this component has no idea what any of
  * its buttons do. See `Bindings.ts` on why every device speaks one alphabet.
  *
- * **The cross is one element, not four buttons.** A thumb rolling from left to
- * up-left has to stay on the control the whole way, and four adjacent buttons
- * each with their own hit test drop the input in the gap between them. It is the
- * deck's *left stick*: the sector for the movement codes comes from `quantise8`,
- * the same function a physical left stick goes through, and the raw thumb
- * position is emitted as the analog Contra aim — so a thumb at 30° aims at 30°,
- * not at the nearest of eight.
+ * **The cross is one element, not four buttons, and it is an analog stick, not
+ * a d-pad.** A thumb rolling from left to up-left has to stay on the control the
+ * whole way, and four adjacent buttons each with their own hit test drop the
+ * input in the gap between them. It is the deck's *left stick*: the movement
+ * sector for the codes comes from `quantise8`, the same function a physical left
+ * stick goes through, and the raw thumb position is emitted as the analog Contra
+ * aim — so a thumb at 30° aims at 30°, not at the nearest of eight. It is drawn
+ * as a round pad with a nub, because that is what it is; it used to be drawn as
+ * a d-pad and read as one.
+ *
+ * **Each stance draws its own buttons.** Sword and gun do not share a button:
+ * block and uppercut are sword moves, so in gun mode they are not drawn at all
+ * rather than left sitting there doing nothing. `Input` owns the stance and says
+ * which it is over `stance-changed`; this component just listens.
  *
  * **It is not tied to being a phone.** `inputSettings.deck` is a separate setting
  * from `inputSettings.scheme` precisely because somebody can pair a Bluetooth
@@ -120,7 +127,7 @@ function PadButton({
 /** The on-screen left stick. One control, two outputs, one thumb. */
 function Cross() {
 	const ref = useRef<HTMLDivElement>(null);
-	const [dir, setDir] = useState({ x: 0, y: 0 });
+	const [nub, setNub] = useState<{ x: number; y: number } | null>(null);
 	// Kept in refs as well, because the pointer handlers close over the state
 	// from the render they were created in and would diff against a stale value.
 	const live = useRef({ x: 0, y: 0 });
@@ -136,7 +143,6 @@ function Cross() {
 		const was = live.current;
 		if (next.x !== was.x || next.y !== was.y) {
 			live.current = next;
-			setDir(next);
 			if (next.x !== was.x) {
 				press(CODES.left, next.x < 0);
 				press(CODES.right, next.x > 0);
@@ -146,6 +152,15 @@ function Cross() {
 				press(CODES.down, next.y > 0);
 			}
 		}
+		// The nub follows the thumb, clamped to the rim so it cannot leave the
+		// pad, and returns to the hub on release — a stick at rest, not one left
+		// where it was abandoned.
+		let nubPos: { x: number; y: number } | null = null;
+		if (raw) {
+			const m = Math.hypot(raw.x, raw.y);
+			nubPos = m > 1 ? { x: raw.x / m, y: raw.y / m } : raw;
+		}
+		setNub(nubPos);
 		const contra = raw && Math.hypot(raw.x, raw.y) >= 0.22 ? raw : null;
 		const prev = liveContra.current;
 		if (contra?.x !== prev?.x || contra?.y !== prev?.y) {
@@ -161,7 +176,7 @@ function Cross() {
 		const cx = rect.left + rect.width / 2;
 		const cy = rect.top + rect.height / 2;
 		// Normalised against the half-size, so the deadzone is a fraction of the
-		// cross rather than a pixel count that means something different on every
+		// pad rather than a pixel count that means something different on every
 		// screen. A thumb resting on the hub is not a direction.
 		apply({
 			x: (e.clientX - cx) / (rect.width / 2),
@@ -186,19 +201,24 @@ function Cross() {
 	return (
 		<div
 			ref={ref}
-			className="vg-cross"
+			className={`vg-cross${nub ? " live" : ""}`}
 			onPointerDown={down}
 			onPointerMove={move}
 			onPointerUp={release}
 			onPointerCancel={release}
 			onLostPointerCapture={() => apply(null)}
 		>
-			<div className="vg-cross-plate" />
-			<div className={`vg-cross-arm up${dir.y < 0 ? " lit" : ""}`}>▲</div>
-			<div className={`vg-cross-arm down${dir.y > 0 ? " lit" : ""}`}>▼</div>
-			<div className={`vg-cross-arm left${dir.x < 0 ? " lit" : ""}`}>◀</div>
-			<div className={`vg-cross-arm right${dir.x > 0 ? " lit" : ""}`}>▶</div>
-			<div className="vg-cross-hub" />
+			<div
+				className="vg-cross-nub"
+				style={
+					nub
+						? // 29% of the pad, so a fully deflected nub sits inside the
+							// rim rather than half outside it.
+							{ transform: `translate(${nub.x * 29}%, ${nub.y * 29}%)` }
+						: undefined
+				}
+			/>
+			<div className="vg-cross-label">Move</div>
 		</div>
 	);
 }
@@ -297,6 +317,27 @@ export function TouchControls() {
 		return () => query.removeEventListener("change", onChange);
 	}, []);
 
+	// The stance is owned by `Input` — the simulation reads `swordStance`, not
+	// the deck — so the deck learns it over the same EventBus the rest of the
+	// overlay uses. It starts on sword, which is where a new match starts.
+	const [stance, setStance] = useState<"sword" | "gun">("sword");
+	useEffect(() => {
+		const off = EventBus.on("stance-changed", ((sword: boolean) => {
+			setStance(sword ? "sword" : "gun");
+		}) as never);
+		return off;
+	}, []);
+	// A button that stops being drawn must not leave its code held, or the
+	// fighter would keep blocking (sword-only) while the player watches a deck
+	// with no Block button on it. Released defensively when the stance drops the
+	// buttons — releasing a code that was never held is a no-op.
+	useEffect(() => {
+		if (stance === "gun") {
+			press(CODES.upper, false);
+			press(CODES.block, false);
+		}
+	}, [stance]);
+
 	// The Esc menu takes the keyboard; it takes the deck too. Anything held when
 	// it opened would never deliver its release and would stay down forever —
 	// the same rule the keyboard follows, for the same reason.
@@ -363,24 +404,32 @@ export function TouchControls() {
 				</div>
 				<div className="vg-cell face">
 					<div className="vg-face">
-						<PadButton
-							code={CODES.upper}
-							label="Upper"
-							className="vg-btn upper"
-							title="Uppercut"
-						/>
+						{/* Sword and gun do not share buttons. Block and Uppercut are
+						    sword moves and do nothing in gun stance, so in gun mode they
+						    are not drawn — a dead button on a phone is a thumb spent on
+						    nothing. Slash survives both, as the fire button. */}
+						{stance === "sword" && (
+							<PadButton
+								code={CODES.upper}
+								label="Upper"
+								className="vg-btn upper"
+								title="Uppercut"
+							/>
+						)}
 						<PadButton
 							code={CODES.slash}
 							label="Slash"
 							className="vg-btn slash"
 							title="Slash / fire"
 						/>
-						<PadButton
-							code={CODES.block}
-							label="Block"
-							className="vg-btn block"
-							title="Block"
-						/>
+						{stance === "sword" && (
+							<PadButton
+								code={CODES.block}
+								label="Block"
+								className="vg-btn block"
+								title="Block"
+							/>
+						)}
 						<PadButton
 							code={CODES.jump}
 							label="Jump"

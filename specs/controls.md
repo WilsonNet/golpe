@@ -219,12 +219,14 @@ clusters pin into the two letterbox margins a 4:3 canvas leaves beside itself on
 a 16:9 screen — which is where thumbs already are. Same DOM, placed by grid area,
 so a rotation cannot drop a button a thumb is holding.
 
-**The cross is one element, not four buttons.** A thumb rolling from left to
-up-left has to stay on the control the whole way, and four adjacent buttons each
-with their own hit test drop the input in the gap between them. It is the deck's
-*left stick*: the movement sector comes from the same eight-way quantiser a
-physical left stick goes through, and the raw thumb position is the analog
-Contra aim — a thumb at 30° aims at 30°, not at the nearest of eight.
+**The cross is one element, not four buttons, and it is an analog stick, not a
+d-pad.** A thumb rolling from left to up-left has to stay on the control the
+whole way, and four adjacent buttons each with their own hit test drop the input
+in the gap between them. It is the deck's *left stick*: the movement sector comes
+from the same eight-way quantiser a physical left stick goes through, and the raw
+thumb position is the analog Contra aim — a thumb at 30° aims at 30°, not at the
+nearest of eight. It is drawn as a round pad with a nub that follows the thumb,
+because that is what it is; it used to be drawn as a d-pad and read as one.
 
 **The thumb pad is absolute**, like a real right stick: the vector is where the
 thumb sits relative to the pad's centre, clamped to the rim, and it recentres the
@@ -237,6 +239,13 @@ twin-stick shooter. It is the on-screen pad only, and gun mode only: a physical
 right stick has a trigger to hand, and in sword mode a touch of the pad must not
 slash. Like everything else here it reaches the simulation as the `attack`
 button, never as a thumb, so it cannot desync anything.
+
+**Each stance draws its own buttons.** Block and uppercut are sword moves and do
+nothing in gun stance, so in gun mode the deck does not draw them — a dead button
+on a phone is a thumb spent on nothing. Slash survives both, as the gun's fire
+button. The stance is owned by `Input` and announced over `stance-changed`, and a
+button that stops being drawn releases its code, so a fighter never keeps
+blocking while the deck it blocked with has gone away.
 
 **The deck emits codes, not actions.** A thumb on the slash button sends `Pad2` —
 exactly what a real controller's X button sends — so it is rebindable for free

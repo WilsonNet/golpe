@@ -287,6 +287,12 @@ async function runTouchDeck(browser, check) {
 		walking.game.playerPhys.x - before.playerPhys.x > 20,
 		`moved ${Math.round(walking.game.playerPhys.x - before.playerPhys.x)}px`,
 	);
+	check(
+		"the left stick is drawn as an analog pad, not a d-pad",
+		(await page.locator(".vg-cross-nub").count()) === 1 &&
+			(await page.locator(".vg-cross-arm").count()) === 0,
+		"",
+	);
 
 	/**
 	 * **A thumb drag is not a trackpad stroke.**
@@ -416,7 +422,15 @@ async function runTouchDeck(browser, check) {
 	// On a phone the right thumb is on this pad, and there is no spare finger for
 	// the fire button — so in gun stance the pad aims *and* fires, which is what
 	// makes a phone gun a twin-stick shooter. The stance pill is real DOM, so a
-	// tap proves the path a player takes.
+	// tap proves the path a player takes. The stance also decides which face
+	// buttons are worth drawing: block and uppercut are sword moves, so a gunner
+	// should not be shown buttons that do nothing.
+	check(
+		"sword stance draws the sword-only buttons",
+		(await page.locator(".vg-btn.block").count()) === 1 &&
+			(await page.locator(".vg-btn.upper").count()) === 1,
+		"",
+	);
 	await settle(page);
 	await page.locator(".vg-pill").filter({ hasText: "Gun" }).tap();
 	await page.waitForTimeout(300);
@@ -425,6 +439,12 @@ async function runTouchDeck(browser, check) {
 		"the deck's Gun pill switched the stance",
 		gunBefore.playerPhys.stance === "gun",
 		`stance=${gunBefore.playerPhys.stance}`,
+	);
+	check(
+		"gun stance hides the sword-only buttons",
+		(await page.locator(".vg-btn.block").count()) === 0 &&
+			(await page.locator(".vg-btn.upper").count()) === 0,
+		"",
 	);
 	await touch.start(stick.x + stick.width / 2, stick.y + stick.height / 2);
 	await touch.move(stick.x + stick.width / 2, stick.y - 40);

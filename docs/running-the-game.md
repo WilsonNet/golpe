@@ -311,10 +311,12 @@ mode has no beam, because the cursor is already telling you the same thing.
 deck in the half of a portrait screen the 4:3 arena leaves empty; turn the phone
 sideways and the controls move into the letterbox margins instead. The deck has
 its own **Menu** button, because a phone has no Escape key. The left thumb works
-the cross — move, and aim at whatever angle it is held — and the right thumb
-works the aim pad, which overrides the aim with the full 360° *and*, in gun mode,
-fires the gun: there is no spare finger for a fire button, so the pad is the
-trigger too, and a phone gun plays as a twin-stick shooter.
+a round analog pad — move, and aim at whatever angle it is held — and the right
+thumb works the aim pad, which overrides the aim with the full 360° *and*, in gun
+mode, fires the gun: there is no spare finger for a fire button, so the pad is
+the trigger too, and a phone gun plays as a twin-stick shooter. The deck also
+**swaps its buttons with the stance**: block and uppercut are sword moves, so a
+gunner is not shown buttons that do nothing.
 
 **Attach a Bluetooth keyboard and mouse to that phone** and you can go straight
 back to the normal scheme: set *Aiming* to Mouse, or set *On-screen gamepad* to

@@ -499,8 +499,17 @@ export class Input {
 		if (action === undefined) return;
 		if (action === "left") this.dashGesture.press(-1, performance.now());
 		if (action === "right") this.dashGesture.press(1, performance.now());
-		if (action === "sword") this.swordStance = true;
-		if (action === "gun") this.swordStance = false;
+		if (action === "sword") {
+			this.swordStance = true;
+			// The deck draws different buttons in each stance, and the stance is
+			// owned here — so a press that flips it tells React over the same
+			// bridge the rest of the overlay talks over.
+			EventBus.emit("stance-changed", true);
+		}
+		if (action === "gun") {
+			this.swordStance = false;
+			EventBus.emit("stance-changed", false);
+		}
 		if (action === "toggleAi") this.onToggleAi?.();
 	}
 
