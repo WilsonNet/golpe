@@ -4,6 +4,7 @@ import { MatchOver } from "./ui/MatchOver";
 import { NamePrompt } from "./ui/NamePrompt";
 import { PauseMenu } from "./ui/PauseMenu";
 import { Scoreboard } from "./ui/Scoreboard";
+import { TouchControls } from "./ui/TouchControls";
 import { TrainingPanel } from "./ui/TrainingPanel";
 
 /**
@@ -37,6 +38,11 @@ function App() {
 	return (
 		<div id="app">
 			<GameCanvas />
+			{/* Directly after the canvas, because it is part of the *page* rather
+			    than an overlay on it: the deck's presence is what turns a centred
+			    canvas into a handheld, screen above and controls below. It draws
+			    nothing at all unless this player is aiming like a controller. */}
+			<TouchControls />
 			{training ? <TrainingPanel /> : null}
 			<Scoreboard />
 			<MatchOver />

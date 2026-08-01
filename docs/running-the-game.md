@@ -244,8 +244,12 @@ here says nothing about the netcode.
 | **A** / **D** | Move left / right |
 | Double-tap **A** / **D** | Dash |
 | **Mouse** | Aim — **you face where you aim**, which is how you keep your guard toward an attacker while retreating |
+| **Arrows** | The keyboard's d-pad: left/right move, up/down aim in controller mode |
 | **P** | Toggle AI vs AI |
 | **Esc** | Menu — and the controls dialog, where every button here can be rebound |
+
+A gamepad, a trackpad and a touchscreen all play this too — see *Playing with a
+controller, a trackpad, or a phone* below.
 
 Jumping is forgiving on both sides of a ledge: 100ms of coyote time after
 walking off, and a 120ms jump buffer before landing. While airborne and touching
@@ -282,12 +286,41 @@ cancelled and root you where you stand, so whiffing one loses the exchange.
 Full frame data and the reasoning behind every number is in
 [`specs/melee.md`](../specs/melee.md).
 
+### Playing with a controller, a trackpad, or a phone
+
+**Esc → Controls → Aiming** switches between the two schemes.
+
+- **Mouse** — you face the cursor. The default on anything with a real pointer.
+- **Controller** — the d-pad or left stick aims in eight directions with the same
+  input that moves you, and the right stick overrides it with the full 360° until
+  you let go. On a laptop with no controller, *sliding the mouse* drives that
+  right stick, which is what makes the game playable on a trackpad.
+
+A gamepad works with no setup beyond flipping that switch: the defaults put jump
+on A, slash on X, uppercut on Y, block on the left trigger and the stances on the
+shoulders, and the controls dialog will capture a pad button into any slot.
+
+**Controller mode draws a beam** out of your fighter showing where it is aiming —
+gold for the eight-direction aim, turning cyan while the right stick (or the
+thumb pad) is overriding it, and fading back to gold as that hands over. Mouse
+mode has no beam, because the cursor is already telling you the same thing.
+
+**On a phone**, the game starts in controller mode and draws a Game Boy-shaped
+deck in the half of a portrait screen the 4:3 arena leaves empty; turn the phone
+sideways and the controls move into the letterbox margins instead. The deck has
+its own **Menu** button, because a phone has no Escape key.
+
+**Attach a Bluetooth keyboard and mouse to that phone** and you can go straight
+back to the normal scheme: set *Aiming* to Mouse, or set *On-screen gamepad* to
+Off. They are two separate settings precisely so that this works.
+
 ### Rebinding
 
 **Esc** opens the menu, and *Controls* opens the binding dialog: click a slot,
-press the key or mouse button you want, and that is the binding. Escape cancels a
-capture, right-click clears a slot, and *Reset to defaults* puts everything back.
-Bindings are kept in `localStorage` per browser.
+press the key, mouse button or gamepad button you want, and that is the binding.
+Escape cancels a capture, right-click clears a slot, and *Reset to defaults* puts
+everything back. There are three slots per action — a key, an alternate and a pad
+button — and bindings are kept in `localStorage` per browser.
 
 The menu **does not pause the match** — the server is authoritative and the other
 fifteen fighters are still swinging. What it does is take the keyboard away from
@@ -329,6 +362,9 @@ window.__matchState()           // scores, clock, winner, rollback and bandwidth
 window.__setPlayerName("Bob")   // answer the name prompt from a script
 window.__toggleAIVsAI()         // same as pressing P
 window.__physicsDiagnostic(5000) // collect 5s of frames, print a JSON report
+window.__aimState()             // cursor, aim angle, facing and live shot headings
+window.__inputState()           // scheme, deck, and both controller aim layers
+window.__setInputScheme("controller")  // the same store the Esc menu writes
 ```
 
 ---

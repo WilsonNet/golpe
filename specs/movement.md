@@ -41,12 +41,26 @@ Retuning the jump silently retunes what being launched feels like — see
 
 ## Aim and facing
 
-**A fighter faces the cursor, always — the only exceptions are a swing's startup
-and active frames, and being stunned.** Facing travels in the intent as `face`
-(-1, 1, or 0 meaning "let the feet decide"), so the client and server derive it
-from the same input on the same tick. See [melee.md](melee.md) for why the two
-exceptions exist, and [combat.md](combat.md) for the shot that leaves along the
-same angle.
+**A fighter faces where it aims, always — the only exceptions are a swing's
+startup and active frames, and being stunned.** Facing travels in the intent as
+`face` (-1, 1, or 0 meaning "let the feet decide"), so the client and server
+derive it from the same input on the same tick. See [melee.md](melee.md) for why
+the two exceptions exist, and [combat.md](combat.md) for the shot that leaves
+along the same angle.
+
+**Where the aim angle comes from is the input layer's business, not the
+simulation's.** With a mouse it is the vector to the cursor; with a controller it
+is eight directions from the d-pad, overridden by the right stick's full 360°.
+The simulation is handed a number with no provenance either way — which is why a
+player can switch scheme mid-match and nothing desyncs. See
+[controls.md](controls.md).
+
+**Within ~4.6° of straight up or down, `face` is 0 and the feet decide.** Without
+the dead band `cos(-90°)` is a positive floating-point crumb and a fighter aiming
+at the ceiling snaps to facing right; facing decides which side a guard covers,
+so that frame is a free hit. It matters far more with a controller, where
+straight up is one of eight directions players actually sit on, than with a mouse
+where it is a pixel-wide accident.
 
 **The cursor is a screen fact and everything it is compared against is a world
 fact.** The conversion divides by the *logical* view — 800x600, `app.screen` —
@@ -98,7 +112,9 @@ rise against the ground jump's 136px.
 
 ## Dash
 
-- Double-tap **A** or **D** to dash that direction.
+- Double-tap **A** or **D** to dash that direction — or the d-pad, or flick the
+  left stick, since the gesture is on the *action* and every device reaches it
+  through the same four direction codes.
 - Dash speed **1000 px/s**; double-tap window **300ms**; travel **160ms**;
   lockout **250ms**.
 - A dash is an *impulse on the shared simulation* — it sets velocity, then

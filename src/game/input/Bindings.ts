@@ -7,15 +7,18 @@
  * source of truth for the mapping, and `Input` asks it rather than comparing
  * `e.code` against literals.
  *
- * **Mouse buttons live in the same namespace as keys.** A binding is a code
- * string: `KeyboardEvent.code` for keys, `Mouse0`/`Mouse1`/`Mouse2` for the
- * pointer. That is what lets block move from right-click to Shift without the
- * input layer growing a second code path — and lets a player move it back.
+ * **Mouse buttons and gamepad buttons live in the same namespace as keys.** A
+ * binding is a code string: `KeyboardEvent.code` for keys, `Mouse0`/`Mouse1`/
+ * `Mouse2` for the pointer, `Pad0`…/`PadUp`… for a controller. That is what lets
+ * block move from right-click to Shift to the left trigger without the input
+ * layer growing a code path per device — and lets a player move it back.
  *
  * **This is a client-side concern only.** The simulation is handed buttons, not
  * keys: `PlayerIntent` says `block`, never `ShiftLeft`. Rebinding therefore
  * cannot desync anything, because nothing about a binding ever reaches the wire.
  */
+
+import { padLabel } from "./Gamepad";
 
 /**
  * Every rebindable action, in the order the controls dialog lists them.
@@ -23,10 +26,18 @@
  * Dash is absent on purpose: it is a *gesture* on the movement bindings (double
  * tap left or right), not a button of its own, so it follows whatever those two
  * are bound to.
+ *
+ * **`aimUp` and `aimDown` have no `aimLeft`/`aimRight` counterparts**, and that
+ * is the Contra scheme rather than an omission: horizontal aim *is* the movement
+ * input, so running right aims right and nothing extra is held. Aiming away from
+ * where you are running is the fine stick's job — see `Aim.ts`. They do nothing
+ * at all in mouse mode, where the cursor answers both axes.
  */
 export const ACTIONS = [
 	"left",
 	"right",
+	"aimUp",
+	"aimDown",
 	"jump",
 	"attack",
 	"block",
@@ -40,8 +51,10 @@ export type Action = (typeof ACTIONS)[number];
 
 /** How the controls dialog names each action. */
 export const ACTION_LABELS: Record<Action, string> = {
-	left: "Move left",
-	right: "Move right",
+	left: "Move / aim left",
+	right: "Move / aim right",
+	aimUp: "Aim up",
+	aimDown: "Aim down",
 	jump: "Jump / double jump",
 	attack: "Slash / fire",
 	block: "Block",
@@ -52,13 +65,19 @@ export const ACTION_LABELS: Record<Action, string> = {
 };
 
 /**
- * Two bindings per action: a primary and an alternate.
+ * Three bindings per action: a primary, an alternate, and a gamepad button.
+ *
+ * The third slot is a *convention*, not a constraint — nothing stops a player
+ * putting a fourth key there, and nothing should. It exists because every action
+ * now wants a keyboard binding, a comfortable alternate, **and** a pad button,
+ * and two slots forced a controller to displace one of the two keys that were
+ * already there.
  *
  * Named rather than numbered because the dialog keys its cells by them — keying
  * a row's buttons by slot index is the React mistake where a re-render hands the
  * focused button's state to a different slot.
  */
-export const SLOT_NAMES = ["primary", "alternate"] as const;
+export const SLOT_NAMES = ["primary", "alternate", "gamepad"] as const;
 
 /** How many bindings an action can hold. */
 export const SLOTS = SLOT_NAMES.length;
@@ -74,18 +93,29 @@ export const SLOTS = SLOT_NAMES.length;
  * **Jump is W and Space.** W keeps the WASD hand shape; Space is what every
  * player's thumb reaches for without being told. They are the same action, so a
  * double jump can even be W then Space.
+ *
+ * **The arrow keys are the keyboard's d-pad.** Left and right double up with
+ * A/D, and up and down are the aim axis WASD has no room for — a keyboard in
+ * controller mode aims Contra-style with the hand that is not on the mouse.
+ *
+ * **The pad layout puts the two held actions on the left hand.** Block is the
+ * left trigger and stance sits on the shoulders, because a guard is held through
+ * a whole exchange while the right thumb is busy on the face buttons — the same
+ * argument that moved block off the mouse.
  */
 export const DEFAULT_BINDINGS: Readonly<Record<Action, readonly string[]>> = {
-	left: ["KeyA"],
-	right: ["KeyD"],
-	jump: ["KeyW", "Space"],
-	attack: ["Mouse0"],
+	left: ["KeyA", "ArrowLeft", "PadLeft"],
+	right: ["KeyD", "ArrowRight", "PadRight"],
+	aimUp: ["ArrowUp", "PadUp"],
+	aimDown: ["ArrowDown", "PadDown"],
+	jump: ["KeyW", "Space", "Pad0"],
+	attack: ["Mouse0", "Pad2"],
 	// Both shifts, because which one is under the hand depends on which half of
 	// the keyboard the player's movement fingers live on.
-	block: ["ShiftLeft", "ShiftRight"],
-	uppercut: ["KeyF"],
-	sword: ["KeyQ"],
-	gun: ["KeyE"],
+	block: ["ShiftLeft", "ShiftRight", "Pad6"],
+	uppercut: ["KeyF", "Pad3"],
+	sword: ["KeyQ", "Pad4"],
+	gun: ["KeyE", "Pad5"],
 	toggleAi: ["KeyP"],
 };
 
@@ -113,6 +143,8 @@ const MOUSE_LABELS: Record<string, string> = {
 export function codeLabel(code: string): string {
 	if (code in MOUSE_LABELS) return MOUSE_LABELS[code] as string;
 	if (code.startsWith("Mouse")) return `Mouse ${code.slice(5)}`;
+	const pad = padLabel(code);
+	if (pad !== undefined) return pad;
 	if (code.startsWith("Key")) return code.slice(3);
 	if (code.startsWith("Digit")) return code.slice(5);
 	if (code.startsWith("Numpad")) return `Num ${code.slice(6)}`;

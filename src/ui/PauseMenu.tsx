@@ -25,7 +25,34 @@ import {
 	RESERVED_CODES,
 	SLOT_NAMES,
 } from "../game/input/Bindings";
+import { readPads } from "../game/input/Gamepad";
+import {
+	type AimScheme,
+	type DeckSetting,
+	inputSettings,
+} from "../game/input/Scheme";
 import { HUD_CSS } from "./hudStyles";
+
+/** The aiming schemes, as a player chooses between them. */
+const SCHEMES: { value: AimScheme; label: string; hint: string }[] = [
+	{
+		value: "mouse",
+		label: "Mouse",
+		hint: "You face the cursor. Point at a place and the shot goes there.",
+	},
+	{
+		value: "controller",
+		label: "Controller",
+		hint: "Eight directions from the d-pad, full 360° from the right stick — or from sliding the mouse, for a trackpad.",
+	},
+];
+
+/** When the on-screen gamepad is drawn. */
+const DECKS: { value: DeckSetting; label: string }[] = [
+	{ value: "auto", label: "Auto" },
+	{ value: "on", label: "On" },
+	{ value: "off", label: "Off" },
+];
 
 type View = "menu" | "controls";
 
@@ -54,6 +81,9 @@ export function PauseMenu() {
 	openRef.current = open;
 
 	useEffect(() => bindings.subscribe(() => bump((n) => n + 1)), []);
+	// The scheme store is not React state either — `Input` reads it every frame
+	// from outside React entirely — so it is subscribed to the same way.
+	useEffect(() => inputSettings.subscribe(() => bump((n) => n + 1)), []);
 
 	useEffect(() => {
 		const offNeed = EventBus.on("need-player-name", (() => {
@@ -79,7 +109,17 @@ export function PauseMenu() {
 			setOpen(!openRef.current);
 		};
 		window.addEventListener("keydown", onKey);
-		return () => window.removeEventListener("keydown", onKey);
+		// A phone has no Escape key. The on-screen gamepad's menu button fires this
+		// instead of synthesising a keystroke, because a synthetic keydown would
+		// also have to be kept out of the rebind capture and out of the canvas.
+		const offToggle = EventBus.on("menu-toggle", (() => {
+			if (naming.current || captureRef.current) return;
+			setOpen(!openRef.current);
+		}) as never);
+		return () => {
+			window.removeEventListener("keydown", onKey);
+			offToggle();
+		};
 	}, []);
 
 	// The game learns about the menu here and only here.
@@ -135,10 +175,29 @@ export function PauseMenu() {
 		// Right-click is a legitimate binding, so the browser menu cannot have it.
 		const onContext = (e: Event) => e.preventDefault();
 
+		// A gamepad has no button events, so the one device that cannot announce
+		// itself is polled for as long as the dialog is listening. Without this the
+		// third slot would be labelled "gamepad" and be the only one a gamepad
+		// could not be bound to.
+		//
+		// Seeded from the *current* state rather than from nothing, so a trigger
+		// still held from opening the menu does not immediately bind itself.
+		let held = new Set(readPadCodes());
+		const poll = window.setInterval(() => {
+			const now = new Set(readPadCodes());
+			for (const code of now) {
+				if (held.has(code)) continue;
+				assign(action, slot, code);
+				return;
+			}
+			held = now;
+		}, 50);
+
 		window.addEventListener("keydown", onKey, true);
 		window.addEventListener("pointerdown", onPointer, true);
 		window.addEventListener("contextmenu", onContext, true);
 		return () => {
+			window.clearInterval(poll);
 			window.removeEventListener("keydown", onKey, true);
 			window.removeEventListener("pointerdown", onPointer, true);
 			window.removeEventListener("contextmenu", onContext, true);
@@ -178,12 +237,61 @@ export function PauseMenu() {
 				) : (
 					<>
 						<h2 className="vd-title">Controls</h2>
+
+						<div className="vd-setting">
+							<div className="vd-setting-head">
+								<span>Aiming</span>
+								<div className="vd-choice">
+									{SCHEMES.map((s) => (
+										<button
+											key={s.value}
+											type="button"
+											className={`vd-chip${inputSettings.scheme === s.value ? " vd-chip-on" : ""}`}
+											onClick={() => inputSettings.setScheme(s.value)}
+										>
+											{s.label}
+										</button>
+									))}
+								</div>
+							</div>
+							<p className="vd-setting-hint">
+								{SCHEMES.find((s) => s.value === inputSettings.scheme)?.hint}{" "}
+								Switching is safe mid-match — the simulation is handed an angle
+								and never learns which device made it.
+							</p>
+						</div>
+
+						<div className="vd-setting">
+							<div className="vd-setting-head">
+								<span>On-screen gamepad</span>
+								<div className="vd-choice">
+									{DECKS.map((d) => (
+										<button
+											key={d.value}
+											type="button"
+											className={`vd-chip${inputSettings.deck === d.value ? " vd-chip-on" : ""}`}
+											onClick={() => inputSettings.setDeck(d.value)}
+										>
+											{d.label}
+										</button>
+									))}
+								</div>
+							</div>
+							<p className="vd-setting-hint">
+								<strong>Auto</strong> draws it when a finger is the pointer and
+								aiming is set to Controller. Pair a keyboard to a phone and turn
+								it <strong>Off</strong>.
+							</p>
+						</div>
+
 						<p className="vd-sub">
-							Click a slot, then press the key or mouse button you want.
-							<strong> Esc</strong> cancels. Double-tapping{" "}
+							Click a slot, then press the key, mouse button or gamepad button
+							you want. <strong>Esc</strong> cancels. Double-tapping{" "}
 							<strong>{firstLabel("left")}</strong> or{" "}
 							<strong>{firstLabel("right")}</strong> dashes, so the dash follows
-							whatever those two are bound to.
+							whatever those two are bound to. <strong>Aim up</strong> and{" "}
+							<strong>aim down</strong> do nothing in Mouse aiming — the cursor
+							answers both axes there.
 						</p>
 						<table className="vd-bind-table">
 							<tbody>
@@ -251,6 +359,12 @@ export function PauseMenu() {
 			</div>
 		</div>
 	);
+}
+
+/** Every gamepad code held right now, in the shared binding namespace. */
+function readPadCodes(): string[] {
+	if (typeof navigator === "undefined" || !navigator.getGamepads) return [];
+	return [...readPads(navigator.getGamepads()).down];
 }
 
 /** How a hint should name an action: its primary binding, or that it has none. */

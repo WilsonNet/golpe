@@ -29,6 +29,7 @@ node scripts/verify-modes.mjs                   # smoke-check every launch mode
 node scripts/aim-probe.mjs                      # cursor, facing and shot direction, at dpr 1 and 2
 node scripts/training-probe.mjs                 # one interaction at a time, against a scripted dummy
 node scripts/controls-probe.mjs                 # key bindings, the Esc menu and a rebind
+node scripts/pad-probe.mjs                      # controller aim, a gamepad, and the phone deck
 ```
 
 ## The deathmatch probe
@@ -118,6 +119,52 @@ simulation state back:
 
 Every check reports what it measured, not just a verdict — `blocking=false` on a
 line that expected a guard says which half of the chain broke.
+
+## The controller probe
+
+`pad-probe.mjs` covers the third blind spot. `aim-probe.mjs` measures the
+*cursor*, which controller mode does not use at all, and Playwright cannot press
+a physical gamepad button — so the probe **stubs `navigator.getGamepads`** before
+the page loads. That is legitimate rather than a shortcut: the Gamepad API is
+polled, so a stub returning the same snapshot shape on the same schedule is
+genuinely equivalent from the game's point of view.
+
+| Check | Why it is there |
+|---|---|
+| the d-pad aims in eight directions | the Contra layer, and its horizontal half is the same input that moves you |
+| aiming straight up leaves `face: 0` | `cos(-90°)` is a positive crumb, and a fighter that snapped to facing right there gives away free hits |
+| the right stick aims at any angle while running the other way | the whole reason there are two layers |
+| letting go falls back to the Contra aim | a stick that stayed where it was left is a fighter aiming at a wall |
+| a mouse stroke **runs up the arc past 45°** | a clamping virtual stick stalls near -63° and never reaches the ceiling; this is the one number that distinguishes the two implementations |
+| a mouse left alone holds, then resets on its own | the mouse has no spring, so a hold window stands in for one |
+| trigger blocks, face button jumps, shoulder swaps stance | pad buttons reach the simulation through the *ordinary* bindings, not a second path |
+| switching back to Mouse gives the cursor its say | a scheme that cannot be left is a trap |
+
+It then opens a second, phone-shaped context — `hasTouch` is what makes Chromium
+answer `pointer: coarse` the way a phone does, and it cannot be changed on a live
+page — and checks that the deck is drawn, that the game and the deck **both fit
+with no horizontal scroll and the canvas keeps its 4:3**, that the screen reaches
+both edges of the phone, that a thumb on the cross walks the fighter, that the
+thumb pad aims and recentres, and that the deck's own menu button can send the
+deck away. The controls are ordinary DOM, so it taps them: an emitted event
+proves the wiring, a tap proves the game.
+
+**It drives that context with CDP `Input.dispatchTouchEvent`, never
+`page.mouse`.** Playwright's mouse reports `pointerType: "mouse"` even inside a
+touch context, and that field is exactly what the relative-mouse aim layer is
+filtered on — so a probe driven by it is structurally blind to every bug in the
+filter, and was: two of them passed a green probe until this section was
+rewritten. Two checks exist only because of that:
+
+| Check | Why it is there |
+|---|---|
+| a deck button does not also swing the sword | `Input`'s `pointerdown` is on `window` and `Mouse0` is attack, so every button on the deck slashed as well as doing its own job |
+| a thumb sliding across the cross does not steer the aim | `movementX` is populated for touch pointers, so a thumb drag drove the virtual stick — holding *left* while dragging *right* aimed right |
+
+The second one slides **rightward along the left arm** on purpose. A drag *toward*
+an arm pushes a broken virtual stick the same way that arm points, so the correct
+and the broken build agree; only a press and a travel that disagree can separate
+them.
 
 ## The training probe
 

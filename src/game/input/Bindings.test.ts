@@ -26,8 +26,25 @@ describe("defaults", () => {
 		expect(DEFAULT_BINDINGS.block).not.toContain("Mouse2");
 	});
 
-	it("jumps on W and on Space", () => {
-		expect([...DEFAULT_BINDINGS.jump]).toEqual(["KeyW", "Space"]);
+	it("jumps on W, on Space and on the pad's bottom face button", () => {
+		expect([...DEFAULT_BINDINGS.jump]).toEqual(["KeyW", "Space", "Pad0"]);
+	});
+
+	it("gives every action a pad binding except the debug toggle", () => {
+		// A controller that could not do something a keyboard can is not a control
+		// scheme, it is a demo. AI vs AI is the one exception: it is a debug switch,
+		// and a stray pad button flipping the whole match to bots would be a bug.
+		for (const action of ACTIONS) {
+			const hasPad = DEFAULT_BINDINGS[action].some((c) => c.startsWith("Pad"));
+			expect(hasPad).toBe(action !== "toggleAi");
+		}
+	});
+
+	it("aims vertically on the arrow keys and the d-pad", () => {
+		// Horizontal aim is the movement input — that is the Contra scheme — so
+		// there is deliberately no aimLeft/aimRight to bind.
+		expect([...DEFAULT_BINDINGS.aimUp]).toEqual(["ArrowUp", "PadUp"]);
+		expect([...DEFAULT_BINDINGS.aimDown]).toEqual(["ArrowDown", "PadDown"]);
 	});
 
 	it("binds no code to two actions", () => {
@@ -55,7 +72,7 @@ describe("KeyBindings", () => {
 		// unable to jump with no idea why.
 		expect(b.bind("block", 0, "KeyW")).toBe("jump");
 		expect(b.actionFor("KeyW")).toBe("block");
-		expect([...b.codesFor("jump")]).toEqual(["Space"]);
+		expect([...b.codesFor("jump")]).toEqual(["Space", "Pad0"]);
 	});
 
 	it("does not report a displacement when the action already had the code", () => {
@@ -66,8 +83,10 @@ describe("KeyBindings", () => {
 	it("puts a code in the first free slot rather than leaving a hole", () => {
 		const b = new KeyBindings();
 		b.clear("left", 0);
-		b.bind("left", 1, "ArrowLeft");
-		expect([...b.codesFor("left")]).toEqual(["ArrowLeft"]);
+		b.clear("left", 0);
+		b.clear("left", 0);
+		b.bind("left", 2, "KeyZ");
+		expect([...b.codesFor("left")]).toEqual(["KeyZ"]);
 	});
 
 	it("never keeps more than two bindings for an action", () => {
@@ -134,7 +153,7 @@ describe("sanitise", () => {
 	it("drops a default that a saved binding already claimed", () => {
 		const map = sanitise({ block: ["KeyW"] });
 		expect(map.block).toEqual(["KeyW"]);
-		expect(map.jump).toEqual(["Space"]);
+		expect(map.jump).toEqual(["Space", "Pad0"]);
 	});
 
 	it("refuses duplicates, reserved codes and junk entries", () => {
@@ -163,6 +182,8 @@ describe("codeLabel", () => {
 		expect(codeLabel("Mouse2")).toBe("Right Click");
 		expect(codeLabel("ArrowUp")).toBe("Up Arrow");
 		expect(codeLabel("Digit1")).toBe("1");
+		expect(codeLabel("Pad0")).toBe("Pad A");
+		expect(codeLabel("PadLeft")).toBe("Pad Left");
 		// Anything unmapped is shown raw rather than hidden.
 		expect(codeLabel("F13")).toBe("F13");
 	});

@@ -1,18 +1,50 @@
+html,
 body {
     margin: 0;
     padding: 0;
+    height: 100%;
     color: rgba(255, 255, 255, 0.87);
-    background-color: #000000; 
+    background-color: #000000;
     font-family: Arial, Helvetica, sans-serif;
+    /* A phone must not rubber-band the page while a thumb is on the d-pad, and
+       must not zoom on a double tap that was meant to be two slashes. */
+    overscroll-behavior: none;
+    -webkit-text-size-adjust: 100%;
 }
 
 #app {
     width: 100%;
+    /* dvh, not vh: a mobile browser's URL bar makes vh taller than the visible
+       screen, which pushes the bottom of the on-screen gamepad off it. */
     height: 100vh;
+    height: 100dvh;
     overflow: hidden;
     display: flex;
     justify-content: center;
     align-items: center;
+}
+
+#game-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    max-width: 100%;
+    max-height: 100%;
+    min-height: 0;
+}
+
+/* The game is authored at 800x600 and stays 4:3 whatever it is shown on.
+   Constraining *both* axes is what keeps it that way: a replaced element given
+   a max width and a max height scales down proportionally, whereas the old
+   `width: 100%` let a short window crop the arena off the bottom — which on a
+   phone in portrait is most of it. */
+#game-container canvas {
+    display: block;
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    max-height: 100%;
+    touch-action: none;
 }
 
 .spritePosition {

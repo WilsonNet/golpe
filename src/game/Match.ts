@@ -41,8 +41,10 @@ import {
 	type Queries,
 } from "./ecs/world";
 import { Input } from "./input/Input";
+import { inputSettings } from "./input/Scheme";
 import { OnlineSession } from "./online/OnlineSession";
 import { requestedRoomId, showRoomInUrl } from "./online/room";
+import { AimLine } from "./render/AimLine";
 import { bodyCentre, drawArena } from "./render/ArenaRenderer";
 import { dudeFrames, TEX, tex } from "./render/assets";
 import { type ImpactEvent, MeleeFx } from "./render/MeleeFx";
@@ -119,6 +121,7 @@ export class Match {
 	private readonly queries: Queries;
 	private readonly fx: MeleeFx;
 	private readonly plates: Nameplates;
+	private readonly aimLine: AimLine;
 	private readonly input: Input;
 	private readonly diagnostics: PhysicsDiagnostics;
 	private readonly bullets: BulletSystem;
@@ -192,6 +195,10 @@ export class Match {
 		this.queries = createQueries(this.world);
 		this.fx = new MeleeFx(stage.effects, stage);
 		this.plates = new Nameplates(stage.nameplates);
+		// In the nameplate layer, which is inside the camera and drawn last: the beam
+		// tracks a moving fighter, and one buried behind a ledge or a spark answers
+		// nothing. It is under the plates themselves because a name is worth more.
+		this.aimLine = new AimLine(stage.nameplates);
 		this.bullets = new BulletSystem(stage.projectiles, tex(TEX.fireball));
 		this.diagnostics = new PhysicsDiagnostics(
 			() => (this.onlineMode ? "online" : "offline"),
@@ -649,6 +656,24 @@ export class Match {
 				bullets: this.localBullets(),
 			};
 		};
+		// Controller mode is invisible to every other probe for exactly the reason
+		// aim was: the brains hand the simulation an angle and never touch a stick,
+		// and Playwright cannot press a physical button. `scripts/pad-probe.mjs`
+		// stubs the Gamepad API and reads this.
+		window.__inputState = () => ({
+			scheme: inputSettings.scheme,
+			deck: inputSettings.deck,
+			deckVisible: inputSettings.deckVisible(),
+			padAvailable: this.input.padAvailable,
+			aim: this.input.aimReport(),
+			face: this.localIntent.face,
+			facing: this.local.body.facing,
+		});
+		// Switching scheme from a probe, the same way the Esc menu switches it —
+		// a bypass nobody plays would prove nothing about the path a player takes.
+		window.__setInputScheme = (scheme) => {
+			inputSettings.setScheme(scheme);
+		};
 	}
 
 	/** Local fighter's live projectiles with their headings, for the aim probe. */
@@ -680,6 +705,11 @@ export class Match {
 		const dtSec = Math.min(dtMs / 1000, 0.05);
 		this.elapsed += dtMs;
 
+		// Before anything reads an aim or an intent. The gamepad has no events, so
+		// this is where a pad button becomes a held code, and where the handover
+		// between the Contra aim and the fine stick advances by one frame.
+		this.input.poll(dtMs, this.local.body.facing);
+
 		if (this.onlineMode) this.updateOnline(dtSec);
 		else this.updateOffline(dtSec);
 
@@ -688,12 +718,43 @@ export class Match {
 		animationSystem(this.queries, dtMs);
 		spriteSyncSystem(this.queries);
 		nameplateSystem(this.queries, this.plates);
+		this.syncAimLine(dtMs);
 		meleeFxSystem(this.queries, this.fx, dtMs);
 		this.fx.update(dtMs);
 		this.stage.update(dtMs);
 
 		this.training?.update(dtMs);
 		this.record(dtMs);
+	}
+
+	/**
+	 * Point the aim beam at whatever the input layer settled on this frame.
+	 *
+	 * **Controller mode only, and only for a human.** A mouse player's cursor is
+	 * already the reticle, so a second one would be a line pointing at a dot a few
+	 * hundred pixels away; and a bot's beam is noise on every probe screenshot.
+	 *
+	 * Read off the *drawn* position, like the nameplates: the render smoother
+	 * deliberately offsets the sprite from its simulation state to hide a
+	 * correction, and a beam grown from the body would detach from its own fighter
+	 * by exactly the amount that smoothing is hiding.
+	 */
+	private syncAimLine(dtMs: number) {
+		const at = this.local.renderPos ?? this.local.body;
+		const centre = bodyCentre(at.x, at.y);
+		const report = this.input.aimReport();
+		const visible =
+			inputSettings.scheme === "controller" &&
+			!this.localBrain &&
+			this.local.fighter.hp > 0;
+		this.aimLine.update(
+			dtMs,
+			visible,
+			centre.x,
+			centre.y,
+			this.aimAngle,
+			report.blend,
+		);
 	}
 
 	private record(dtMs: number) {
@@ -1060,6 +1121,7 @@ export class Match {
 
 		this.bullets.clear();
 		this.fx.reset();
+		this.aimLine.reset();
 		this.stage.reset();
 		this.hpText.text = "hp: 100";
 	}
@@ -1081,6 +1143,7 @@ export class Match {
 	destroy() {
 		this.nameUnsubscribe?.();
 		this.input.destroy();
+		this.aimLine.destroy();
 		this.training?.destroy();
 		this.online?.disconnect();
 	}

@@ -39,10 +39,13 @@ export async function startGame(parent: HTMLElement): Promise<GameHandle> {
 	});
 
 	parent.appendChild(app.canvas);
-	app.canvas.style.width = "100%";
-	app.canvas.style.height = "auto";
-	app.canvas.style.display = "block";
-	app.canvas.style.touchAction = "none";
+	// Sizing lives in `public/style.css`, not here. Pixi's `autoDensity` writes an
+	// inline width and height in CSS pixels, and an inline style beats a
+	// stylesheet — so those two are cleared and the page decides how big the
+	// screen is. It has to: on a phone the answer depends on whether the
+	// on-screen gamepad is taking the bottom half.
+	app.canvas.style.width = "";
+	app.canvas.style.height = "";
 
 	await loadAssets();
 	createFxTextures(app.renderer);

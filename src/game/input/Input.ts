@@ -1,17 +1,31 @@
 /**
- * Raw keyboard and mouse state.
+ * Raw keyboard, mouse, gamepad and touch state.
  *
  * Deliberately dumb: it records which buttons are down and where the cursor is,
  * and nothing else. **Edge detection does not belong here.** The simulation does
  * its own — jump height is analogue, a slash needs a press edge, a Massive fires
  * on release — and detecting edges in two places would mean the client and the
  * server disagreed about what a given frame's input was.
+ *
+ * **Four devices, one alphabet.** Keys, mouse buttons, pad buttons and the
+ * on-screen deck all reduce to code strings in one namespace, so an action asks
+ * "is any of my codes held" and gets one answer. See `Bindings.ts`.
+ *
+ * **Two ways to answer "where is this fighter aiming".** With a cursor, the
+ * angle is the vector to a point on the screen. Without one — a pad, a trackpad,
+ * a thumb — it comes from `AimController`, which has no idea a screen exists.
+ * `inputSettings.scheme` picks between them, and the simulation is handed the
+ * same `aimAngle` either way: it never learns which device produced it, and
+ * therefore nothing about any of this can desync.
  */
 
 import { EventBus } from "../EventBus";
 import { bodyCentre } from "../render/ArenaRenderer";
 import { NEUTRAL_INTENT, type PlayerIntent } from "../simulation/Physics";
+import { AimController, type AimReport } from "./Aim";
 import { type Action, bindings, mouseCode } from "./Bindings";
+import { GamepadSource } from "./Gamepad";
+import { inputSettings } from "./Scheme";
 
 /**
  * Two taps inside this window are a dash rather than two steps.
@@ -137,6 +151,32 @@ export function viewToWorld(
 	};
 }
 
+/**
+ * How close to vertical an aim has to be before the feet decide the facing.
+ *
+ * A cosine, so 0.08 is about 4.6° either side of straight up or straight down.
+ * Without it, `cos(-90°)` is a positive floating-point crumb and a fighter that
+ * aims at the ceiling snaps to facing right — which in a game where facing
+ * decides which side a guard covers is a free hit. `face: 0` is the intent's
+ * existing "let the feet decide", so a fighter aiming straight up keeps looking
+ * the way it is walking.
+ *
+ * It matters far more with a controller than with a mouse: straight up is one of
+ * the eight Contra directions and therefore a place players actually sit, rather
+ * than a pixel-wide accident of where the cursor landed.
+ */
+const VERTICAL_AIM_COS = 0.08;
+
+/** Shared empty set, so a suspended frame allocates nothing. */
+const EMPTY_CODES: ReadonlySet<string> = new Set<string>();
+
+/** Which way an aim angle says to face, or 0 for "let the feet decide". */
+export function faceFor(aimAngle: number): -1 | 0 | 1 {
+	const c = Math.cos(aimAngle);
+	if (Math.abs(c) < VERTICAL_AIM_COS) return 0;
+	return c > 0 ? 1 : -1;
+}
+
 /** A DOM node that owns the keystrokes going into it. */
 function isEditable(target: EventTarget | null): boolean {
 	const el = target as HTMLElement | null;
@@ -184,6 +224,46 @@ export class Input {
 	private pointerU = 0.5;
 	private pointerV = 0.5;
 
+	/**
+	 * Pointer travel since the last poll, in CSS pixels.
+	 *
+	 * Controller mode aims with a *relative* mouse, because an absolute one cannot
+	 * express "keep turning": it runs out of screen, and on the trackpad this mode
+	 * mostly exists for it runs out of glass long before that. Accumulated here
+	 * and drained once per frame, so a 240Hz mouse and a 60Hz frame agree on how
+	 * far the hand actually moved.
+	 */
+	private mouseDeltaX = 0;
+	private mouseDeltaY = 0;
+
+	/**
+	 * The physical gamepad, and the two-layer aim it feeds.
+	 *
+	 * The controller is polled rather than evented — the Gamepad API has no button
+	 * events — so press edges for pad buttons are derived here, against the
+	 * previous frame's set. `padPrevious` is what makes a held trigger a hold
+	 * rather than a press repeated sixty times a second.
+	 */
+	private readonly pad = new GamepadSource();
+	private padDown: ReadonlySet<string> = new Set();
+	private padPrevious: ReadonlySet<string> = new Set();
+	private readonly aim = new AimController();
+	/** True while an absolute fine-aim source was live last frame. */
+	private hadAbsoluteFine = false;
+	/** Last seen scheme, so a change can be noticed without subscribing to it. */
+	private lastScheme = inputSettings.scheme;
+
+	/**
+	 * Buttons the on-screen gamepad is holding, in the same code namespace.
+	 *
+	 * Separate from `down` because a finger can leave the deck's DOM without ever
+	 * delivering a pointerup the canvas would see, and a stuck key set is how a
+	 * fighter ends up swinging at nothing forever.
+	 */
+	private readonly virtual = new Set<string>();
+	/** The on-screen thumb pad, as a unit vector, or null while nobody holds it. */
+	private touchAim: { x: number; y: number } | null = null;
+
 	/** Cursor in world coordinates. */
 	get pointerX(): number {
 		return viewToWorld(this.pointerU, this.pointerV, this.viewport).x;
@@ -229,6 +309,11 @@ export class Input {
 		// forever, and the fighter would keep swinging at nothing.
 		const clearAll = () => {
 			this.down.clear();
+			this.virtual.clear();
+			this.touchAim = null;
+			this.mouseDeltaX = 0;
+			this.mouseDeltaY = 0;
+			this.aim.releaseFine();
 			this.dashGesture.reset();
 		};
 
@@ -240,14 +325,45 @@ export class Input {
 			);
 			this.pointerU = p.u;
 			this.pointerV = p.v;
+			// **A finger is not a trackpad.**
+			//
+			// The relative layer exists for a laptop with no controller. A touchscreen
+			// has the deck's own thumb pad for the same job — and `movementX` is
+			// populated for touch pointers too, so without this filter every thumb
+			// drag on the d-pad also shoved the virtual stick: pressing *up* on the
+			// cross reported an aim of 76° with the fine layer fully engaged, because
+			// the thumb's travel across the glass had overridden the direction the
+			// thumb was pressing.
+			//
+			// Kept whatever the scheme is, so switching to controller mode mid-match
+			// does not need the player to jiggle the mouse before it responds.
+			if (!this.suspended && e.pointerType === "mouse") {
+				this.mouseDeltaX += e.movementX ?? 0;
+				this.mouseDeltaY += e.movementY ?? 0;
+			}
 		};
 
 		const pointerDown = (e: PointerEvent) => {
 			if (this.suspended) return;
+			// **Only a press on the game surface is a press at the fighter.**
+			//
+			// The listener is on `window` because a drag that starts on the canvas has
+			// to keep being tracked when it leaves — but that also meant *every* tap
+			// anywhere on the page counted as `Mouse0`, and `Mouse0` is attack. On a
+			// phone the on-screen gamepad is DOM sitting right there, so a thumb on
+			// Jump swung the sword as well as jumping, and so did the stance pills,
+			// the d-pad and the menu button. Every button was a slash.
+			//
+			// `preventDefault` in the deck's own handler cannot fix it: it stops the
+			// browser's default, not another listener on the same event.
+			if (e.target !== canvas) return;
 			const code = mouseCode(e.button);
 			this.down.add(code);
 			this.notePress(bindings.actionFor(code));
 		};
+		// Deliberately *not* gated on the target: a drag that starts on the canvas
+		// and releases over the deck must still release. Deleting a code that was
+		// never added is a no-op, so the asymmetry is free.
 		const pointerUp = (e: PointerEvent) => {
 			this.down.delete(mouseCode(e.button));
 		};
@@ -270,6 +386,30 @@ export class Input {
 		const offSuspend = EventBus.on("input-suspended", ((on: boolean) =>
 			suspend(on)) as never);
 
+		// The on-screen gamepad talks over the EventBus, the same bridge the rest of
+		// the React overlay uses. It sends *codes*, not actions, so a thumb on the
+		// deck's A button is bound and rebound exactly like a key — and the deck
+		// itself has no idea what any of its buttons do.
+		const offVirtual = EventBus.on("virtual-button", ((payload: {
+			code: string;
+			down: boolean;
+		}) => {
+			if (this.suspended) return;
+			if (payload.down) {
+				if (!this.virtual.has(payload.code)) {
+					this.virtual.add(payload.code);
+					this.notePress(bindings.actionFor(payload.code));
+				}
+			} else {
+				this.virtual.delete(payload.code);
+			}
+		}) as never);
+		const offVirtualAim = EventBus.on("virtual-aim", ((
+			vector: { x: number; y: number } | null,
+		) => {
+			this.touchAim = this.suspended ? null : vector;
+		}) as never);
+
 		this.disposers.push(
 			() => window.removeEventListener("keydown", keydown),
 			() => window.removeEventListener("keyup", keyup),
@@ -279,17 +419,21 @@ export class Input {
 			() => window.removeEventListener("pointerup", pointerUp),
 			() => canvas.removeEventListener("contextmenu", contextMenu),
 			offSuspend,
+			offVirtual,
+			offVirtualAim,
 		);
 	}
 
 	isDown(code: string): boolean {
-		return this.down.has(code);
+		return (
+			this.down.has(code) || this.virtual.has(code) || this.padDown.has(code)
+		);
 	}
 
-	/** True while any code bound to `action` is held. */
+	/** True while any code bound to `action` is held, on any device. */
 	actionDown(action: Action): boolean {
 		for (const code of bindings.codesFor(action)) {
-			if (this.down.has(code)) return true;
+			if (this.isDown(code)) return true;
 		}
 		return false;
 	}
@@ -325,6 +469,95 @@ export class Input {
 	/** Take the dash direction, if one was gestured since the last call. */
 	consumeDash(): number {
 		return this.dashGesture.consume();
+	}
+
+	/**
+	 * One frame of the polled devices, and one step of the aim handover.
+	 *
+	 * Called once per frame by `Match`, **before** the aim angle and the intent
+	 * are read. Everything evented — keys, mouse buttons, the deck — has already
+	 * updated itself by the time this runs; what is left is the gamepad, which the
+	 * platform gives no events for, and the aim controller, which needs a `dtMs`.
+	 *
+	 * `facing` is only a fallback: it decides where a controller aims before it
+	 * has ever pointed anywhere, so a fighter that spawns looking left does not
+	 * open the match aiming across itself.
+	 */
+	poll(dtMs: number, facing: number) {
+		const frame = this.pad.poll();
+		// A menu that has taken the keyboard has taken the controller too. Otherwise
+		// a held trigger would keep blocking behind the dialog, and nothing would
+		// deliver its release.
+		this.padDown = this.suspended ? EMPTY_CODES : frame.down;
+
+		// Press edges, derived rather than delivered — the Gamepad API has no button
+		// events, so without this a held button would read as a press every frame
+		// and simply holding a direction would count as a dash.
+		for (const code of this.padDown) {
+			if (!this.padPrevious.has(code)) this.notePress(bindings.actionFor(code));
+		}
+		this.padPrevious = new Set(this.padDown);
+
+		// A scheme change is a clean break. The aim controller stops being ticked the
+		// moment mouse aim takes over, so its stick, its blend and its idle timer all
+		// freeze — and coming back to controller mode would resume a stroke the player
+		// made minutes ago, at an angle they have long since stopped meaning.
+		const scheme = inputSettings.scheme;
+		if (scheme !== this.lastScheme) {
+			this.lastScheme = scheme;
+			this.aim.reset(facing);
+			this.hadAbsoluteFine = false;
+			this.mouseDeltaX = 0;
+			this.mouseDeltaY = 0;
+		}
+
+		if (scheme !== "controller") {
+			// Nothing to accumulate into: the cursor is the aim. Draining the delta
+			// anyway stops a switch into controller mode inheriting a whole window's
+			// worth of mouse travel as one enormous flick.
+			this.mouseDeltaX = 0;
+			this.mouseDeltaY = 0;
+			this.hadAbsoluteFine = false;
+			return;
+		}
+
+		// The Contra layer: the same buttons that move you also aim you, which is
+		// what makes eight directions cost nothing extra to hold.
+		const x =
+			(this.actionDown("right") ? 1 : 0) - (this.actionDown("left") ? 1 : 0);
+		const y =
+			(this.actionDown("aimDown") ? 1 : 0) - (this.actionDown("aimUp") ? 1 : 0);
+		this.aim.setContra(x, y, facing);
+
+		// The fine layer, in priority order: a real right stick, then a thumb on the
+		// deck, then the mouse. The first two are absolute and recentre themselves;
+		// the mouse is relative and does not, which is the whole reason `AimController`
+		// distinguishes the two.
+		const absolute = frame.fine ?? this.touchAim;
+		if (absolute) {
+			this.aim.setFine(absolute.x, absolute.y);
+		} else if (this.hadAbsoluteFine) {
+			// The stick was let go. Say so exactly once, or the aim controller would
+			// keep seeing it pushed and hold the override open for its full window.
+			this.aim.setFine(0, 0);
+		} else if (this.mouseDeltaX !== 0 || this.mouseDeltaY !== 0) {
+			this.aim.pushFine(this.mouseDeltaX, this.mouseDeltaY);
+		}
+		this.hadAbsoluteFine = absolute !== null;
+
+		this.mouseDeltaX = 0;
+		this.mouseDeltaY = 0;
+		this.aim.update(dtMs);
+	}
+
+	/** True once a gamepad has reported anything, so the menu can say so. */
+	get padAvailable(): boolean {
+		return this.pad.available;
+	}
+
+	/** What the two aim layers are doing, for the HUD and for `scripts/pad-probe.mjs`. */
+	aimReport(): AimReport {
+		return this.aim.report();
 	}
 
 	// -------------------------------------------------------------------------
@@ -386,11 +619,19 @@ export class Input {
 		return this.overrideIntent;
 	}
 
-	/** Angle from a fighter's centre to the cursor. */
+	/**
+	 * Where this fighter is aiming.
+	 *
+	 * With a cursor it is the vector to a point on the screen. Without one it is
+	 * the Contra aim, overridden by the fine stick while that is being held — and
+	 * the fighter's position is irrelevant, because a direction is not a place.
+	 * The simulation is handed the same number either way.
+	 */
 	aimAngle(bodyX: number, bodyY: number): number {
 		if (this.overrideIntent && this.overrideAim !== null) {
 			return this.overrideAim;
 		}
+		if (inputSettings.scheme === "controller") return this.aim.angle;
 		const c = bodyCentre(bodyX, bodyY);
 		return Math.atan2(this.pointerY - c.y, this.pointerX - c.x);
 	}
@@ -403,7 +644,7 @@ export class Input {
 				...NEUTRAL_INTENT,
 				// Facing still follows the aim unless the caller states otherwise, so
 				// a programmatic slash points where a player's would.
-				face: Math.cos(aimAngle) >= 0 ? 1 : -1,
+				face: faceFor(aimAngle),
 				...override,
 			};
 		}
@@ -418,7 +659,7 @@ export class Input {
 			swordStance: this.swordStance,
 			// You face where you aim. That is what lets a player retreat while still
 			// guarding the side the attacker is coming from.
-			face: Math.cos(aimAngle) >= 0 ? 1 : -1,
+			face: faceFor(aimAngle),
 			// One-shot: consumed here so the impulse is sent exactly once, and the
 			// server applies the same tick the client predicted.
 			dash: this.consumeDash(),

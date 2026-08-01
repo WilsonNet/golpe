@@ -112,8 +112,16 @@ One line each; the war story behind every one is in
 - **Anything that moves a fighter travels in the intent.** A dash applied
   straight to predicted state was erased by the next reconciliation.
 - **AI vs AI cannot test aim.** The brains hand the simulation an angle and never
-  touch a cursor, so anything about the mouse must be measured with
-  `scripts/aim-probe.mjs`, at `--dpr=2`.
+  touch a cursor or a stick, so the mouse must be measured with
+  `scripts/aim-probe.mjs` at `--dpr=2`, and controller mode with
+  `scripts/pad-probe.mjs`.
+- **Every input device speaks one alphabet.** Keys, `Mouse0`, `Pad0`/`PadUp` and
+  the on-screen deck are all code strings in one namespace, so an action asks "is
+  any of my codes held" once. A device with its own code path is a device that
+  quietly stops being rebindable.
+- **The gamepad has no events — it is polled**, in `Input.poll`, once per frame
+  before anything reads an aim. Press edges are derived against the previous
+  frame's set, or holding a direction reads as a dash sixty times a second.
 - **The dummy is an input source, never a simulation flag.** The training room
   adds a third input source beside the network queue and `EnemyBrain`, and
   nothing else. It is server-side because a client-side dummy would bypass the
@@ -135,6 +143,7 @@ node scripts/diagnose.mjs --mode=online --runs=3       # the feedback loop, in a
 node scripts/deathmatch-probe.mjs                      # sixteen AI fighters, to a winner
 node scripts/verify-modes.mjs                          # smoke-check every mode
 node scripts/aim-probe.mjs                             # cursor, facing and shot direction
+node scripts/pad-probe.mjs                             # controller aim, gamepad and the phone deck
 node scripts/training-probe.mjs                        # one interaction, against a scripted dummy
 ```
 
@@ -159,11 +168,45 @@ toggle AI vs AI · **hold Tab** scoreboard · **Esc** menu. Sword is the default
 stance.
 
 **Every button is rebindable, and these are only the defaults.** Esc → Controls
-captures the key you press. Bindings live in `localStorage`, never on the wire —
-the simulation is handed `block`, never `ShiftLeft`. A DOM overlay that takes the
-keyboard must emit `input-suspended`, or the canvas keeps playing the game with
-keys meant for the dialog. Nothing in AI vs AI presses a key, so bindings are
-measured with `scripts/controls-probe.mjs`. See [specs/controls.md](specs/controls.md).
+captures the key, mouse button *or gamepad button* you press. Bindings live in
+`localStorage`, never on the wire — the simulation is handed `block`, never
+`ShiftLeft`. A DOM overlay that takes the keyboard must emit `input-suspended`,
+or the canvas keeps playing the game with keys meant for the dialog. Nothing in
+AI vs AI presses a key, so bindings are measured with
+`scripts/controls-probe.mjs`. See [specs/controls.md](specs/controls.md).
+
+**Aiming is a scheme, and there are two.** *Mouse* points at a place. *Controller*
+is two layers: the d-pad or left stick gives eight Contra directions with the
+same input that moves you, and the right stick — or a **relative mouse**, for a
+trackpad — overrides it with the full 360°, then eases back after **900ms**. The
+virtual stick **rotates along the rim** rather than clamping, which is what lets a
+straight stroke reach the ceiling instead of crawling at 63°; it is Steam Input's
+Mouse Joystick, and it is in `src/game/input/Aim.ts`. Switching scheme mid-match
+cannot desync — the simulation gets an angle with no provenance.
+
+**Controller mode draws the aim.** A beam out of the local fighter's chest —
+**gold** for Contra, **cyan** while the fine layer overrides — because facing is
+one bit and a controller has no cursor. Mouse mode does not get one: the cursor
+already is the reticle. `src/game/render/AimLine.ts`, drawn from the *drawn*
+position like the nameplates.
+
+**Mobile is controller mode plus a deck.** `pointer: coarse` starts a client in
+controller mode with an on-screen gamepad: a Game Boy shell filling the half of a
+portrait phone a 4:3 game leaves empty, dissolving into the letterbox margins in
+landscape. The screen itself has **no bezel** — a fixed 800x600 arena scaled to
+fit means every framed pixel is arena nobody can see. **The deck emits `Pad…`
+codes**, the same ones a real controller sends, so it is rebindable for free. It
+is a **separate setting** from the scheme so that a phone with a Bluetooth
+keyboard can turn it off — and it carries its own menu button, because a phone has
+no Escape key.
+
+**DOM the player presses is not the game surface.** `Input`'s `pointerdown` is on
+`window`, and `Mouse0` is attack — so until it was gated on `e.target === canvas`,
+every button on the deck swung the sword as well as doing its own job. Likewise
+`movementX` exists on *touch* pointers, so the relative-mouse aim layer is
+filtered to `pointerType === "mouse"` or a thumb sliding on the d-pad aims 180°
+wrong. Both are only reachable with real touch events — drive the deck with CDP,
+never `page.mouse`.
 
 **A slash is the first of three.** Tap again as each swing's hitbox closes and the
 chain runs right-to-left diagonal → left-to-right diagonal → overhead finisher,

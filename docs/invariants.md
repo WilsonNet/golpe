@@ -183,6 +183,71 @@ stops the butterfly being the only option.
   angle and never touch a cursor, so `diagnose.mjs` cannot fail on any of the
   above. `scripts/aim-probe.mjs` drives a real mouse, and it must be run at
   `--dpr=2` — every backing-store bug is invisible at 1.
+- **The simulation is handed an angle with no provenance.** A mouse points at a
+  place; a controller gives a direction; a thumb gives a vector. All three become
+  one number in `PlayerIntent`, which is the only reason a player can switch
+  aiming scheme in the middle of a match without desyncing anything. The day the
+  simulation branches on *how* the angle was made is the day it can disagree with
+  the server about it.
+- **One code alphabet across every device.** Keys are `KeyboardEvent.code`, the
+  mouse is `Mouse0`, a pad is `Pad0`/`PadUp`, and the on-screen deck sends the
+  same `Pad…` codes a real pad does. An action asks "is any of my codes held" and
+  gets one answer. Give a device its own code path and it silently stops being
+  rebindable — which is exactly the state the mouse was in before block moved to
+  Shift.
+- **The gamepad is polled, so its press edges must be derived.** There are no
+  button events in the Gamepad API. `Input.poll` diffs this frame's held set
+  against the previous one; without that, holding a direction is a fresh press
+  sixty times a second and reads as a dash.
+- **Poll before anything reads the aim.** `Input.poll` also advances the handover
+  from the fine stick back to the Contra aim by one frame. Called after the intent
+  is built, it spends a frame of the hold window on input that has not arrived —
+  invisible at 60Hz and a stutter in the aim at 20.
+- **A virtual stick must rotate at the rim, not clamp.** Accumulating mouse
+  deltas and clamping the magnitude looks correct and is not: from "aiming right",
+  strokes straight up give 45°, 63°, 71° and never reach the ceiling. Splitting
+  the delta into radial and tangential parts and rotating by the tangential
+  component reaches vertical in two strokes and carries on round. Prior art:
+  Steam Input's *Mouse Joystick*, and Flick Stick's rotation along the gate.
+- **A virtual stick must recentre when it is let go.** A stick that resumed from
+  where it was abandoned answers the same flick with a different angle every time.
+- **Near-vertical aim sets `face: 0`.** `cos(-90°)` is a positive floating-point
+  crumb, so without a dead band a fighter aiming at the ceiling snaps to facing
+  right — and facing decides which side a guard covers.
+- **The suspend rule covers every device.** `input-suspended` has to release the
+  gamepad and the on-screen deck as well as the keyboard. A held trigger behind an
+  open dialog keeps blocking and has nothing that will ever deliver its release.
+- **A window-level `pointerdown` is not "the player clicked the game".** The
+  listener has to be on `window` so a drag that starts on the canvas keeps being
+  tracked when it leaves — but button 0 is `Mouse0`, and `Mouse0` is attack, so
+  *every tap anywhere on the page swung the sword*. Invisible until the page grew
+  DOM the player is meant to press: with the on-screen gamepad, Jump jumped **and
+  slashed**, the stance pills slashed, and so did the menu button. Gate the press
+  on `e.target === canvas`; leave the *release* ungated, because deleting a code
+  that was never added is free and a drag must always be able to end.
+  `preventDefault` in the other handler is not a fix — it stops the browser's
+  default, not another listener on the same event.
+- **`movementX`/`movementY` are populated for touch pointers too.** The relative
+  virtual stick exists for a trackpad, and without a `pointerType === "mouse"`
+  filter every thumb sliding across the on-screen d-pad drove it: holding *left*
+  while dragging *right* aimed right, 180° from what the thumb was pressing. A
+  touchscreen already has an absolute thumb pad for that layer.
+- **A probe that drives touch UI with `page.mouse` is measuring the wrong
+  device.** Playwright's mouse reports `pointerType: "mouse"` even inside a
+  `hasTouch` context, so it cannot see a bug in anything that branches on that
+  field — and both touch bugs above passed a green probe until it was rewritten
+  onto CDP `Input.dispatchTouchEvent`.
+- **A gesture test needs the press and the travel to disagree.** Dragging toward
+  a d-pad arm pushes a broken virtual stick the same way that arm points, so the
+  correct build and the broken one give the same answer. Sliding *along* an arm —
+  holding left while travelling right — is what separates them.
+- **The aim needs to be drawn when there is no cursor to look at.** A mouse
+  player's cursor is the reticle; a controller has none, and facing is one bit —
+  so eight Contra directions and 360° of fine aim all collapsed into "left or
+  right", with the fine layer's whole purpose (aiming away from where you run)
+  being exactly the case facing cannot show. Draw it from the **drawn** position
+  like the nameplates, or the beam detaches from its fighter by however much the
+  render smoother is hiding.
 
 ## Projectiles
 
@@ -371,7 +436,27 @@ sixteen fighters breaks things two never could.
 - **Nothing in AI vs AI presses a key.** The brains hand the simulation an intent
   directly, so every binding in the game can be wrong while `diagnose.mjs`
   reports PASS — the same blind spot that made `aim-probe.mjs` necessary.
-  `scripts/controls-probe.mjs` is the instrument for this one.
+  `scripts/controls-probe.mjs` is the instrument for this one, and
+  `scripts/pad-probe.mjs` for the controller and the on-screen deck.
+- **A polled API can be stubbed; an evented one has to be driven.** Playwright
+  cannot press a physical gamepad button, but the Gamepad API is `getGamepads()`
+  returning a fresh snapshot — so an init script replacing it is *genuinely
+  equivalent* from the game's point of view, on the same schedule with the same
+  shape. That is what makes controller mode measurable at all.
+- **The on-screen gamepad is DOM, so tap it.** Emitting its EventBus messages
+  from a probe proves the wiring and nothing else; a probe that taps the actual
+  control proves the geometry, the pointer capture and the layout too — the same
+  argument as `controls-probe.mjs` pressing real keys rather than calling
+  `Input`.
+- **On a phone, the layout is the feature.** A 4:3 canvas and a control deck have
+  to both fit a portrait screen with no horizontal scroll, and the canvas has to
+  keep its aspect ratio doing it — which is why sizing lives in the stylesheet
+  with `max-width` *and* `max-height`, and why Pixi's inline `autoDensity` sizes
+  are cleared. `width: 100%` alone lets a short window crop the arena away.
+- **A setting a player cannot undo is a trap.** The on-screen gamepad is reached
+  by a setting and left by the Esc menu, and a phone has no Escape key — so the
+  deck carries its own menu button. Anything that can only be turned on needs the
+  same treatment.
 
 ## Rooms
 

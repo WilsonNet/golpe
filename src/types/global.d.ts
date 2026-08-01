@@ -13,6 +13,8 @@
  */
 
 import type { AIState } from "../game/characters/EnemyBrain";
+import type { AimReport } from "../game/input/Aim";
+import type { AimScheme, DeckSetting } from "../game/input/Scheme";
 import type {
 	MatchEndReason,
 	MatchPhase,
@@ -145,6 +147,29 @@ export interface AimSnapshot {
 	bullets: { id: number; x: number; y: number; angle: number }[];
 }
 
+/**
+ * Which scheme is aiming this fighter, and what its two layers are doing.
+ *
+ * Controller mode is invisible to every other probe for exactly the reason aim
+ * was: the AI brains hand the simulation an angle and never touch a stick, and
+ * Playwright cannot press a physical gamepad button. `scripts/pad-probe.mjs`
+ * stubs `navigator.getGamepads` and reads this.
+ */
+export interface InputSnapshot {
+	scheme: AimScheme;
+	deck: DeckSetting;
+	/** Whether the on-screen gamepad is actually drawn right now. */
+	deckVisible: boolean;
+	/** True once a gamepad has reported anything at all. */
+	padAvailable: boolean;
+	/** The Contra aim, the fine stick, and the handover between them. */
+	aim: AimReport;
+	/** What the intent asked for: -1, 1, or 0 meaning "let the feet decide". */
+	face: number;
+	/** What the simulation settled on. */
+	facing: number;
+}
+
 declare global {
 	interface Window {
 		/** Flip AI vs AI, same as pressing P. */
@@ -164,6 +189,15 @@ declare global {
 		__physicsDiagnostic?: (durationMs?: number) => string;
 		/** Where the cursor points, where the fighter looks, and where its shots go. */
 		__aimState?: () => AimSnapshot;
+		/** Which input scheme is live, and what the two aim layers are doing. */
+		__inputState?: () => InputSnapshot;
+		/**
+		 * Switch aiming scheme from a script.
+		 *
+		 * Deliberately the same store the Esc menu writes, so an automated run
+		 * exercises the path a player takes instead of a bypass nobody plays.
+		 */
+		__setInputScheme?: (scheme: AimScheme) => void;
 		/**
 		 * The training room's controller: configure the dummy, drive the local
 		 * fighter, run a scenario, read a structured report.

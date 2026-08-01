@@ -21,9 +21,13 @@ src/game/
   app.ts          Pixi Application bootstrap: init, load, build, tick
   characters/     EnemyBrain, AIConfig
   combat/         BulletSystem.ts — the only simulated source of bullets offline
-  input/          Input.ts — raw keyboard and pointer state, dash gestures, and the
-                  cursor->world conversion (logical view + camera, never canvas.width)
+  input/          Input.ts — the one place four devices meet: raw held codes, dash
+                  gestures, and the cursor->world conversion (logical view +
+                  camera, never canvas.width)
     Bindings.ts     which button means what: defaults, rebinding, persistence
+    Gamepad.ts      the polled pad, read as codes in that same namespace
+    Aim.ts          the two controller aim layers — pure, clock-free, testable
+    Scheme.ts       mouse vs controller, and whether the on-screen deck is drawn
   online/         OnlineManager (channel), OnlineSession (owns netcode)
     Prediction.ts   the local fighter: predict, rewind, replay, and render smoothing
     Rollback.ts     every *other* fighter: carry its input forward, rewind on snapshot
@@ -59,9 +63,10 @@ server/           Geckos.io authoritative server
 
 scripts/          diagnose.mjs (Playwright harness), deathmatch-probe.mjs (sixteen
                   AI fighters played to a winner), aim-probe.mjs (drives a real
-                  cursor — the only thing that can test aim), training-probe.mjs
-                  (one interaction at a time), dev-herdr.mjs, probe-online.mjs,
-                  verify-modes.mjs
+                  cursor — the only thing that can test mouse aim), pad-probe.mjs
+                  (stubs the Gamepad API — the only thing that can test controller
+                  aim and the phone deck), training-probe.mjs (one interaction at
+                  a time), dev-herdr.mjs, probe-online.mjs, verify-modes.mjs
 specs/            the source of truth for intended behaviour
 docs/             how to work in this repo
 public/assets/
@@ -106,6 +111,10 @@ those pieces are explicit files rather than framework config:
 | Camera, layers, screen shake | `render/Stage.ts` |
 | Input | `input/Input.ts` |
 | Key bindings | `input/Bindings.ts` — `Input` knows no key names of its own |
+| Gamepad | `input/Gamepad.ts` — polled, and read as codes in the same namespace |
+| Controller aim | `input/Aim.ts` — eight directions, plus a 360° virtual stick |
+| On-screen gamepad | `ui/TouchControls.tsx` — DOM, and it emits `Pad…` codes |
+| Aim beam | `render/AimLine.ts` — controller mode's reticle, drawn in the world |
 | Particles | `render/Particles.ts` |
 | Animation | `ecs/systems.ts` + frame slices in `render/assets.ts` |
 | Physics | `simulation/` — and it always was |

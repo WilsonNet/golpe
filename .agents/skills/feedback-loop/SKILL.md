@@ -184,6 +184,24 @@ crossed sides *while swinging* (`attackTurn.worstMs`), and the heading a fired
 bullet actually left with. Run it after touching `input/`, `app.ts`, facing rules
 or anything that spawns a projectile.
 
+### Controller mode is a third blind spot
+
+`aim-probe.mjs` measures the *cursor*, and controller mode does not use one.
+Playwright cannot press a physical gamepad button either — but the Gamepad API is
+**polled**, so a stub of `navigator.getGamepads` is genuinely equivalent from the
+game's point of view.
+
+```bash
+node scripts/pad-probe.mjs
+```
+
+It drives the d-pad, the right stick and a mouse-as-stick, and checks the one
+number that separates a correct virtual stick from a plausible one: an upward
+stroke from "aiming right" must **run up the arc past 45°**, where a clamping
+implementation stalls near -63° forever. It then taps the on-screen gamepad on a
+phone-shaped context. Run it after touching `input/`, the aim layers, the Esc
+menu's controls dialog, or the page layout.
+
 ### What AI vs AI cannot test: one specific interaction
 
 A brain never does the same thing twice. The canonical run can tell you that
@@ -503,6 +521,7 @@ for fps in [30, 60, 85, 120]:
 | `scripts/probe-online.mjs` | Dumps one online client's console + `__gameState()` when something is off |
 | `scripts/verify-modes.mjs` | Smoke-checks every launch mode: connects, matches, fights |
 | `scripts/aim-probe.mjs` | Drives a real cursor: screen→world mapping, facing, and shot direction, at dpr 1 and 2 |
+| `scripts/pad-probe.mjs` | Stubs the Gamepad API: the two controller aim layers, pad bindings, and the on-screen deck on a phone-shaped context |
 | `scripts/training-probe.mjs` | One interaction at a time against a scripted dummy: block, uppercut, backstab, frame data, determinism |
 | `server/TrainingDummy.ts` | The scriptable dummy: a deterministic input source with `EnemyBrain`'s contract |
 | `src/game/training/TrainingRoom.ts` | `window.__training`, and the report as a *view* over `PhysicsDiagnostics` |

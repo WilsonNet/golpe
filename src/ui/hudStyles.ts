@@ -279,13 +279,108 @@ export const HUD_CSS = `
 	min-width: 420px;
 	/* Capped, or the binding table's full-width rule lets the card fill the whole
 	   veil and strands each action's label a screen away from its own slots. */
-	max-width: 560px;
+	max-width: 620px;
+	/* Eleven actions, three slots each and two settings above them do not fit on
+	   a phone in portrait. The card scrolls; the veil does not. */
+	max-height: 88vh;
+	max-height: 88dvh;
+	overflow-y: auto;
+	box-sizing: border-box;
+}
+/* On a narrow screen the card is the screen, and a min-width wider than it is
+   what makes a dialog scroll sideways. */
+@media (max-width: 520px) {
+	.vd-card {
+		min-width: 0;
+		padding: 18px 16px;
+	}
+	.vd-menu-card {
+		min-width: 0;
+		width: 100%;
+	}
+	/* Three slots and a label do not fit on one line at 390px. The row becomes a
+	   block — label above, its three slots in a grid below — rather than a table
+	   the player has to scroll sideways to reach the gamepad column of. */
+	.vd-bind-table,
+	.vd-bind-table tbody {
+		display: block;
+	}
+	.vd-bind-table tr {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 6px;
+		margin-bottom: 12px;
+	}
+	.vd-bind-table th {
+		display: block;
+		grid-column: 1 / -1;
+		padding: 0 0 2px;
+		white-space: normal;
+	}
+	.vd-bind-table td {
+		display: block;
+		width: auto;
+		padding: 0;
+	}
+	.vd-setting-head {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 8px;
+	}
 }
 .vd-menu-list {
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
 }
+/* ---- a setting with a small set of answers ----
+   Chips rather than a <select>, because both of these are things a player flips
+   back and forth while working out which they prefer, and a dropdown hides the
+   alternative behind a click. */
+.vd-setting {
+	margin: 0 0 14px;
+	padding-bottom: 12px;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+.vd-setting-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	font-size: 13px;
+}
+.vd-choice {
+	display: flex;
+	gap: 6px;
+}
+.vd-chip {
+	background: #000;
+	color: inherit;
+	font: inherit;
+	font-size: 12px;
+	padding: 6px 12px;
+	border: 1px solid rgba(255, 255, 255, 0.3);
+	border-radius: 999px;
+	cursor: pointer;
+	white-space: nowrap;
+}
+.vd-chip:hover {
+	border-color: #0ec3c9;
+	color: #0ec3c9;
+}
+.vd-chip-on,
+.vd-chip-on:hover {
+	border-color: #ffd166;
+	color: #ffd166;
+	background: rgba(255, 209, 102, 0.12);
+}
+.vd-setting-hint {
+	font-size: 12px;
+	opacity: 0.55;
+	line-height: 1.5;
+	margin: 8px 0 0;
+}
+
 .vd-bind-table {
 	width: 100%;
 	border-collapse: collapse;
@@ -300,7 +395,7 @@ export const HUD_CSS = `
 }
 .vd-bind-table td {
 	padding: 4px 0 4px 8px;
-	width: 9.5em;
+	width: 8em;
 }
 .vd-slot {
 	width: 100%;
