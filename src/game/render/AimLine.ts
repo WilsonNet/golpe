@@ -22,7 +22,7 @@
 import { type Container, Graphics } from "pixi.js";
 
 /** How far the beam reaches. Long enough to read the angle, short of a laser sight. */
-const LENGTH = 104;
+const LENGTH = 140;
 /** Where the beam starts, so it leaves the fighter rather than its middle. */
 const INSET = 12;
 
@@ -40,7 +40,7 @@ const FINE = 0x0ec3c9;
 /** How fast the beam fades in and out, in alpha per millisecond. */
 const FADE_PER_MS = 1 / 140;
 /** The most the beam is ever drawn at. A hint, not a sight. */
-const MAX_ALPHA = 0.45;
+const MAX_ALPHA = 0.6;
 
 /** Blend two packed RGB colours. */
 function mixRgb(from: number, to: number, t: number): number {
