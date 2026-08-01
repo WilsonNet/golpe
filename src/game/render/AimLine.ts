@@ -25,8 +25,6 @@ import { type Container, Graphics } from "pixi.js";
 const LENGTH = 104;
 /** Where the beam starts, so it leaves the fighter rather than its middle. */
 const INSET = 12;
-/** The dot on the end. It is what makes an angle readable at a glance. */
-const TIP_RADIUS = 3;
 
 /**
  * Gold for the Contra aim, cyan while the fine stick overrides.
@@ -41,7 +39,8 @@ const FINE = 0x0ec3c9;
 
 /** How fast the beam fades in and out, in alpha per millisecond. */
 const FADE_PER_MS = 1 / 140;
-const MAX_ALPHA = 0.85;
+/** The most the beam is ever drawn at. A hint, not a sight. */
+const MAX_ALPHA = 0.45;
 
 /** Blend two packed RGB colours. */
 function mixRgb(from: number, to: number, t: number): number {
@@ -114,23 +113,13 @@ export class AimLine {
 		const colour = mixRgb(CONTRA, FINE, blend);
 
 		// Rebuilt rather than transformed. A rotated Graphics would rotate the line
-		// *cap* too, and the tip dot with it — and the geometry is four commands.
+		// *cap* too, and the geometry is two commands.
 		this.gfx.clear();
 
-		// A soft outer stroke under a bright core: over a sky-blue arena a single
-		// thin line disappears, and an outline is cheaper than a filter.
 		this.gfx
 			.moveTo(x0, y0)
 			.lineTo(x1, y1)
-			.stroke({ width: 4.5, color: 0x000000, alpha: 0.32, cap: "round" });
-		this.gfx
-			.moveTo(x0, y0)
-			.lineTo(x1, y1)
-			.stroke({ width: 2, color: colour, alpha: 0.85, cap: "round" });
-		this.gfx
-			.circle(x1, y1, TIP_RADIUS + 1)
-			.fill({ color: 0x000000, alpha: 0.32 });
-		this.gfx.circle(x1, y1, TIP_RADIUS).fill({ color: colour, alpha: 1 });
+			.stroke({ width: 2, color: colour, alpha: 0.8, cap: "round" });
 	}
 
 	/** Hide it immediately — a respawn, or a match reset. */

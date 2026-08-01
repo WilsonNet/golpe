@@ -130,8 +130,8 @@ rest and has no say — generous, because a worn stick resting at 0.12 would hol
 the override open forever and read as "aiming is broken" rather than "my
 controller is old".
 
-**The aim is drawn.** A short beam leaves the local fighter's chest along the aim
-angle, with a dot on the end: **gold** for the Contra aim, **cyan** while the fine
+**The aim is drawn.** A short, translucent beam leaves the local fighter's chest
+along the aim angle: **gold** for the Contra aim, **cyan** while the fine
 layer is overriding, blending between the two as the handover runs. It exists
 because a controller has no cursor — the only other feedback for the Contra aim
 and a full 360° of fine aim was which way the sprite faced, and facing is one bit.
