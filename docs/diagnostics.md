@@ -293,6 +293,13 @@ correct behaviour trains you to ignore it**:
   no jitter. `scripts/diagnose.mjs` preflights `:9208` and marks a run
   `INVALID: no server snapshots received`. Never trust an online run without a
   `reconciliationSummary`.
+- **A *stale* server also reads as healthy.** A tsx process killed out from under
+  its pane can leave the old server holding `:9208` — the port check passes, and
+  every room then has the *old* rules. Symptom: a `--screens=2` run reports
+  `worldScreens: 1` while the code says 2. Fix: `pgrep -af "tsx server"`, kill
+  the survivor, then `npm run dev:herdr:down && npm run dev:herdr` — and read the
+  room-creation line, which now names the screen count
+  (`[MATCH] Created room … (fill N, M screens)`).
 - **`pgrep -f "tsx server/index.ts"` matches its own shell.** Check the port
   instead:
   `curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:9208/.wrtc/v2/connections`
@@ -321,6 +328,14 @@ ranged duel across the ledges — and that variety is the point. What must hold 
 that across a handful of runs every mechanic fires at least once and every
 violation counter stays at zero.
 
+**A lone marginal event is the bot-variance band, not a signal.** Random bot
+personalities occasionally throw one event just over a threshold — an airborne
+combo link, or a `player_y`/`enemy_x` correction at severity ~1.1–1.3 (a
+12-second window of a random sixteen-fighter brawl is the best place to catch
+one). Baseline runs on `main` produce them too, so chase the failure class, not
+the run: the same type in every run, or severity climbing past ~1.5, is a
+regression; one marginal event in a handful of runs is not.
+
 Healthy for the canonical 14s online AI-vs-AI run:
 
 | Metric | Healthy |
@@ -330,6 +345,16 @@ Healthy for the canonical 14s online AI-vs-AI run:
 | `bulletSummary.tracked` | 4-20 |
 | `meleeSummary` move counters | all non-zero across a few runs |
 | every violation counter | **0, every run** |
+
+Healthy for a wide-arena run (`diagnose.mjs --screens=2` — the follow camera
+moves the whole time, so this proves scroll never reads as jitter):
+
+| Metric | Healthy |
+|---|---|
+| `verdict` | `PASS` |
+| `jitterSummary.total` | **0** — the camera cap (12px/frame) sits under the 15px threshold on purpose |
+| `arenaSummary.xSpanPct` | 50-95% of the *wider* world — the bots must cross screen 0 |
+| `arenaSummary.surfacesAvailable` | `1 + 8 × screens` |
 
 Healthy for a sixteen-fighter deathmatch run:
 

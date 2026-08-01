@@ -1,8 +1,9 @@
 import {
+	DEFAULT_WORLD,
 	PLAYER_HEIGHT,
 	PLAYER_WIDTH,
-	platforms,
 	type Rect,
+	type World,
 } from "../simulation/Arena.js";
 import {
 	isComboSlash,
@@ -125,11 +126,11 @@ const ZONE_COOLDOWN_MS = 2200;
  * almost never happens. Measured without this, three matches used one of the
  * arena's nine surfaces and never rose above the bottom third.
  */
-function perchAbove(selfX: number, selfY: number): Rect | null {
+function perchAbove(selfX: number, selfY: number, world: World): Rect | null {
 	let best: Rect | null = null;
 	let bestDx = Number.POSITIVE_INFINITY;
 
-	for (const p of platforms) {
+	for (const p of world.platforms) {
 		const standingY = p.y - PLAYER_HEIGHT;
 		const rise = selfY - standingY;
 		// Must be genuinely above, and reachable from here.
@@ -231,8 +232,6 @@ export class EnemyBrain {
 	private stuckCount = 0;
 	private jumpHoldTimer = 0;
 	private jumpReleaseTimer = 0;
-
-	/** The melee rhythm currently being played, and how far into it we are. */
 	private beats: MeleeBeat[] | null = null;
 	private beatIndex = 0;
 	private beatElapsed = 0;
@@ -246,8 +245,16 @@ export class EnemyBrain {
 	/** ms until this fighter is willing to break away and zone again. */
 	private zoneCooldown = 0;
 
-	constructor(config: AIConfig) {
+	/**
+	 * The geometry this brain reasons about — ledges to perch on, cover to use.
+	 * Defaults to the single-screen arena; a room's bots pass the room's world
+	 * so a wide arena does not teach them to "zone" into a wall.
+	 */
+	readonly world: World;
+
+	constructor(config: AIConfig, world: World = DEFAULT_WORLD) {
 		this.config = config;
+		this.world = world;
 	}
 
 	getConfig(): AIConfig {
@@ -816,7 +823,7 @@ export class EnemyBrain {
 				// Put the arena between us: back off, and climb while doing it. Height
 				// is what turns a retreat into a position rather than a corner.
 				const away = input.selfX - input.playerX;
-				const perch = perchAbove(input.selfX, input.selfY);
+				const perch = perchAbove(input.selfX, input.selfY, this.world);
 
 				// Space first, height second. Climbing while still inside sword range
 				// left the fighter high but engaged: the gun never came out, because

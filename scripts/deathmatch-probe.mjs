@@ -32,6 +32,8 @@ const TIME_LIMIT_SEC = Number(arg("timeLimit", 120));
 const DIAG_MS = Number(arg("diagnostic", 12000));
 /** Give up rather than hang if the match never ends. */
 const WALL_CLOCK_MS = (TIME_LIMIT_SEC + 60) * 1000;
+/** How many 800px screens wide the arena is. Defaults to the classic one. */
+const SCREENS = Math.max(1, Number(arg("screens", 1)) || 1);
 
 function sinkConsole(page, lines = []) {
 	page.on("console", (msg) => lines.push(msg.text()));
@@ -169,7 +171,8 @@ async function main() {
 	// name prompt, which is gated on exactly that.
 	const url =
 		`${BASE_URL}/?ai=true&bots=${FIGHTERS - 1}` +
-		`&scoreLimit=${SCORE_LIMIT}&timeLimit=${TIME_LIMIT_SEC}`;
+		`&scoreLimit=${SCORE_LIMIT}&timeLimit=${TIME_LIMIT_SEC}` +
+		(SCREENS > 1 ? `&screen=${SCREENS}` : "");
 	console.log(`[PROBE] ${url}`);
 	await page.goto(url);
 	await page.waitForFunction(() => typeof window.__matchState === "function", {

@@ -1,7 +1,11 @@
 import type { Container, Sprite, Texture } from "pixi.js";
 import type { BulletSample } from "../diagnostics/PhysicsDiagnostics";
 import { SpritePool } from "../render/SpritePool";
-import { pointInAnyPlatform } from "../simulation/Arena";
+import {
+	DEFAULT_WORLD,
+	pointInAnyPlatform,
+	type World,
+} from "../simulation/Arena";
 import {
 	rankScores,
 	type ScoreEntry,
@@ -87,8 +91,12 @@ export interface OnlineCallbacks {
 	 * Not always the room that was asked for, which is why it is reported: the
 	 * address bar follows this rather than the proposal, so the link a player copies
 	 * is the room they are actually in.
+	 *
+	 * `screens` is the room's authoritative arena width, which is also not always
+	 * what the URL asked for — a latecomer's `?screen=` is ignored, so the world
+	 * must be rebuilt from this number.
 	 */
-	onSeated: (roomId: string) => void;
+	onSeated: (roomId: string, screens: number) => void;
 	/** The room asked for is full of humans. */
 	onRoomFull: (roomId: string) => void;
 }
@@ -165,9 +173,10 @@ export class OnlineSession {
 		bulletTexture: Texture,
 		private readonly startX: number,
 		private readonly startY: number,
+		private readonly world: World = DEFAULT_WORLD,
 		private readonly callbacks: OnlineCallbacks,
 	) {
-		this.predicted = new PredictedPlayer(startX, startY);
+		this.predicted = new PredictedPlayer(startX, startY, world);
 		this.bulletPool = new SpritePool(layer, bulletTexture);
 		this.manager = new OnlineManager(
 			`${location.protocol}//${location.hostname}`,
@@ -357,7 +366,7 @@ export class OnlineSession {
 				onRoster: (msg) => this.onRoster(msg.players),
 				onRespawn: (msg) => this.onRespawn(msg.id),
 				onMatchOver: (msg) => this.callbacks.onMatchOver(msg),
-				onSeated: (roomId) => this.callbacks.onSeated(roomId),
+				onSeated: (roomId, screens) => this.callbacks.onSeated(roomId, screens),
 				onRoomFull: (roomId) => this.callbacks.onRoomFull(roomId),
 			},
 			join,
@@ -471,7 +480,7 @@ export class OnlineSession {
 		// never mattered for it — but the rule is that anything drawn from a position
 		// the simulation did not produce gets depenetrated first, and an exception
 		// nobody can see is exactly the kind that stops being true quietly.
-		return legaliseDrawn(at.x, at.y);
+		return legaliseDrawn(at.x, at.y, this.world);
 	}
 
 	/** Where a remote fighter should be drawn this frame. */
@@ -535,7 +544,10 @@ export class OnlineSession {
 			// reached geometry; retire it now rather than flying it through a wall
 			// for the rest of the snapshot interval. This is permanent: letting it
 			// reappear past the platform made the sprite blink and jump.
-			if (pointInAnyPlatform(x, y) || isBulletOutOfBounds({ ...b, x, y })) {
+			if (
+				pointInAnyPlatform(x, y, this.world) ||
+				isBulletOutOfBounds({ ...b, x, y }, this.world)
+			) {
 				this.bulletDead.add(b.id);
 				const stale = this.bulletSprites.get(b.id);
 				if (stale) {
@@ -673,7 +685,7 @@ export class OnlineSession {
 			// First sight. Adopted outright — there is nothing to reconcile against,
 			// and smoothing in from a default position would draw the fighter flying
 			// across the arena to its spawn.
-			fighter = new RemoteFighter(state);
+			fighter = new RemoteFighter(state, this.world);
 			this.fighters.set(p.id, fighter);
 			fighter.teleport(state, intent);
 			this.ensurePrimary();

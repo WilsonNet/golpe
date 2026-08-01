@@ -15,7 +15,12 @@ import {
 	type SnapshotPlayer,
 } from "../src/game/online/types.js";
 import { packIntent, packState } from "../src/game/online/wire.js";
-import { pickSpawn, type SpawnPoint } from "../src/game/simulation/Arena.js";
+import {
+	buildWorld,
+	pickSpawn,
+	type SpawnPoint,
+	type World,
+} from "../src/game/simulation/Arena.js";
 import {
 	MATCH_OVER_LINGER_MS,
 	type MatchEndReason,
@@ -239,18 +244,31 @@ export class GameRoom {
 	 */
 	readonly fillTarget: number;
 
+	/**
+	 * The arena this room plays in: bounds, platforms and spawn points for its
+	 * screen count.
+	 *
+	 * Built once when the room is created and shared by every fighter in it —
+	 * every `tickPlayer`, bullet check, spawn pick and bot brain reads this
+	 * object. The client builds the same geometry from the `match` message, so
+	 * both sides collide with the same world.
+	 */
+	readonly world: World;
+
 	constructor(
 		id: string,
 		rules: {
 			scoreLimit?: number;
 			timeLimitMs?: number;
 			fillTarget?: number;
+			screens?: number;
 		} = {},
 	) {
 		this.id = id;
 		this.scoreLimit = rules.scoreLimit ?? SCORE_LIMIT;
 		this.timeLimitMs = rules.timeLimitMs ?? TIME_LIMIT_MS;
 		this.fillTarget = Math.max(0, Math.min(rules.fillTarget ?? 0, MAX_PLAYERS));
+		this.world = buildWorld(rules.screens ?? 1);
 	}
 
 	get playerCount(): number {
@@ -335,9 +353,15 @@ export class GameRoom {
 		this.channelIds.push(id);
 		this.players.set(
 			id,
-			this.newSlot(id, name, pickSpawn(this.occupiedPoints()), 100, {
-				channel,
-			}),
+			this.newSlot(
+				id,
+				name,
+				pickSpawn(this.occupiedPoints(), this.world),
+				100,
+				{
+					channel,
+				},
+			),
 		);
 
 		channel.join(this.id);
@@ -399,10 +423,10 @@ export class GameRoom {
 			this.newSlot(
 				id,
 				botName(this.names),
-				pickSpawn(this.occupiedPoints()),
+				pickSpawn(this.occupiedPoints(), this.world),
 				100,
 				{
-					brain: new EnemyBrain(botConfig()),
+					brain: new EnemyBrain(botConfig(), this.world),
 				},
 			),
 		);
@@ -648,6 +672,8 @@ export class GameRoom {
 				bot.state.y,
 				foe.state.x,
 				foe.state.y,
+				24,
+				this.world,
 			),
 			selfHP: bot.hp,
 			enemyHP: foe.hp,
@@ -771,6 +797,7 @@ export class GameRoom {
 			this.occupiedPoints().filter(
 				(p) => p.x !== player.state.x || p.y !== player.state.y,
 			),
+			this.world,
 		);
 		player.state = createPlayerState(spawn.x, spawn.y, spawn.facing);
 		player.hp = 100;
@@ -829,7 +856,7 @@ export class GameRoom {
 			player.stats = newStats();
 			// A fresh personality per match, so sixteen bots do not replay the same
 			// fight every five minutes.
-			if (player.brain) player.brain = new EnemyBrain(botConfig());
+			if (player.brain) player.brain = new EnemyBrain(botConfig(), this.world);
 		}
 		this.phase = "live";
 		this.matchElapsedMs = 0;
@@ -977,7 +1004,7 @@ export class GameRoom {
 			}
 
 			player.simulatedIntent = input;
-			player.state = tickPlayer(player.state, input, dt);
+			player.state = tickPlayer(player.state, input, dt, this.world);
 
 			// A fighter holds a sword or a gun, never both: firing is gated on the
 			// stance the simulation says they are actually in.
@@ -1106,7 +1133,11 @@ export class GameRoom {
 		for (const b of this.bullets) {
 			tickBullet(b, dt);
 
-			if (isBulletOutOfBounds(b) || bulletHitsPlatform(b)) continue;
+			if (
+				isBulletOutOfBounds(b, this.world) ||
+				bulletHitsPlatform(b, this.world)
+			)
+				continue;
 
 			let consumed = false;
 			for (const player of this.players.values()) {
@@ -1165,7 +1196,7 @@ export class GameRoom {
 							...cfg.spawn.player,
 							facing: cfg.spawn.player.x <= cfg.spawn.dummy.x ? 1 : -1,
 						}
-				: pickSpawn(taken);
+				: pickSpawn(taken, this.world);
 			taken.push({ x: spawn.x, y: spawn.y });
 
 			p.state = createPlayerState(spawn.x, spawn.y, spawn.facing);
@@ -1178,7 +1209,7 @@ export class GameRoom {
 			p.pendingInput = null;
 			p.tickInput = null;
 			p.simulatedIntent = null;
-			if (p.brain) p.brain = new EnemyBrain(botConfig());
+			if (p.brain) p.brain = new EnemyBrain(botConfig(), this.world);
 		});
 		this.bullets = [];
 		this.meleeEvents.length = 0;

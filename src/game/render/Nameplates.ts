@@ -16,7 +16,7 @@
  */
 
 import { Container, Sprite, Text, Texture } from "pixi.js";
-import { WORLD_RIGHT } from "../simulation/Physics";
+import { DEFAULT_WORLD, type World } from "../simulation/Arena";
 
 /** Wider than the fighter (32px), so a nearly-empty bar is still readable. */
 const BAR_WIDTH = 40;
@@ -69,7 +69,15 @@ interface Plate {
 export class Nameplates {
 	private readonly plates = new Map<string, Plate>();
 
-	constructor(private readonly layer: Container) {}
+	/**
+	 * The arena's right edge, so a plate is kept inside the *world* — on a
+	 * multi-screen map that is not the viewport edge, but a plate pushed past it
+	 * would sit off the end of the map nobody can see.
+	 */
+	constructor(
+		private readonly layer: Container,
+		private readonly world: World = DEFAULT_WORLD,
+	) {}
 
 	private plate(key: string): Plate {
 		const existing = this.plates.get(key);
@@ -170,7 +178,7 @@ export class Nameplates {
 	 */
 	private onScreenX(centreX: number, p: Plate): number {
 		const half = Math.max(p.label.width, BAR_WIDTH + 2) / 2 + 2;
-		return Math.max(half, Math.min(WORLD_RIGHT - half, centreX));
+		return Math.max(half, Math.min(this.world.right - half, centreX));
 	}
 
 	/** Release a fighter's plate. Fighters are transient; their sprites must not be. */

@@ -1,10 +1,9 @@
 import { type Container, Graphics, Sprite } from "pixi.js";
 import {
+	DEFAULT_WORLD,
 	PLAYER_HEIGHT,
 	PLAYER_WIDTH,
-	platforms,
-	WORLD_BOTTOM,
-	WORLD_RIGHT,
+	type World,
 } from "../simulation/Arena";
 import { TEX, tex } from "./assets";
 
@@ -20,17 +19,33 @@ export interface Positionable {
  * Hand-placing platform sprites is how visuals and colliders drift apart —
  * an earlier version drew a 400px-wide image for a 100px-wide collider, so
  * players appeared to walk through solid ground and stand on thin air.
- * Everything here is derived from `platforms`, so the two cannot disagree.
+ * Everything here is derived from `world.platforms`, so the two cannot
+ * disagree.
+ *
+ * Re-entrant: children are destroyed and rebuilt, so a client that learns the
+ * room's authoritative screen count after connecting (the `match` message can
+ * disagree with `?screen=`) redraws the same two containers in place.
  */
-export function drawArena(background: Container, arena: Container) {
+export function drawArena(
+	background: Container,
+	arena: Container,
+	world: World = DEFAULT_WORLD,
+) {
+	background.removeChildren().forEach((c) => {
+		c.destroy({ children: true });
+	});
+	arena.removeChildren().forEach((c) => {
+		c.destroy({ children: true });
+	});
+
 	const sky = new Sprite(tex(TEX.sky));
 	sky.anchor.set(0.5);
-	sky.position.set(WORLD_RIGHT / 2, WORLD_BOTTOM / 2);
-	sky.width = WORLD_RIGHT;
-	sky.height = WORLD_BOTTOM;
+	sky.position.set(world.right / 2, world.bottom / 2);
+	sky.width = world.right;
+	sky.height = world.bottom;
 	background.addChild(sky);
 
-	for (const p of platforms) {
+	for (const p of world.platforms) {
 		const s = new Sprite(tex(TEX.platform));
 		s.anchor.set(0.5);
 		s.position.set(p.x + p.w / 2, p.y + p.h / 2);
@@ -60,9 +75,12 @@ export function bodyCentre(bodyX: number, bodyY: number) {
 }
 
 /** Debug overlay: outlines every collider so mismatches are obvious on sight. */
-export function drawColliderDebug(layer: Container): Graphics {
+export function drawColliderDebug(
+	layer: Container,
+	world: World = DEFAULT_WORLD,
+): Graphics {
 	const g = new Graphics();
-	for (const p of platforms) {
+	for (const p of world.platforms) {
 		g.rect(p.x, p.y, p.w, p.h);
 	}
 	g.stroke({ width: 1, color: 0x00ff00, alpha: 0.8 });

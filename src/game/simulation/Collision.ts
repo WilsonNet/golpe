@@ -7,15 +7,7 @@
  * a wall is a wall whether or not you happen to be standing on the floor.
  */
 
-import {
-	platforms,
-	type Rect,
-	rectsOverlap,
-	WORLD_BOTTOM,
-	WORLD_LEFT,
-	WORLD_RIGHT,
-	WORLD_TOP,
-} from "./Arena.js";
+import { DEFAULT_WORLD, type Rect, rectsOverlap, type World } from "./Arena.js";
 
 export type WallSide = "none" | "left" | "right";
 
@@ -50,16 +42,21 @@ function collidesAt(box: MovingBox, solids: readonly Rect[]): Rect | null {
 }
 
 /**
- * Move `box` by (dx, dy), resolving against `solids` and the world bounds.
- * Mutates `box` and returns what it ended up touching.
+ * Move `box` by (dx, dy), resolving against `world.platforms` and the world
+ * bounds. Mutates `box` and returns what it ended up touching.
+ *
+ * The world is a parameter rather than an import so a room can be wider than
+ * the default single screen — client and server pass the same `World` object,
+ * which is what keeps their physics identical.
  */
 export function moveAndCollide(
 	box: MovingBox,
 	dx: number,
 	dy: number,
-	solids: readonly Rect[] = platforms,
+	world: World = DEFAULT_WORLD,
 ): Contacts {
 	const contacts: Contacts = { grounded: false, ceiling: false, wall: "none" };
+	const solids = world.platforms;
 
 	const steps = Math.max(
 		1,
@@ -85,11 +82,11 @@ export function moveAndCollide(
 		}
 
 		// World side walls are wall-jumpable surfaces too.
-		if (box.x < WORLD_LEFT) {
-			box.x = WORLD_LEFT;
+		if (box.x < world.left) {
+			box.x = world.left;
 			contacts.wall = "left";
-		} else if (box.x + box.w > WORLD_RIGHT) {
-			box.x = WORLD_RIGHT - box.w;
+		} else if (box.x + box.w > world.right) {
+			box.x = world.right - box.w;
 			contacts.wall = "right";
 		}
 
@@ -108,11 +105,11 @@ export function moveAndCollide(
 			}
 		}
 
-		if (box.y + box.h > WORLD_BOTTOM) {
-			box.y = WORLD_BOTTOM - box.h;
+		if (box.y + box.h > world.bottom) {
+			box.y = world.bottom - box.h;
 			contacts.grounded = true;
-		} else if (box.y < WORLD_TOP) {
-			box.y = WORLD_TOP;
+		} else if (box.y < world.top) {
+			box.y = world.top;
 			contacts.ceiling = true;
 		}
 	}
@@ -129,10 +126,10 @@ export function moveAndCollide(
  */
 export function resolveOverlap(
 	box: MovingBox,
-	solids: readonly Rect[] = platforms,
+	world: World = DEFAULT_WORLD,
 ): boolean {
 	let moved = false;
-	for (const s of solids) {
+	for (const s of world.platforms) {
 		if (!rectsOverlap(box, s)) continue;
 
 		const pushLeft = s.x - (box.x + box.w); // negative
@@ -161,14 +158,14 @@ export function resolveOverlap(
 export function probeWall(
 	box: MovingBox,
 	reach = 2,
-	solids: readonly Rect[] = platforms,
+	world: World = DEFAULT_WORLD,
 ): WallSide {
 	const right: MovingBox = { ...box, x: box.x + reach };
-	if (collidesAt(right, solids) || right.x + right.w >= WORLD_RIGHT) {
+	if (collidesAt(right, world.platforms) || right.x + right.w >= world.right) {
 		return "right";
 	}
 	const left: MovingBox = { ...box, x: box.x - reach };
-	if (collidesAt(left, solids) || left.x <= WORLD_LEFT) {
+	if (collidesAt(left, world.platforms) || left.x <= world.left) {
 		return "left";
 	}
 	return "none";

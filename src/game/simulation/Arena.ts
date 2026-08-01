@@ -5,6 +5,13 @@
  *
  * Renderers MUST draw from `platforms` rather than hand-placing sprites —
  * that is what keeps what you see identical to what you collide with.
+ *
+ * The world is **parameterised by screen count**: one screen is the classic
+ * 800x600 arena, and a wider room tiles the same layout per screen,
+ * mirroring every other screen so long corridors do not repeat visually.
+ * `buildWorld(screens)` is the single builder — client and server call the
+ * same code, which is what keeps a 3-screen room physically identical on
+ * both sides of the wire.
  */
 
 export interface Rect {
@@ -14,10 +21,35 @@ export interface Rect {
 	h: number;
 }
 
+/** One screen's width/height, in world px. The whole game is authored at this scale. */
+export const SCREEN_W = 800;
+export const SCREEN_H = 600;
+/** Upper bound on `?screen=N`, so a typo cannot build a world nobody can load. */
+export const MAX_SCREENS = 8;
+
+/**
+ * The whole arena as a room owns it: bounds, solids and spawn points.
+ *
+ * An instance is shared by reference — the server builds one per room and
+ * every client builds one, and the same object is handed to the physics, the
+ * AI, the renderer and the diagnostics. The client mutates its instance in
+ * place when the server's `match` message names the authoritative screen
+ * count, so every holder sees the corrected geometry without re-plumbing.
+ */
+export interface World {
+	screens: number;
+	left: number;
+	top: number;
+	right: number;
+	bottom: number;
+	platforms: readonly Rect[];
+	spawnPoints: readonly SpawnPoint[];
+}
+
 export const WORLD_LEFT = 0;
-export const WORLD_RIGHT = 800;
 export const WORLD_TOP = 0;
-export const WORLD_BOTTOM = 600;
+export const WORLD_RIGHT = SCREEN_W;
+export const WORLD_BOTTOM = SCREEN_H;
 
 export const PLAYER_WIDTH = 32;
 export const PLAYER_HEIGHT = 48;
@@ -26,8 +58,15 @@ export const PLAYER_HEIGHT = 48;
 const LEDGE_H = 24;
 
 /**
- * Symmetric arena, laid out so every surface is reachable with a single jump
- * from the surface below it (see JUMP_HEIGHT_PX in Physics.ts).
+ * The ground: one solid spanning the whole world width, whatever the screen
+ * count. Tiling it would only create seams at screen boundaries.
+ */
+export const GROUND: Rect = { x: 0, y: 568, w: SCREEN_W, h: 32 };
+
+/**
+ * One screen's worth of ledges and pillars, laid out so every surface is
+ * reachable with a single jump from the surface below it (see JUMP_HEIGHT_PX
+ * in Physics.ts). Tiled per screen by `buildWorld`, mirrored on odd screens.
  *
  *   y=170            [ top ]
  *   y=250   [ hi-L ]          [ hi-R ]
@@ -36,7 +75,6 @@ const LEDGE_H = 24;
  *   y=468        |P|      |P|              <- ground-level cover
  *   y=568   ==================== ground ====================
  */
-export const GROUND: Rect = { x: 0, y: 568, w: 800, h: 32 };
 export const LOW_LEFT: Rect = { x: 90, y: 450, w: 130, h: LEDGE_H };
 export const LOW_RIGHT: Rect = { x: 580, y: 450, w: 130, h: LEDGE_H };
 export const MID: Rect = { x: 330, y: 360, w: 140, h: LEDGE_H };
@@ -55,16 +93,8 @@ export const TOP_CENTRE: Rect = { x: 350, y: 170, w: 100, h: LEDGE_H };
 export const PILLAR_LEFT: Rect = { x: 280, y: 468, w: 24, h: 100 };
 export const PILLAR_RIGHT: Rect = { x: 496, y: 468, w: 24, h: 100 };
 
-/**
- * Every solid in the arena.
- *
- * Named rather than anonymous so nothing has to refer to a surface by index.
- * Tests used to reach for `platforms[3]` with the coordinates copied into a
- * trailing comment — which is both unreadable and a lie waiting to happen the
- * next time the list is reordered.
- */
-export const platforms: readonly Rect[] = [
-	GROUND,
+/** Everything except the ground, one screen's worth. */
+const BASE_LEDGES: readonly Rect[] = [
 	LOW_LEFT,
 	LOW_RIGHT,
 	MID,
@@ -94,7 +124,14 @@ export interface SpawnPoint {
 	facing: number;
 }
 
-export const SPAWN_POINTS: readonly SpawnPoint[] = [
+/**
+ * One screen's worth of spawn points — seventeen for sixteen slots, so a
+ * respawn always has somewhere to go that is not the point somebody is
+ * standing on. Every one sits on top of a platform and clear of the pillars —
+ * a spawn inside geometry is depenetrated on the first tick, which reads as a
+ * teleport on every other client.
+ */
+const BASE_SPAWN_POINTS: readonly SpawnPoint[] = [
 	// Ground, avoiding the two pillars at x=280..304 and x=496..520.
 	{ x: 40, y: 518, facing: 1 },
 	{ x: 120, y: 518, facing: 1 },
@@ -120,6 +157,107 @@ export const SPAWN_POINTS: readonly SpawnPoint[] = [
 ];
 
 /**
+ * Build the world for a room of `screens` screens.
+ *
+ * Deterministic and shared verbatim by client and server, so what a player
+ * collides with is exactly what every other client drew. Screen 0 carries the
+ * original layout; every odd screen is mirrored (x' = SCREEN_W - (x + w)) so
+ * corridors are not a wallpaper loop. The ground spans the whole width.
+ */
+export function buildWorld(screens: number): World {
+	const count = Math.max(1, Math.min(Math.floor(screens), MAX_SCREENS));
+	const right = SCREEN_W * count;
+
+	const platforms: Rect[] = [
+		// One ground across the whole width; tiling it would only create seams.
+		{ ...GROUND, w: right },
+	];
+	const spawnPoints: SpawnPoint[] = [];
+
+	for (let i = 0; i < count; i++) {
+		const ox = i * SCREEN_W;
+		const mirrored = i % 2 === 1;
+		const px = (x: number) => (mirrored ? SCREEN_W - (x + PLAYER_WIDTH) : x);
+
+		for (const p of BASE_LEDGES) {
+			platforms.push({
+				x: ox + (mirrored ? SCREEN_W - (p.x + p.w) : p.x),
+				y: p.y,
+				w: p.w,
+				h: p.h,
+			});
+		}
+		for (const s of BASE_SPAWN_POINTS) {
+			spawnPoints.push({
+				x: ox + px(s.x),
+				y: s.y,
+				// Mirror the facing with the layout, so an odd screen's spawns
+				// still look in toward that screen's centre.
+				facing: mirrored ? -s.facing : s.facing,
+			});
+		}
+	}
+
+	return {
+		screens: count,
+		left: WORLD_LEFT,
+		top: WORLD_TOP,
+		right,
+		bottom: WORLD_BOTTOM,
+		platforms,
+		spawnPoints,
+	};
+}
+
+/**
+ * The world every caller gets when it does not ask for one: one screen.
+ *
+ * Kept as a module-level instance so unchanged call sites — tests included —
+ * keep reading `platforms`/`SPAWN_POINTS`/`WORLD_*` exactly as they always
+ * did, while everything that knows about rooms passes its own `World`.
+ */
+export const DEFAULT_WORLD: World = buildWorld(1);
+
+/**
+ * Rebuild `target` in place to describe a different screen count.
+ *
+ * Identity is preserved, so every holder of the reference — physics, AI,
+ * renderer, diagnostics — sees the new geometry without being re-plumbed.
+ * Used by the client when the server's `match` message names the room's
+ * authoritative screen count, which can differ from what the URL asked for.
+ */
+export function applyWorld(target: World, screens: number): World {
+	const next = buildWorld(screens);
+	target.screens = next.screens;
+	target.left = next.left;
+	target.top = next.top;
+	target.right = next.right;
+	target.bottom = next.bottom;
+	target.platforms = next.platforms;
+	target.spawnPoints = next.spawnPoints;
+	return target;
+}
+
+/**
+ * Every solid in the default arena.
+ *
+ * Named rather than anonymous so nothing has to refer to a surface by index.
+ * Tests used to reach for `platforms[3]` with the coordinates copied into a
+ * trailing comment — which is both unreadable and a lie waiting to happen the
+ * next time the list is reordered.
+ */
+export const platforms: readonly Rect[] = DEFAULT_WORLD.platforms;
+
+/**
+ * Where fighters enter the default arena.
+ *
+ * A deathmatch picks the point furthest from the nearest living fighter rather
+ * than the next one in the list: spawning inside somebody's swing is the one
+ * death a player cannot do anything about.
+ */
+export const SPAWN_POINTS: readonly SpawnPoint[] = DEFAULT_WORLD.spawnPoints;
+
+/**
  * The spawn point furthest from everyone in `occupied`.
  *
  * Pure and deterministic, so client and server agree on where a fighter came
@@ -128,11 +266,12 @@ export const SPAWN_POINTS: readonly SpawnPoint[] = [
  */
 export function pickSpawn(
 	occupied: readonly { x: number; y: number }[],
+	world: World = DEFAULT_WORLD,
 ): SpawnPoint {
-	let best = SPAWN_POINTS[0] as SpawnPoint;
+	let best = world.spawnPoints[0] as SpawnPoint;
 	let bestScore = -1;
 
-	for (const point of SPAWN_POINTS) {
+	for (const point of world.spawnPoints) {
 		let nearest = Number.POSITIVE_INFINITY;
 		for (const other of occupied) {
 			nearest = Math.min(
@@ -160,8 +299,12 @@ export function pointInRect(px: number, py: number, r: Rect): boolean {
 	return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
 }
 
-export function pointInAnyPlatform(px: number, py: number): boolean {
-	for (const p of platforms) {
+export function pointInAnyPlatform(
+	px: number,
+	py: number,
+	world: World = DEFAULT_WORLD,
+): boolean {
+	for (const p of world.platforms) {
 		if (pointInRect(px, py, p)) return true;
 	}
 	return false;
@@ -177,12 +320,13 @@ export function hasLineOfSight(
 	toX: number,
 	toY: number,
 	samples = 24,
+	world: World = DEFAULT_WORLD,
 ): boolean {
 	for (let i = 1; i < samples; i++) {
 		const t = i / samples;
 		const x = fromX + (toX - fromX) * t;
 		const y = fromY + (toY - fromY) * t;
-		if (pointInAnyPlatform(x, y)) return false;
+		if (pointInAnyPlatform(x, y, world)) return false;
 	}
 	return true;
 }
@@ -194,14 +338,17 @@ export function hasLineOfSight(
  * be pinned inside — invisible on screen, but it stops the AI dead. Tests
  * assert against this so level edits cannot reintroduce one.
  */
-export function narrowGaps(minWidth = PLAYER_WIDTH): {
+export function narrowGaps(
+	minWidth = PLAYER_WIDTH,
+	world: World = DEFAULT_WORLD,
+): {
 	a: Rect;
 	b: Rect;
 	gap: number;
 }[] {
 	const found: { a: Rect; b: Rect; gap: number }[] = [];
-	platforms.forEach((a, i) => {
-		for (const b of platforms.slice(i + 1)) {
+	world.platforms.forEach((a, i) => {
+		for (const b of world.platforms.slice(i + 1)) {
 			const verticallyOverlap = a.y < b.y + b.h && a.y + a.h > b.y;
 			if (!verticallyOverlap) continue;
 
@@ -222,10 +369,14 @@ export function playerBox(x: number, y: number): Rect {
  * Should be 0 every frame — diagnostics assert on this to catch collision
  * regressions that jitter thresholds cannot see.
  */
-export function penetrationDepth(x: number, y: number): number {
+export function penetrationDepth(
+	x: number,
+	y: number,
+	world: World = DEFAULT_WORLD,
+): number {
 	const box = playerBox(x, y);
 	let worst = 0;
-	for (const p of platforms) {
+	for (const p of world.platforms) {
 		if (!rectsOverlap(box, p)) continue;
 		const overlapX = Math.min(box.x + box.w, p.x + p.w) - Math.max(box.x, p.x);
 		const overlapY = Math.min(box.y + box.h, p.y + p.h) - Math.max(box.y, p.y);

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import geckos, { type ServerChannel } from "@geckos.io/server";
 import { RELIABLE } from "../src/game/online/types.js";
+import { MAX_SCREENS } from "../src/game/simulation/Arena.js";
 import { GameRoom } from "./GameRoom.js";
 
 const io = geckos({ iceServers: [] });
@@ -68,6 +69,12 @@ interface JoinMsg {
 	 */
 	scoreLimit?: number;
 	timeLimitMs?: number;
+	/**
+	 * How many 800px screens wide the arena is. Also fixed by the room's
+	 * creator: the arena's size is a property of the room, so a latecomer's
+	 * `?screen=` is ignored like the shortened rules are.
+	 */
+	screens?: number;
 }
 
 function clamp(
@@ -111,11 +118,18 @@ function botFill(msg: JoinMsg): number {
 /** Create a room and register it. Its rules and size are fixed here, for good. */
 function createRoom(
 	id: string,
-	rules: { scoreLimit?: number; timeLimitMs?: number; fillTarget?: number },
+	rules: {
+		scoreLimit?: number;
+		timeLimitMs?: number;
+		fillTarget?: number;
+		screens?: number;
+	},
 ): GameRoom {
 	const room = new GameRoom(id, rules);
 	rooms.set(id, room);
-	console.log(`[MATCH] Created room ${id} (fill ${room.fillTarget})`);
+	console.log(
+		`[MATCH] Created room ${id} (fill ${room.fillTarget}, ${room.world.screens} screens)`,
+	);
 	return room;
 }
 
@@ -139,6 +153,7 @@ function seated(room: GameRoom, channel: ServerChannel) {
 			roomId: room.id,
 			playerCount: room.playerCount,
 			youId: String(channel.id),
+			screens: room.world.screens,
 		},
 		RELIABLE,
 	);
@@ -186,6 +201,9 @@ io.onConnection((channel) => {
 				...(msg.timeLimitMs === undefined
 					? {}
 					: { timeLimitMs: clamp(msg.timeLimitMs, 5000, 3_600_000, 300_000) }),
+				...(msg.screens === undefined
+					? {}
+					: { screens: clamp(msg.screens, 1, MAX_SCREENS, 1) }),
 			});
 		}
 

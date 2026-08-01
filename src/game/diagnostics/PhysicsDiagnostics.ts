@@ -10,11 +10,10 @@
  */
 
 import {
+	DEFAULT_WORLD,
 	PLAYER_HEIGHT,
 	penetrationDepth,
-	platforms,
-	WORLD_BOTTOM,
-	WORLD_RIGHT,
+	type World,
 } from "../simulation/Arena";
 import {
 	BULLET_SPEED,
@@ -367,6 +366,13 @@ export class PhysicsDiagnostics {
 		 * there is no wire to measure.
 		 */
 		private readonly netSummary: (() => object | null) | undefined = undefined,
+		/**
+		 * The geometry being measured. A wide room must be judged against its
+		 * own bounds — `arenaSummary.xSpanPct` normalises by the world's width,
+		 * which is what keeps "did the fighters actually use the arena" readable
+		 * on a multi-screen map instead of always reading 100%.
+		 */
+		private readonly world: World = DEFAULT_WORLD,
 	) {}
 
 	get isActive(): boolean {
@@ -556,7 +562,7 @@ export class PhysicsDiagnostics {
 		this.frameCount++;
 
 		const p = sample.player;
-		const penetration = penetrationDepth(p.x, p.y);
+		const penetration = penetrationDepth(p.x, p.y, this.world);
 
 		const frame: DiagnosticFrame = {
 			playerX: p.x,
@@ -585,7 +591,11 @@ export class PhysicsDiagnostics {
 		}
 
 		if (sample.enemy) {
-			const enemyPen = penetrationDepth(sample.enemy.x, sample.enemy.y);
+			const enemyPen = penetrationDepth(
+				sample.enemy.x,
+				sample.enemy.y,
+				this.world,
+			);
 			if (enemyPen > PENETRATION_TOLERANCE_PX) {
 				this.penetrations.push({
 					frame: this.frameCount,
@@ -1005,7 +1015,7 @@ export class PhysicsDiagnostics {
 		this.highestY = Math.min(this.highestY, p.y);
 		if (p.grounded) {
 			// Which surface is underfoot: the body's feet rest on a platform's top.
-			platforms.forEach((plat, i) => {
+			this.world.platforms.forEach((plat, i) => {
 				const onTop = Math.abs(p.y + PLAYER_HEIGHT - plat.y) < 2;
 				const withinSpan =
 					p.x + PLAYER_HEIGHT > plat.x && p.x < plat.x + plat.w;
@@ -1184,18 +1194,18 @@ export class PhysicsDiagnostics {
 				xSpanPct: Math.round(
 					((Math.max(...frames.map((f) => f.playerX)) -
 						Math.min(...frames.map((f) => f.playerX))) /
-						WORLD_RIGHT) *
+						this.world.right) *
 						100,
 				),
 				ySpanPct: Math.round(
 					((Math.max(...frames.map((f) => f.playerY)) -
 						Math.min(...frames.map((f) => f.playerY))) /
-						WORLD_BOTTOM) *
+						this.world.bottom) *
 						100,
 				),
 				/** Distinct platforms stood on, out of every solid in the arena. */
 				surfacesUsed: this.surfacesUsed.size,
-				surfacesAvailable: platforms.length,
+				surfacesAvailable: this.world.platforms.length,
 				highestY: Math.round(this.highestY),
 			},
 			/** Collision integrity: must be all zeroes. */

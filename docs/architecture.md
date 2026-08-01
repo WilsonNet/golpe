@@ -9,7 +9,8 @@ see [invariants.md](invariants.md); for intended behaviour see
 ```
 src/game/
   simulation/     deterministic, engine-free gameplay — shared verbatim with the server
-    Arena.ts        world bounds, platform rects, line-of-sight, penetrationDepth, narrowGaps
+    Arena.ts        buildWorld(screens): per-room bounds, platforms, spawns — plus
+                    line-of-sight, penetrationDepth, narrowGaps
     Collision.ts    swept axis-separated AABB: moveAndCollide, probeWall, resolveOverlap
     Physics.ts      tuning constants, PlayerPosition, tickPlayer, bullets
     Melee.ts        sword combat: the MOVES frame-data table, tickMelee, hitboxes, resolveMelee
@@ -77,6 +78,14 @@ public/assets/
 `simulation/` is the only code both the client and the server run, and it is the
 reason the netcode converges instead of rubber-banding. It may not import a
 rendering engine, touch the DOM, or read wall-clock time.
+
+**The geometry is per-room, not global.** `buildWorld(screens)` makes the arena
+`?screen=N` 800px screens wide, and every sim entry point that touches geometry
+takes that `World` as a parameter (defaulting to the single-screen arena).
+`GameRoom` builds one at creation; the client builds one from its URL and
+rewrites it in place from the `match` message, because the room's size is a
+property of the room. The two sides pass *the same values* into `tickPlayer`,
+which is what keeps prediction bit-identical on a wide map.
 
 Everything else is a consumer of it:
 

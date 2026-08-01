@@ -162,6 +162,15 @@ export interface MatchMessage {
 	playerCount: number;
 	/** The id the server knows this client by — never assume the channel id. */
 	youId: string;
+	/**
+	 * How many 800px screens wide the room's arena is.
+	 *
+	 * Set by the client that created the room (`?screen=N`) and authoritative
+	 * from then on — a latecomer's `?screen=` is ignored, exactly like the
+	 * shortened rules. The client builds its world from this rather than from
+	 * its own URL, so every client in a room simulates the same geometry.
+	 */
+	screens?: number;
 }
 
 /** A single fighter returning to the arena. Announced, never inferred. */

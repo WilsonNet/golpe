@@ -50,6 +50,14 @@ import { dudeFrames, TEX, tex } from "./render/assets";
 import { type ImpactEvent, MeleeFx } from "./render/MeleeFx";
 import { Nameplates } from "./render/Nameplates";
 import type { Stage } from "./render/Stage";
+import {
+	applyWorld,
+	buildWorld,
+	MAX_SCREENS,
+	PLAYER_HEIGHT,
+	PLAYER_WIDTH,
+	type World,
+} from "./simulation/Arena";
 import { timeLeftMs } from "./simulation/Deathmatch";
 import {
 	applyMeleeResult,
@@ -70,6 +78,20 @@ import { TrainingRoom } from "./training/TrainingRoom";
 const PHYSICS_DT = 1 / 60;
 const MAX_PHYSICS_STEPS = 5;
 const RESET_DELAY_MS = 2000;
+
+/**
+ * How far the follow camera may move in one rendered frame, in world px.
+ *
+ * Deliberately under `DIAG_JITTER_CAM` (15px): the diagnostic reads camera
+ * scroll as a jitter signal, so a follow camera that outran the threshold on
+ * a dash frame would report deliberate movement as a defect. 12px/frame is a
+ * comfortable glide at 60fps and still keeps up with a walking fighter.
+ */
+const CAMERA_MAX_STEP_PX = 12;
+
+function clamp(value: number, lo: number, hi: number): number {
+	return Math.max(lo, Math.min(hi, value));
+}
 
 const START_PLAYER_X = 100;
 const START_PLAYER_Y = 480;
@@ -119,6 +141,17 @@ function aiClientName(): string {
 export class Match {
 	private readonly world: GameWorld = createWorld();
 	private readonly queries: Queries;
+	/**
+	 * The arena geometry this client simulates, renders and aims against.
+	 *
+	 * One object shared by reference with the physics, the AI, the renderer and
+	 * the diagnostics, so a wide room never has two geometries to drift. Built
+	 * from `?screen=N`, then rebuilt in place from the `match` message — the
+	 * server is the authority on a room's size, not the URL.
+	 */
+	private readonly arena: World = buildWorld(1);
+	/** Logical view size (`app.screen`), for camera clamping. */
+	private readonly view: { readonly width: number; readonly height: number };
 	private readonly fx: MeleeFx;
 	private readonly plates: Nameplates;
 	private readonly aimLine: AimLine;
@@ -190,19 +223,38 @@ export class Match {
 		/** Logical view size — `app.screen`, never the canvas backing store. */
 		screen: { readonly width: number; readonly height: number },
 	) {
-		drawArena(stage.background, stage.arena);
+		// `?screen=N` widens the arena to N 800px screens. The URL proposes; the
+		// room decides (the creator's value sticks, and the `match` message says
+		// what it actually is), so the authoritative correction happens on
+		// `onSeated`.
+		const rawScreens = numberParam(
+			new URLSearchParams(window.location.search),
+			"screen",
+		);
+		this.arena = buildWorld(
+			rawScreens === undefined
+				? 1
+				: Math.max(1, Math.min(rawScreens, MAX_SCREENS)),
+		);
+		this.view = screen;
+		drawArena(stage.background, stage.arena, this.arena);
 
 		this.queries = createQueries(this.world);
 		this.fx = new MeleeFx(stage.effects, stage);
-		this.plates = new Nameplates(stage.nameplates);
+		this.plates = new Nameplates(stage.nameplates, this.arena);
 		// In the nameplate layer, which is inside the camera and drawn last: the beam
 		// tracks a moving fighter, and one buried behind a ledge or a spark answers
 		// nothing. It is under the plates themselves because a name is worth more.
 		this.aimLine = new AimLine(stage.nameplates);
-		this.bullets = new BulletSystem(stage.projectiles, tex(TEX.fireball));
+		this.bullets = new BulletSystem(
+			stage.projectiles,
+			tex(TEX.fireball),
+			this.arena,
+		);
 		this.diagnostics = new PhysicsDiagnostics(
 			() => (this.onlineMode ? "online" : "offline"),
 			() => this.online?.netSummary() ?? null,
+			this.arena,
 		);
 
 		this.local = this.spawnFighter(
@@ -412,6 +464,7 @@ export class Match {
 			tex(TEX.fireball),
 			START_PLAYER_X,
 			START_PLAYER_Y,
+			this.arena,
 			{
 				onStatus: (msg) => {
 					if (msg) console.log(`[ONLINE] ${msg}`);
@@ -497,10 +550,20 @@ export class Match {
 					);
 					EventBus.emit("match-over", msg);
 				},
-				onSeated: (roomId) => {
+				onSeated: (roomId, screens) => {
 					// The server decides the id, so the address bar follows it rather
 					// than the proposal. They agree unless the proposal was malformed.
 					this.roomId = roomId;
+					// The server also decides the arena's size — a latecomer's
+					// `?screen=` is ignored, and the client must simulate the room's
+					// geometry, not the one it asked for. Rebuilding the shared world
+					// in place keeps every holder (physics, AI, renderer, diagnostics)
+					// on the corrected geometry, then the arena is redrawn.
+					if (screens !== this.arena.screens) {
+						applyWorld(this.arena, screens);
+						drawArena(this.stage.background, this.stage.arena, this.arena);
+						console.log(`[ONLINE] room arena resized to ${screens} screens`);
+					}
 					if (!this.trainingMode) {
 						showRoomInUrl(roomId);
 						EventBus.emit("room-id", roomId);
@@ -524,6 +587,7 @@ export class Match {
 			...(this.timeLimitMs === undefined
 				? {}
 				: { timeLimitMs: this.timeLimitMs }),
+			screens: this.arena.screens,
 		});
 
 		if (this.trainingMode) {
@@ -538,7 +602,7 @@ export class Match {
 		}
 
 		if (this.aiMode) {
-			this.localBrain = new EnemyBrain(fightConfig());
+			this.localBrain = new EnemyBrain(fightConfig(), this.arena);
 			console.log("[AI-ONLINE] AI brain created for local player");
 		}
 	}
@@ -559,8 +623,8 @@ export class Match {
 	}
 
 	private startOfflineAi() {
-		this.localBrain = new EnemyBrain(fightConfig());
-		this.remoteBrain = new EnemyBrain(fightConfig());
+		this.localBrain = new EnemyBrain(fightConfig(), this.arena);
+		this.remoteBrain = new EnemyBrain(fightConfig(), this.arena);
 		console.log("=== AI VS AI MODE ENABLED ===");
 	}
 
@@ -594,6 +658,10 @@ export class Match {
 			bulletCount: this.onlineMode
 				? (this.online?.bullets.length ?? 0)
 				: this.bullets.count,
+			worldScreens: this.arena.screens,
+			worldWidth: this.arena.right,
+			cameraX: this.stage.cameraX,
+			cameraY: this.stage.cameraY,
 		});
 		// The deathmatch's own contract. `__gameState` describes two fighters
 		// because that is what a duel is; a sixteen-player match is a scoreboard and
@@ -623,6 +691,8 @@ export class Match {
 				standings,
 				rollback: this.online?.rollbackStats.summary() ?? null,
 				net: this.online?.netSummary() ?? null,
+				worldScreens: this.arena.screens,
+				worldWidth: this.arena.right,
 			};
 		};
 		window.__physicsDiagnostic = (durationMs = 5000) =>
@@ -722,6 +792,7 @@ export class Match {
 		meleeFxSystem(this.queries, this.fx, dtMs);
 		this.fx.update(dtMs);
 		this.stage.update(dtMs);
+		this.updateCamera();
 
 		this.training?.update(dtMs);
 		this.record(dtMs);
@@ -755,6 +826,44 @@ export class Match {
 			this.aimAngle,
 			report.blend,
 		);
+	}
+
+	/**
+	 * The follow camera: keep the local fighter on screen, clamped to the world.
+	 *
+	 * A room wider than the viewport scrolls horizontally (and would scroll
+	 * vertically too if the world were ever taller than a screen). The fighter
+	 * is kept near the centre, and the camera's per-frame movement is capped —
+	 * deliberately: the diagnostic reads `camera_x`/`camera_y` scroll as jitter,
+	 * and a dash at 1000px/s would otherwise trip the 15px threshold on the
+	 * frames it flies. On a single-screen arena `maxX` is zero and the camera
+	 * never moves, exactly as it always has.
+	 *
+	 * Reads the *drawn* position, like the nameplates and the aim beam — the
+	 * sprite is what a player watches, so the camera tracks it, not the body.
+	 */
+	private updateCamera() {
+		const at = this.local.renderPos ?? this.local.body;
+		const centreX = at.x + PLAYER_WIDTH / 2;
+		const centreY = at.y + PLAYER_HEIGHT / 2;
+
+		const maxX = Math.max(0, this.arena.right - this.view.width);
+		const maxY = Math.max(0, this.arena.bottom - this.view.height);
+		const targetX = clamp(centreX - this.view.width / 2, 0, maxX);
+		const targetY = clamp(centreY - this.view.height / 2, 0, maxY);
+
+		const dx = targetX - this.stage.cameraX;
+		const dy = targetY - this.stage.cameraY;
+		const dist = Math.hypot(dx, dy);
+		if (dist <= CAMERA_MAX_STEP_PX) {
+			this.stage.setScroll(targetX, targetY);
+		} else {
+			const t = CAMERA_MAX_STEP_PX / dist;
+			this.stage.setScroll(
+				this.stage.cameraX + dx * t,
+				this.stage.cameraY + dy * t,
+			);
+		}
 	}
 
 	private record(dtMs: number) {
@@ -852,7 +961,14 @@ export class Match {
 			touchingDown: self.grounded,
 			touchingLeft: self.wallTouch === "left",
 			touchingRight: self.wallTouch === "right",
-			hasLineOfSight: hasLineOfSight(self.x, self.y, foe.x, foe.y),
+			hasLineOfSight: hasLineOfSight(
+				self.x,
+				self.y,
+				foe.x,
+				foe.y,
+				24,
+				this.arena,
+			),
 			selfHP,
 			enemyHP,
 			enemyAction: foe.meleeAction,
@@ -953,10 +1069,10 @@ export class Match {
 					this.localBrain !== undefined
 						? this.localIntent
 						: Input.withDash(this.localIntent, this.input.consumeDash());
-				this.local.body = tickPlayer(this.local.body, intent, dt);
+				this.local.body = tickPlayer(this.local.body, intent, dt, this.arena);
 			}
 			if (foe.fighter.hp > 0) {
-				foe.body = tickPlayer(foe.body, this.remoteIntent, dt);
+				foe.body = tickPlayer(foe.body, this.remoteIntent, dt, this.arena);
 			}
 			this.bullets.step(dt);
 		});
@@ -1133,8 +1249,10 @@ export class Match {
 			this.offlineFoe.fighter.hp = 100;
 		}
 
-		if (this.localBrain) this.localBrain = new EnemyBrain(fightConfig());
-		if (this.remoteBrain) this.remoteBrain = new EnemyBrain(fightConfig());
+		if (this.localBrain)
+			this.localBrain = new EnemyBrain(fightConfig(), this.arena);
+		if (this.remoteBrain)
+			this.remoteBrain = new EnemyBrain(fightConfig(), this.arena);
 
 		this.bullets.clear();
 		this.fx.reset();
@@ -1150,8 +1268,9 @@ export class Match {
 			console.log("=== AI VS AI MODE DISABLED ===");
 			return;
 		}
-		this.localBrain = new EnemyBrain(fightConfig());
-		if (!this.onlineMode) this.remoteBrain = new EnemyBrain(fightConfig());
+		this.localBrain = new EnemyBrain(fightConfig(), this.arena);
+		if (!this.onlineMode)
+			this.remoteBrain = new EnemyBrain(fightConfig(), this.arena);
 		if (!this.onlineMode) this.resetFight();
 		console.log("=== AI VS AI MODE ENABLED ===");
 		console.log("Press 'P' to exit, or call window.__gameState()");

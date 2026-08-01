@@ -7,9 +7,11 @@ import {
 	blocksBullet,
 	bulletHitsPlatform,
 	bulletHitsPlayer,
+	DEFAULT_WORLD,
 	isBulletOutOfBounds,
 	type MeleeState,
 	tickBullet,
+	type World,
 } from "../simulation/Physics";
 
 export type BulletOwner = "player" | "enemy";
@@ -42,7 +44,11 @@ export class BulletSystem {
 	private pool: SpritePool;
 	private nextId = 0;
 
-	constructor(layer: Container, texture: Texture) {
+	constructor(
+		layer: Container,
+		texture: Texture,
+		private readonly world: World = DEFAULT_WORLD,
+	) {
 		this.pool = new SpritePool(layer, texture);
 	}
 
@@ -107,7 +113,10 @@ export class BulletSystem {
 		// reasoned about while the array is changing under it.
 		let kept = 0;
 		for (const b of this.bullets) {
-			if (isBulletOutOfBounds(b) || bulletHitsPlatform(b)) {
+			if (
+				isBulletOutOfBounds(b, this.world) ||
+				bulletHitsPlatform(b, this.world)
+			) {
 				this.pool.release(b.sprite);
 				continue;
 			}

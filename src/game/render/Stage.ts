@@ -60,6 +60,18 @@ export class Stage {
 		return -this.scroll.y;
 	}
 
+	/**
+	 * Move the camera so the world point (x, y) is its top-left corner.
+	 *
+	 * Deliberate scroll, written straight to the scroll container — the same
+	 * position the diagnostic reads, so the movement it reports is exactly the
+	 * movement a player sees. The follow camera in `Match` clamps and paces
+	 * this call so the movement never reads as jitter.
+	 */
+	setScroll(cameraX: number, cameraY: number) {
+		this.scroll.position.set(-cameraX, -cameraY);
+	}
+
 	/** Kick off an impact shake. Cosmetic only — never touches the simulation. */
 	startShake(durationMs: number, amplitudePx: number) {
 		// Let a bigger hit override a smaller one already running, rather than

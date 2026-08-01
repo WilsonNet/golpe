@@ -9,10 +9,12 @@
  */
 
 import {
+	DEFAULT_WORLD,
 	PLAYER_HEIGHT,
 	PLAYER_WIDTH,
 	pointInAnyPlatform,
 	type Rect,
+	type World,
 } from "./Arena.js";
 import {
 	type MovingBox,
@@ -31,9 +33,13 @@ import {
 	tickMelee,
 } from "./Melee.js";
 
-export type { Rect, SpawnPoint } from "./Arena.js";
+export type { Rect, SpawnPoint, World } from "./Arena.js";
 export {
+	applyWorld,
+	buildWorld,
+	DEFAULT_WORLD,
 	hasLineOfSight,
+	MAX_SCREENS,
 	PLAYER_HEIGHT,
 	PLAYER_WIDTH,
 	penetrationDepth,
@@ -41,6 +47,8 @@ export {
 	platforms,
 	playerBox,
 	rectsOverlap,
+	SCREEN_H,
+	SCREEN_W,
 	SPAWN_POINTS,
 	WORLD_BOTTOM,
 	WORLD_LEFT,
@@ -342,11 +350,18 @@ function decay(timerMs: number, dt: number): number {
  * all. Stun and launch live in this same state and replay through
  * reconciliation like any other physics — that is the whole reason combat state
  * is here rather than in a system beside it.
+ *
+ * `world` names the room's geometry; it defaults to the single-screen arena so
+ * callers that do not know about rooms (tests included) stay unchanged. The
+ * server and the predicting client pass their room's `World`, and because it
+ * is the same deterministic geometry on both sides, prediction stays
+ * bit-identical.
  */
 export function tickPlayer(
 	pos: PlayerPosition,
 	input: PlayerIntent,
 	dt: number,
+	world: World = DEFAULT_WORLD,
 ): PlayerPosition {
 	const s: PlayerPosition = { ...pos };
 
@@ -496,7 +511,7 @@ export function tickPlayer(
 
 	// ---- one collision-resolved move ----
 	const box: MovingBox = { x: s.x, y: s.y, w: PLAYER_WIDTH, h: PLAYER_HEIGHT };
-	const contacts = moveAndCollide(box, s.vx * dt, s.vy * dt);
+	const contacts = moveAndCollide(box, s.vx * dt, s.vy * dt, world);
 	s.x = box.x;
 	s.y = box.y;
 
@@ -517,7 +532,8 @@ export function tickPlayer(
 		s.airJumps = AIR_JUMPS;
 	}
 
-	const wall = contacts.wall !== "none" ? contacts.wall : probeWall(box);
+	const wall =
+		contacts.wall !== "none" ? contacts.wall : probeWall(box, 2, world);
 	if (wall !== "none") {
 		s.wallTouch = wall;
 		s.wallCoyoteTimer = WALL_COYOTE_MS;
@@ -554,8 +570,18 @@ export function tickBullet(b: BulletState, dt: number): void {
 	b.y += b.vy * dt;
 }
 
-export function isBulletOutOfBounds(b: BulletState): boolean {
-	return b.x < -50 || b.x > 850 || b.y < -50 || b.y > 650;
+export function isBulletOutOfBounds(
+	b: BulletState,
+	world: World = DEFAULT_WORLD,
+): boolean {
+	// A 50px margin is the original one-screen tolerance; it scales with the
+	// world so a wide room's bullets are judged against the room's walls.
+	return (
+		b.x < world.left - 50 ||
+		b.x > world.right + 50 ||
+		b.y < world.top - 50 ||
+		b.y > world.bottom + 50
+	);
 }
 
 export function bulletHitsPlayer(
@@ -572,6 +598,9 @@ export function bulletHitsPlayer(
 	);
 }
 
-export function bulletHitsPlatform(b: BulletState): boolean {
-	return pointInAnyPlatform(b.x, b.y);
+export function bulletHitsPlatform(
+	b: BulletState,
+	world: World = DEFAULT_WORLD,
+): boolean {
+	return pointInAnyPlatform(b.x, b.y, world);
 }

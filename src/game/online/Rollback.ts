@@ -43,11 +43,13 @@
 import { resolveOverlap } from "../simulation/Collision";
 import {
 	copyPlayerState,
+	DEFAULT_WORLD,
 	PLAYER_HEIGHT,
 	PLAYER_WIDTH,
 	type PlayerIntent,
 	type PlayerPosition,
 	tickPlayer,
+	type World,
 } from "../simulation/Physics";
 import { RenderSmoother } from "./Prediction";
 
@@ -64,9 +66,13 @@ import { RenderSmoother } from "./Prediction";
  * Never fed back into the simulation. A depenetrated draw position that became
  * authoritative would make the renderer part of the physics.
  */
-export function legaliseDrawn(x: number, y: number): { x: number; y: number } {
+export function legaliseDrawn(
+	x: number,
+	y: number,
+	world: World = DEFAULT_WORLD,
+): { x: number; y: number } {
 	const box = { x, y, w: PLAYER_WIDTH, h: PLAYER_HEIGHT };
-	return resolveOverlap(box) ? { x: box.x, y: box.y } : { x, y };
+	return resolveOverlap(box, world) ? { x: box.x, y: box.y } : { x, y };
 }
 
 /**
@@ -115,7 +121,15 @@ export class RemoteFighter {
 
 	private readonly smoother = new RenderSmoother(0.06, REMOTE_TELEPORT_PX);
 
-	constructor(state: PlayerPosition) {
+	/**
+	 * The geometry this fighter is predicted against — the room's, not the
+	 * default's: predicting a wide-room fighter against single-screen walls
+	 * would plant every correction at x=800 as a phantom wall contact.
+	 */
+	constructor(
+		state: PlayerPosition,
+		private readonly world: World = DEFAULT_WORLD,
+	) {
 		this.state = { ...state };
 	}
 
@@ -127,7 +141,7 @@ export class RemoteFighter {
 	 */
 	predict(dt: number) {
 		if (!this.intent) return;
-		this.state = tickPlayer(this.state, this.intent, dt);
+		this.state = tickPlayer(this.state, this.intent, dt, this.world);
 	}
 
 	/**
@@ -153,7 +167,7 @@ export class RemoteFighter {
 		if (intent) {
 			const depth = Math.max(0, Math.min(leadTicks, MAX_ROLLBACK_TICKS));
 			for (let i = 0; i < depth; i++) {
-				this.state = tickPlayer(this.state, intent, dt);
+				this.state = tickPlayer(this.state, intent, dt, this.world);
 				resimTicks++;
 			}
 		}
@@ -189,7 +203,7 @@ export class RemoteFighter {
 	/** Where to draw this fighter: its state plus the decaying correction offset. */
 	render(dtSec: number): { x: number; y: number } {
 		const at = this.smoother.apply(this.state.x, this.state.y, dtSec);
-		return legaliseDrawn(at.x, at.y);
+		return legaliseDrawn(at.x, at.y, this.world);
 	}
 }
 

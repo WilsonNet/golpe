@@ -1,0 +1,116 @@
+import { describe, expect, it } from "vitest";
+import {
+	applyWorld,
+	buildWorld,
+	MAX_SCREENS,
+	narrowGaps,
+	PLAYER_WIDTH,
+	penetrationDepth,
+	type Rect,
+	SCREEN_W,
+	WORLD_BOTTOM,
+	WORLD_RIGHT,
+} from "./Arena.js";
+
+/** The base layout for one screen: ground + eight ledges/pillars. */
+const BASE_PLATFORM_COUNT = 1 + 8;
+const BASE_SPAWN_COUNT = 17;
+
+/** Does any solid from `a` overlap any solid from `b`? */
+function overlapsAny(rect: Rect, solids: readonly Rect[]): boolean {
+	return solids.some(
+		(s) =>
+			rect.x < s.x + s.w &&
+			rect.x + rect.w > s.x &&
+			rect.y < s.y + s.h &&
+			rect.y + rect.h > s.y,
+	);
+}
+
+describe("buildWorld", () => {
+	it("builds the classic single-screen arena by default", () => {
+		const w = buildWorld(1);
+		expect(w.screens).toBe(1);
+		expect(w.right).toBe(WORLD_RIGHT);
+		expect(w.bottom).toBe(WORLD_BOTTOM);
+		expect(w.platforms).toHaveLength(BASE_PLATFORM_COUNT);
+		expect(w.spawnPoints).toHaveLength(BASE_SPAWN_COUNT);
+	});
+
+	it("tiles one layout per screen, mirrored on odd screens", () => {
+		const w = buildWorld(3);
+		expect(w.screens).toBe(3);
+		expect(w.right).toBe(3 * SCREEN_W);
+		// The ground is one span across the whole width; everything else tiles.
+		expect(w.platforms).toHaveLength(1 + 8 * 3);
+		expect(w.spawnPoints).toHaveLength(BASE_SPAWN_COUNT * 3);
+
+		// The ground truly spans the whole world.
+		expect(w.platforms[0]).toMatchObject({ x: 0, y: 568, w: 3 * SCREEN_W });
+
+		// Every even screen matches screen 0's pattern...
+		const base = buildWorld(1);
+		for (let screen = 0; screen < 3; screen += 2) {
+			for (const plat of base.platforms.slice(1)) {
+				expect(w.platforms).toContainEqual({
+					x: screen * SCREEN_W + plat.x,
+					y: plat.y,
+					w: plat.w,
+					h: plat.h,
+				});
+			}
+		}
+
+		// ...and every odd screen carries the mirror of that pattern.
+		const mirrorX = (x: number, w: number) => SCREEN_W - (x + w);
+		for (const plat of base.platforms.slice(1)) {
+			expect(w.platforms).toContainEqual({
+				x: SCREEN_W + mirrorX(plat.x, plat.w),
+				y: plat.y,
+				w: plat.w,
+				h: plat.h,
+			});
+		}
+	});
+
+	it("clamps absurd screen counts", () => {
+		expect(buildWorld(0).screens).toBe(1);
+		expect(buildWorld(-4).screens).toBe(1);
+		expect(buildWorld(99).screens).toBe(MAX_SCREENS);
+	});
+
+	it("keeps every spawn on a platform, clear of pillars, at any size", () => {
+		for (const screens of [1, 2, 3, MAX_SCREENS]) {
+			const w = buildWorld(screens);
+			const pillars = w.platforms.filter((p) => p.h > 2 * PLAYER_WIDTH);
+			for (const s of w.spawnPoints) {
+				// Inside the world, standing on a surface (the box rests on the
+				// platform top, so it overlaps nothing — penetration must be zero).
+				expect(s.x).toBeGreaterThanOrEqual(0);
+				expect(s.x + PLAYER_WIDTH).toBeLessThanOrEqual(w.right);
+				expect(penetrationDepth(s.x, s.y, w)).toBe(0);
+				// A spawn inside geometry is a teleport on the first tick; a spawn
+				// overlapping a pillar is that, in the loudest direction.
+				const box = { x: s.x, y: s.y, w: PLAYER_WIDTH, h: 48 };
+				expect(overlapsAny(box, pillars)).toBe(false);
+			}
+		}
+	});
+
+	it("leaves no narrow pockets a fighter could be pinned in, at any size", () => {
+		for (const screens of [1, 2, 3]) {
+			expect(narrowGaps(PLAYER_WIDTH, buildWorld(screens))).toEqual([]);
+		}
+	});
+
+	it("applyWorld rewrites an existing instance in place", () => {
+		const w = buildWorld(1);
+		const identity = w;
+		applyWorld(w, 2);
+		expect(w).toBe(identity);
+		expect(w.screens).toBe(2);
+		expect(w.right).toBe(2 * SCREEN_W);
+		expect(w.platforms).toHaveLength(1 + 8 * 2);
+		expect(w.spawnPoints).toHaveLength(BASE_SPAWN_COUNT * 2);
+	});
+});

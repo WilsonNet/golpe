@@ -30,7 +30,7 @@ export interface OnlineHandlers {
 	onRespawn: (msg: RespawnMsg) => void;
 	onMatchOver: (msg: MatchOverMsg) => void;
 	/** Seated, in the room the server actually put us in. */
-	onSeated: (roomId: string) => void;
+	onSeated: (roomId: string, screens: number) => void;
 	/** The room asked for is full of humans. Nothing more will arrive. */
 	onRoomFull: (roomId: string) => void;
 }
@@ -60,6 +60,13 @@ export interface JoinOptions {
 	 */
 	scoreLimit?: number;
 	timeLimitMs?: number;
+	/**
+	 * How many 800px screens wide this client wants the arena.
+	 *
+	 * Also honoured only by the room's creator: the arena's size is part of the
+	 * room, and the server says what it actually is in the `match` message.
+	 */
+	screens?: number;
 }
 
 export class OnlineManager {
@@ -134,6 +141,7 @@ export class OnlineManager {
 					...(join.timeLimitMs === undefined
 						? {}
 						: { timeLimitMs: join.timeLimitMs }),
+					...(join.screens === undefined ? {} : { screens: join.screens }),
 				},
 				RELIABLE,
 			);
@@ -152,7 +160,7 @@ export class OnlineManager {
 			if (msg?.youId) this._myId = msg.youId;
 			if (msg?.roomId) {
 				this._roomId = msg.roomId;
-				handlers.onSeated(msg.roomId);
+				handlers.onSeated(msg.roomId, msg.screens ?? 1);
 			}
 			handlers.onStatus("");
 		});

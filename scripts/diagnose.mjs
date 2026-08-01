@@ -24,6 +24,12 @@ const MODE = arg("mode", "both");
 // too short to prove the arena and the ranged game get used at all.
 const DURATION = Number(arg("duration", 14000));
 const RUNS = Number(arg("runs", 1));
+// How many 800px screens wide the arena is. `?screen=N` widens the map and
+// engages the follow camera — which is the whole point of measuring with it:
+// camera scroll is read as a jitter signal, so a multi-screen run proves the
+// follow cam never moves fast enough to read as a defect.
+const SCREENS = Math.max(1, Number(arg("screens", 1)) || 1);
+const URL_PARAMS = SCREENS > 1 ? `&screen=${SCREENS}` : "";
 
 /** Attach a console sink to a page and return the collected lines. */
 function sinkConsole(page, lines = []) {
@@ -159,7 +165,7 @@ async function onlineRun(browser, durationMs) {
 	// reconciliation and projectiles are cleanest to read against one opponent.
 	// `scripts/deathmatch-probe.mjs` is the sixteen-fighter measurement.
 	const room = `diag-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-	const url = `${BASE_URL}/?online=true&ai=true&room=${room}`;
+	const url = `${BASE_URL}/?online=true&ai=true&room=${room}${URL_PARAMS}`;
 
 	const a = await ctx.newPage();
 	const linesA = sinkConsole(a);

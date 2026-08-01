@@ -12,9 +12,11 @@
 import {
 	copyPlayerState,
 	createPlayerState,
+	DEFAULT_WORLD,
 	type PlayerIntent,
 	type PlayerPosition,
 	tickPlayer,
+	type World,
 } from "../simulation/Physics";
 
 interface PendingInput {
@@ -81,7 +83,16 @@ export class PredictedPlayer {
 	private pending: PendingInput[] = [];
 	private nextSeq = 1;
 
-	constructor(x: number, y: number) {
+	/**
+	 * `world` is the geometry prediction replays against — it must be the
+	 * room's, not the default's, or a wide room's replays would fight the
+	 * single-screen walls and reconciliation would yank every correction back.
+	 */
+	constructor(
+		x: number,
+		y: number,
+		private readonly world: World = DEFAULT_WORLD,
+	) {
 		this.state = createPlayerState(x, y);
 	}
 
@@ -101,7 +112,7 @@ export class PredictedPlayer {
 	 */
 	step(intent: PlayerIntent, dt: number): number {
 		const seq = this.nextSeq++;
-		this.state = tickPlayer(this.state, intent, dt);
+		this.state = tickPlayer(this.state, intent, dt, this.world);
 		this.pending.push({ seq, intent: { ...intent } });
 		if (this.pending.length > MAX_PENDING_INPUTS) {
 			this.pending.splice(0, this.pending.length - MAX_PENDING_INPUTS);
@@ -132,7 +143,7 @@ export class PredictedPlayer {
 		const rewound = copyPlayerState(authoritative, { ...this.state });
 		let replayed = rewound;
 		for (const p of this.pending) {
-			replayed = tickPlayer(replayed, p.intent, dt);
+			replayed = tickPlayer(replayed, p.intent, dt, this.world);
 		}
 		this.state = replayed;
 

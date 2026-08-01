@@ -146,7 +146,12 @@ node scripts/aim-probe.mjs                             # cursor, facing and shot
 node scripts/pad-probe.mjs                             # controller aim, gamepad and the phone deck
 node scripts/training-probe.mjs                        # one interaction, against a scripted dummy
 node scripts/dash-probe.mjs                            # double-tap dash delivery, at a forced frame rate
+node scripts/screens-probe.mjs                         # ?screen=N room: spawn spread + follow camera
 ```
+
+Both `diagnose.mjs` and `deathmatch-probe.mjs` take `--screens=N` to run their
+measurement on a wide arena — the follow camera and the wide-world spawns are
+part of what they must prove.
 
 - Ports: Vite **8080**, Geckos **9208**.
 - **`npm run typecheck` covers two projects.** `tsconfig.json` is client-only;
@@ -240,7 +245,10 @@ individual respawns.
 `?fill=N` keeps the room at N fighters with bots as ballast, and neither means
 humans only — still up to sixteen of them. `?scoreLimit`/`?timeLimit` shorten a
 match for a probe. All four are honoured only for the client that *creates* the
-room. See [specs/deathmatch.md](specs/deathmatch.md).
+room. **`?screen=N` widens the arena to N 800px screens** (1–8) — the same
+creator-only rule, with the follow camera capping at 12px/frame so scroll never
+reads as camera jitter. See [specs/deathmatch.md](specs/deathmatch.md) and
+[specs/arena.md](specs/arena.md).
 
 **Rooms are addressed, not matchmade.** `?room=<uuid>` joins that room; no
 `?room=` makes a new one, and the client writes the id into the address bar so the
