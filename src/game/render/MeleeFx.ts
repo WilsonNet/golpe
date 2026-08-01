@@ -51,6 +51,12 @@ const COLOR = {
 } as const satisfies Record<MeleeMove | string, number>;
 
 /**
+ * Dash wind: a cool white-blue, distinct from every sword colour so the tell is
+ * "speed", not "a swing is coming".
+ */
+const DASH_WIND_COLOR = 0xbfe8ff;
+
+/**
  * How one move's blade travels, in the fighter's own frame.
  *
  * Angles are radians with 0 pointing forward and negative pointing up; the
@@ -132,6 +138,10 @@ interface FighterFx {
 	/** Sprite the fighter is drawn with, for the impact scale punch. */
 	body?: Sprite;
 	punch: number;
+	/** Cadence for the dash wind streaks. */
+	dashEmitMs: number;
+	/** Whether the fighter was mid-dash last frame, to notice a dash starting. */
+	wasDashing: boolean;
 }
 
 export class MeleeFx {
@@ -187,6 +197,8 @@ export class MeleeFx {
 			guard: mk(TEX.guard, true),
 			emitAccMs: 0,
 			punch: 0,
+			dashEmitMs: 0,
+			wasDashing: false,
 		};
 		// A sword pivots at the hand, not at the middle of its own blade. With the
 		// default centre anchor the tip and the grip swapped ends through a swing,
@@ -213,6 +225,7 @@ export class MeleeFx {
 
 		this.drawSwing(f, s, cx, cy, dir);
 		this.drawGuard(f, s, cx, cy, dir);
+		this.drawDashWind(f, s, cx, cy, dtMs);
 
 		f.emitAccMs += dtMs;
 		if (f.emitAccMs >= 40) {
@@ -309,6 +322,78 @@ export class MeleeFx {
 		f.guard.scale.set(dir > 0 ? 1 : -1, parrying ? 1.15 : 1);
 		f.guard.tint = parrying ? COLOR.parry : COLOR.block;
 		f.guard.alpha = parrying ? 1 : 0.45;
+	}
+
+	/**
+	 * Wind trails for a dash.
+	 *
+	 * A dash is a burst of speed with no other tell — the fighter is a flat line
+	 * holding its Y — so the reward has to be drawn. Streaks stream out of the
+	 * *trailing* edge (the direction comes from `vx`, never from facing, which a
+	 * fighter can keep while dashing the other way), tinted cool and kept
+	 * translucent so they read as "you are moving fast" without ever covering
+	 * the fighter or the arena behind it. Additive blend makes them light rather
+	 * than paint.
+	 *
+	 * The kick-off fires once, the moment the dash starts; the streaks continue
+	 * for as long as the dash holds its line, so their tail lingers just past the
+	 * end of the travel.
+	 */
+	private drawDashWind(
+		f: FighterFx,
+		s: PlayerPosition,
+		cx: number,
+		cy: number,
+		dtMs: number,
+	) {
+		const dashing = s.dashActiveTimer > 0;
+		const dir = s.vx > 0 ? 1 : -1;
+
+		if (dashing && !f.wasDashing) {
+			// The tell that a dash is starting: a small air-burst out of the
+			// trailing edge, whatever surface the dash was thrown from.
+			this.particles.burst({
+				texture: TEX.spark,
+				count: 5,
+				x: cx - dir * 20,
+				y: cy,
+				tint: DASH_WIND_COLOR,
+				// Backwards against travel, with a little up-and-down spread.
+				angle:
+					dir > 0
+						? [Math.PI * 0.8, Math.PI * 1.2]
+						: [-Math.PI * 0.2, Math.PI * 0.2],
+				speed: [60, 170],
+				lifeMs: 240,
+				scale: [0.9, 0],
+				alpha: [0.35, 0],
+			});
+		}
+
+		if (dashing) {
+			f.dashEmitMs += dtMs;
+			// 160ms of dash at ~34ms cadence is about four emissions, each a
+			// couple of lines — enough to read as wind, not as confetti.
+			if (f.dashEmitMs >= 34) {
+				f.dashEmitMs = 0;
+				this.particles.burst({
+					texture: TEX.shard,
+					count: 2,
+					x: cx - dir * 26,
+					// A height that wanders, so the stream reads as a band rather
+					// than as one exact line through the body.
+					y: cy + (Math.random() * 2 - 1) * 14,
+					tint: DASH_WIND_COLOR,
+					angle: dir > 0 ? [Math.PI - 0.35, Math.PI + 0.35] : [-0.35, 0.35],
+					speed: [130, 300],
+					lifeMs: 240,
+					scale: [1.1, 0],
+					alpha: [0.3, 0],
+				});
+			}
+		}
+
+		f.wasDashing = dashing;
 	}
 
 	private drawCharge(s: PlayerPosition, cx: number, cy: number) {
@@ -523,6 +608,8 @@ export class MeleeFx {
 			f.blade.visible = false;
 			f.guard.visible = false;
 			f.punch = 0;
+			f.dashEmitMs = 0;
+			f.wasDashing = false;
 			f.body?.scale.set(1);
 		}
 		this.particles.clear();

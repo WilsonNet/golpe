@@ -144,6 +144,14 @@ fighter ends the dash at exactly the Y it started.
 - It changes reachability, like anything that moves a fighter: gaps that needed a
   jump can now be crossed flat. Only ever *more* reachable, never less.
 
+**A dash is drawn with wind, not with more movement.** The dash is a burst of
+speed with no other tell — the fighter is a flat line holding its Y — so the
+renderer streams low-opacity streaks out of the trailing edge, tinted a cool
+white-blue and additively blended so they read as speed without ever covering
+the fighter or the arena behind it. Renderer-only (`MeleeFx`), driven from
+`dashActiveTimer` and the direction of `vx` (never facing, which a fighter can
+keep while dashing the other way); nothing about it reaches the simulation.
+
 ### Forgiveness
 
 - **300ms, up from 200.** Dashing at the peak of a jump means releasing the
