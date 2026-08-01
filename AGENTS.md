@@ -145,6 +145,7 @@ node scripts/verify-modes.mjs                          # smoke-check every mode
 node scripts/aim-probe.mjs                             # cursor, facing and shot direction
 node scripts/pad-probe.mjs                             # controller aim, gamepad and the phone deck
 node scripts/training-probe.mjs                        # one interaction, against a scripted dummy
+node scripts/dash-probe.mjs                            # double-tap dash delivery, at a forced frame rate
 ```
 
 - Ports: Vite **8080**, Geckos **9208**.

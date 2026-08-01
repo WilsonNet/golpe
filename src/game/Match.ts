@@ -901,7 +901,18 @@ export class Match {
 		}
 
 		this.diagSteps = this.runFixedSteps(dtSec, (dt) => {
-			session.fixedStep(this.localIntent, this.aimAngle, dt);
+			// The one-shot dash is delivered here, at the fixed-step boundary,
+			// rather than by the rendered frame. A frame can run zero fixed steps
+			// — on a 120Hz+ display, roughly half of them — and a gesture consumed
+			// into a frame that ran none was silently dropped: the player
+			// double-tapped and nothing happened, which read as a cooldown far
+			// longer than the 250ms lockout. A local AI brain already carries its
+			// dash inside `localIntent`, so it wins and the human gesture stays.
+			const intent =
+				this.localBrain !== undefined
+					? this.localIntent
+					: Input.withDash(this.localIntent, this.input.consumeDash());
+			session.fixedStep(intent, this.aimAngle, dt);
 		});
 
 		// The predicted state object is replaced every tick, so the entity has to
@@ -936,7 +947,13 @@ export class Match {
 
 		this.diagSteps = this.runFixedSteps(dtSec, (dt) => {
 			if (this.local.fighter.hp > 0) {
-				this.local.body = tickPlayer(this.local.body, this.localIntent, dt);
+				// Same dash-at-the-step-boundary rule as online, so the offline
+				// escape hatch behaves like the real game: see `updateOnline`.
+				const intent =
+					this.localBrain !== undefined
+						? this.localIntent
+						: Input.withDash(this.localIntent, this.input.consumeDash());
+				this.local.body = tickPlayer(this.local.body, intent, dt);
 			}
 			if (foe.fighter.hp > 0) {
 				foe.body = tickPlayer(foe.body, this.remoteIntent, dt);

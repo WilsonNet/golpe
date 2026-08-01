@@ -8,9 +8,11 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { NEUTRAL_INTENT } from "../simulation/Physics";
 import {
 	DASH_DOUBLE_TAP_MS,
 	DoubleTapDash,
+	Input,
 	normalisePointer,
 	type Viewport,
 	viewToWorld,
@@ -151,5 +153,46 @@ describe("DoubleTapDash", () => {
 		g.press(1, 100);
 		g.reset();
 		expect(g.consume()).toBe(0);
+	});
+
+	/**
+	 * The whole point of the dash fix: a rendered frame is *not* the delivery
+	 * point for a one-shot. A frame can run zero fixed physics steps — on a
+	 * 120Hz+ display, roughly half of them — and a gesture consumed by the frame
+	 * (as `Input.intent()` used to) was dropped on the floor: the player
+	 * double-tapped and nothing happened, which read as a cooldown far longer
+	 * than the 250ms lockout. Delivery happens at the fixed-step boundary: the
+	 * gesture is pulled only when a step actually runs.
+	 */
+	it("delivers the gesture at the first fixed step after it fires", () => {
+		const g = new DoubleTapDash();
+		g.press(1, 0);
+		g.press(1, 100);
+
+		// The gesture sat through any number of frames that ran zero steps, then
+		// a step finally ran and pulled it into the step intent.
+		const intent = Input.withDash({ ...NEUTRAL_INTENT }, g.consume());
+		expect(intent.dash).toBe(1);
+		// Delivered exactly once.
+		expect(g.consume()).toBe(0);
+	});
+});
+
+describe("Input.withDash", () => {
+	const base = { ...NEUTRAL_INTENT };
+
+	it("leaves the intent alone when no gesture is waiting", () => {
+		expect(Input.withDash({ ...base }, 0)).toEqual(base);
+	});
+
+	it("folds a waiting gesture into the step intent", () => {
+		const intent = Input.withDash({ ...base }, -1);
+		expect(intent.dash).toBe(-1);
+		expect(intent).not.toBe(base);
+	});
+
+	it("lets an intent that already carries a dash win", () => {
+		const aiDash = { ...base, dash: 1 };
+		expect(Input.withDash(aiDash, -1)).toBe(aiDash);
 	});
 });

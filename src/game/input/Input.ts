@@ -718,10 +718,30 @@ export class Input {
 			// You face where you aim. That is what lets a player retreat while still
 			// guarding the side the attacker is coming from.
 			face: faceFor(aimAngle),
-			// One-shot: consumed here so the impulse is sent exactly once, and the
-			// server applies the same tick the client predicted.
-			dash: this.consumeDash(),
+			// The dash gesture is *not* consumed here — it is pulled at the
+			// fixed-step boundary instead. A rendered frame can run zero physics
+			// steps (on a 120Hz+ display, roughly half of them), and a one-shot
+			// consumed into a frame that ran none was dropped on the floor: the
+			// player double-tapped and nothing happened, which read as a cooldown
+			// far longer than the 250ms lockout. See `withDash` — the fixed step
+			// pulls the gesture only when one actually runs.
+			dash: 0,
 		};
+	}
+
+	/**
+	 * Fold a pending dash gesture into one fixed-step intent.
+	 *
+	 * `dash` is the only one-shot in `PlayerIntent`; every other field is held
+	 * button state, so it is the only one that must be delivered *when a step
+	 * runs* rather than whenever the rendered frame happened to poll. When the
+	 * intent already carries a dash — a local AI brain, or a training override
+	 * that spread one through `intent()` — that one wins and the gesture is left
+	 * for later.
+	 */
+	static withDash(intent: PlayerIntent, gesture: number): PlayerIntent {
+		if (intent.dash !== 0 || gesture === 0) return intent;
+		return { ...intent, dash: gesture };
 	}
 
 	destroy() {

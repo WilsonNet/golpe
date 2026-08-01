@@ -162,6 +162,16 @@ fighter ends the dash at exactly the Y it started.
   snapped the client back mid-dash. Only the double-tap *detection* is local —
   it is a gesture, not a button, so the input layer resolves it and hands the
   simulation a one-shot impulse.
+- **A one-shot is delivered at the fixed-step boundary, not the rendered
+  frame.** `dash` is the only one-shot in the intent — every other field is held
+  button state, so it is the only one a frame can lose. A rendered frame runs
+  zero physics steps whenever it is faster than one step: on a 120Hz+ display
+  that is roughly half of all frames. A gesture consumed into such a frame was
+  dropped on the floor — the player double-tapped and nothing happened, which
+  read as a cooldown far longer than the 250ms lockout. The gesture therefore
+  sits pending until the next fixed step actually pulls it. Measured at 8ms
+  frames (52% zero-step): `scripts/dash-probe.mjs` went from 4/40 deliveries to
+  30/30 for the same double-tap.
 - **A dash is the only way to break away from an equal-speed opponent.** Walking
   backwards from someone who walks at your speed never opens a gap, which is why
   the AI could not disengage — and therefore never used the gun or the upper
