@@ -24,6 +24,7 @@ import {
 import { TEX, tex } from "./assets";
 import { ParticleSystem } from "./Particles";
 import type { Stage } from "./Stage";
+import { VIOLET } from "./UltAimLine";
 
 /**
  * Palette. One colour per readable game state, so a glance tells you what
@@ -55,6 +56,9 @@ const COLOR = {
  * "speed", not "a swing is coming".
  */
 const DASH_WIND_COLOR = 0xbfe8ff;
+
+/** Cadence of the ultimate charge aura's emissions, in milliseconds. */
+const ULT_AURA_EVERY_MS = 24;
 
 /**
  * How one move's blade travels, in the fighter's own frame.
@@ -142,6 +146,16 @@ interface FighterFx {
 	dashEmitMs: number;
 	/** Whether the fighter was mid-dash last frame, to notice a dash starting. */
 	wasDashing: boolean;
+	/** Cadence for the ultimate charge aura's motes. */
+	ultEmitMs: number;
+	/** Wall-clock age of the current ultimate hold, for the glow's breathing. */
+	ultGlowMs: number;
+	/** The last whole breath the aura has completed, for its pulse ring. */
+	ultPulseFloor: number;
+	/** The aura's soft violet envelope, drawn while the ultimate button is held. */
+	glow: Sprite;
+	/** The hotter inner core of the same envelope. */
+	core: Sprite;
 }
 
 export class MeleeFx {
@@ -175,6 +189,8 @@ export class MeleeFx {
 		f.arc.destroy();
 		f.blade.destroy();
 		f.guard.destroy();
+		f.glow.destroy();
+		f.core.destroy();
 		this.fighters.delete(key);
 	}
 
@@ -199,7 +215,20 @@ export class MeleeFx {
 			punch: 0,
 			dashEmitMs: 0,
 			wasDashing: false,
+			ultEmitMs: 0,
+			ultGlowMs: 0,
+			ultPulseFloor: -1,
+			glow: mk(TEX.halo, false),
+			// The core is additive on purpose: it sits mostly on the fighter's
+			// own body, where adding violet reads as inner fire rather than as
+			// a wash against the sky.
+			core: mk(TEX.halo, true),
 		};
+		// Painted, not added: over the bright sky an additive halo washes out to
+		// white, and the aura's whole point is to read as the ability's violet.
+		// The sprite's own ramp is already soft — tinting it is enough.
+		f.glow.tint = VIOLET;
+		f.core.tint = VIOLET;
 		// A sword pivots at the hand, not at the middle of its own blade. With the
 		// default centre anchor the tip and the grip swapped ends through a swing,
 		// which no amount of perspective can make look like a cut.
@@ -216,8 +245,19 @@ export class MeleeFx {
 	 * effects are predicted along with its state machine and appear on the frame
 	 * the button was pressed — while the remote's come from the authoritative
 	 * snapshot. Neither path needs its own animation logic.
+	 *
+	 * `holdingUlt` is the one thing `PlayerPosition` cannot carry: the held
+	 * ultimate button is input, and the wire format keeps input and state
+	 * separate on purpose. The local fighter's answer comes from the live input
+	 * layer; a remote's from the input the server echoed for it. Either way the
+	 * aura never invents a charge-up for a fighter whose cast would be refused.
 	 */
-	updateFighter(key: string, s: PlayerPosition, dtMs: number) {
+	updateFighter(
+		key: string,
+		s: PlayerPosition,
+		dtMs: number,
+		holdingUlt: boolean,
+	) {
 		const f = this.fx(key);
 		const cx = s.x + PLAYER_WIDTH / 2;
 		const cy = s.y + PLAYER_HEIGHT / 2;
@@ -226,6 +266,7 @@ export class MeleeFx {
 		this.drawSwing(f, s, cx, cy, dir);
 		this.drawGuard(f, s, cx, cy, dir);
 		this.drawDashWind(f, s, cx, cy, dtMs);
+		this.drawUltAura(f, holdingUlt, cx, cy, dtMs);
 
 		f.emitAccMs += dtMs;
 		if (f.emitAccMs >= 40) {
@@ -394,6 +435,124 @@ export class MeleeFx {
 		}
 
 		f.wasDashing = dashing;
+	}
+
+	/**
+	 * The ultimate's charge aura: a violet flame around the fighter while the
+	 * ultimate button is held and a cast is legal.
+	 *
+	 * The Dragon Ball tell — a power-up everybody in the room can see before it
+	 * lands. The hold phase is the thrower's free preview of the arc; this is
+	 * the room's half of that bargain, drawn on the *holding* fighter wherever
+	 * they stand. The same violet as the aim arc, so the glow and the trajectory
+	 * are recognisably one ability.
+	 *
+	 * Three layers, because the bright sky eats pure additive light: a **painted
+	 * halo** gives the body of the glow its colour at any distance, a dense column
+	 * of **painted motes** flows upward around the whole body, and a few additive
+	 * sparks and streaks add the energy on top. Like every effect here it is
+	 * driven from frame time and never read back by the simulation.
+	 */
+	private drawUltAura(
+		f: FighterFx,
+		holdingUlt: boolean,
+		cx: number,
+		cy: number,
+		dtMs: number,
+	) {
+		if (!holdingUlt) {
+			f.ultEmitMs = 0;
+			f.ultGlowMs = 0;
+			f.ultPulseFloor = -1;
+			f.glow.visible = false;
+			f.core.visible = false;
+			return;
+		}
+		f.ultEmitMs += dtMs;
+		f.ultGlowMs += dtMs;
+
+		// Two halos, breathing together: a painted envelope that carries the
+		// violet from across the arena and a small additive core hugging the body
+		// like the inner fire of the flame. The pulse is what stops them reading
+		// as static discs — the whole point of the aura is to draw the eye, and a
+		// steady glow does not.
+		// Two halos, breathing like a heartbeat: a painted envelope that carries
+		// the violet from across the arena and a small additive core hugging the
+		// body like the inner fire of the flame. The breath swings the glow from
+		// nearly off to full — a steady glow reads as ambient, a pulsing one reads
+		// as *imminent*. Each completed breath also sheds an expanding ring, so
+		// the beat has an edge to it even in peripheral vision.
+		const breath = Math.sin(f.ultGlowMs / 130);
+		f.glow.visible = true;
+		f.glow.position.set(cx, cy + 8);
+		f.glow.scale.set(1.15 + 0.12 * breath);
+		f.glow.alpha = 0.22 + 0.18 * breath;
+		f.core.visible = true;
+		f.core.position.set(cx, cy + 4);
+		f.core.scale.set(0.62 + 0.06 * breath);
+		f.core.alpha = 0.4 + 0.2 * breath;
+
+		const pulse = Math.floor(f.ultGlowMs / (Math.PI * 2 * 130));
+		if (pulse !== f.ultPulseFloor) {
+			f.ultPulseFloor = pulse;
+			this.ring(cx, cy + 10, VIOLET, 1.5, 550, false);
+		}
+
+		if (f.ultEmitMs < ULT_AURA_EVERY_MS) return;
+		f.ultEmitMs = 0;
+
+		// The flame: vertical wisps, streaming upward from a spawn band across the
+		// body. A shard texture rotated to point up is a tongue, not a diamond —
+		// elongated, directional, the motion vocabulary an aura needs. Painted,
+		// like the motes: over the bright sky only paint keeps its violet.
+		for (let i = 0; i < 2; i++) {
+			this.particles.burst({
+				texture: TEX.shard,
+				count: 1,
+				x: cx + (Math.random() * 2 - 1) * 28,
+				y: cy - 16 + Math.random() * 38,
+				tint: VIOLET,
+				angle: [-Math.PI * 0.75, -Math.PI * 0.25],
+				speed: [70, 190],
+				lifeMs: 380,
+				scale: [1.5, 0],
+				alpha: [0.5, 0],
+				blend: false,
+				rotation: -Math.PI / 2,
+			});
+		}
+		// Painted motes around the wisps: born small and faint, growing and
+		// brightening as they rise, so the column has volume rather than being a
+		// handful of lines.
+		for (let i = 0; i < 4; i++) {
+			this.particles.burst({
+				texture: TEX.spark,
+				count: 1,
+				x: cx + (Math.random() * 2 - 1) * 34,
+				y: cy - 22 + Math.random() * 48,
+				tint: VIOLET,
+				angle: [-Math.PI * 0.7, -Math.PI * 0.3],
+				speed: [25, 85],
+				lifeMs: 620,
+				scale: [0.7, 2.8],
+				alpha: [0.08, 0.5],
+				blend: false,
+			});
+		}
+		// One additive spark per beat, so the column sparkles rather than sitting
+		// as paint. Deliberately secondary — see the function comment.
+		this.particles.burst({
+			texture: TEX.spark,
+			count: 1,
+			x: cx + (Math.random() * 2 - 1) * 26,
+			y: cy - 26 + Math.random() * 46,
+			tint: VIOLET,
+			angle: [-Math.PI * 0.8, -Math.PI * 0.2],
+			speed: [60, 160],
+			lifeMs: 400,
+			scale: [1, 0],
+			alpha: [0.8, 0],
+		});
 	}
 
 	private drawCharge(s: PlayerPosition, cx: number, cy: number) {
@@ -566,12 +725,16 @@ export class MeleeFx {
 		tint: number,
 		toScale: number,
 		lifeMs: number,
+		blend = true,
 	) {
 		const sprite = new Sprite(tex(TEX.ring));
 		sprite.anchor.set(0.5);
 		sprite.position.set(x, y);
 		sprite.tint = tint;
-		sprite.blendMode = "add";
+		// The aura's pulse ring is painted rather than added: over the bright
+		// sky only paint keeps its violet, and the ring is the aura's most
+		// readable element at a distance.
+		if (blend) sprite.blendMode = "add";
 		sprite.scale.set(toScale * 0.2);
 		this.layer.addChild(sprite);
 		this.rings.push({ sprite, ageMs: 0, lifeMs, toScale });
@@ -607,9 +770,14 @@ export class MeleeFx {
 			f.arc.visible = false;
 			f.blade.visible = false;
 			f.guard.visible = false;
+			f.glow.visible = false;
+			f.core.visible = false;
 			f.punch = 0;
 			f.dashEmitMs = 0;
 			f.wasDashing = false;
+			f.ultEmitMs = 0;
+			f.ultGlowMs = 0;
+			f.ultPulseFloor = -1;
 			f.body?.scale.set(1);
 		}
 		this.particles.clear();

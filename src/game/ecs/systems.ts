@@ -130,16 +130,24 @@ export function spriteSyncSystem(queries: Queries) {
 }
 
 /**
- * Draw each fighter's sword state — swing trail, blade, guard, charge, stun.
+ * Draw each fighter's sword state — swing trail, blade, guard, charge, stun —
+ * and the ultimate's charge aura while its button is held.
  *
  * Reads `PlayerPosition` directly, which is why the local fighter's effects are
  * predicted along with its state machine and appear on the frame the button was
  * pressed, while the remote's come from the authoritative snapshot. Neither path
- * needs animation logic of its own.
+ * needs animation logic of its own. The one thing `PlayerPosition` cannot carry
+ * is the held ultimate button — that is input, and the wire keeps input and
+ * state separate on purpose — so `holdingUlt` supplies it per fighter.
  */
-export function meleeFxSystem(queries: Queries, fx: MeleeFx, dtMs: number) {
+export function meleeFxSystem(
+	queries: Queries,
+	fx: MeleeFx,
+	dtMs: number,
+	holdingUlt: (id: string) => boolean,
+) {
 	for (const e of queries.fighters) {
-		fx.updateFighter(e.fighter.id, e.body, dtMs);
+		fx.updateFighter(e.fighter.id, e.body, dtMs, holdingUlt(e.fighter.id));
 	}
 }
 

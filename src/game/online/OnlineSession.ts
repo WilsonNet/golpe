@@ -269,6 +269,17 @@ export class OnlineSession {
 		return this.info.get(id)?.ult ?? 0;
 	}
 
+	/**
+	 * Is a remote fighter holding the ultimate button, per the input the server
+	 * last consumed for it?
+	 *
+	 * The renderer reads this to draw the charge aura on a fighter about to
+	 * cast. `ultOf` answers whether it *can*; this answers whether it *is*.
+	 */
+	ultHeldBy(id: string): boolean {
+		return this.fighters.get(id)?.heldUltimate ?? false;
+	}
+
 	/** The local fighter's ultimate charge, for the HUD meter. */
 	get localUlt(): number {
 		return this.ultOf(this.manager.myId);

@@ -51,6 +51,7 @@ import { BlackHoleFx } from "./render/BlackHoleFx";
 import { type ImpactEvent, MeleeFx } from "./render/MeleeFx";
 import { Nameplates } from "./render/Nameplates";
 import type { Stage } from "./render/Stage";
+import { UltAimLine } from "./render/UltAimLine";
 import { UltMeter } from "./render/UltMeter";
 import {
 	applyWorld,
@@ -68,6 +69,8 @@ import {
 	createPlayerState,
 	fieldFor,
 	hasLineOfSight,
+	isKnockedDown,
+	isStunned,
 	meleePhase,
 	NEUTRAL_INTENT,
 	type PlayerIntent,
@@ -167,6 +170,7 @@ export class Match {
 	private readonly ultMeter: UltMeter;
 	private readonly plates: Nameplates;
 	private readonly aimLine: AimLine;
+	private readonly ultAim: UltAimLine;
 	private readonly input: Input;
 	private readonly diagnostics: PhysicsDiagnostics;
 	private readonly bullets: BulletSystem;
@@ -264,6 +268,10 @@ export class Match {
 		// tracks a moving fighter, and one buried behind a ledge or a spark answers
 		// nothing. It is under the plates themselves because a name is worth more.
 		this.aimLine = new AimLine(stage.nameplates);
+		// Same layer, same reason: it tracks a moving fighter inside the camera.
+		// The ultimate's aim arc is only ever shown while its button is held, so
+		// it never competes with the ordinary beam.
+		this.ultAim = new UltAimLine(stage.nameplates);
 		this.bullets = new BulletSystem(
 			stage.projectiles,
 			tex(TEX.fireball),
@@ -775,6 +783,8 @@ export class Match {
 				myId: me,
 				charge: session?.localUlt ?? 0,
 				ready: (session?.localUlt ?? 0) >= ULT_MAX_CHARGE,
+				/** True while the ultimate button is held and a cast is legal. */
+				aiming: this.ultAimVisible(),
 				frozen: session?.frozen ?? false,
 				cinematic: session?.cinematic ?? null,
 				grenades: [...(session?.grenades ?? [])].map((g) => ({
@@ -889,7 +899,7 @@ export class Match {
 		spriteSyncSystem(this.queries);
 		nameplateSystem(this.queries, this.plates);
 		this.syncAimLine(dtMs);
-		meleeFxSystem(this.queries, this.fx, dtMs);
+		meleeFxSystem(this.queries, this.fx, dtMs, (id) => this.ultAuraVisible(id));
 		this.fx.update(dtMs);
 		this.updateUltimate(dtMs);
 		this.stage.update(dtMs);
@@ -965,6 +975,20 @@ export class Match {
 			EventBus.emit("ult-charge", charge);
 		}
 
+		// The aim phase: while the ultimate button is held and a cast is legal,
+		// show the arc the grenade will fly on this angle. It is the *release*
+		// that casts, so the aim itself must not be hidden behind anything.
+		const at = this.local.renderPos ?? this.local.body;
+		const centre = bodyCentre(at.x, at.y);
+		this.ultAim.update(
+			dtMs,
+			this.ultAimVisible(),
+			centre.x,
+			centre.y,
+			this.aimAngle,
+			this.arena,
+		);
+
 		const field: Singularity | null = session.singularity;
 		const victims: PlayerPosition[] = [];
 		if (field) {
@@ -980,8 +1004,66 @@ export class Match {
 		this.blackHole.update(field, victims, dtMs);
 	}
 
+	/**
+	 * May the ultimate's aim arc be shown right now?
+	 *
+	 * The mirror image of the server's cast conditions in `tryCastUltimate`,
+	 * asked of what the *client* knows: the button is held, the meter is full,
+	 * and nothing that would refuse the cast on release is true. It is
+	 * presentation — the server still decides the cast — but an arc shown for a
+	 * cast that will be silently refused is a lie about the button.
+	 *
+	 * The one asymmetry is deliberate: the client cannot know about a throw
+	 * waiting on the far side of somebody else's freeze, but that state only
+	 * exists *during* a cinematic, and `frozen` covers it.
+	 */
+	private ultAimVisible(): boolean {
+		const session = this.online;
+		if (!session) return false;
+		if (session.frozen) return false;
+		if (session.singularity) return false;
+		if (session.grenades.length > 0) return false;
+		if (session.matchStatus?.phase !== "live") return false;
+		if (!this.input.actionDown("ultimate")) return false;
+		if (this.local.fighter.hp <= 0) return false;
+		if (isStunned(this.local.body) || isKnockedDown(this.local.body)) {
+			return false;
+		}
+		return session.localUlt >= ULT_MAX_CHARGE;
+	}
+
 	/** Last value pushed over `ult-charge`, so the deck is told only on a change. */
 	private ultReadyLast = false;
+
+	/**
+	 * May this fighter's ultimate charge aura be drawn right now?
+	 *
+	 * The local fighter answers with the same mirror of the server's cast
+	 * conditions the aim arc uses: the button is held, the meter is full, and
+	 * nothing would refuse the cast on release. A remote answers from what the
+	 * **server** echoed about it — the held button travels in the input, so the
+	 * input the server consumed tells the room a charge-up is happening one
+	 * snapshot after it starts — plus the same room and fighter conditions.
+	 *
+	 * The aura is the room's tell that a cast is imminent, and like the arc it
+	 * must never appear for a cast that will be refused: an aura on a fighter
+	 * with an empty meter is a lie about the button.
+	 */
+	private ultAuraVisible(id: string): boolean {
+		if (id === LOCAL_ID) return this.ultAimVisible();
+		const session = this.online;
+		if (!session) return false;
+		if (session.frozen) return false;
+		if (session.singularity) return false;
+		if (session.grenades.length > 0) return false;
+		if (session.matchStatus?.phase !== "live") return false;
+		const entity = this.remotes.get(id);
+		if (!entity) return false;
+		if (entity.fighter.hp <= 0) return false;
+		if (isStunned(entity.body) || isKnockedDown(entity.body)) return false;
+		if (session.ultOf(id) < ULT_MAX_CHARGE) return false;
+		return session.ultHeldBy(id);
+	}
 
 	/**
 	 * The id the *server* knows an entity by.
@@ -1468,6 +1550,7 @@ export class Match {
 		this.fx.reset();
 		this.blackHole.reset();
 		this.aimLine.reset();
+		this.ultAim.reset();
 		this.stage.reset();
 		this.hpText.text = "hp: 100";
 	}
@@ -1493,6 +1576,7 @@ export class Match {
 		this.blackHole.destroy();
 		this.ultMeter.destroy();
 		this.aimLine.destroy();
+		this.ultAim.destroy();
 		this.training?.destroy();
 		this.online?.disconnect();
 	}

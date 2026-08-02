@@ -120,6 +120,18 @@ export class RemoteFighter {
 	 */
 	private intent: PlayerIntent | null = null;
 
+	/**
+	 * Is this fighter pressing the ultimate button, per the input the server
+	 * last echoed for it?
+	 *
+	 * The button travels in the intent, so the whole room sees a held charge-up
+	 * one snapshot after it starts — which is exactly what the charge aura is
+	 * for. `null` intent (the server froze the fighter) reads as not held.
+	 */
+	get heldUltimate(): boolean {
+		return this.intent?.ultimate === true;
+	}
+
 	private readonly smoother = new RenderSmoother(0.06, REMOTE_TELEPORT_PX);
 
 	/**

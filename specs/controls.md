@@ -65,8 +65,9 @@ The third slot is a *convention*, not a constraint.
 **The ultimate is R, and Pad B.** Every game with an ultimate put it on R and a
 player's hand goes looking for it there. On a pad it is the right-hand face
 button — the one a thumb hits deliberately rather than in passing, which is what
-a button that spends a minute of earned charge in one press should require. See
-[ultimate.md](ultimate.md).
+a button that spends a minute of earned charge should require. The cast is
+decided at the **release** of the hold: pressing R is the aim phase (the arc
+comes up), releasing R is the cast. See [ultimate.md](ultimate.md).
 
 **Block is Shift, not right-click.** A guard is held through a whole exchange
 while the same hand aims and slashes, and holding a mouse button down removes the

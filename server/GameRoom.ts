@@ -158,8 +158,16 @@ interface ConnectedPlayer {
 	 * with everything else about the match.
 	 */
 	ult: number;
-	/** Press-edge detection for the ultimate button, so a hold casts once. */
+	/**
+	 * Release-edge detection for the ultimate button.
+	 *
+	 * Holding R is the *aim phase* — the cast is decided when the button is let
+	 * go, not when it goes down. The held button travels on the wire like any
+	 * other, and this is the edge that turns a hold into exactly one cast.
+	 */
 	ultHeld: boolean;
+	/** The aim angle of the most recent input that held the ultimate button. */
+	ultAimAngle: number;
 	stats: ReturnType<typeof newStats>;
 }
 
@@ -293,10 +301,10 @@ export class GameRoom {
 	 * The throw waiting on the far side of the cinematic.
 	 *
 	 * The grenade is launched when the freeze *ends*, not when the button is
-	 * pressed. That ordering is the whole risk in the ability: the room is told a
-	 * black hole is coming and only then does it have to be aimed well. The aim
-	 * angle is captured at the press so a caster cannot re-aim during their own
-	 * cutscene.
+	 * released. That ordering is the whole risk in the ability: the room is told a
+	 * black hole is coming and only then does it have to be thrown well — and the
+	 * announcement gives the room time to see the arc and dodge. The aim angle is
+	 * captured at the release so a caster cannot re-aim during their own cutscene.
 	 */
 	private pendingThrow: {
 		ownerId: string;
@@ -437,6 +445,7 @@ export class GameRoom {
 			simulatedIntent: null,
 			ult: this.startUltCharge,
 			ultHeld: false,
+			ultAimAngle: 0,
 			stats: newStats(),
 		};
 	}
@@ -997,6 +1006,7 @@ export class GameRoom {
 			// winner an ultimate before the new one has begun.
 			player.ult = this.startUltCharge;
 			player.ultHeld = false;
+			player.ultAimAngle = 0;
 			// A fresh personality per match, so sixteen bots do not replay the same
 			// fight every five minutes.
 			if (player.brain) player.brain = new EnemyBrain(botConfig(), this.world);
@@ -1187,11 +1197,13 @@ export class GameRoom {
 				fieldFor(this.singularity, player.id),
 			);
 
-			// A press edge, not a hold: `ultimate` is held button state on the wire
-			// like every other button, and edge-detecting it here rather than on the
-			// client is the same rule attack and jump follow.
-			if (input.ultimate && !player.ultHeld)
-				this.tryCastUltimate(player, input);
+			// A release edge, not a press edge: `ultimate` is held button state on
+			// the wire like every other button, but the hold is the *aim phase* — the
+			// cast is decided when the button is let go, at the angle the player
+			// released on. Edge-detecting here rather than on the client is the same
+			// rule attack and jump follow.
+			if (input.ultimate) player.ultAimAngle = input.aimAngle;
+			if (!input.ultimate && player.ultHeld) this.tryCastUltimate(player);
 			player.ultHeld = input.ultimate;
 
 			// A fighter holds a sword or a gun, never both: firing is gated on the
@@ -1406,7 +1418,16 @@ export class GameRoom {
 	 * rejection message would be a second, unreliable channel telling them
 	 * something the first one already did.
 	 */
-	private tryCastUltimate(player: ConnectedPlayer, input: PlayerInput) {
+	/**
+	 * Try to cast, on the release of the ultimate button. Silently refused when
+	 * the conditions are not met.
+	 *
+	 * Silent on purpose: every refusal is a state the player can already see —
+	 * an empty meter, being stunned, somebody else's cinematic on screen. A
+	 * rejection message would be a second, unreliable channel telling them
+	 * something the first one already did.
+	 */
+	private tryCastUltimate(player: ConnectedPlayer) {
 		if (!ultReady(player.ult)) return;
 		if (!player.alive || this.phase !== "live") return;
 		if (isStunned(player.state) || isKnockedDown(player.state)) return;
@@ -1415,7 +1436,7 @@ export class GameRoom {
 		// would mean one of them was never seen.
 		if (this.cinematic || this.pendingThrow || this.singularity) return;
 
-		// Spent at the press, before the freeze. A caster who disconnects mid
+		// Spent at the release, before the freeze. A caster who disconnects mid
 		// cinematic must not come back still armed.
 		player.ult = 0;
 		this.cinematic = { casterId: player.id, msLeft: ULT_CINEMATIC_MS };
@@ -1423,8 +1444,12 @@ export class GameRoom {
 			ownerId: player.id,
 			x: player.state.x + PLAYER_WIDTH / 2,
 			y: player.state.y + PLAYER_HEIGHT / 2,
-			// Captured now, so the caster cannot re-aim during their own cutscene.
-			angle: input.aimAngle,
+			// The last input that held the button, not the release input itself: the
+			// release frame is the moment the button came up, and the aim that
+			// matters is the one it was held at. They are the same for a human — the
+			// cursor has not moved between two frames — and they differ only for
+			// scripted input, whose release frame may carry no angle at all.
+			angle: player.ultAimAngle,
 		};
 		console.log(`[ULT] ${player.name} casts Black Hole`);
 	}

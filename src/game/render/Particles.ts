@@ -30,6 +30,14 @@ export interface BurstOptions {
 	gravity?: number;
 	spin?: boolean;
 	blend?: boolean;
+	/**
+	 * Fixed initial rotation, radians.
+	 *
+	 * `spin` scatters random rotations; this sets one, which is what turns a
+	 * horizontal shard texture into a vertical flame wisp. Both can coexist —
+	 * `spin` adds its own rotation on top of this one.
+	 */
+	rotation?: number;
 }
 
 interface Particle {
@@ -71,7 +79,8 @@ export class ParticleSystem {
 			sprite.position.set(o.x, o.y);
 			sprite.scale.set(sFrom);
 			sprite.alpha = alFrom;
-			sprite.rotation = o.spin ? Math.random() * Math.PI * 2 : 0;
+			sprite.rotation =
+				(o.rotation ?? 0) + (o.spin ? Math.random() * Math.PI * 2 : 0);
 			sprite.visible = true;
 
 			const angle = rand(aMin, aMax);

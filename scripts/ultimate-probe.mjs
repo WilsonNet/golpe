@@ -16,15 +16,19 @@
  * 1. **The meter is server-owned and arrives.** `?ultCharge=100` seats both
  *    clients armed. A client that never sees a charge is one whose HUD is lying
  *    and whose cast will be refused for reasons it cannot show.
- * 2. **A cast freezes BOTH clients, for about as long as the server declared.**
+ * 2. **Holding R is the aim phase, and casts nothing.** The arc is up while the
+ *    button is held; no freeze, no grenade. The cast is decided at the release,
+ *    so a press that fires early would throw the grenade before the player
+ *    finished aiming.
+ * 3. **A cast freezes BOTH clients, for about as long as the server declared.**
  *    This is the whole netcode risk: a freeze one client honours and the other
  *    does not is two rooms simulating different tick counts, and it would
  *    present as unexplained correction forever afterwards. A cutscene that never
  *    lifts is a hang.
- * 3. **A grenade flies and one hole opens, in one place, on both clients.** The
+ * 4. **A grenade flies and one hole opens, in one place, on both clients.** The
  *    field is an argument to every `tickPlayer` both of them run, so a
  *    disagreement about where it is is a disagreement about physics.
- * 4. **The victim's own client predicts the pull**, measured with
+ * 5. **The victim's own client predicts the pull**, measured with
  *    `__physicsDiagnostic` — the tuned instrument — on the client whose *own*
  *    locally predicted fighter is the one being dragged.
  *
@@ -297,10 +301,14 @@ const aimCheck = await caster.evaluate(() => window.__aimState?.() ?? null);
 // than inferred from its aftermath.
 const watching = watch(pages, 6000);
 await caster.waitForTimeout(150);
-// The real key, on the canvas, through `Input` and `Bindings` — not a hook. R is
-// the default binding; a probe that called a cast function directly would still
-// pass with the button unbound.
-if (CAST) await caster.keyboard.press("KeyR");
+// The cast is decided at the **release**, and the hold before it is the aim
+// phase: R down shows the arc and must cast nothing, R up is what casts. Sampled
+// mid-hold so a cast-on-press regression is caught here, where the button is
+// down and the room is still moving.
+if (CAST) await caster.keyboard.down("KeyR");
+await caster.waitForTimeout(500);
+const aimHeld = CAST ? await Promise.all(pages.map(ultState)) : null;
+if (CAST) await caster.keyboard.up("KeyR");
 const frames = await watching;
 
 const casterId = armed[0]?.myId ?? "";
@@ -338,6 +346,21 @@ if (!CAST) {
 		fail.push("a client froze with the ultimate never pressed");
 	}
 } else {
+	// The hold was the aim phase: the arc was up, and nothing was cast yet.
+	// "Nothing" is the whole point — a press that fires early would throw the
+	// grenade before the player finished aiming.
+	if (!aimHeld?.[0]?.aiming) {
+		fail.push("holding R never entered the aim phase");
+	}
+	if (aimHeld?.[0]?.frozen) {
+		fail.push("the cast happened on the press, not the release");
+	}
+	if (aimHeld?.[1]?.frozen) {
+		fail.push("the witness froze while the button was still held");
+	}
+	if ((aimHeld?.[0]?.grenades?.length ?? 0) > 0) {
+		fail.push("a grenade flew before the button was released");
+	}
 	if (freeze.casterFrames === 0) fail.push("the caster never froze");
 	if (freeze.witnessFrames === 0) {
 		fail.push("the witness never froze — the cinematic did not reach it");
@@ -628,8 +651,9 @@ if (fail.length) {
 }
 console.log(
 	CAST
-		? "PASS: both clients froze and recovered together, one hole in one place, " +
-				"the dummy was caught and damaged, the caster never was, prediction held"
+		? "PASS: the hold aimed and the release cast, both clients froze and recovered " +
+				"together, one hole in one place, the dummy was caught and damaged, the " +
+				"caster never was, prediction held"
 		: "PASS (control): no press, no freeze, no hole — baseline " +
 				`reconciliation ${prediction.witnessAvgErrorPx}px`,
 );

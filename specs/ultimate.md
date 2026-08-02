@@ -14,17 +14,27 @@ Graviton Surge** for the fact that it is a *thrown* thing you can miss with.
 
 1. A fighter's **ult meter** fills, from damage they deal and from a slow
    passive trickle. At 100 it is armed and the meter says so.
-2. They press **R** (or the pad's ultimate button). The meter must be full and
-   they must be alive, upright and not mid-swing.
-3. **The whole room freezes for 1100ms** and every client draws the caster's
-   portrait, their name, and the ability's title. Nobody can act; the match
-   clock does not advance.
-4. The freeze ends and the **grenade launches**, along the angle the caster was
-   aiming at the instant they pressed. It arcs under its own gravity.
+2. They **hold R** (or the pad's ultimate button). While the button is held the
+   meter is full and nothing forbids a cast, the fighter **aims with a special
+   arc** — the grenade's own ballistic trajectory traced from the chest, ending
+   where the hole will open. The meter must be full and the fighter must be
+   alive, upright and not mid-swing.
+3. They **release R**. That release is the cast: charge is spent, **the whole
+   room freezes for 1100ms** and every client draws the caster's portrait,
+   their name, and the ability's title. Nobody can act; the match clock does
+   not advance.
+4. The freeze ends and the **grenade launches**, along the aim angle recorded
+   at the release. It arcs under its own gravity.
 5. It **detonates** on a platform, on an enemy fighter, or when its fuse runs
    out — into a **singularity** that lasts 2200ms.
 6. Everyone inside the event horizon, **except the caster**, is dragged to the
    centre, held completely still, and damaged four times a second.
+
+The hold is the risk in reverse: the thrower gets a preview of the exact arc
+for free, and the room gets the cinematic *before* the grenade flies — so
+everybody who is not throwing sees the black hole coming and has the whole
+flight to get out of its way. Aiming happens while the screen is clean; the
+announcement happens when aiming is already done.
 
 ## Earning it
 
@@ -54,6 +64,14 @@ on the wire like every other button. **The server is the only thing that
 decides a cast happened**, exactly as it is the only thing that decides a bullet
 was fired. The client predicts nothing about it.
 
+**The cast is decided at the release, not the press.** The button is held state
+like every other, and the server edge-detects the *release*: a press that fired
+early would throw the grenade before the player finished aiming. The hold in
+between is the aim phase — the arc is a client-side preview, and the simulation
+never learns it was shown. The aim angle used is the one the last held input
+carried, so a release frame with no angle (scripted input, a dead zone) cannot
+turn the throw into a guess.
+
 A cast is refused, silently, unless all of:
 
 - charge is at 100,
@@ -61,12 +79,13 @@ A cast is refused, silently, unless all of:
 - the match phase is `live`,
 - the fighter is not stunned or knocked down,
 - **no cinematic is already running** — two ultimates cannot overlap, and the
-  second presser keeps their charge,
+  second release keeps their charge,
 - **no singularity is already open.** One hole at a time in a room. The second
   one would have to argue with the first about which way a fighter is pulled.
 
-On a successful cast the charge is spent **immediately**, before the cinematic,
-so a caster who disconnects mid-freeze cannot come back armed.
+On a successful cast the charge is spent **immediately**, at the release,
+before the cinematic, so a caster who disconnects mid-freeze cannot come back
+armed.
 
 ## The cinematic freeze
 
@@ -97,8 +116,12 @@ are ever read back by the simulation.
 ## The grenade
 
 Launched at the **end** of the freeze, from the caster's chest, along the aim
-angle recorded when they pressed. That ordering is the whole risk: the cinematic
-tells the room a black hole is coming, and *then* it has to be thrown well.
+angle recorded at the **release** of the button. The cinematic happens *between*
+the aim and the flight, which is what gives the room its dodge: the freeze
+announces the black hole, and the grenade is only then in the air — a visible
+lob every other fighter has the whole arc to run from. The thrower had their
+clean look at the arc while holding the button, so nothing about the freeze
+obstructs the aim.
 
 - Speed **780 px/s**, gravity **860 px/s²** — a lobbed arc, much lighter than a
   falling fighter.
@@ -231,6 +254,22 @@ error after a cast and looked exactly like the pull leaking outside
 The renderer's job, none of it authoritative:
 
 - **The meter**, bottom-centre, filling; a pulse and a colour change at 100.
+- **The aim arc**: while the ultimate button is held and a cast is legal, the
+  grenade's own trajectory drawn from the caster's chest — the same speed,
+  gravity and fuse the simulation will use, stopped where the grenade would
+  stop, with a larger dot where the hole will open. Drawn from the *drawn*
+  position like the nameplates, and a pure preview: nothing about it is read
+  back. It appears only when the hold can actually cast, so an arc shown for a
+  cast that will be silently refused is never shown.
+- **The charge aura**: while the ultimate button is held and a cast is legal,
+  violet energy sheets upward around the whole fighter — the same violet as
+  the arc, so the glow and the throw are recognisably one ability. It is drawn
+  on whichever fighter is holding the button: the caster's own client draws it
+  from its live input, and every other client draws it from the input the
+  server echoed for that fighter, so the room sees the charge-up coming and
+  has the whole hold to react — the hold's risk, paid in advance. Like the
+  arc, it appears only when the hold can actually cast, so an aura on a
+  fighter with an empty meter is never shown.
 - **The cinematic**: the caster's portrait in a frame, their name on a plate
   under it, the ability title, and a collapsing-star motif. Drawn by the React
   overlay, because it is a dialog and the canvas is the wrong tool for one.
