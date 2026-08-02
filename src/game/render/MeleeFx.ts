@@ -21,6 +21,8 @@ import {
 	PLAYER_WIDTH,
 	type PlayerPosition,
 } from "../simulation/Physics";
+import type { TeamId } from "../simulation/Teams";
+import { TINT, teamTint } from "../teamPalette";
 import { TEX, tex } from "./assets";
 import { ParticleSystem } from "./Particles";
 import type { Stage } from "./Stage";
@@ -156,6 +158,16 @@ interface FighterFx {
 	glow: Sprite;
 	/** The hotter inner core of the same envelope. */
 	core: Sprite;
+	/**
+	 * The side this fighter's effects are tinted toward. `null` in a free-for-all,
+	 * which makes every `teamTint` call below the identity.
+	 *
+	 * Stored per fighter rather than passed to each draw call, because `impact`
+	 * is fired from a *server event* and has only ids to work with — the attacker
+	 * whose colour the sparks take may be somebody this client is not drawing this
+	 * frame.
+	 */
+	team: TeamId | null;
 }
 
 export class MeleeFx {
@@ -223,6 +235,7 @@ export class MeleeFx {
 			// own body, where adding violet reads as inner fire rather than as
 			// a wash against the sky.
 			core: mk(TEX.halo, true),
+			team: null,
 		};
 		// Painted, not added: over the bright sky an additive halo washes out to
 		// white, and the aura's whole point is to read as the ability's violet.
@@ -257,8 +270,12 @@ export class MeleeFx {
 		s: PlayerPosition,
 		dtMs: number,
 		holdingUlt: boolean,
+		team: TeamId | null = null,
 	) {
 		const f = this.fx(key);
+		// Latched here so `impact` — which is fired from a server event and knows
+		// only ids — can tint an attacker's sparks without being handed a team.
+		f.team = team;
 		const cx = s.x + PLAYER_WIDTH / 2;
 		const cy = s.y + PLAYER_HEIGHT / 2;
 		const dir = s.facing >= 0 ? 1 : -1;
@@ -271,8 +288,8 @@ export class MeleeFx {
 		f.emitAccMs += dtMs;
 		if (f.emitAccMs >= 40) {
 			f.emitAccMs = 0;
-			this.drawCharge(s, cx, cy);
-			this.drawStun(s, cx, s.y);
+			this.drawCharge(f, s, cx, cy);
+			this.drawStun(f, s, cx, s.y);
 		}
 
 		this.applyPunch(f, dtMs);
@@ -317,7 +334,10 @@ export class MeleeFx {
 		f.blade.scale.set(near, 1 + 0.5 * PERSPECTIVE_GAIN * z);
 		// A touch of rake, so the blade is never quite edge-on to the camera.
 		f.blade.skew.x = 0.28 * z * dir;
-		f.blade.tint = depthTint(z);
+		// Steel, washed toward the wielder's side. Lightly: the depth ramp *is* the
+		// perspective, and a blade repainted flat team-blue would lose the near/far
+		// read that makes the swing travel through the screen.
+		f.blade.tint = teamTint(depthTint(z), f.team, TINT.subtle);
 
 		if (phase !== "active") {
 			f.arc.visible = false;
@@ -340,7 +360,10 @@ export class MeleeFx {
 		// come apart at exactly the moment the swing is most visible.
 		f.arc.scale.set((def.reachPx / 46) * (0.8 + 0.3 * activeT) * near);
 		f.arc.alpha = (1 - activeT * 0.75) * (0.75 + 0.25 * (z + 1) * 0.5);
-		f.arc.tint = COLOR[s.meleeAction];
+		// The trail keeps most of its move colour — white first link, amber
+		// finisher, cyan uppercut — because that colour is frame data you can see.
+		// The team pulls it, it does not replace it.
+		f.arc.tint = teamTint(COLOR[s.meleeAction], f.team, TINT.subtle);
 	}
 
 	private drawGuard(
@@ -361,7 +384,13 @@ export class MeleeFx {
 		f.guard.visible = true;
 		f.guard.position.set(cx + dir * 20, cy);
 		f.guard.scale.set(dir > 0 ? 1 : -1, parrying ? 1.15 : 1);
-		f.guard.tint = parrying ? COLOR.parry : COLOR.block;
+		// Same rule as the swing trail: the parry window is the one thing a
+		// defender can time, so its gold stays gold and only leans toward the side.
+		f.guard.tint = teamTint(
+			parrying ? COLOR.parry : COLOR.block,
+			f.team,
+			TINT.subtle,
+		);
 		f.guard.alpha = parrying ? 1 : 0.45;
 	}
 
@@ -398,7 +427,9 @@ export class MeleeFx {
 				count: 5,
 				x: cx - dir * 20,
 				y: cy,
-				tint: DASH_WIND_COLOR,
+				// Wind is nearly colourless to begin with, so it takes the team
+				// strongly — a dash across the arena becomes a streak of your side.
+				tint: teamTint(DASH_WIND_COLOR, f.team, TINT.strong),
 				// Backwards against travel, with a little up-and-down spread.
 				angle:
 					dir > 0
@@ -424,7 +455,7 @@ export class MeleeFx {
 					// A height that wanders, so the stream reads as a band rather
 					// than as one exact line through the body.
 					y: cy + (Math.random() * 2 - 1) * 14,
-					tint: DASH_WIND_COLOR,
+					tint: teamTint(DASH_WIND_COLOR, f.team, TINT.strong),
 					angle: dir > 0 ? [Math.PI - 0.35, Math.PI + 0.35] : [-0.35, 0.35],
 					speed: [130, 300],
 					lifeMs: 240,
@@ -483,6 +514,13 @@ export class MeleeFx {
 		// as *imminent*. Each completed breath also sheds an expanding ring, so
 		// the beat has an edge to it even in peripheral vision.
 		const breath = Math.sin(f.ultGlowMs / 130);
+		// The aura leans toward the side, gently. It is the room's warning that a
+		// black hole is coming, and *whose* it is decides whether you run toward
+		// the caster or away from where they are aiming — but the violet has to
+		// stay violet, because violet is what "ultimate" means here.
+		const auraTint = teamTint(VIOLET, f.team, TINT.subtle);
+		f.glow.tint = auraTint;
+		f.core.tint = auraTint;
 		f.glow.visible = true;
 		f.glow.position.set(cx, cy + 8);
 		f.glow.scale.set(1.15 + 0.12 * breath);
@@ -495,7 +533,7 @@ export class MeleeFx {
 		const pulse = Math.floor(f.ultGlowMs / (Math.PI * 2 * 130));
 		if (pulse !== f.ultPulseFloor) {
 			f.ultPulseFloor = pulse;
-			this.ring(cx, cy + 10, VIOLET, 1.5, 550, false);
+			this.ring(cx, cy + 10, auraTint, 1.5, 550, false);
 		}
 
 		if (f.ultEmitMs < ULT_AURA_EVERY_MS) return;
@@ -511,7 +549,7 @@ export class MeleeFx {
 				count: 1,
 				x: cx + (Math.random() * 2 - 1) * 28,
 				y: cy - 16 + Math.random() * 38,
-				tint: VIOLET,
+				tint: auraTint,
 				angle: [-Math.PI * 0.75, -Math.PI * 0.25],
 				speed: [70, 190],
 				lifeMs: 380,
@@ -530,7 +568,7 @@ export class MeleeFx {
 				count: 1,
 				x: cx + (Math.random() * 2 - 1) * 34,
 				y: cy - 22 + Math.random() * 48,
-				tint: VIOLET,
+				tint: auraTint,
 				angle: [-Math.PI * 0.7, -Math.PI * 0.3],
 				speed: [25, 85],
 				lifeMs: 620,
@@ -546,7 +584,7 @@ export class MeleeFx {
 			count: 1,
 			x: cx + (Math.random() * 2 - 1) * 26,
 			y: cy - 26 + Math.random() * 46,
-			tint: VIOLET,
+			tint: auraTint,
 			angle: [-Math.PI * 0.8, -Math.PI * 0.2],
 			speed: [60, 160],
 			lifeMs: 400,
@@ -555,7 +593,7 @@ export class MeleeFx {
 		});
 	}
 
-	private drawCharge(s: PlayerPosition, cx: number, cy: number) {
+	private drawCharge(f: FighterFx, s: PlayerPosition, cx: number, cy: number) {
 		if (s.chargeTimer <= 0 && !s.massiveReady) return;
 
 		if (s.massiveReady) {
@@ -565,7 +603,7 @@ export class MeleeFx {
 				count: 3,
 				x: cx,
 				y: cy,
-				tint: COLOR.massive,
+				tint: teamTint(COLOR.massive, f.team, TINT.medium),
 				speed: [10, 60],
 				lifeMs: 420,
 				scale: [0.8, 0],
@@ -582,14 +620,14 @@ export class MeleeFx {
 			count: 1,
 			x: cx + Math.cos(a) * radius,
 			y: cy + Math.sin(a) * radius,
-			tint: COLOR.charge,
+			tint: teamTint(COLOR.charge, f.team, TINT.strong),
 			speed: [5, 25],
 			lifeMs: 380,
 			scale: [0.7, 0],
 		});
 	}
 
-	private drawStun(s: PlayerPosition, cx: number, top: number) {
+	private drawStun(f: FighterFx, s: PlayerPosition, cx: number, top: number) {
 		if (s.stunTimer <= 0) return;
 		const a = (s.stunTimer / 90) % (Math.PI * 2);
 		this.particles.burst({
@@ -597,7 +635,7 @@ export class MeleeFx {
 			count: 1,
 			x: cx + Math.cos(a) * 16,
 			y: top - 10 + Math.sin(a) * 5,
-			tint: COLOR.stun,
+			tint: teamTint(COLOR.stun, f.team, TINT.strong),
 			speed: [5, 20],
 			lifeMs: 400,
 			scale: [0.6, 0],
@@ -619,10 +657,24 @@ export class MeleeFx {
 		f.body.scale.set(1 + 0.35 * f.punch, 1 + 0.18 * f.punch);
 	}
 
-	/** One sword impact, as judged by the server (or by the offline resolver). */
-	impact(event: ImpactEvent, victimKey?: string) {
+	/**
+	 * One sword impact, as judged by the server (or by the offline resolver).
+	 *
+	 * `attackerKey` decides the colour of everything this throws: an impact is the
+	 * loudest thing that happens in a fight, and in a team match the first
+	 * question about it is whose it was. The *victim* is who gets punched — those
+	 * are deliberately two different fighters, and conflating them was already a
+	 * bug once (see `Match.onMeleeEvent`).
+	 */
+	impact(event: ImpactEvent, victimKey?: string, attackerKey?: string) {
 		const { move, outcome, x, y } = event;
 		const heavy = move === "massive";
+		// Looked up rather than created: an attacker this client has never drawn
+		// has no effect record, and calling `fx()` here would leave a set of
+		// sprites behind for every fighter that ever hit somebody off screen.
+		const team = attackerKey
+			? (this.fighters.get(attackerKey)?.team ?? null)
+			: null;
 
 		if (victimKey) {
 			this.fx(victimKey).punch = heavy
@@ -640,7 +692,10 @@ export class MeleeFx {
 				count,
 				x,
 				y,
-				tint,
+				// Half-way to the side's colour: far enough that a scrum of eight
+				// fighters resolves into two colours of sparks, not so far that a
+				// parry stops looking like a parry.
+				tint: teamTint(tint, team, TINT.medium),
 				speed: [90, speedMax],
 				lifeMs: 340,
 				scale: [1.1, 0],
@@ -653,7 +708,7 @@ export class MeleeFx {
 				count,
 				x,
 				y,
-				tint,
+				tint: teamTint(tint, team, TINT.medium),
 				speed: [140, 420],
 				lifeMs: 480,
 				scale: [1, 0.2],
@@ -664,7 +719,7 @@ export class MeleeFx {
 		switch (outcome) {
 			case "blocked":
 				sparks(10, COLOR.block);
-				this.ring(x, y, COLOR.block, 0.5, 220);
+				this.ring(x, y, teamTint(COLOR.block, team, TINT.medium), 0.5, 220);
 				this.stage.startShake(70, 2);
 				break;
 
@@ -672,14 +727,14 @@ export class MeleeFx {
 				// The biggest read in the game deserves the biggest tell.
 				sparks(22, COLOR.parry);
 				shards(14, COLOR.parry);
-				this.ring(x, y, COLOR.parry, 1.3, 420);
+				this.ring(x, y, teamTint(COLOR.parry, team, TINT.medium), 1.3, 420);
 				this.stage.startShake(180, 7);
 				break;
 
 			case "backstab":
 				sparks(20, COLOR.backstab);
 				shards(10, COLOR.backstab);
-				this.ring(x, y, COLOR.backstab, 0.9, 320);
+				this.ring(x, y, teamTint(COLOR.backstab, team, TINT.medium), 0.9, 320);
 				this.stage.startShake(150, 5);
 				break;
 
@@ -690,8 +745,10 @@ export class MeleeFx {
 				if (move !== "slash" && move !== "slash2") {
 					shards(heavy ? 18 : 12, tint);
 				}
-				if (heavy || finisher) this.ring(x, y, tint, 1.5, 460);
-				if (move === "uppercut") this.launchPlume(x, y);
+				if (heavy || finisher) {
+					this.ring(x, y, teamTint(tint, team, TINT.medium), 1.5, 460);
+				}
+				if (move === "uppercut") this.launchPlume(x, y, team);
 				// The chain builds: each link shakes harder than the last, and the
 				// finisher lands closer to a Massive than to the slash it started as.
 				const links = { slash: 3, slash2: 5, slash3: 8 };
@@ -703,13 +760,13 @@ export class MeleeFx {
 	}
 
 	/** An upward cone, sold as the target leaving the ground. */
-	private launchPlume(x: number, y: number) {
+	private launchPlume(x: number, y: number, team: TeamId | null) {
 		this.particles.burst({
 			texture: TEX.spark,
 			count: 14,
 			x,
 			y,
-			tint: COLOR.uppercut,
+			tint: teamTint(COLOR.uppercut, team, TINT.medium),
 			speed: [180, 420],
 			// Straight up, give or take: -90 degrees with a narrow spread.
 			angle: [-Math.PI * 0.72, -Math.PI * 0.28],

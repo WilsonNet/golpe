@@ -27,6 +27,14 @@ export interface HudState {
 	online: boolean;
 	/** The held slash has finished charging — the Massive Strike is armed. */
 	massiveReady: boolean;
+	/**
+	 * The local fighter's side in a team deathmatch, or `null` in a free-for-all.
+	 *
+	 * The HUD's own panel wears it, because the one thing a player must never have
+	 * to work out is which colour they are: everything else on screen is tinted
+	 * relative to that answer.
+	 */
+	team: 0 | 1 | null;
 }
 
 /** Event names, so the emitter and the subscriber cannot drift. */

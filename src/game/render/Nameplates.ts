@@ -17,6 +17,8 @@
 
 import { Container, Sprite, Text, Texture } from "pixi.js";
 import { DEFAULT_WORLD, type World } from "../simulation/Arena";
+import type { TeamId } from "../simulation/Teams";
+import { mixRgb, teamColor } from "../teamPalette";
 
 /** Wider than the fighter (32px), so a nearly-empty bar is still readable. */
 const BAR_WIDTH = 40;
@@ -33,15 +35,20 @@ const CRITICAL = 0xef4444;
 const OWN_NAME = 0x7ff0f4;
 const OTHER_NAME = 0xf2f2f2;
 
-/** Blend two packed RGB colours. */
-function mixRgb(from: number, to: number, t: number): number {
-	const f = Math.max(0, Math.min(1, t));
-	const r =
-		((from >> 16) & 0xff) + (((to >> 16) & 0xff) - ((from >> 16) & 0xff)) * f;
-	const g =
-		((from >> 8) & 0xff) + (((to >> 8) & 0xff) - ((from >> 8) & 0xff)) * f;
-	const b = (from & 0xff) + ((to & 0xff) - (from & 0xff)) * f;
-	return (Math.round(r) << 16) | (Math.round(g) << 8) | Math.round(b);
+/**
+ * A name's colour: its side's, or the neutral pair a free-for-all uses.
+ *
+ * **The local fighter keeps a lighter shade of their own team colour** rather
+ * than the FFA cyan. Two questions are being answered at once here — "which of
+ * these is me" and "which of these can I hit" — and in a team match the second
+ * one is the one that gets you killed, so the team colour wins and "me" is said
+ * by lightening it toward white. In a free-for-all there are no sides and the
+ * old cyan/white pair is exactly right, so nothing changes there.
+ */
+function nameColour(team: TeamId | null, local: boolean): number {
+	if (team === null) return local ? OWN_NAME : OTHER_NAME;
+	const base = teamColor(team);
+	return local ? mixRgb(base, 0xffffff, 0.45) : base;
 }
 
 /**
@@ -64,6 +71,10 @@ interface Plate {
 	/** Last name written, so the text is only re-rasterised when it changes. */
 	name: string;
 	local: boolean;
+	/** Last colour written, so a `TextStyle` is only rebuilt on a real change. */
+	tint: number;
+	/** The bar's team-tinted surround. */
+	backing: Sprite;
 }
 
 export class Nameplates {
@@ -121,7 +132,15 @@ export class Nameplates {
 		root.addChild(backing, fill, label);
 		this.layer.addChild(root);
 
-		const plate: Plate = { root, fill, label, name: "", local: false };
+		const plate: Plate = {
+			root,
+			fill,
+			label,
+			backing,
+			name: "",
+			local: false,
+			tint: -1,
+		};
 		this.plates.set(key, plate);
 		return plate;
 	}
@@ -140,6 +159,7 @@ export class Nameplates {
 		maxHp: number,
 		name: string,
 		local: boolean,
+		team: TeamId | null = null,
 	) {
 		const p = this.plate(key);
 
@@ -161,9 +181,21 @@ export class Nameplates {
 			p.name = name;
 			p.label.text = name;
 		}
-		if (local !== p.local) {
+		// The **health bar keeps its green-amber-red**, always. It is the one
+		// reading in the world that has to be understood instantly and never
+		// second-guessed, and a bar that was blue on one fighter and orange on
+		// another would take that away to say something the name already says. The
+		// side is carried by the name and by the bar's surround instead.
+		const colour = nameColour(team, local);
+		if (colour !== p.tint || local !== p.local) {
 			p.local = local;
-			p.label.style.fill = local ? OWN_NAME : OTHER_NAME;
+			p.tint = colour;
+			p.label.style.fill = colour;
+			// A hairline of the team colour around the bar, dark enough to still
+			// read as a frame: it puts the side right next to the number a player is
+			// actually looking at, without touching the fill.
+			p.backing.tint =
+				team === null ? 0x101014 : mixRgb(teamColor(team), 0x000000, 0.62);
 		}
 	}
 

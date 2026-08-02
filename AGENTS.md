@@ -49,7 +49,8 @@ stated in English survives. **Change behaviour, change the spec, in the same
 commit** — and tuning a constant counts as changing behaviour. Read the relevant
 spec before implementing: [movement](specs/movement.md) ·
 [combat](specs/combat.md) · [melee](specs/melee.md) · [arena](specs/arena.md) ·
-[deathmatch](specs/deathmatch.md) · [netcode](specs/netcode.md) ·
+[deathmatch](specs/deathmatch.md) · [team deathmatch](specs/team-deathmatch.md) ·
+[netcode](specs/netcode.md) ·
 [controls](specs/controls.md) · [training room](specs/training-room.md) ·
 [ultimate](specs/ultimate.md).
 
@@ -108,6 +109,22 @@ One line each; the war story behind every one is in
 - **The black hole's pull is an argument to `tickPlayer`**, and the friendly-fire
   rule is one predicate (`fieldAffects`). A pull applied on top of predicted
   state is erased by the next reconciliation.
+- **Friendly fire is one predicate too, and every weapon asks it.** `hostile()`
+  in `simulation/Teams.ts`. A weapon that compares teams itself is a weapon that
+  disagrees with the sword the day the rule changes — and `team: null` is hostile
+  to everything, which is the whole of how free-for-all keeps working unbranched.
+- **Freezetime discards intent; it never stops the simulation.** A timer in
+  `PlayerPosition` that both sides tick, exactly like death being a stun. The one
+  legal frame freeze in this game is 1.1s long and server-declared for a reason.
+- **A team is snapshot state, not roster state.** It is an argument to
+  `tickPlayer` through the black hole; the roster is on a 2s heartbeat, so a lost
+  one would mean seconds of dragging your own side into a hole.
+- **A TDM round ends by wipe-out, and only once both sides have somebody in
+  them.** Otherwise a room with one fighter wipes the empty side sixty times a
+  second and wins before the second player has connected.
+- **A team tint blends, it never replaces**, and the health bar is never tinted
+  at all. Every combat colour is frame data; paint it flat and you know whose
+  swing it was and no longer what it was.
 - **A link's hitstun is set by the gap to the next link's hitbox.** Shorten one and
   the combo silently stops being a combo — nothing reports it but a defender who
   blocks the second hit. The chain also pierces melee iframes, and only the chain.
@@ -147,6 +164,7 @@ npm run verify           # typecheck (client AND server) + tests + build
 npm run lint             # biome, across src/ server/ scripts/
 node scripts/diagnose.mjs --mode=online --runs=3       # the feedback loop, in a duel
 node scripts/deathmatch-probe.mjs                      # sixteen AI fighters, to a winner
+node scripts/tdm-probe.mjs                             # two sides, wipe-out rounds, no friendly fire
 node scripts/verify-modes.mjs                          # smoke-check every mode
 node scripts/aim-probe.mjs                             # cursor, facing and shot direction
 node scripts/pad-probe.mjs                             # controller aim, gamepad and the phone deck
@@ -165,8 +183,18 @@ part of what they must prove.
   `tsconfig.server.json` covers `server/`. Running bare `tsc` checks half the
   game — which is how the server's bots silently lost the ability to evade.
 - **Restart the server after touching `server/`, `src/game/simulation/`,
-  `src/game/characters/` or `src/game/training/`** — all four are inside
-  `tsconfig.server.json` and tsx does not hot-reload. The client *does* reload,
+  `src/game/characters/`, `src/game/training/` or `src/game/online/wire.ts`** —
+  all of them are inside `tsconfig.server.json` and tsx does not hot-reload. The
+  wire is the nastiest: a stale server and a fresh client disagree about every
+  packed field after the one you added, and it surfaces as a storm of melee
+  prediction desyncs rather than as anything to do with the wire.
+- **A dev pane that died still holds the port open.** `dev:herdr` polls the port
+  and will report `ready :9208` for a server that exited with `EADDRINUSE` behind
+  a zombie process — so the room you connect to is running your *previous* code.
+  Read `node scripts/dev-herdr.mjs logs server` before believing a probe that
+  suddenly fails everywhere. And **never `pkill -f "tsx server/index.ts"`**: the
+  pattern matches the agent's own shell, kills it mid-chain, and silently skips
+  every command after it. The client *does* reload,
   which makes a stale server look like a bug in your change.
 - **Never background the servers with `&`.** A detached server is invisible when
   it dies, and `pgrep -f "tsx server/index.ts"` matches its own shell. Load the
@@ -247,6 +275,37 @@ which is why every probe runs that way.
 
 **Deathmatch is the mode.** Up to sixteen fighters, 21 frags or 5 minutes,
 individual respawns.
+
+**`?mode=tdm` is team deathmatch, and it is a different game.** Two sides
+(AZURE/EMBER), **no friendly fire**, and a round that ends when one side is
+**wiped out** — a dead fighter stays dead until it does. First to 15 rounds, and
+a round is **4s of CS-style freezetime → the fight → a 5s cooldown → the arena
+resets**. The arena has a **three-screen floor** and each side spawns on its own
+**end screen**, because a losing team needs somewhere to retreat to.
+Creator-only, like `?screen=`; `?freezeTime=S` shortens the countdown for a
+probe. **Freezetime is not a pause** — it is `PlayerPosition.freezeTimer`
+discarding the intent inside `tickPlayer`, so both sides predict the tick a round
+goes live; the ultimate's simulation freeze is safe for 1.1s and would park
+four seconds of input here. **The match clock stops during freezetime and cooldown,
+but the win condition is still checked** — pausing both cost a whole extra round
+before it was caught. **The friendly-fire rule is one
+predicate** (`hostile` in `simulation/Teams.ts`) and every weapon asks it; a
+fighter with `team: null` — every fighter in a free-for-all — is hostile to
+everybody, so FFA falls out of the same code with no mode check in any damage
+path. **Bots know by construction**: `nearestFoe` only ever hands a brain a
+living enemy, so a teammate is not a target the AI declines, it is a fighter the
+AI is never told about. **Teams travel in the snapshot, not the roster** — they
+are an argument to `tickPlayer`. See
+[specs/team-deathmatch.md](specs/team-deathmatch.md).
+
+**Team colour is a feature, and it is a blend, never a replacement.** Every
+combat colour already means something (white = first slash, amber = finisher,
+violet = ultimate), so a tint pulls it toward the side at a strength from
+`src/game/teamPalette.ts` — light where the colour was information, heavy where
+it was neutral, full for names, bullets and shadows. **The health bar keeps
+green-amber-red always.** Every fighter also casts a **team-tinted shadow** onto
+the surface below them (`render/Shadows.ts`, its own Stage layer), which doubles
+as the game's only altitude cue.
 
 **There is one ultimate: a black hole grenade, on R.** Earned Overwatch-style
 (1.4 charge/s passive, 0.8 per point of damage dealt, 12 a kill; it survives

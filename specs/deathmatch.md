@@ -1,7 +1,10 @@
 # Deathmatch
 
 **Intent:** sixteen fighters in one arena, everybody against everybody, first to
-twenty-one frags. The mode exists to be played with real people, so every part of
+twenty-one frags. This is the default mode; `?mode=tdm` plays the same arena in
+two sides with wipe-out rounds instead — see
+[team-deathmatch.md](team-deathmatch.md), which states only what *differs* from
+this document. The mode exists to be played with real people, so every part of
 it is answerable to one question: can a player tell what is happening to them
 without looking away from the fight?
 
@@ -174,6 +177,7 @@ mechanics in [netcode.md](netcode.md).
 | `/?room=<id>` | That room, and whoever is already in it |
 | `/?ai=true&bots=15` | A room full of AI — the canonical deathmatch test |
 | `/?scoreLimit=N&timeLimit=S` | Shortened rules. **Only when creating the room** |
+| `/?mode=tdm` | **Team deathmatch** instead — two sides, wipe-out rounds. See [team-deathmatch.md](team-deathmatch.md) |
 
 **Size and rules belong to whoever created the room.** A five-minute match is the
 right length to play and the wrong length to measure, so a probe can ask for a
@@ -197,7 +201,7 @@ pass.
 
 ## Not implemented
 
-- Teams, objectives or any mode other than deathmatch.
+- Objectives of any kind: no flags, no control points, no bomb.
 - Kill feed, assists, streaks, or damage attribution shown to players.
 - Persistence: scores, names and rankings live only as long as the room.
 - Reconnection to a match in progress, and spectators.

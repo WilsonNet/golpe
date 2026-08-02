@@ -15,6 +15,7 @@ src/game/
     Physics.ts      tuning constants, PlayerPosition, tickPlayer, bullets
     Melee.ts        sword combat: the MOVES frame-data table, tickMelee, hitboxes, resolveMelee
     Deathmatch.ts   scoring limits, the win condition, and the one ranking both sides use
+    Teams.ts        sides, the friendly-fire predicate, and the wipe-out round rules
   ecs/            miniplex world, entity components, and the per-frame systems
     world.ts        Entity shape, archetype queries, FighterEntity
     systems.ts      animation, sprite sync, melee effects
@@ -37,7 +38,10 @@ src/game/
     room.ts         which room, and keeping the address bar shareable
     types.ts        the wire messages, shared with the server
   render/         Stage.ts (layers + camera), ArenaRenderer.ts (draws from collider
-                  data), assets.ts, SpritePool.ts, Particles.ts, MeleeFx.ts
+                  data), assets.ts, SpritePool.ts, Particles.ts, MeleeFx.ts,
+                  Shadows.ts (team-tinted cast shadows, in their own layer)
+  teamPalette.ts  the two team colours and the one function that applies them —
+                  dependency-free, so the canvas and the React overlay share it
   diagnostics/    PhysicsDiagnostics.ts — the measurement half of the feedback loop
   training/       the training room's client half and its shared vocabulary
     types.ts        config, beats and the two wire messages — shared with the server
@@ -65,7 +69,8 @@ server/           Geckos.io authoritative server
   index.ts          matchmaking, room sizing and deferred placement
 
 scripts/          diagnose.mjs (Playwright harness), deathmatch-probe.mjs (sixteen
-                  AI fighters played to a winner), aim-probe.mjs (drives a real
+                  AI fighters played to a winner), tdm-probe.mjs (two sides,
+                  wipe-out rounds, and friendly fire caught from the scoreboard), aim-probe.mjs (drives a real
                   cursor — the only thing that can test mouse aim), pad-probe.mjs
                   (stubs the Gamepad API — the only thing that can test controller
                   aim and the phone deck), training-probe.mjs (one interaction at

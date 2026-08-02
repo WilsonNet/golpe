@@ -15,12 +15,14 @@
 import type { AIState } from "../game/characters/EnemyBrain";
 import type { AimReport } from "../game/input/Aim";
 import type { AimScheme, DeckSetting } from "../game/input/Scheme";
+import type { TeamStatus } from "../game/online/types";
 import type {
 	MatchEndReason,
 	MatchPhase,
 	Standing,
 } from "../game/simulation/Deathmatch";
 import type { MeleePhase, PlayerPosition } from "../game/simulation/Physics";
+import type { MatchMode, TeamId } from "../game/simulation/Teams";
 import type { TrainingApi } from "../game/training/report";
 
 export interface GameStateSnapshot {
@@ -80,6 +82,22 @@ export interface MatchStateSnapshot {
 	winnerName: string;
 	/** Ranked, by the same pure function the server ranks with. */
 	standings: Standing[];
+	/**
+	 * Which ruleset the room plays. `"ffa"` is the deathmatch every other field
+	 * here describes.
+	 */
+	mode: MatchMode;
+	/**
+	 * The round scoreboard in a team deathmatch, or `null` in a free-for-all.
+	 *
+	 * Its own object because a team match is not answerable from the individual
+	 * standings: sixteen frag counts say nothing about whether a side was ever
+	 * wiped out, which is the only thing that scores in this mode.
+	 * `scripts/tdm-probe.mjs` reads exactly this.
+	 */
+	teams: TeamStatus | null;
+	/** The local fighter's side, so a probe can check its own friendly fire. */
+	myTeam: TeamId | null;
 	/**
 	 * Rollback quality: how often a remote fighter's prediction was wrong, and by
 	 * how much. `rollbacks: 0` means no snapshots landed and nothing else here
@@ -195,6 +213,8 @@ export interface UltSnapshot {
 	singularity: {
 		id: number;
 		ownerId: string;
+		/** The caster's side, so a probe can check the team's immunity too. */
+		ownerTeam: TeamId | null;
 		x: number;
 		y: number;
 		remainingMs: number;

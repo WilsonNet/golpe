@@ -89,6 +89,40 @@ herdr pane list                         # -> result.panes[] with agent_status
 herdr tab close w1:tA
 ```
 
+### Two ways a stale server lies to you
+
+Both of these have already burned a session, and both look like a *code* bug.
+
+**1. `up` can report "ready :9208" for a server that just died.** The pane's
+`npm run dev:server` exits with `EADDRINUSE` because a previous server process
+still holds the port — and the readiness check polls the *port*, which is open,
+because the old process is holding it. The room you then connect to is running
+**the code from before your change**.
+
+The symptom is spectacular and points nowhere near the truth: a change to
+`online/wire.ts` (adding one packed field) made the client and the zombie server
+disagree about every field index after it, and the probe reported *160 melee
+prediction desyncs* and a feature that "did not work at all". The feature was
+fine. Read the pane before believing a probe that suddenly fails everywhere:
+
+```bash
+node scripts/dev-herdr.mjs logs server --lines=20   # EADDRINUSE says it outright
+ss -lptn 'sport = :9208'                            # who actually holds it
+```
+
+**Restart the server for `src/game/online/wire.ts` too.** The rule in AGENTS.md
+lists `server/`, `src/game/simulation/`, `src/game/characters/` and
+`src/game/training/` — but the server imports the wire format as well, and a
+half-updated wire is the worst of all of them because the failure is silent
+divergence rather than a crash.
+
+**2. `pkill -f "tsx server/index.ts"` kills the shell that ran it.** The pattern
+matches the agent's own command line, exactly as the `pgrep` note below warns —
+the tool call dies mid-chain with exit 144 and every command *after* it is
+silently skipped. That is how a `git stash push … ; … ; git stash pop` chain left
+a whole session's work sitting in a stash. Use `npm run dev:herdr:down`, which
+sends ctrl+c to the panes and does not pattern-match anything.
+
 ### Gotchas found the hard way
 
 - **`herdr pane read` returns plain text, not JSON.** Parsing it as JSON throws.

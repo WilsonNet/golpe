@@ -13,6 +13,8 @@
  */
 
 import { rankScores } from "../game/simulation/Deathmatch";
+import { TEAM_NAMES } from "../game/simulation/Teams";
+import { teamCss } from "../game/teamPalette";
 import { HUD_CSS } from "./hudStyles";
 import { ScoreTable } from "./Scoreboard";
 import { formatClock, useMatch, useMatchOver } from "./useMatch";
@@ -64,19 +66,46 @@ export function MatchOver() {
 	const myId = match?.myId ?? "";
 	const winner = podium[0];
 	const nextIn = match?.status.nextMatchInMs ?? 0;
+	// A team match was won by a side. The MVP still gets the middle of the podium
+	// — somebody carried it and that is worth showing — but the headline is the
+	// side, because that is what everybody in the room was actually playing for.
+	const team = over.winnerTeam ?? null;
+	const teamScores = over.teamScores ?? null;
 
 	return (
 		<div className="vd-veil">
 			<style>{HUD_CSS}</style>
 			<div className="vd-card" style={{ minWidth: "min(560px, 92vw)" }}>
-				<h2 className="vd-title">
-					{winner ? `${winner.name} wins` : "Match over"}
-				</h2>
-				<p className="vd-sub">
-					{over.reason === "score"
-						? `Reached the frag limit with ${winner?.kills ?? 0}.`
-						: "Time. Highest score takes it."}
-				</p>
+				{teamScores ? (
+					<>
+						<div
+							className="vd-team-banner"
+							style={{ color: team === null ? undefined : teamCss(team) }}
+						>
+							{team === null ? "DRAW" : `${TEAM_NAMES[team]} WIN`}
+						</div>
+						<div className="vd-team-final">
+							{TEAM_NAMES.map(
+								(name, i) => `${name} ${teamScores[i] ?? 0}`,
+							).join("  ·  ")}
+							{over.reason === "time" ? "  ·  time" : ""}
+						</div>
+						<p className="vd-sub">
+							{winner ? `MVP: ${winner.name}, ${winner.kills} frags.` : ""}
+						</p>
+					</>
+				) : (
+					<>
+						<h2 className="vd-title">
+							{winner ? `${winner.name} wins` : "Match over"}
+						</h2>
+						<p className="vd-sub">
+							{over.reason === "score"
+								? `Reached the frag limit with ${winner?.kills ?? 0}.`
+								: "Time. Highest score takes it."}
+						</p>
+					</>
+				)}
 
 				<div className="vd-podium">
 					{/* Second, first, third — so the winner stands in the middle. The

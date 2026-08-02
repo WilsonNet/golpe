@@ -113,6 +113,7 @@ plays. Testing must follow the same rule.
 ```bash
 node scripts/diagnose.mjs --mode=online --runs=3   # the canonical duel
 node scripts/deathmatch-probe.mjs                  # a room full of AI, to a winner
+node scripts/tdm-probe.mjs                         # the same, in two sides
 ```
 
 - **Online AI vs AI is the reference mode.** Two AI fighters over the real
@@ -138,7 +139,16 @@ that needs a crowd.
 ```bash
 node scripts/deathmatch-probe.mjs                                   # to the frag limit
 node scripts/deathmatch-probe.mjs --scoreLimit=999 --timeLimit=20   # to the clock
+node scripts/tdm-probe.mjs                                          # two sides, to a winning team
 ```
+
+**A team match is a third thing again, and the deathmatch probe cannot see it.**
+Every check it makes passes in a room where friendly fire is on and rounds never
+end — frags still exceed nothing, names are still unique, a winner is still
+ranked first. `tdm-probe.mjs` watches the *rounds* go by (a wipe is one tick in a
+thirty-second fight, so the final scoreboard cannot prove one happened) and
+reconstructs friendly fire from the standings: with none, a side's deaths can only
+have been scored by the other side.
 
 Every one of these was found by the sixteen-fighter run and was invisible to the
 duel:

@@ -31,6 +31,7 @@ import {
 	bindFxBodies,
 	meleeFxSystem,
 	nameplateSystem,
+	shadowSystem,
 	spriteSyncSystem,
 } from "./ecs/systems";
 import {
@@ -51,6 +52,7 @@ import { dudeFrames, TEX, tex } from "./render/assets";
 import { BlackHoleFx } from "./render/BlackHoleFx";
 import { type ImpactEvent, MeleeFx } from "./render/MeleeFx";
 import { Nameplates } from "./render/Nameplates";
+import { Shadows } from "./render/Shadows";
 import type { Stage } from "./render/Stage";
 import { UltAimLine } from "./render/UltAimLine";
 import {
@@ -81,6 +83,7 @@ import {
 	tickPlayer,
 	ULT_MAX_CHARGE,
 } from "./simulation/Physics";
+import { type MatchMode, TDM_MIN_SCREENS, teamName } from "./simulation/Teams";
 import { TrainingRoom } from "./training/TrainingRoom";
 
 /** Client physics runs at a fixed 60Hz to match the server, whatever the display does. */
@@ -168,6 +171,7 @@ export class Match {
 	private readonly fx: MeleeFx;
 	private readonly blackHole: BlackHoleFx;
 	private readonly plates: Nameplates;
+	private readonly shadows: Shadows;
 	private readonly aimLine: AimLine;
 	private readonly ultAim: UltAimLine;
 	private readonly input: Input;
@@ -205,6 +209,17 @@ export class Match {
 	private timeLimitMs: number | undefined;
 	/** `?ultCharge=N`: what everybody in a freshly created room starts armed with. */
 	private ultCharge: number | undefined;
+	/**
+	 * Which ruleset this room plays — a *proposal* until the server answers.
+	 *
+	 * `?mode=tdm` asks for team deathmatch; the room's creator decides, and
+	 * `onSeated` replaces this with what the room actually is. A client that
+	 * trusted its own URL would draw a team HUD over a free-for-all it had just
+	 * joined by link.
+	 */
+	private mode: MatchMode = "ffa";
+	/** `?freezeTime=S`: how long a team round's countdown lasts. Creator-only. */
+	private freezeTime: number | undefined;
 	private online: OnlineSession | undefined;
 	private training: TrainingRoom | undefined;
 
@@ -243,10 +258,17 @@ export class Match {
 			new URLSearchParams(window.location.search),
 			"screen",
 		);
-		this.arena = buildWorld(
+		// `?mode=tdm` is read again below; here it only decides how wide to build
+		// the arena before connecting. A team room has a three-screen floor, and
+		// building one screen first would draw the whole level twice — once wrong.
+		const wantsTeams =
+			new URLSearchParams(window.location.search).get("mode") === "tdm";
+		const askedScreens =
 			rawScreens === undefined
 				? 1
-				: Math.max(1, Math.min(rawScreens, MAX_SCREENS)),
+				: Math.max(1, Math.min(rawScreens, MAX_SCREENS));
+		this.arena = buildWorld(
+			wantsTeams ? Math.max(askedScreens, TDM_MIN_SCREENS) : askedScreens,
 		);
 		this.view = screen;
 		drawArena(stage.background, stage.arena, this.arena);
@@ -258,6 +280,9 @@ export class Match {
 		// hid the fighters it was holding.
 		this.blackHole = new BlackHoleFx(stage.field, stage.effects, stage);
 		this.plates = new Nameplates(stage.nameplates, this.arena);
+		// Between the arena and the fighters: a shadow falls on the ledge below and
+		// is never drawn over the feet that cast it. See `Stage.shadows`.
+		this.shadows = new Shadows(stage.shadows, this.arena);
 		// In the nameplate layer, which is inside the camera and drawn last: the beam
 		// tracks a moving fighter, and one buried behind a ledge or a spark answers
 		// nothing. It is under the plates themselves because a name is worth more.
@@ -336,6 +361,12 @@ export class Match {
 		// `numberParam`, because 0 is the real default and a legitimate thing to ask
 		// for explicitly.
 		this.ultCharge = countParam(params, "ultCharge");
+		// Both spellings, like `training`, and both are only a request.
+		const rawMode = params.get("mode");
+		this.mode = rawMode === "tdm" || rawMode === "team" ? "tdm" : "ffa";
+		// Zero is a legitimate request — "no countdown, start fighting" — so this
+		// goes through the parser that accepts it.
+		this.freezeTime = countParam(params, "freezeTime");
 		const timeLimitSec = numberParam(params, "timeLimit");
 		this.timeLimitMs =
 			timeLimitSec === undefined ? undefined : timeLimitSec * 1000;
@@ -386,7 +417,9 @@ export class Match {
 			// The name is filled in from the roster once it arrives; until then a
 			// plate shows a bar and no label, which is honest — nobody has told this
 			// client who that is yet.
-			fighter: { id, local, hp: 100, maxHp: 100, name: "" },
+			// No side until a snapshot says otherwise, which is also what every
+			// fighter in a free-for-all keeps for the whole match.
+			fighter: { id, local, hp: 100, maxHp: 100, name: "", team: null },
 			body: createPlayerState(x, y, facing),
 			sprite,
 			anim: { clip: "right-idle", frame: 0, elapsedMs: 0 },
@@ -415,6 +448,7 @@ export class Match {
 		this.world.remove(entity);
 		this.fx.forget(id);
 		this.plates.forget(id);
+		this.shadows.forget(id);
 	}
 
 	/**
@@ -452,6 +486,7 @@ export class Match {
 				(this.offlineFoe ? 1 : 0),
 			online: this.onlineMode,
 			massiveReady: this.local.body.massiveReady,
+			team: this.local.fighter.team,
 		};
 		const stanceChanged = state.stance !== this.lastHudStance;
 		const nameChanged = state.name !== this.lastHudName;
@@ -572,7 +607,7 @@ export class Match {
 					// `attackerId === myId` was correct in a duel and wrong the moment a
 					// third fighter existed: every hit between two other players punched
 					// the local fighter's sprite.
-					this.fx.impact(event, event.victimId);
+					this.fx.impact(event, event.victimId, event.attackerId);
 					this.diagnostics.recordMeleeEvent(event.move, event.outcome);
 					this.training?.recordMeleeEvent(
 						event,
@@ -603,7 +638,7 @@ export class Match {
 					);
 				},
 				onSingularityOpened: (field) => {
-					this.blackHole.detonate(field.x, field.y);
+					this.blackHole.detonate(field.x, field.y, field.ownerTeam);
 					// An announced discontinuity, like a melee hit: the server has just
 					// started yanking fighters toward a point no client could have
 					// predicted, and the first frame of that is tens of pixels. Counting
@@ -619,13 +654,41 @@ export class Match {
 						myId: this.online?.manager.myId ?? "",
 					});
 				},
+				onRoundWon: (msg) => {
+					// The banner, and only the banner. The arena reset that follows
+					// arrives as its own `round-reset` message a couple of seconds
+					// later — that is the one that breaks prediction continuity, and
+					// conflating the two would drop every fighter's rollback history on
+					// a frame where the survivors are still fighting.
+					const who =
+						msg.team === null
+							? "ROUND DRAWN"
+							: `${teamName(msg.team)} WIN THE ROUND`;
+					EventBus.emit(
+						HUD_EVENTS.status,
+						`${who} — ${msg.scores.join(" : ")}`,
+					);
+					EventBus.emit("round-won", msg);
+					console.log(`[ROUND] ${msg.round}: ${who} (${msg.scores.join("-")})`);
+				},
+				onRoundLive: (msg) => {
+					// The one moment everybody has to see together. The countdown that
+					// led to it is in the snapshot and drawn from there; this is the
+					// server saying "now", so no two screens can start on different
+					// frames because their clocks drifted.
+					EventBus.emit(HUD_EVENTS.status, "FIGHT!");
+					console.log(`[ROUND] ${msg.round} live`);
+				},
 				onMatchOver: (msg) => {
 					console.log(
 						`[MATCH] over by ${msg.reason}, winner ${msg.winnerId ?? "nobody"}`,
 					);
 					EventBus.emit("match-over", msg);
 				},
-				onSeated: (roomId, screens) => {
+				onSeated: (roomId, screens, mode) => {
+					// The room decides the mode as it decides the id and the size. A
+					// client that joined a team room by link learns it here.
+					this.mode = mode;
 					// The server decides the id, so the address bar follows it rather
 					// than the proposal. They agree unless the proposal was malformed.
 					this.roomId = roomId;
@@ -663,6 +726,8 @@ export class Match {
 				? {}
 				: { timeLimitMs: this.timeLimitMs }),
 			...(this.ultCharge === undefined ? {} : { ultCharge: this.ultCharge }),
+			mode: this.mode,
+			...(this.freezeTime === undefined ? {} : { freezeTime: this.freezeTime }),
 			screens: this.arena.screens,
 		});
 
@@ -747,6 +812,13 @@ export class Match {
 			const standings = this.online?.standings() ?? [];
 			const winnerId = status?.winnerId ?? null;
 			return {
+				// The mode and the round scoreboard, for `scripts/tdm-probe.mjs`.
+				// Everything else here describes a free-for-all, which a team match
+				// is not: sixteen individual frag counts say nothing about whether a
+				// side was ever wiped out.
+				mode: status?.mode ?? this.mode,
+				teams: status?.teams ?? null,
+				myTeam: this.online?.myTeam ?? null,
 				connected: this.online?.connected ?? false,
 				roomId: this.online?.roomId || this.roomId,
 				myId: this.online?.manager.myId ?? "",
@@ -788,7 +860,8 @@ export class Match {
 					// the entity key — a probe comparing `held` against a caster id has
 					// to be comparing the same alphabet. See `serverIdOf`.
 					const id = this.serverIdOf(e.fighter.id);
-					if (singularityGrip(fieldFor(field, id), at.x, at.y) === "held") {
+					const mine = fieldFor(field, id, e.fighter.team);
+					if (singularityGrip(mine, at.x, at.y) === "held") {
 						held.push(id);
 					}
 				}
@@ -912,6 +985,7 @@ export class Match {
 		animationSystem(this.queries, dtMs);
 		spriteSyncSystem(this.queries);
 		nameplateSystem(this.queries, this.plates);
+		shadowSystem(this.queries, this.shadows);
 		this.syncAimLine(dtMs);
 		meleeFxSystem(this.queries, this.fx, dtMs, (id) => this.ultAuraVisible(id));
 		this.fx.update(dtMs);
@@ -1005,7 +1079,11 @@ export class Match {
 		if (field) {
 			for (const e of this.queries.fighters) {
 				if (e.fighter.hp <= 0) continue;
-				const mine = fieldFor(field, this.serverIdOf(e.fighter.id));
+				const mine = fieldFor(
+					field,
+					this.serverIdOf(e.fighter.id),
+					e.fighter.team,
+				);
 				const at = e.renderPos ?? e.body;
 				if (singularityGrip(mine, at.x, at.y) === "held") victims.push(e.body);
 			}
@@ -1300,6 +1378,7 @@ export class Match {
 			this.accumulator = 0;
 			this.diagSteps = 0;
 			this.local.body = session.predicted.state;
+			this.local.fighter.team = session.myTeam;
 			// Presentation still runs. `render` knows it is frozen and holds the
 			// projectile clock still, so bullets hang in the air with everything
 			// else instead of flying on through the cutscene.
@@ -1329,6 +1408,7 @@ export class Match {
 		// a new object.
 		this.local.body = session.predicted.state;
 		this.local.renderPos = session.render(dtSec);
+		this.local.fighter.team = session.myTeam;
 		this.syncRemotes(session, dtSec);
 	}
 
@@ -1351,6 +1431,10 @@ export class Match {
 			// Cheap, and it means a name appears the moment the roster names it —
 			// including when a bot gives up its seat and a human inherits the slot.
 			entity.fighter.name = session.nameOf(id);
+			// Straight off the snapshot, every frame. Sides do not change mid-match,
+			// but a fighter is drawn before its first snapshot lands, and a colourless
+			// frame is better than a wrong one that never corrects itself.
+			entity.fighter.team = session.teamOf(id);
 		}
 	}
 

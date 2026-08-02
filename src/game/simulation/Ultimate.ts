@@ -23,6 +23,7 @@ import {
 	pointInAnyPlatform,
 	type World,
 } from "./Arena.js";
+import { hostile, type TeamId } from "./Teams.js";
 
 // ---------------------------------------------------------------------------
 // Charge
@@ -123,6 +124,8 @@ export const GRENADE_TOUCH_PX = 20;
 export interface GrenadeState {
 	id: number;
 	ownerId: string;
+	/** The caster's side, so the throw cannot detonate on a teammate. */
+	ownerTeam: TeamId | null;
 	x: number;
 	y: number;
 	vx: number;
@@ -137,10 +140,12 @@ export function launchGrenade(
 	x: number,
 	y: number,
 	angle: number,
+	ownerTeam: TeamId | null = null,
 ): GrenadeState {
 	return {
 		id,
 		ownerId,
+		ownerTeam,
 		x,
 		y,
 		vx: Math.cos(angle) * GRENADE_SPEED,
@@ -200,14 +205,23 @@ export function grenadeEnd(
 	return null;
 }
 
-/** Does the grenade overlap this fighter's body? The caster is never a target. */
+/**
+ * Does the grenade overlap this fighter's body?
+ *
+ * The caster is never a target, and neither is anyone on their side: a lob that
+ * detonated on the teammate it was thrown over would make the ultimate a way to
+ * lose the round, which is not the risk the ability is supposed to carry. It
+ * passes through them and lands where it was aimed.
+ */
 export function grenadeTouches(
 	g: GrenadeState,
 	fighterId: string,
 	x: number,
 	y: number,
+	fighterTeam: TeamId | null = null,
 ): boolean {
 	if (fighterId === g.ownerId) return false;
+	if (!hostile(g.ownerTeam, fighterTeam)) return false;
 	const m = GRENADE_TOUCH_PX;
 	return (
 		g.x > x - m &&
@@ -283,6 +297,15 @@ export const SINGULARITY_HOLD_STUN_MS = 60;
 export interface Singularity {
 	id: number;
 	ownerId: string;
+	/**
+	 * The caster's side, or `null` in a free-for-all.
+	 *
+	 * Carried on the field itself rather than looked up per fighter, because the
+	 * client feeds this object straight into `tickPlayer` for everybody it
+	 * predicts — including through replays — and a lookup would make the pull
+	 * depend on a roster that arrives on a different message.
+	 */
+	ownerTeam: TeamId | null;
 	/** Centre, in world coordinates — not a body's top-left. */
 	x: number;
 	y: number;
@@ -293,27 +316,39 @@ export interface Singularity {
 /**
  * Is this field hostile to this fighter?
  *
- * **The one place the friendly-fire rule is written.** Deathmatch has no teams,
- * so today it is "everybody but the caster" — but every caller asks this
- * question rather than comparing ids itself, so a team mode is a change to this
- * function and to nothing else.
+ * **The one place the ultimate's friendly-fire rule is written**, and it was
+ * built to take a team the day one existed: never the caster, and never a
+ * teammate of the caster. Every caller asks this rather than comparing ids
+ * itself, so the black hole cannot end up disagreeing with the sword about who
+ * is on your side.
+ *
+ * `fighterTeam` defaults to `null`, which is what every fighter in a
+ * free-for-all carries — and `sameTeam(null, null)` is false, so FFA is
+ * "everybody but the caster" with no mode check anywhere.
  */
-export function fieldAffects(field: Singularity, fighterId: string): boolean {
-	return field.ownerId !== fighterId;
+export function fieldAffects(
+	field: Singularity,
+	fighterId: string,
+	fighterTeam: TeamId | null = null,
+): boolean {
+	if (field.ownerId === fighterId) return false;
+	return hostile(field.ownerTeam, fighterTeam);
 }
 
 /**
  * The field as one fighter experiences it: the room's, or nothing at all.
  *
  * Callers hand `tickPlayer` the result of this rather than the room's field,
- * which is what keeps `tickPlayer` from needing to know a fighter's id.
+ * which is what keeps `tickPlayer` from needing to know a fighter's id — or,
+ * now, their side.
  */
 export function fieldFor(
 	field: Singularity | null | undefined,
 	fighterId: string,
+	fighterTeam: TeamId | null = null,
 ): Singularity | null {
 	if (!field) return null;
-	return fieldAffects(field, fighterId) ? field : null;
+	return fieldAffects(field, fighterId, fighterTeam) ? field : null;
 }
 
 export type Grip = "held" | "fringe" | "clear";

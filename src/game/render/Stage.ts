@@ -35,6 +35,15 @@ export class Stage {
 	 * fighters and the void behind them is what makes a flat sprite read as depth.
 	 */
 	readonly field = new Container();
+	/**
+	 * Cast shadows, between the arena and the fighters that throw them.
+	 *
+	 * Its own layer for one reason: a shadow has to be *over* the platform it
+	 * falls on and *under* every fighter, including the one standing on the ledge
+	 * below. In `arena` it would be painted over by the next platform sprite; in
+	 * `actors` it would sometimes be drawn on top of a fighter's feet.
+	 */
+	readonly shadows = new Container();
 	readonly actors = new Container();
 	readonly projectiles = new Container();
 	readonly effects = new Container();
@@ -56,6 +65,7 @@ export class Stage {
 			this.background,
 			this.arena,
 			this.field,
+			this.shadows,
 			this.actors,
 			this.projectiles,
 			this.effects,

@@ -351,13 +351,16 @@ Defaults and the reasoning behind them are in
 | `?bots=N` | **N bots to fight. Absent means none** |
 | `?fill=N` | Keep the room at N fighters, bots as ballast |
 | `?ai=true` | Make **your** fighter AI-driven (and skip the name prompt) |
-| `?scoreLimit=N` | Frags to win |
+| `?mode=tdm` | **Team deathmatch**: two sides, no friendly fire, wipe-out rounds, first to 15. Forces the arena to at least 3 screens |
+| `?freezeTime=S` | Seconds of freezetime before each team round (default 4, `0` for none) |
+| `?screen=N` | Widen the arena to N 800px screens (1-8) |
+| `?scoreLimit=N` | Frags to win — **rounds** to win in `tdm` |
 | `?timeLimit=S` | Match length in seconds |
 | `?training=true` | A scriptable practice dummy and its menu |
 | `?offline=true` | Escape hatch: no server, no netcode (unsupported) |
 
-`fill`, `scoreLimit` and `timeLimit` are honoured **only for the client that
-creates the room** — everyone arriving later gets the room as it already is. One
+`mode`, `screen`, `freezeTime`, `fill`, `scoreLimit` and `timeLimit` are honoured **only for
+the client that creates the room** — everyone arriving later gets the room as it already is. One
 player must not be able to resize or end a match everybody else is playing.
 
 ---
@@ -387,6 +390,7 @@ prints a digest:
 ```bash
 node scripts/diagnose.mjs --mode=online --runs=3  # the canonical duel
 node scripts/deathmatch-probe.mjs                 # 16 AI fighters, played to a winner
+node scripts/tdm-probe.mjs                       # two sides, wipe-out rounds, no friendly fire
 npm run diagnose                                  # offline + online, 8s each
 node scripts/verify-modes.mjs                     # smoke-check every launch mode
 node scripts/probe-online.mjs                     # raw console from one online client

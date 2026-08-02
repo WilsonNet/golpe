@@ -106,6 +106,16 @@ A whole-arena reset hands spawns out one at a time against the points already
 taken, so the *set* is spread rather than each fighter independently choosing the
 same "best" point.
 
+**Team deathmatch spawns by side.** `pickTeamSpawn(occupied, world, team)` picks
+from the screen that side owns — **team 0 on the leftmost screen, team 1 on the
+rightmost**, exactly one each however wide the room is, with everything between
+contested — and
+**overrides facing to point across the map**. Inheriting the spawn point's own
+facing would leave half a team starting with its back to the fight, because the
+per-screen layout aims each screen's spawns at the middle of *that screen*. A
+team room is at least three screens wide for the same reason it has spawn zones
+at all: see [team-deathmatch.md](team-deathmatch.md).
+
 ## Not implemented
 
 - One-way / drop-through platforms. Every surface is solid from all sides.

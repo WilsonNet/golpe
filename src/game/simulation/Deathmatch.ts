@@ -10,6 +10,8 @@
  * No wall-clock reads in here. Elapsed time arrives as a number.
  */
 
+import type { TeamId } from "./Teams.js";
+
 /** Frags that end the match. */
 export const SCORE_LIMIT = 21;
 
@@ -34,6 +36,16 @@ export interface ScoreEntry {
 	deaths: number;
 	/** True for a server-hosted bot, so the UI can say so. */
 	bot: boolean;
+	/**
+	 * Which side, in team deathmatch. `null` in a free-for-all, and absent from
+	 * anything that predates teams.
+	 *
+	 * Deliberately **not** part of the ranking. Individual standings stay
+	 * individual in both modes — a TDM scoreboard groups these rows by side, but
+	 * the order inside a group is the same order the same function produces for a
+	 * free-for-all, so there is only ever one ranking to disagree about.
+	 */
+	team?: TeamId | null;
 }
 
 /** A ranked entry: the standings plus the place it came in. */

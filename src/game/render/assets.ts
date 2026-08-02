@@ -39,6 +39,8 @@ export const TEX = {
 	accretion: "fx_accretion",
 	grenade: "fx_grenade",
 	halo: "fx_halo",
+	/** The soft ellipse every fighter's team-tinted cast shadow is drawn with. */
+	shadow: "fx_shadow",
 } as const;
 
 /** The `dude` strip, sliced into its nine 32x48 frames. */
@@ -152,6 +154,20 @@ export function createFxTextures(renderer: Renderer): void {
 	guard.arc(28, 32, 26, Math.PI - 1.1, Math.PI + 1.1, false);
 	guard.stroke({ width: 5, color: 0xffffff });
 	bake(renderer, TEX.guard, guard);
+
+	// A soft ellipse, white so a team tint decides its colour. Concentric fills
+	// rather than one flat shape: a hard-edged oval reads as a decal painted on
+	// the floor, and the whole job of this sprite is to read as light being
+	// blocked. Drawn wide and shallow because the camera looks slightly down —
+	// the same reason the accretion disk is an ellipse.
+	const shadow = new Graphics();
+	for (let i = 6; i >= 1; i--) {
+		shadow.ellipse(32, 16, (30 * i) / 6, (13 * i) / 6).fill({
+			color: 0xffffff,
+			alpha: 0.13,
+		});
+	}
+	bake(renderer, TEX.shadow, shadow);
 
 	createHitTextures(renderer);
 	createUltimateTextures(renderer);

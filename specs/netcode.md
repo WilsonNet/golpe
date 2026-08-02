@@ -126,6 +126,14 @@ them at 20Hz is ~128 KB/s per client and a datagram well past any sane MTU.
 - **Scores travel as numbers; names travel once.** The snapshot carries kills,
   deaths and alive per fighter; `roster` carries names. Ranking is a pure function
   both sides call, so the standings are never sent.
+- **A team travels in the snapshot, beside `hp` — not in the roster.** It looks
+  like a name-shaped fact and is not: teams are an *argument to `tickPlayer`*,
+  because the black hole's friendly-fire rule is applied on the client for every
+  fighter it predicts and replayed on every reconciliation. The roster is sent on
+  change with a 2s heartbeat, so a client that lost one would spend two seconds
+  dragging its own side into a hole the server is not pulling them into — a
+  divergence with nothing in any metric to explain it. See
+  [team-deathmatch.md](team-deathmatch.md).
 
 ## Training rooms
 
@@ -250,6 +258,19 @@ decays over ~60ms. Corrections past 100px are discontinuities and snap.
   and that offset can put it inside a ledge the body never touched. The old
   interpolator needed this for the same reason; forgetting it turned zero jitter
   into six collision penetrations.
+- **Freezetime is simulation state, not a message.** `PlayerPosition.freezeTimer`
+  rides the packed snapshot like every other timer, so a client *predicts* the
+  tick a round goes live instead of waiting to be told and lurching a frame
+  later. `round-live` is sent as well, but only so the banner lands together —
+  it carries nothing a client could not already derive. **The ultimate's
+  cinematic freeze would have been the wrong tool**: that stops the simulation on
+  both sides and parks every input in the queue, which is safe for 1.1s and
+  nothing like safe for four seconds.
+- **A wipe-out and the reset that follows it are two messages.** `round-won`
+  announces the round (reliably, so the banner cannot be lost) and the survivors
+  keep fighting for 2.6s; `round-reset` arrives when the arena actually resets
+  and is what breaks prediction continuity. Conflating them would drop every
+  fighter's rollback history on a frame where the fight is still going on.
 - **Respawns are announced, not inferred.** `respawn { id }` for one fighter,
   `round-reset` for the whole arena. Both drop that fighter's prediction outright
   instead of smoothing across it — easing over 600px turns one honest jump into a

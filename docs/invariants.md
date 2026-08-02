@@ -463,6 +463,79 @@ sixteen fighters breaks things two never could.
   `attackerId === myId` was correct in a duel and wrong the instant a third fighter
   existed: every hit between two other players punched the local fighter's sprite.
 
+## Teams
+
+Full detail in [specs/team-deathmatch.md](../specs/team-deathmatch.md). These are
+the ways a *side* breaks things a free-for-all could not.
+
+- **Friendly fire is one predicate, `hostile(a, b)`, and every weapon asks it.**
+  Swords, bullets, the grenade's contact test, the black hole's `fieldAffects`,
+  and `damage()` as the backstop. A weapon that compared teams itself would be a
+  weapon that disagreed with the sword the day the rule changed, and in a team
+  game that bug loses the round for you rather than glitching.
+- **`team: null` is hostile to everything, including another `null`.** That is
+  not a quirk, it is the design: every fighter in a free-for-all carries `null`,
+  so FFA falls out of the team rules with no `mode === "ffa"` test anywhere in
+  the damage path. Deleting that property means branching every weapon.
+- **A team travels in the snapshot, beside `hp` — never in the roster.** Teams
+  are an argument to `tickPlayer`: the client applies the black hole's
+  friendly-fire rule for every fighter it predicts, and replays it on every
+  reconciliation. The roster is sent on change with a 2s heartbeat, so a client
+  that lost one would spend two seconds dragging its own side into a hole the
+  server is not pulling them into — with nothing in any metric to explain it.
+- **The hole carries its caster's side, copied from the grenade.** Looked up per
+  fighter instead, a caster who left the room mid-flight would leave a hole that
+  had forgotten whose side it was on and started eating its own team.
+- **A round cannot end until both sides have somebody seated.** A room with one
+  fighter in it otherwise "wipes" the empty side sixty times a second and wins
+  the match before the second player has finished connecting. `roundResult`
+  checks seats before it checks the living.
+- **Both sides falling on the same tick is a draw, not a win for whoever the
+  iteration reached first.** A black hole makes simultaneous elimination
+  ordinary, and crediting it by `Map` order would be a score that differs between
+  a replay and the run.
+- **A teammate does not consume anything.** A blade passes through without
+  spending `hitLatch`, a bullet flies on unconsumed, a grenade does not detonate.
+  Consuming them was the obvious implementation and makes a firing line
+  impossible, a corridor a queue, and the ultimate a way to lose the round.
+- **A bot is never told about a teammate.** `nearestFoe` filters them out, so
+  friendly fire is not a decision `EnemyBrain` declines to make — it is a
+  situation the brain cannot perceive. The brain gained no team concept at all.
+- **Never reassign a side mid-match.** Balance by where the *next* joiner goes;
+  moving somebody across hands the round they are standing in to the other side.
+  And evict bots from the **larger** side, or every arriving human is seated
+  beside the bot that just left and the room drifts 9v7.
+- **A team tint blends toward the side's colour; it never replaces it.** Every
+  combat colour in this game is frame data — white is the first slash, amber the
+  finisher, cyan the uppercut, violet the ultimate. Painted flat you would know
+  whose swing it was and no longer what it was. And the **health bar is never
+  tinted**: it is the one reading that must be understood without a second
+  thought.
+- **Additive particles over a bright sky wash any tint toward white.** The same
+  thing that forced the ultimate's aura to be painted rather than added. A blend
+  that reads as clearly blue in isolation reads as white at 50% on this
+  background, which is why the impact strengths are 0.62 and 0.8 rather than the
+  half they started at.
+- **Freezetime is a timer in `PlayerPosition`, not a stopped simulation.** Four
+  seconds of the ultimate's cinematic mechanism would park four seconds of every
+  client's input in the server's queue — that freeze is safe at 1.1s and nothing
+  like safe at four; discarding the intent inside `tickPlayer`
+  costs nothing and is replayed and rolled back like every other timer, so a
+  client predicts the tick the round goes live instead of lurching a frame after
+  being told. It is deliberately **not** a stun: a stun is drawn as one, and ten
+  seconds of the staggered pose would say the whole team had just been hit.
+- **Pause the clock, never the win condition.** The team match clock stops during
+  freezetime and the cooldown — otherwise fifteen rounds of countdown decide the
+  match — but returning early from the whole of `tickMatchClock` meant a deciding
+  wipe went unread for five seconds, the arena reset, and the scoreboard counted
+  a round nobody played.
+- **A wipe that ends the match resets nothing.** The podium belongs over the
+  arena as it was left.
+- **The cast shadow is drawn from `world.platforms`,** like the arena itself, and
+  sits a couple of pixels *below* the surface it lands on — an ellipse centred
+  exactly on the line puts half of itself in the air off the front of a ledge and
+  reads as a floating disc.
+
 ## Input and the UI
 
 - **A programmatic entry point must drive the same *state* the UI does, not just

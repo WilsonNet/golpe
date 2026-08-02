@@ -813,6 +813,43 @@ describe("level reachability", () => {
 	});
 });
 
+describe("round freeze", () => {
+	// Freezetime is a *simulation* rule, not a server one: both sides run this,
+	// which is what lets a client predict the moment a round goes live instead of
+	// waiting to be told and lurching a tick later.
+
+	it("discards the intent entirely while it runs", () => {
+		const frozen = { ...createPlayerState(400, 500), freezeTimer: 1000 };
+		const after = ticks(frozen, { right: true, attack: true, up: true }, 20);
+		expect(after.x).toBe(400);
+		expect(after.vx).toBe(0);
+		expect(after.meleeAction).toBe("none");
+		expect(after.jumping).toBe(false);
+	});
+
+	it("keeps its facing, so a team starts the round looking at the enemy", () => {
+		const frozen = {
+			...createPlayerState(400, 500, -1),
+			freezeTimer: 1000,
+		};
+		expect(ticks(frozen, { face: 1, right: true }, 20).facing).toBe(-1);
+	});
+
+	it("still falls — it is not a pause", () => {
+		const frozen = { ...createPlayerState(400, 100), freezeTimer: 1000 };
+		expect(ticks(frozen, {}, 10).y).toBeGreaterThan(100);
+	});
+
+	it("counts down in real time and hands control back exactly once", () => {
+		const frozen = { ...createPlayerState(400, 500), freezeTimer: 100 };
+		// 100ms is six ticks at 60Hz; the seventh must move.
+		const held = ticks(frozen, { right: true }, 6);
+		expect(held.x).toBe(400);
+		expect(held.freezeTimer).toBe(0);
+		expect(tick(held, { right: true }).x).toBeGreaterThan(400);
+	});
+});
+
 describe("determinism (client/server parity)", () => {
 	it("produces identical state for identical input", () => {
 		const seq: Partial<PlayerIntent>[] = [];

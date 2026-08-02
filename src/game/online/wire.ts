@@ -138,6 +138,10 @@ const NUMBER_FIELDS = [
 	"stunTimer",
 	"knockdownTimer",
 	"iframeTimer",
+	// Appended, like every field before it. The *position* in this list is the
+	// wire slot, so inserting one in the middle silently renumbers everything
+	// after it — a desync whose only symptom is unexplained correction.
+	"freezeTimer",
 ] as const;
 
 const ENUM_FIELDS = ["wallTouch", "stance", "meleeAction"] as const;

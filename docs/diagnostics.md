@@ -24,6 +24,7 @@ npm run dev:herdr                               # both servers in visible panes
 node scripts/diagnose.mjs                       # offline + online, 8s each
 node scripts/diagnose.mjs --mode=online --runs=3  # the canonical duel
 node scripts/deathmatch-probe.mjs               # sixteen AI fighters, played to a winner
+node scripts/tdm-probe.mjs                      # two sides, wipe-out rounds, no friendly fire
 node scripts/probe-online.mjs                   # dump one online client's console
 node scripts/verify-modes.mjs                   # smoke-check every launch mode
 node scripts/aim-probe.mjs                      # cursor, facing and shot direction, at dpr 1 and 2
@@ -42,6 +43,7 @@ answers at scale:
 |---|---|
 | Is prediction, reconciliation, projectile flight clean? | `diagnose.mjs --mode=online` |
 | Does a sixteen-fighter room stay consistent, score honestly, and end? | `deathmatch-probe.mjs` |
+| Do sides hold: even split, no friendly fire, rounds that end by wipe-out? | `tdm-probe.mjs` |
 
 It shortens the rules so a win condition is observable in seconds rather than five
 minutes — `--scoreLimit`, `--timeLimit` — and everything else is the real path:
@@ -58,6 +60,42 @@ node scripts/deathmatch-probe.mjs --fighters=8                      # a smaller 
 It fails on: a room that did not fill, a match that never ended, a winner who is
 not ranked first, places that are not a total order 1..n, a duplicated or missing
 name, frags exceeding deaths, no snapshots, no rollbacks — **and nobody scoring**.
+
+## The team deathmatch probe
+
+`tdm-probe.mjs` is the same shape against `?mode=tdm`, and it asks the questions
+that only exist once fighters have sides.
+
+```bash
+node scripts/tdm-probe.mjs                                # 8 bots, two sides, to a winner
+node scripts/tdm-probe.mjs --fighters=16 --scoreLimit=2   # a full room
+```
+
+**It watches the match rather than reading the end of it.** A wipe-out is a
+one-tick event in a fight that lasts half a minute, so the final scoreboard
+cannot prove one ever happened: the probe polls `__matchState().teams` and counts
+the rounds in which a side hit zero standing, and the arena resets that followed.
+
+**Friendly fire is caught from the scoreboard, not trusted from the code.** With
+no friendly fire a side's deaths can only have been scored by the *other* side, so
+a side that died more often than its opponents have frags killed itself — that is
+a failure. The reverse is only a note: an unattributed death (a fall, a hole
+opened by somebody who has since left) is legitimate.
+
+**And that freezetime held them still.** The probe compares the local fighter's x
+between two consecutive samples of the *same* countdown and fails if it moved at
+all — between, not from a baseline, because the reset that starts a freeze
+teleports everybody to their spawn and a baseline measured that as a 1008px
+"drift" — a countdown that ran
+while fighters walked around would say the round had not started while the round
+was being decided. `--freeze=N` overrides the countdown; the default is the real 4s, because unlike
+a five-minute match that is affordable to sit through.
+
+It also fails on: a room the server did not make `tdm`, an arena narrower than
+three screens **that nobody asked to be wide**, a fighter with no side, teams more
+than one apart, a match that ended without a winning side, and — as ever — no
+wipe, no reset and no frag, because a room of sixteen fighters standing still
+passes every correctness check there is.
 That last one is the important one: every other check passes in a room where
 sixteen fighters stood still.
 

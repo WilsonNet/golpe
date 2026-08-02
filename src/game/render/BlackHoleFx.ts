@@ -39,6 +39,8 @@ import {
 	SINGULARITY_REACH,
 	type Singularity,
 } from "../simulation/Physics";
+import type { TeamId } from "../simulation/Teams";
+import { TINT, teamTint } from "../teamPalette";
 import { TEX, tex } from "./assets";
 import { ParticleSystem } from "./Particles";
 import type { Stage } from "./Stage";
@@ -85,6 +87,22 @@ export class BlackHoleFx {
 	private infallAccMs = 0;
 	private tearAccMs = 0;
 	private open = false;
+
+	/**
+	 * The side that cast whatever is currently on screen.
+	 *
+	 * The hole takes a **light** team wash and no more. It is the one object in
+	 * the arena that is defined by its own colours — a core that emits nothing
+	 * against a disk that is far too bright — and painting it team-blue would turn
+	 * an event into a decoration. What the tint has to answer is narrower: whose
+	 * hole is this, i.e. am I the one who is safe standing in it.
+	 */
+	private casterTeam: TeamId | null = null;
+
+	/** Pull one of the ability's own colours toward the caster's side. */
+	private tint(base: number, strength: number = TINT.subtle): number {
+		return teamTint(base, this.casterTeam, strength);
+	}
 
 	/**
 	 * Two layers, on purpose.
@@ -134,13 +152,14 @@ export class BlackHoleFx {
 	 * rather than teleported, and it is the first thing that happens after the
 	 * cutscene lifts.
 	 */
-	launch(x: number, y: number) {
+	launch(x: number, y: number, team: TeamId | null = null) {
+		this.casterTeam = team;
 		this.particles.burst({
 			texture: TEX.spark,
 			count: 12,
 			x,
 			y,
-			tint: COLOR.grenade,
+			tint: this.tint(COLOR.grenade),
 			speed: [40, 200],
 			lifeMs: 320,
 			scale: [1, 0],
@@ -156,11 +175,19 @@ export class BlackHoleFx {
 	 * projectile the moment the server splices a dead one out.
 	 */
 	syncGrenades(
-		live: readonly { id: number; x: number; y: number }[],
+		live: readonly {
+			id: number;
+			x: number;
+			y: number;
+			ownerTeam?: TeamId | null;
+		}[],
 		dtMs: number,
 	) {
 		const seen = new Set<number>();
 		for (const g of live) {
+			// The grenade in flight is what tells the room whose hole is about to
+			// open, and it is in the air for the whole second anybody has to react.
+			this.casterTeam = g.ownerTeam ?? null;
 			seen.add(g.id);
 			let trail = this.grenades.get(g.id);
 			if (!trail) {
@@ -176,6 +203,7 @@ export class BlackHoleFx {
 			// A slow tumble. A grenade that held one orientation through a whole arc
 			// reads as a decal sliding across the screen.
 			trail.sprite.rotation += (dtMs / 1000) * 4;
+			trail.sprite.tint = this.tint(0xffffff, TINT.medium);
 
 			trail.emitAccMs += dtMs;
 			if (trail.emitAccMs >= 26) {
@@ -185,7 +213,7 @@ export class BlackHoleFx {
 					count: 2,
 					x: g.x,
 					y: g.y,
-					tint: COLOR.grenade,
+					tint: this.tint(COLOR.grenade),
 					speed: [10, 55],
 					lifeMs: 420,
 					scale: [0.9, 0],
@@ -214,13 +242,14 @@ export class BlackHoleFx {
 	 * Strike, because an ultimate that shook the screen less than a sword hit
 	 * would be an ultimate nobody respects.
 	 */
-	detonate(x: number, y: number) {
+	detonate(x: number, y: number, team: TeamId | null = null) {
+		this.casterTeam = team;
 		this.particles.burst({
 			texture: TEX.shard,
 			count: 34,
 			x,
 			y,
-			tint: COLOR.disk,
+			tint: this.tint(COLOR.disk),
 			speed: [220, 720],
 			lifeMs: 620,
 			scale: [1.3, 0],
@@ -231,7 +260,7 @@ export class BlackHoleFx {
 			count: 46,
 			x,
 			y,
-			tint: COLOR.horizon,
+			tint: this.tint(COLOR.horizon),
 			speed: [140, 620],
 			lifeMs: 520,
 			scale: [1.5, 0],
@@ -326,12 +355,13 @@ export class BlackHoleFx {
 		this.core.scale.set((SINGULARITY_RADIUS * 0.46) / 64);
 		this.glow.scale.set((SINGULARITY_REACH * 0.85) / 64);
 		this.glow.alpha = 0.16;
-		this.glow.tint = COLOR.horizon;
+		this.casterTeam = field.ownerTeam ?? null;
+		this.glow.tint = this.tint(COLOR.horizon);
 
 		this.diskInner.scale.set((SINGULARITY_RADIUS * 0.86) / 88);
 		this.diskOuter.scale.set((SINGULARITY_RADIUS * 1.18) / 88);
-		this.diskInner.tint = COLOR.disk;
-		this.diskOuter.tint = COLOR.horizon;
+		this.diskInner.tint = this.tint(COLOR.disk);
+		this.diskOuter.tint = this.tint(COLOR.horizon);
 		this.diskInner.alpha = 1;
 		this.diskOuter.alpha = 0.65;
 		this.spinDisks(dtMs);
@@ -344,7 +374,9 @@ export class BlackHoleFx {
 		const pulse = 1 + 0.035 * Math.sin(this.ageMs / 150);
 		this.horizon.scale.set((SINGULARITY_RADIUS / 60) * pulse);
 		this.horizon.alpha = 0.78 + 0.16 * Math.sin(this.ageMs / 150 + 1);
-		this.horizon.tint = COLOR.horizon;
+		// The event horizon is the one line a player has to read exactly — inside it
+		// you are cargo — so it takes the lightest wash of all and keeps its violet.
+		this.horizon.tint = this.tint(COLOR.horizon);
 
 		this.emitInfall(field, dtMs);
 		this.emitTearing(field, victims, dtMs);
@@ -386,7 +418,7 @@ export class BlackHoleFx {
 				count: 1,
 				x,
 				y,
-				tint: COLOR.infall,
+				tint: this.tint(COLOR.infall),
 				angle: [lead - 0.12, lead + 0.12],
 				speed: [r * 1.9, r * 2.5],
 				lifeMs: 420,
@@ -416,7 +448,7 @@ export class BlackHoleFx {
 				count: 3,
 				x: cx,
 				y: cy,
-				tint: COLOR.tear,
+				tint: this.tint(COLOR.tear, TINT.medium),
 				// A narrow cone straight at the centre: this one is *not* an orbit. It
 				// is the fighter coming apart, and it should read as a direct line
 				// between them and the thing doing it.

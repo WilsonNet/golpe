@@ -268,10 +268,18 @@ export function pickSpawn(
 	occupied: readonly { x: number; y: number }[],
 	world: World = DEFAULT_WORLD,
 ): SpawnPoint {
-	let best = world.spawnPoints[0] as SpawnPoint;
+	return pickFrom(world.spawnPoints, occupied);
+}
+
+/** `pickSpawn`, over an arbitrary candidate list. Ties go to the earlier point. */
+function pickFrom(
+	points: readonly SpawnPoint[],
+	occupied: readonly { x: number; y: number }[],
+): SpawnPoint {
+	let best = points[0] as SpawnPoint;
 	let bestScore = -1;
 
-	for (const point of world.spawnPoints) {
+	for (const point of points) {
 		let nearest = Number.POSITIVE_INFINITY;
 		for (const other of occupied) {
 			nearest = Math.min(
@@ -287,6 +295,52 @@ export function pickSpawn(
 		}
 	}
 	return best;
+}
+
+/**
+ * The spawn points belonging to one side: **team 0 on the leftmost screen, team
+ * 1 on the rightmost**.
+ *
+ * Exactly one screen each, whatever the room's width — not a fraction of it. A
+ * screen is the unit the whole game is authored in and the unit a player reads:
+ * "we start on the left screen, they start on the right, everything between is
+ * contested" is a sentence somebody can hold in their head on a three-screen map
+ * and on an eight-screen one. A third of the arena is the same thing at three
+ * screens and a vague blob at eight.
+ *
+ * On a two-screen room the two zones meet in the middle with no neutral ground,
+ * which is why team deathmatch has a three-screen floor.
+ *
+ * Falls back to the whole arena if the zone is empty, which cannot happen with
+ * the shipped layout but would otherwise turn a level edit into a crash rather
+ * than a bad spawn.
+ */
+export function teamSpawnPoints(
+	world: World,
+	team: number,
+): readonly SpawnPoint[] {
+	const lo = team === 0 ? world.left : world.right - SCREEN_W;
+	const hi = team === 0 ? world.left + SCREEN_W : world.right;
+	const zone = world.spawnPoints.filter((p) => p.x >= lo && p.x <= hi);
+	return zone.length > 0 ? zone : world.spawnPoints;
+}
+
+/**
+ * Where a team deathmatch fighter enters: their own end of the arena, at the
+ * point furthest from everyone already placed.
+ *
+ * **Facing is overridden to point across the map**, not inherited from the spawn
+ * point. The per-screen layout aims its spawns at the middle of *their screen*,
+ * which on a three-screen arena leaves half a team starting with their back to
+ * the fight — and facing is what decides which way a guard covers.
+ */
+export function pickTeamSpawn(
+	occupied: readonly { x: number; y: number }[],
+	world: World,
+	team: number,
+): SpawnPoint {
+	const point = pickFrom(teamSpawnPoints(world, team), occupied);
+	return { ...point, facing: team === 0 ? 1 : -1 };
 }
 
 export function rectsOverlap(a: Rect, b: Rect): boolean {

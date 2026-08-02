@@ -17,6 +17,7 @@ import {
 	type PlayerPosition,
 	tickPlayer,
 } from "./Physics.js";
+import type { TeamId } from "./Teams.js";
 import {
 	addCharge,
 	fieldAffects,
@@ -38,8 +39,20 @@ import {
 const DT = 1 / 60;
 const WORLD = buildWorld(1);
 
-function hole(x: number, y: number, ownerId = "caster"): Singularity {
-	return { id: 1, ownerId, x, y, remainingMs: SINGULARITY_DURATION_MS };
+function hole(
+	x: number,
+	y: number,
+	ownerId = "caster",
+	ownerTeam: TeamId | null = null,
+): Singularity {
+	return {
+		id: 1,
+		ownerId,
+		ownerTeam,
+		x,
+		y,
+		remainingMs: SINGULARITY_DURATION_MS,
+	};
 }
 
 /** A body whose *centre* sits at (x, y), which is the space the field works in. */
@@ -72,6 +85,30 @@ describe("friendly fire", () => {
 		const field = hole(400, 300, "me");
 		expect(fieldAffects(field, "them")).toBe(true);
 		expect(fieldFor(field, "them")).toBe(field);
+	});
+
+	it("never affects the caster's own side", () => {
+		// The pull is an argument to `tickPlayer` on both sides of the wire, so a
+		// disagreement here is not a scoring bug — it is a client dragging its own
+		// teammates somewhere the server is not.
+		const field = hole(400, 300, "me", 0);
+		expect(fieldAffects(field, "ally", 0)).toBe(false);
+		expect(fieldFor(field, "ally", 0)).toBeNull();
+		expect(fieldAffects(field, "enemy", 1)).toBe(true);
+		expect(fieldFor(field, "enemy", 1)).toBe(field);
+	});
+
+	it("affects everybody when there are no sides", () => {
+		const field = hole(400, 300, "me");
+		expect(fieldAffects(field, "them", null)).toBe(true);
+	});
+
+	it("passes a thrown grenade straight through a teammate", () => {
+		// A lob that detonated on the ally it was thrown over would make the
+		// ultimate a way to lose the round.
+		const g = launchGrenade(0, "me", 400, 300, 0, 0);
+		expect(grenadeTouches(g, "ally", 390, 280, 0)).toBe(false);
+		expect(grenadeTouches(g, "enemy", 390, 280, 1)).toBe(true);
 	});
 
 	it("means the caster is not gripped even standing dead centre", () => {

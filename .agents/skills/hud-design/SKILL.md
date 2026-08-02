@@ -47,6 +47,12 @@ both sides import) and emits `hud-state`:
 - The HUD also reads `match-status` (standings, clock, myId — 20Hz) and
   `hud-status` (battle messages). Nothing reaches into the simulation: a HUD
   that reads `body` directly is a HUD that stops updating when the code moves.
+- **Team deathmatch adds nothing to the loop.** `HudState.team` is the local
+  fighter's side (the self panel's edge colour), and everything else the mode
+  needs — round scores, who is still standing, the round number — is already in
+  `match-status` as `status.teams`, because the *server* decides a round has been
+  won. A client counting the living itself would announce a wipe on a frame where
+  its own prediction had killed somebody the server had not.
 
 ## Sizing: container units, no JS measurement
 
@@ -58,6 +64,27 @@ The HUD root sets `container-type: size`, and everything is sized in
 **`cqw`/`cqh`** (1cqw = 8 logical px, 1cqh = 6 logical px — the game is
 authored 800x600). The HUD scales with the arena on any window shape with zero
 measurement. Never mix in `px` for layout (hairlines at 1-2px are fine).
+
+## Team deathmatch on the HUD
+
+- **The clock's subtitle is replaced, not joined.** In TDM the `FIRST TO N` line
+  becomes the round score in both sides' colours with the living count between
+  them — `3 (4 v 2) 2` — over a small `ROUND N · FIRST TO 15`. Two subtitles
+  under one clock is furniture, and the frag limit is not interesting in a mode
+  where frags win nothing. "4 v 2" is the most decision-changing number on the
+  screen: it is what says push or hold.
+- **The side that just scored flares once** (`.vdh-team-won`, keyed on the score
+  so a second round restarts it — the same trick as the frag popup). A score that
+  changes silently is a score nobody saw change.
+- **The self panel's hairline takes the team colour.** One element, the one a
+  player never has to search for, so everything else read in team colour is read
+  relative to it.
+- Colours come from `src/game/teamPalette.ts` (`teamCss`), which is
+  dependency-free precisely so the DOM overlay and the canvas share one palette.
+- The Tab scoreboard becomes **two blocks**, one per side, each headed with its
+  round score and standing count; the order inside a block is `rankScores`'s,
+  untouched. The podium leads with the winning side and demotes the top fighter
+  to an MVP line.
 
 ## The design language
 

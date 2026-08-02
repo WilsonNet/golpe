@@ -14,11 +14,13 @@ import {
 	type RosterMsg,
 	type SnapshotCinematic,
 	type SnapshotPlayer,
+	type TeamStatus,
 } from "../src/game/online/types.js";
 import { packIntent, packState } from "../src/game/online/wire.js";
 import {
 	buildWorld,
 	pickSpawn,
+	pickTeamSpawn,
 	type SpawnPoint,
 	type World,
 } from "../src/game/simulation/Arena.js";
@@ -33,6 +35,21 @@ import {
 	type ScoreEntry,
 	TIME_LIMIT_MS,
 } from "../src/game/simulation/Deathmatch.js";
+import {
+	aliveCounts,
+	balanceTeam,
+	hostile,
+	type MatchMode,
+	ROUND_FREEZE_MS,
+	ROUND_RESET_DELAY_MS,
+	roundResult,
+	TDM_SCORE_LIMIT,
+	type TeamId,
+	teamAhead,
+	teamCounts,
+	teamMatchWinner,
+	teamName,
+} from "../src/game/simulation/Teams.js";
 import type {
 	TrainingConfig,
 	TrainingConfigMsg,
@@ -58,6 +75,7 @@ import {
 	grenadeTouches,
 	hasLineOfSight,
 	isBulletOutOfBounds,
+	isFrozen,
 	isKnockedDown,
 	isStunned,
 	launchGrenade,
@@ -105,6 +123,16 @@ interface ConnectedPlayer {
 	 * second pipeline, it is a third input source into the one that exists.
 	 */
 	dummy: TrainingDummy | null;
+	/**
+	 * Which side this fighter is on, or `null` in a free-for-all.
+	 *
+	 * Assigned once when the slot is seated and never reassigned mid-match:
+	 * balancing a live match by moving somebody across would hand the round they
+	 * are in to the other side. A leaver is replaced by the next joiner going to
+	 * whichever team is now smaller, which is where the balance actually comes
+	 * from.
+	 */
+	team: TeamId | null;
 	/** Full simulation state — never rebuilt per tick, or wall state is lost. */
 	state: PlayerPosition;
 	hp: number;
@@ -308,6 +336,7 @@ export class GameRoom {
 	 */
 	private pendingThrow: {
 		ownerId: string;
+		ownerTeam: TeamId | null;
 		x: number;
 		y: number;
 		angle: number;
@@ -326,6 +355,45 @@ export class GameRoom {
 	private overTimer = 0;
 	private readonly scoreLimit: number;
 	private readonly timeLimitMs: number;
+
+	// =========================================================
+	//  TEAM DEATHMATCH
+	// =========================================================
+	//
+	// A room plays one mode for its whole life. `"ffa"` leaves every field below
+	// inert — teams are `null`, `tickTeamRound` returns immediately, and the
+	// friendly-fire predicate answers "hostile" for every pair, so the deathmatch
+	// path is byte for byte the one that was there before.
+
+	/** Which ruleset this room plays. Fixed by its creator. */
+	readonly mode: MatchMode;
+	/** Rounds won, indexed by team id. */
+	private teamScores: number[] = [0, 0];
+	/** 1-based, for the HUD's "ROUND N". */
+	private roundNumber = 1;
+	/** Counting down to the next round's spawn, after a wipe. -1 while live. */
+	private roundResetTimer = -1;
+	private lastRoundWinner: TeamId | null = null;
+	private winnerTeam: TeamId | null = null;
+	/**
+	 * ms of freezetime left before the round goes live. Room-level, for the HUD
+	 * and for the two things that are decided outside `tickPlayer` — a gunshot and
+	 * an ultimate cast.
+	 *
+	 * The *authority* on whether a given fighter is frozen is that fighter's own
+	 * `state.freezeTimer`, because that is what both sides simulate and replay.
+	 * This is the same number, kept where a fighter-less caller can read it.
+	 */
+	private roundFreezeMs = 0;
+	/**
+	 * How long freezetime lasts in this room. `?freezeTime=S`, creator-only.
+	 *
+	 * Ten seconds is the number the mode is designed around; a probe that had to
+	 * sit through ten of them per run is a probe nobody waits for, so it can be
+	 * shortened exactly like the score and time limits — and, like them, only by
+	 * whoever creates the room.
+	 */
+	private readonly freezeTimeMs: number;
 
 	/**
 	 * How many fighters this room keeps topped up with bots.
@@ -361,10 +429,27 @@ export class GameRoom {
 			fillTarget?: number;
 			screens?: number;
 			startUltCharge?: number;
+			mode?: MatchMode;
+			freezeTimeMs?: number;
 		} = {},
 	) {
 		this.id = id;
-		this.scoreLimit = rules.scoreLimit ?? SCORE_LIMIT;
+		this.mode = rules.mode ?? "ffa";
+		this.freezeTimeMs =
+			this.mode === "tdm"
+				? Math.max(0, rules.freezeTimeMs ?? ROUND_FREEZE_MS)
+				: 0;
+		// The first round gets its countdown like every other one. Fighters seated
+		// while it runs inherit whatever is left of it, so a bot arriving three
+		// seconds in is planted for the remaining seven rather than walking around
+		// a room that has not started.
+		this.roundFreezeMs = this.freezeTimeMs;
+		// A frag limit and a round limit are different numbers for different
+		// things: 21 frags is a deathmatch, 15 wipe-outs is a team match. Asking
+		// for one and getting the other's default is how a TDM room silently
+		// became a twenty-one-round marathon.
+		this.scoreLimit =
+			rules.scoreLimit ?? (this.mode === "tdm" ? TDM_SCORE_LIMIT : SCORE_LIMIT);
 		this.timeLimitMs = rules.timeLimitMs ?? TIME_LIMIT_MS;
 		this.fillTarget = Math.max(0, Math.min(rules.fillTarget ?? 0, MAX_PLAYERS));
 		this.world = buildWorld(rules.screens ?? 1);
@@ -421,10 +506,12 @@ export class GameRoom {
 			brain?: EnemyBrain | null;
 			dummy?: TrainingDummy | null;
 		},
+		team: TeamId | null = null,
 	): ConnectedPlayer {
 		return {
 			id,
 			name,
+			team,
 			channel: sources.channel ?? null,
 			brain: sources.brain ?? null,
 			dummy: sources.dummy ?? null,
@@ -457,6 +544,39 @@ export class GameRoom {
 			.map((p) => ({ x: p.state.x, y: p.state.y }));
 	}
 
+	/** Every fighter as the team rules see them: a side and whether they stand. */
+	private members() {
+		return [...this.players.values()].map((p) => ({
+			team: p.team,
+			alive: p.alive,
+		}));
+	}
+
+	/**
+	 * The side a fighter about to be seated joins: the smaller one.
+	 *
+	 * `null` in a free-for-all, which is what makes every team rule inert there —
+	 * see `hostile`.
+	 */
+	private nextTeam(): TeamId | null {
+		if (this.mode !== "tdm") return null;
+		return balanceTeam(teamCounts(this.members()));
+	}
+
+	/**
+	 * Where a fighter enters, in whichever mode this room is.
+	 *
+	 * A free-for-all spawns furthest from everybody; a team match spawns in its
+	 * own third of the arena, furthest from everybody *there*. Both are the same
+	 * pure choice — see `pickTeamSpawn`.
+	 */
+	private spawnFor(team: TeamId | null): SpawnPoint {
+		const occupied = this.occupiedPoints();
+		return team === null
+			? pickSpawn(occupied, this.world)
+			: pickTeamSpawn(occupied, this.world, team);
+	}
+
 	addPlayer(channel: ServerChannel, rawName?: unknown): boolean {
 		// A room full of bots still has room for a human: bots exist to keep the
 		// arena busy, not to hold a seat against the people the arena is for.
@@ -472,18 +592,17 @@ export class GameRoom {
 			this.names,
 		);
 		this.channelIds.push(id);
-		this.players.set(
+		const team = this.nextTeam();
+		const slot = this.newSlot(
 			id,
-			this.newSlot(
-				id,
-				name,
-				pickSpawn(this.occupiedPoints(), this.world),
-				100,
-				{
-					channel,
-				},
-			),
+			name,
+			this.spawnFor(team),
+			100,
+			{ channel },
+			team,
 		);
+		slot.state.freezeTimer = this.roundFreezeMs;
+		this.players.set(id, slot);
 
 		channel.join(this.id);
 		channel.userData = { roomId: this.id };
@@ -521,9 +640,23 @@ export class GameRoom {
 		return true;
 	}
 
-	/** Evict one bot so a human can sit down. Returns false if there was none. */
+	/**
+	 * Evict one bot so a human can sit down. Returns false if there was none.
+	 *
+	 * In a team match the bot comes off the **larger** side, because the human
+	 * about to take the seat is assigned to the smaller one — evicting from
+	 * either side at random would seat every arriving human on the same team as
+	 * the bot that just left, and the room would drift 9v7.
+	 */
 	private freeBotSlot(): boolean {
-		const bot = [...this.players.values()].find((p) => p.brain !== null);
+		const bots = [...this.players.values()].filter((p) => p.brain !== null);
+		const counts = teamCounts(this.members());
+		const bot =
+			this.mode === "tdm"
+				? [...bots].sort(
+						(a, b) => (counts[b.team ?? 0] ?? 0) - (counts[a.team ?? 0] ?? 0),
+					)[0]
+				: bots[0];
 		if (!bot) return false;
 		this.removePlayer(bot.id);
 		console.log(`[MATCH] ${this.id}: bot ${bot.name} left to seat a human`);
@@ -543,18 +676,17 @@ export class GameRoom {
 
 		const id = `bot-${this.id}-${this.channelIds.length}`;
 		this.channelIds.push(id);
-		this.players.set(
+		const team = this.nextTeam();
+		const slot = this.newSlot(
 			id,
-			this.newSlot(
-				id,
-				botName(this.names),
-				pickSpawn(this.occupiedPoints(), this.world),
-				100,
-				{
-					brain: new EnemyBrain(botConfig(), this.world),
-				},
-			),
+			botName(this.names),
+			this.spawnFor(team),
+			100,
+			{ brain: new EnemyBrain(botConfig(), this.world) },
+			team,
 		);
+		slot.state.freezeTimer = this.roundFreezeMs;
+		this.players.set(id, slot);
 		this.broadcastRoster();
 		return true;
 	}
@@ -759,12 +891,19 @@ export class GameRoom {
 	 * two players. At sixteen, somebody has to choose which one — and "the nearest
 	 * one still standing" is the choice that makes a bot fight whoever is actually
 	 * threatening it rather than sprinting across the arena at a fixed rival.
+	 *
+	 * **This is the whole of how a bot knows about friendly fire.** The brain has
+	 * no team concept and does not need one: it is only ever shown an enemy, so
+	 * every decision it makes — approach, block, punish, shoot down a corridor —
+	 * is already aimed at somebody it is allowed to hit. A teammate is not a
+	 * target it declines; it is a fighter the brain is never told about.
 	 */
 	private nearestFoe(self: ConnectedPlayer): ConnectedPlayer | undefined {
 		let best: ConnectedPlayer | undefined;
 		let bestDist = Number.POSITIVE_INFINITY;
 		for (const p of this.players.values()) {
 			if (p === self || !p.alive) continue;
+			if (!hostile(self.team, p.team)) continue;
 			const dist = Math.hypot(
 				p.state.x - self.state.x,
 				p.state.y - self.state.y,
@@ -838,6 +977,7 @@ export class GameRoom {
 			kills: p.kills,
 			deaths: p.deaths,
 			bot: p.brain !== null,
+			team: p.team,
 		}));
 	}
 
@@ -851,6 +991,25 @@ export class GameRoom {
 			winnerId: this.winnerId,
 			nextMatchInMs:
 				this.phase === "over" ? Math.max(0, Math.round(this.overTimer)) : 0,
+			mode: this.mode,
+			teams: this.teamStatus(),
+		};
+	}
+
+	/** The round scoreboard, or null in a free-for-all. */
+	private teamStatus(): TeamStatus | null {
+		if (this.mode !== "tdm") return null;
+		const members = this.members();
+		return {
+			scores: [...this.teamScores],
+			alive: aliveCounts(members),
+			seated: teamCounts(members),
+			round: this.roundNumber,
+			resetInMs:
+				this.roundResetTimer > 0 ? Math.round(this.roundResetTimer) : 0,
+			freezeMs: this.roundFreezeMs > 0 ? Math.round(this.roundFreezeMs) : 0,
+			lastRoundWinner: this.lastRoundWinner,
+			winnerTeam: this.winnerTeam,
 		};
 	}
 
@@ -867,6 +1026,9 @@ export class GameRoom {
 	private killPlayer(victim: ConnectedPlayer) {
 		victim.alive = false;
 		victim.deaths++;
+		// Meaningless in a team match — nothing counts it down, because a fighter
+		// stays down until their whole side does. Still set, so a mode that ever
+		// mixed the two would not read an uninitialised timer.
 		victim.respawnTimer = RESPAWN_DELAY_MS;
 		victim.hp = 0;
 		victim.state.stunTimer = RESPAWN_DELAY_MS;
@@ -898,19 +1060,25 @@ export class GameRoom {
 		// Scores are frozen once the podium is decided; the fight is allowed to
 		// keep going, because freezing the simulation is what desyncs it.
 		if (this.phase === "over") return;
+		// **No friendly fire, at the one point every weapon passes through.** Each
+		// of them already declines to hit a teammate at its own hitbox — a sword
+		// swing passes through, a bullet flies on, the hole ignores them — and this
+		// is the backstop that makes those three an optimisation rather than the
+		// rule. A weapon added later cannot forget it.
+		const from = this.players.get(sourceId);
+		if (from && from !== victim && !hostile(from.team, victim.team)) return;
 
 		victim.lastHurtBy = sourceId;
 		victim.hp = Math.max(0, victim.hp - amount);
 		victim.stats.damageTaken += amount;
 
-		const source = this.players.get(sourceId);
-		if (source && source !== victim) {
-			source.stats.damageDealt += amount;
+		if (from && from !== victim) {
+			from.stats.damageDealt += amount;
 			// The Overwatch economy, in one line: charge is what you are paid for
 			// participating. Paid here rather than in each weapon's code path so a
 			// sword hit, a bullet and the black hole's own tick are all worth the
 			// same per point — and so a weapon added later cannot forget to pay.
-			source.ult = addCharge(source.ult, amount * ULT_CHARGE_PER_DAMAGE);
+			from.ult = addCharge(from.ult, amount * ULT_CHARGE_PER_DAMAGE);
 		}
 
 		if (victim.hp <= 0) this.killPlayer(victim);
@@ -935,12 +1103,13 @@ export class GameRoom {
 	 * immediately rather than a frame late.
 	 */
 	private respawn(player: ConnectedPlayer) {
-		const spawn = pickSpawn(
-			this.occupiedPoints().filter(
-				(p) => p.x !== player.state.x || p.y !== player.state.y,
-			),
-			this.world,
+		const occupied = this.occupiedPoints().filter(
+			(p) => p.x !== player.state.x || p.y !== player.state.y,
 		);
+		const spawn =
+			player.team === null
+				? pickSpawn(occupied, this.world)
+				: pickTeamSpawn(occupied, this.world, player.team);
 		player.state = createPlayerState(spawn.x, spawn.y, spawn.facing);
 		player.hp = 100;
 		player.alive = true;
@@ -965,14 +1134,45 @@ export class GameRoom {
 			return;
 		}
 
-		this.matchElapsedMs += dt * 1000;
-		const reason = matchEndReason(
-			this.scoreEntries(),
-			this.matchElapsedMs,
-			this.scoreLimit,
-			this.timeLimitMs,
-		);
+		// The match clock measures *fighting*, not the room being open. Fifteen
+		// rounds of freezetime and cooldown is two and a half minutes of a
+		// five-minute match, so counting them would mean the timer decided almost
+		// every team match — and a countdown that ate your clock would punish the
+		// mode's own pacing.
+		//
+		// **The clock is paused, the win condition is not.** Returning early here
+		// instead cost a whole extra round: the deciding wipe set the cooldown, the
+		// score went unchecked for five seconds, and by the time it was read the
+		// arena had already reset and started a round nobody was playing.
+		const paused =
+			this.mode === "tdm" &&
+			(this.roundFreezeMs > 0 || this.roundResetTimer > 0);
+		if (!paused) this.matchElapsedMs += dt * 1000;
+
+		const reason =
+			this.mode === "tdm"
+				? this.teamMatchEnd()
+				: matchEndReason(
+						this.scoreEntries(),
+						this.matchElapsedMs,
+						this.scoreLimit,
+						this.timeLimitMs,
+					);
 		if (reason) this.endMatch(reason);
+	}
+
+	/**
+	 * Has a team deathmatch ended?
+	 *
+	 * Rounds, not frags — a fighter with thirty kills has won nothing if their
+	 * side never took a round. Score before time, exactly as `matchEndReason`
+	 * does it, so a round won on the final second reads as a won match.
+	 */
+	private teamMatchEnd(): MatchEndReason {
+		if (teamMatchWinner(this.teamScores, this.scoreLimit) !== null) {
+			return "score";
+		}
+		return this.matchElapsedMs >= this.timeLimitMs ? "time" : null;
 	}
 
 	private endMatch(reason: MatchEndReason) {
@@ -982,10 +1182,24 @@ export class GameRoom {
 		this.endReason = reason;
 		this.winnerId = winner?.id ?? null;
 		this.overTimer = MATCH_OVER_LINGER_MS;
+		// The side that took it: the one at the limit, or whoever is ahead when the
+		// clock runs out. `null` is a genuine draw, which only a timed match can
+		// produce and which the podium says out loud rather than inventing a winner.
+		this.winnerTeam =
+			this.mode === "tdm"
+				? (teamMatchWinner(this.teamScores, this.scoreLimit) ??
+					teamAhead(this.teamScores))
+				: null;
 
-		console.log(
-			`[MATCH] ${this.id} over by ${reason}: ${winner?.name ?? "nobody"} wins with ${winner?.kills ?? 0}`,
-		);
+		if (this.mode === "tdm") {
+			console.log(
+				`[MATCH] ${this.id} over by ${reason}: ${teamName(this.winnerTeam) || "nobody"} wins ${this.teamScores.join("-")} (MVP ${winner?.name ?? "nobody"})`,
+			);
+		} else {
+			console.log(
+				`[MATCH] ${this.id} over by ${reason}: ${winner?.name ?? "nobody"} wins with ${winner?.kills ?? 0}`,
+			);
+		}
 		// The full standings, once, with names attached. The scoreboard rebuilds
 		// this from the snapshot every frame; the podium is a one-shot announcement
 		// and should not depend on a client having kept up.
@@ -993,6 +1207,77 @@ export class GameRoom {
 			reason,
 			winnerId: this.winnerId,
 			standings,
+			winnerTeam: this.winnerTeam,
+			...(this.mode === "tdm" ? { teamScores: [...this.teamScores] } : {}),
+		});
+	}
+
+	/**
+	 * The wipe-out round: a side is out when its last fighter falls.
+	 *
+	 * **This replaces individual respawns entirely** in a team match. A dead
+	 * fighter stays dead, which is what makes the last member of a side worth
+	 * watching — everyone else on their team is watching them too. The reward is a
+	 * round, the whole arena resets, and the score is the number of times a side
+	 * has been wiped out.
+	 *
+	 * Scored from `roundResult`, a pure function of who is alive, so the server
+	 * and a test agree on what "wiped" means. Both sides gone on the same tick is
+	 * a draw and scores nobody — a black hole makes that perfectly possible.
+	 */
+	private tickTeamRound(dt: number) {
+		// Freezetime. Nobody can act — every fighter's own `freezeTimer` is doing
+		// that inside `tickPlayer` — so there is nothing to score and no round to
+		// end until it runs out.
+		if (this.roundFreezeMs > 0) {
+			this.roundFreezeMs = Math.max(0, this.roundFreezeMs - dt * 1000);
+			if (this.roundFreezeMs === 0) {
+				console.log(`[ROUND] ${this.id}: round ${this.roundNumber} live`);
+				// Announced, so the banner lands at the same moment on every client
+				// rather than each one racing its own copy of the countdown to zero.
+				this.broadcastReliable("round-live", { round: this.roundNumber });
+			}
+			return;
+		}
+
+		if (this.roundResetTimer > 0) {
+			this.roundResetTimer -= dt * 1000;
+			if (this.roundResetTimer <= 0) {
+				this.roundResetTimer = -1;
+				// Only if the match is still running. A wipe that decided the match
+				// must leave the arena as it stands — otherwise the podium goes up
+				// over a freshly respawned round nobody is playing, and the scoreboard
+				// counts a round that was never fought.
+				if (this.phase === "live") {
+					this.roundNumber++;
+					this.resetPlayers();
+				}
+			}
+			return;
+		}
+
+		const result = roundResult(this.members());
+		if (result === null) return;
+
+		this.roundResetTimer = ROUND_RESET_DELAY_MS;
+		if (result.kind === "draw") {
+			this.lastRoundWinner = null;
+			console.log(`[ROUND] ${this.id}: round ${this.roundNumber} drawn`);
+		} else {
+			this.lastRoundWinner = result.team;
+			this.teamScores[result.team] = (this.teamScores[result.team] ?? 0) + 1;
+			console.log(
+				`[ROUND] ${this.id}: ${teamName(result.team)} takes round ${this.roundNumber} (${this.teamScores.join("-")})`,
+			);
+		}
+		// Announced rather than inferred, like every other discontinuity. The
+		// snapshot carries the same numbers, so a lost datagram costs a banner and
+		// never the score.
+		this.broadcastReliable("round-won", {
+			team: result.kind === "win" ? result.team : null,
+			round: this.roundNumber,
+			scores: [...this.teamScores],
+			resetInMs: ROUND_RESET_DELAY_MS,
 		});
 	}
 
@@ -1016,6 +1301,14 @@ export class GameRoom {
 		this.endReason = null;
 		this.winnerId = null;
 		this.overTimer = 0;
+		// The round score is the match score in TDM, so it is wiped with everything
+		// else — carrying it over would start a new match at 14-13.
+		this.teamScores = [0, 0];
+		this.roundNumber = 1;
+		this.roundResetTimer = -1;
+		this.roundFreezeMs = this.freezeTimeMs;
+		this.lastRoundWinner = null;
+		this.winnerTeam = null;
 		console.log(`[MATCH] ${this.id}: new match`);
 		this.resetPlayers();
 	}
@@ -1039,6 +1332,9 @@ export class GameRoom {
 				kills: p.kills,
 				deaths: p.deaths,
 				alive: p.alive,
+				// Beside `hp` rather than in the roster: teams are an argument to the
+				// client's own `tickPlayer` — see `SnapshotPlayer`.
+				team: p.team,
 				// Rounded: the HUD draws a bar, and a fractional trickle would make
 				// every snapshot differ in a digit nobody can see.
 				ult: Math.round(p.ult),
@@ -1068,6 +1364,7 @@ export class GameRoom {
 			grenades: this.grenades.map((g) => ({
 				id: g.id,
 				ownerId: g.ownerId,
+				ownerTeam: g.ownerTeam,
 				x: g.x,
 				y: g.y,
 				vx: g.vx,
@@ -1194,7 +1491,7 @@ export class GameRoom {
 				input,
 				dt,
 				this.world,
-				fieldFor(this.singularity, player.id),
+				fieldFor(this.singularity, player.id, player.team),
 			);
 
 			// A release edge, not a press edge: `ultimate` is held button state on
@@ -1210,6 +1507,10 @@ export class GameRoom {
 			// stance the simulation says they are actually in.
 			if (
 				player.alive &&
+				// Decided out here rather than in `tickPlayer`, so it needs the same
+				// gate the intent already got: a frozen fighter's neutral intent never
+				// reaches this branch, but `input` is the raw one.
+				!isFrozen(player.state) &&
 				player.state.stance === "gun" &&
 				input.attack &&
 				canFire(player.lastAttackTime, now)
@@ -1245,7 +1546,12 @@ export class GameRoom {
 			return;
 		}
 
-		this.tickRespawns(dt);
+		// Two lifecycles, one per mode, and never both: a deathmatch respawns
+		// individuals on a timer, a team match respawns nobody until a side is
+		// wiped. Running the FFA respawn in a team room would refill the team that
+		// was two seconds from losing the round.
+		if (this.mode === "tdm") this.tickTeamRound(dt);
+		else this.tickRespawns(dt);
 		this.tickMatchClock(dt);
 	}
 
@@ -1310,6 +1616,11 @@ export class GameRoom {
 
 			for (const defender of this.players.values()) {
 				if (defender === attacker || !defender.alive) continue;
+				// A blade passes through a teammate: no damage, no stun, no knockback,
+				// and no `hitLatch` spent — the swing is still live for the enemy
+				// standing behind them. A guard that closed on a friendly body would
+				// make a crowded push worse than swinging alone.
+				if (!hostile(attacker.team, defender.team)) continue;
 
 				const result = resolveMelee(attacker.state, defender.state);
 				if (!result) continue;
@@ -1346,8 +1657,13 @@ export class GameRoom {
 				continue;
 
 			let consumed = false;
+			const shooter = this.players.get(b.ownerId);
 			for (const player of this.players.values()) {
 				if (b.ownerId === player.id || !player.alive) continue;
+				// Straight through a teammate, and *not* consumed: a shot that stopped
+				// on the friendly in front of you would make a firing line impossible
+				// and turn every corridor into a queue.
+				if (shooter && !hostile(shooter.team, player.team)) continue;
 				if (!bulletHitsPlayer(b, player.state.x, player.state.y)) continue;
 
 				// A guard covers the side you face, bullets included. The shot is
@@ -1430,6 +1746,7 @@ export class GameRoom {
 	private tryCastUltimate(player: ConnectedPlayer) {
 		if (!ultReady(player.ult)) return;
 		if (!player.alive || this.phase !== "live") return;
+		if (isFrozen(player.state)) return;
 		if (isStunned(player.state) || isKnockedDown(player.state)) return;
 		// One at a time, both ways. Two overlapping holes would have to argue about
 		// which way a fighter between them is pulled, and two overlapping cinematics
@@ -1442,6 +1759,7 @@ export class GameRoom {
 		this.cinematic = { casterId: player.id, msLeft: ULT_CINEMATIC_MS };
 		this.pendingThrow = {
 			ownerId: player.id,
+			ownerTeam: player.team,
 			x: player.state.x + PLAYER_WIDTH / 2,
 			y: player.state.y + PLAYER_HEIGHT / 2,
 			// The last input that held the button, not the release input itself: the
@@ -1460,7 +1778,14 @@ export class GameRoom {
 		this.pendingThrow = null;
 		if (!t) return;
 		this.grenades.push(
-			launchGrenade(this.nextUltId++, t.ownerId, t.x, t.y, t.angle),
+			launchGrenade(
+				this.nextUltId++,
+				t.ownerId,
+				t.x,
+				t.y,
+				t.angle,
+				t.ownerTeam,
+			),
 		);
 	}
 
@@ -1491,7 +1816,15 @@ export class GameRoom {
 			let touched = false;
 			for (const player of this.players.values()) {
 				if (!player.alive) continue;
-				if (!grenadeTouches(g, player.id, player.state.x, player.state.y)) {
+				if (
+					!grenadeTouches(
+						g,
+						player.id,
+						player.state.x,
+						player.state.y,
+						player.team,
+					)
+				) {
 					continue;
 				}
 				touched = true;
@@ -1515,6 +1848,10 @@ export class GameRoom {
 		this.singularity = {
 			id: g.id,
 			ownerId: g.ownerId,
+			// Carried from the grenade rather than looked up: the caster may already
+			// have left the room by the time their throw lands, and a hole that
+			// forgot whose side it was on would start eating their own team.
+			ownerTeam: g.ownerTeam,
 			// Clamped into the arena.
 			//
 			// A grenade that leaves through a side wall is detonated by `grenadeEnd`
@@ -1556,7 +1893,7 @@ export class GameRoom {
 			// the shared module, so the damage can never disagree with the pull the
 			// client is predicting. `fieldFor` returns null for the caster, and a null
 			// field grips nobody.
-			const mine = fieldFor(field, player.id);
+			const mine = fieldFor(field, player.id, player.team);
 			if (singularityGrip(mine, player.state.x, player.state.y) !== "held") {
 				continue;
 			}
@@ -1594,10 +1931,21 @@ export class GameRoom {
 							...cfg.spawn.player,
 							facing: cfg.spawn.player.x <= cfg.spawn.dummy.x ? 1 : -1,
 						}
-				: pickSpawn(taken, this.world);
+				: p.team === null
+					? pickSpawn(taken, this.world)
+					: // A team starts a round together, at its own end of the arena and
+						// facing the other one. Sides swapping ends between rounds was
+						// considered and rejected: the arena is mirrored per screen, so
+						// the two ends are already the same fight from either side, and
+						// swapping would only cost every player their sense of which way
+						// the enemy is.
+						pickTeamSpawn(taken, this.world, p.team);
 			taken.push({ x: spawn.x, y: spawn.y });
 
 			p.state = createPlayerState(spawn.x, spawn.y, spawn.facing);
+			// Planted for the countdown. Zero outside team deathmatch, so every
+			// other reset in the game behaves exactly as it always has.
+			p.state.freezeTimer = this.freezeTimeMs;
 			p.hp = p.dummy ? (cfg?.dummyHp ?? 100) : 100;
 			p.alive = true;
 			p.respawnTimer = 0;
@@ -1612,6 +1960,8 @@ export class GameRoom {
 		this.bullets = [];
 		this.meleeEvents.length = 0;
 		this.resetTimer = -1;
+		// The room's copy of the same countdown the fighters are carrying.
+		this.roundFreezeMs = this.freezeTimeMs;
 		// A hole left open across a reset would grab fighters at their spawns, and a
 		// cinematic left running would freeze a match that has just started. Charge
 		// is *not* cleared here: `restartMatch` owns that, because a training-room

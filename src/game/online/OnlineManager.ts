@@ -1,4 +1,5 @@
 import geckos from "@geckos.io/client";
+import type { MatchMode } from "../simulation/Teams";
 import type { TrainingConfigMsg, TrainingStateMsg } from "../training/types";
 import {
 	type GameSnapshot,
@@ -8,6 +9,8 @@ import {
 	RELIABLE,
 	type RespawnMsg,
 	type RosterMsg,
+	type RoundLiveMsg,
+	type RoundWonMsg,
 } from "./types";
 
 export type OnlineStateHandler = (state: GameSnapshot) => void;
@@ -29,8 +32,12 @@ export interface OnlineHandlers {
 	onRoster: (msg: RosterMsg) => void;
 	onRespawn: (msg: RespawnMsg) => void;
 	onMatchOver: (msg: MatchOverMsg) => void;
+	/** A team deathmatch round was won by wipe-out. */
+	onRoundWon: (msg: RoundWonMsg) => void;
+	/** Freezetime is over: the round is live. */
+	onRoundLive: (msg: RoundLiveMsg) => void;
 	/** Seated, in the room the server actually put us in. */
-	onSeated: (roomId: string, screens: number) => void;
+	onSeated: (roomId: string, screens: number, mode: MatchMode) => void;
 	/** The room asked for is full of humans. Nothing more will arrive. */
 	onRoomFull: (roomId: string) => void;
 }
@@ -75,6 +82,17 @@ export interface JoinOptions {
 	 * tedious to practise a throw against.
 	 */
 	ultCharge?: number;
+	/**
+	 * Which ruleset to play: `"tdm"` for team deathmatch.
+	 *
+	 * Creator-only server-side, like the rest of this block — and the server
+	 * answers with the mode the room actually plays in the `match` message, so a
+	 * client joining somebody else's room learns which game it is in rather than
+	 * assuming its own URL.
+	 */
+	mode?: MatchMode;
+	/** Freezetime in seconds, for a team room. Creator-only, like the rest. */
+	freezeTime?: number;
 }
 
 export class OnlineManager {
@@ -153,6 +171,10 @@ export class OnlineManager {
 					...(join.ultCharge === undefined
 						? {}
 						: { ultCharge: join.ultCharge }),
+					...(join.mode === undefined ? {} : { mode: join.mode }),
+					...(join.freezeTime === undefined
+						? {}
+						: { freezeTime: join.freezeTime }),
 				},
 				RELIABLE,
 			);
@@ -171,7 +193,7 @@ export class OnlineManager {
 			if (msg?.youId) this._myId = msg.youId;
 			if (msg?.roomId) {
 				this._roomId = msg.roomId;
-				handlers.onSeated(msg.roomId, msg.screens ?? 1);
+				handlers.onSeated(msg.roomId, msg.screens ?? 1, msg.mode ?? "ffa");
 			}
 			handlers.onStatus("");
 		});
@@ -204,6 +226,17 @@ export class OnlineManager {
 
 		channel.on("match-over", (data: unknown) => {
 			handlers.onMatchOver(data as MatchOverMsg);
+		});
+
+		// A side was wiped out. The arena reset that follows arrives separately as
+		// `round-reset`, which is what actually breaks prediction continuity — this
+		// is only the announcement.
+		channel.on("round-won", (data: unknown) => {
+			handlers.onRoundWon(data as RoundWonMsg);
+		});
+
+		channel.on("round-live", (data: unknown) => {
+			handlers.onRoundLive(data as RoundLiveMsg);
 		});
 
 		// The training room echoes its resolved config back, so the UI and the

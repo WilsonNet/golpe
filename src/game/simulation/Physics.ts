@@ -338,6 +338,23 @@ export interface PlayerPosition extends MeleeState {
 	 * different numbers for opposite reasons.
 	 */
 	dashActiveTimer: number;
+	/**
+	 * ms of **round freeze** remaining: the fighter is planted and takes no input.
+	 *
+	 * Counter-Strike's freezetime, and it lives in `PlayerPosition` for exactly
+	 * the reason death does. A room-level "the round has not started" flag would
+	 * have to be re-implemented on both sides of the wire, replayed correctly
+	 * through reconciliation and re-decided on every rollback tick; a timer in the
+	 * state the client already predicts and replays gets all three for free. The
+	 * intent is discarded *inside* `tickPlayer`, so a client that mispredicted the
+	 * end of a freeze corrects it the same way it corrects everything else.
+	 *
+	 * Deliberately **not** a stun. A stun is a state a fighter has been *put* in by
+	 * somebody, and it is drawn that way — ten seconds of the staggered pose and
+	 * stun sparks at the start of every round would say the whole team had just
+	 * been hit. This says nothing except "not yet".
+	 */
+	freezeTimer: number;
 }
 
 export function createPlayerState(
@@ -361,6 +378,7 @@ export function createPlayerState(
 		airJumps: AIR_JUMPS,
 		dashTimer: 0,
 		dashActiveTimer: 0,
+		freezeTimer: 0,
 		...createMeleeState(facing),
 	};
 }
@@ -385,6 +403,7 @@ export function copyPlayerState(
 	target.airJumps = source.airJumps;
 	target.dashTimer = source.dashTimer;
 	target.dashActiveTimer = source.dashActiveTimer;
+	target.freezeTimer = source.freezeTimer;
 	copyMeleeState(source, target);
 	return target;
 }
@@ -398,6 +417,17 @@ function approach(value: number, target: number, maxDelta: number): number {
 
 function decay(timerMs: number, dt: number): number {
 	return Math.max(0, timerMs - dt * 1000);
+}
+
+/**
+ * Is this fighter waiting for a round to start?
+ *
+ * Spelled once so "the round has not begun" is asked the same way everywhere —
+ * the server refuses a gunshot and an ultimate cast on it, and the HUD draws its
+ * countdown from the room's copy of the same number.
+ */
+export function isFrozen(s: PlayerPosition): boolean {
+	return s.freezeTimer > 0;
 }
 
 /**
@@ -427,12 +457,28 @@ function decay(timerMs: number, dt: number): number {
  */
 export function tickPlayer(
 	pos: PlayerPosition,
-	input: PlayerIntent,
+	rawInput: PlayerIntent,
 	dt: number,
 	world: World = DEFAULT_WORLD,
 	field: Singularity | null = null,
 ): PlayerPosition {
 	const s: PlayerPosition = { ...pos };
+
+	// ---- round freeze ----
+	//
+	// Before anything reads the intent: while a round has not started yet, the
+	// fighter is handed the neutral intent instead of the one that arrived. It
+	// still falls, still collides and still counts ticks — **the simulation is
+	// never stopped for this.** Stopping it is what desyncs a networked game, and
+	// the ultimate's cinematic is the one exception precisely because it is 1.1s
+	// and the server declares the exact tick range; ten seconds of that would park
+	// ten seconds of input in every client's queue.
+	//
+	// Discarding intent instead costs nothing and is self-correcting: both sides
+	// run this same line against the same replayed state, so a client predicts the
+	// freeze ending on exactly the tick the server does.
+	s.freezeTimer = decay(s.freezeTimer, dt);
+	const input = pos.freezeTimer > 0 ? NEUTRAL_INTENT : rawInput;
 
 	// Before melee, because being caught has to cancel a swing rather than run
 	// alongside one. Refreshed every tick the fighter is inside the horizon, so

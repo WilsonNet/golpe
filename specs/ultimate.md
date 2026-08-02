@@ -188,13 +188,22 @@ Other rules:
 ## No friendly fire
 
 The caster is immune to their own hole: no pull, no stun, no damage, and the
-grenade passes through them. Everyone else in the room is a target, because
-deathmatch has no teams.
+grenade passes through them. In **team deathmatch the caster's whole side is
+immune** on the same terms; in a free-for-all everybody else is a target.
 
 **The exclusion is a predicate, not a scattering of `if` statements.** Every
-side asks the same question — "is this field hostile to this fighter?" — and the
-answer today is `fighter.id !== field.ownerId`. A team mode changes that one
-function and nothing else.
+side asks the same question — "is this field hostile to this fighter?" —
+`fieldAffects(field, id, team)`, which is the caster test plus the shared
+`hostile()` from `simulation/Teams.ts`. That was the point of writing it as one
+function, and adding teams touched it and the grenade's contact test and nothing
+else.
+
+**The side travels on the field itself** (`Singularity.ownerTeam`), not looked up
+per fighter: the client feeds this object straight into `tickPlayer` for
+everybody it predicts, including through replays, and a lookup would make the
+pull depend on a roster that arrives on a different message. It is copied from the
+grenade when the hole opens, so a caster who leaves the room mid-flight does not
+leave a hole that has forgotten whose side it was on.
 
 ## What it costs a client to be wrong
 
@@ -284,7 +293,9 @@ The renderer's job, none of it authoritative:
 
 ## Not implemented
 
-- Teams, and therefore any friendly fire beyond excluding the caster.
+- Any friendly-fire relationship other than "the caster and their side". No
+  allied casters sharing a hole's credit, no team-coloured horizon beyond the
+  light tint the mode applies to everything.
 - More than one ultimate. `ultimate` is one action, not a per-character slot.
 - Per-character portraits: every fighter uses the same sheet, so the portrait
   is tinted by a hash of the fighter's id to keep two casters distinguishable.

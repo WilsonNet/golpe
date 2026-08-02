@@ -8,6 +8,7 @@ import type {
 	MeleeOutcome,
 	PlayerIntent,
 } from "../simulation/Physics.js";
+import type { MatchMode, TeamId } from "../simulation/Teams.js";
 import type { PackedIntent, PackedState } from "./wire.js";
 
 /**
@@ -91,6 +92,18 @@ export interface SnapshotPlayer {
 	deaths: number;
 	alive: boolean;
 	/**
+	 * Which side this fighter is on, or `null` in a free-for-all.
+	 *
+	 * **In the snapshot, not the roster**, and that is load-bearing. Teams are an
+	 * input to `tickPlayer`: the black hole's friendly-fire rule is applied on the
+	 * client for every fighter it predicts, and replayed on every reconciliation.
+	 * The roster is sent on change with a 2s heartbeat, so a client that lost one
+	 * would spend up to two seconds dragging its own teammates into a hole the
+	 * server is not pulling them into — a divergence nothing else could explain.
+	 * Twenty times a second, beside `hp`, it simply cannot drift.
+	 */
+	team: TeamId | null;
+	/**
 	 * Ultimate charge, 0..100.
 	 *
 	 * Beside `hp` and the scores rather than inside `state`, and for the same
@@ -130,12 +143,61 @@ export interface MatchStatus {
 	winnerId: string | null;
 	/** ms until the next match starts, while the podium is up. */
 	nextMatchInMs: number;
+	/**
+	 * Which ruleset this room plays. `"ffa"` for an ordinary deathmatch.
+	 *
+	 * Sent every snapshot rather than only in the `match` message, for the same
+	 * reason `scoreLimit` is: a client that lost one datagram must not spend a
+	 * whole match drawing the wrong HUD, and one word at 20Hz costs nothing.
+	 */
+	mode: MatchMode;
+	/** The round scoreboard, in team deathmatch. `null` in a free-for-all. */
+	teams: TeamStatus | null;
+}
+
+/**
+ * The state of a team deathmatch: the round score, who is still standing, and
+ * whether the arena is between rounds.
+ *
+ * Everything here is derived from state the server already owns, and it is sent
+ * rather than derived on the client for one reason: **the round is a server
+ * decision**. A client that counted the living itself would announce a wipe on a
+ * frame where its own prediction had killed somebody the server had not.
+ */
+export interface TeamStatus {
+	/** Rounds won, indexed by team id. */
+	scores: number[];
+	/** Fighters still standing, indexed by team id. */
+	alive: number[];
+	/** Fighters seated, indexed by team id — including the dead ones. */
+	seated: number[];
+	/** 1-based round number, so the HUD can say "ROUND 4". */
+	round: number;
+	/**
+	 * ms until the arena resets, while a wipe is being shown. Zero while the
+	 * round is live.
+	 */
+	resetInMs: number;
+	/**
+	 * ms of freezetime left before the round goes live. Zero once it is.
+	 *
+	 * The HUD's countdown reads this rather than counting locally: it is the same
+	 * number the fighters are carrying in their own state, so the banner and the
+	 * moment they can actually move cannot drift apart.
+	 */
+	freezeMs: number;
+	/** Who took the last round: a side, or `null` for a draw or a fresh match. */
+	lastRoundWinner: TeamId | null;
+	/** The side that won the match, once `phase` is "over". */
+	winnerTeam: TeamId | null;
 }
 
 /** A black hole grenade in flight. Server-owned, like a bullet. */
 export interface SnapshotGrenade {
 	id: number;
 	ownerId: string;
+	/** The caster's side, so a client tints the arc and skips its own team. */
+	ownerTeam: TeamId | null;
 	x: number;
 	y: number;
 	/** Carried so the client can dead-reckon the arc between 20Hz snapshots. */
@@ -154,6 +216,12 @@ export interface SnapshotGrenade {
 export interface SnapshotSingularity {
 	id: number;
 	ownerId: string;
+	/**
+	 * The caster's side. Travels with the field rather than being looked up per
+	 * fighter, because this object is handed straight to `tickPlayer` — see
+	 * `Singularity` in the simulation.
+	 */
+	ownerTeam: TeamId | null;
 	x: number;
 	y: number;
 	remainingMs: number;
@@ -230,12 +298,52 @@ export interface MatchMessage {
 	 * its own URL, so every client in a room simulates the same geometry.
 	 */
 	screens?: number;
+	/**
+	 * Which ruleset the room plays, decided by whoever created it.
+	 *
+	 * Like `screens`, a latecomer's `?mode=` is ignored — a room is one match, and
+	 * the last person through the door does not get to change what everybody else
+	 * is playing. The snapshot repeats it; this is only so a client knows before
+	 * the first one lands.
+	 */
+	mode?: MatchMode;
 }
 
 /** A single fighter returning to the arena. Announced, never inferred. */
 export interface RespawnMsg {
 	id: string;
 	t: number;
+}
+
+/**
+ * Freezetime is over — the round is live. Sent once, reliably.
+ *
+ * The countdown is in every snapshot, so this carries no information a client
+ * could not derive. It exists so "FIGHT" lands on the same moment on every
+ * screen instead of each client racing its own copy of the clock to zero.
+ */
+export interface RoundLiveMsg {
+	round: number;
+}
+
+/**
+ * A team deathmatch round ended in a wipe-out. Sent once, reliably.
+ *
+ * The snapshot carries the same numbers 20 times a second, so this is redundant
+ * by construction — deliberately, exactly like `match-over`. A round ending is
+ * the one moment in the mode everybody looks up for, and the banner announcing it
+ * should not depend on a client having kept up with the datagram that happened to
+ * carry the change.
+ */
+export interface RoundWonMsg {
+	/** The side left standing, or `null` when both were wiped on the same tick. */
+	team: TeamId | null;
+	/** The round that just ended, 1-based. */
+	round: number;
+	/** Rounds won, indexed by team id, after this one. */
+	scores: number[];
+	/** ms until the arena resets and the next round starts. */
+	resetInMs: number;
 }
 
 /**
@@ -250,4 +358,15 @@ export interface MatchOverMsg {
 	reason: MatchEndReason;
 	winnerId: string | null;
 	standings: ScoreEntry[];
+	/**
+	 * The winning side in a team deathmatch, or `null` — in a free-for-all, and
+	 * in the drawn team match a clock can produce.
+	 *
+	 * `winnerId` is still sent in TDM and still names the top individual: the
+	 * podium leads with the side that won and names the fighter who carried it,
+	 * because both are things people argue about afterwards.
+	 */
+	winnerTeam?: TeamId | null;
+	/** Final round score, indexed by team id. Absent in a free-for-all. */
+	teamScores?: number[];
 }

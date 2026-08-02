@@ -14,6 +14,7 @@
 import { World } from "miniplex";
 import type { Sprite } from "pixi.js";
 import type { PlayerPosition } from "../simulation/Physics";
+import type { TeamId } from "../simulation/Teams";
 import type { ClipName } from "./systems";
 
 /**
@@ -52,6 +53,15 @@ export interface Entity {
 		maxHp: number;
 		/** What the nameplate says. Empty until the roster names this fighter. */
 		name: string;
+		/**
+		 * Which side, in team deathmatch — `null` in a free-for-all.
+		 *
+		 * Presentation reads this constantly (the nameplate's colour, the cast
+		 * shadow, every particle a fighter emits) but never *decides* anything with
+		 * it. The rule it comes from lives in the simulation; this is the copy the
+		 * renderer is allowed to look at, refreshed from the snapshot like `hp`.
+		 */
+		team: TeamId | null;
 	};
 
 	/** A server-owned projectile, keyed by the id the server assigned. */

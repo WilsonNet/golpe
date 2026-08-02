@@ -156,6 +156,9 @@ export const HUD_CSS = `
 	display: flex;
 	justify-content: space-between;
 	align-items: baseline;
+	/* The team header is half again as long as the deathmatch one, and without a
+	   gap the clock butted straight up against the room id. */
+	gap: 18px;
 	margin-bottom: 14px;
 	font-size: 13px;
 	letter-spacing: 0.08em;
@@ -196,6 +199,54 @@ export const HUD_CSS = `
 }
 .vd-dead {
 	opacity: 0.45;
+}
+
+/* ---- team blocks on the scoreboard and the podium ----
+   A team match is two scoreboards, not one with a colour column: the question
+   "are we winning" is about a side, and answering it should not require reading
+   sixteen rows and adding them up. The rounds are the headline; the individual
+   rows underneath are the same ranking a free-for-all shows. */
+.vd-team-block {
+	margin-bottom: 14px;
+}
+.vd-team-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 10px;
+	margin-bottom: 6px;
+	padding: 4px 8px;
+	border-left: 3px solid currentColor;
+	background: rgba(255, 255, 255, 0.04);
+	font-size: 13px;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+}
+.vd-team-rounds {
+	font-size: 18px;
+	font-weight: bold;
+	font-variant-numeric: tabular-nums;
+}
+.vd-team-alive {
+	font-size: 11px;
+	letter-spacing: 0.08em;
+	opacity: 0.7;
+}
+/* The winning side's banner on the podium, above the individual places. The
+   match was won by a team; the MVP is the footnote, not the headline. */
+.vd-team-banner {
+	text-align: center;
+	font-size: 26px;
+	font-weight: bold;
+	letter-spacing: 0.14em;
+	margin-bottom: 4px;
+}
+.vd-team-final {
+	text-align: center;
+	font-size: 15px;
+	font-variant-numeric: tabular-nums;
+	opacity: 0.8;
+	margin-bottom: 18px;
 }
 
 /* ---- podium ----

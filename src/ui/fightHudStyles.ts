@@ -264,6 +264,59 @@ export const FIGHT_HUD_CSS = `
 	50% { filter: brightness(1.45); }
 }
 
+/* ---- freezetime, centre screen ----
+   The one element allowed to own the middle of the arena, and only because for
+   the ten seconds it is up there is nothing behind it to own: nobody can move.
+   It is the mode's held breath — CS's freezetime — so it is drawn like a title
+   card and not like a HUD widget. */
+.vdh-freeze {
+	position: absolute;
+	left: 50%;
+	top: 34cqh;
+	transform: translateX(-50%);
+	text-align: center;
+	pointer-events: none;
+}
+.vdh-freeze-round {
+	font-size: 1.8cqw;
+	letter-spacing: 0.34em;
+	text-transform: uppercase;
+	color: rgba(243, 212, 136, 0.9);
+	text-shadow:
+		0 0.2cqh 0 rgba(0, 0, 0, 0.85),
+		0 0 1cqw rgba(0, 0, 0, 0.5);
+}
+.vdh-freeze-count {
+	font-size: 9cqw;
+	font-weight: bold;
+	line-height: 1;
+	font-variant-numeric: tabular-nums;
+	color: #f6f2e8;
+	text-shadow:
+		0 0.5cqh 0 rgba(0, 0, 0, 0.7),
+		0 0 3cqw rgba(0, 0, 0, 0.45);
+	/* Re-mounted on every second (keyed on the number), so the beat restarts
+	   rather than easing once and sitting still — a countdown that does not tick
+	   visibly is a number, not a countdown. */
+	animation: vdh-freeze-tick 1s ease-out;
+}
+@keyframes vdh-freeze-tick {
+	0% { transform: scale(1.45); opacity: 0.35; }
+	18% { transform: scale(1); opacity: 1; }
+	100% { transform: scale(1); opacity: 0.85; }
+}
+/* The last three seconds are the adrenaline. */
+.vdh-freeze-count.vdh-freeze-soon {
+	color: #ffd166;
+}
+.vdh-freeze-sides {
+	margin-top: 0.6cqh;
+	font-size: 1.5cqw;
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+	text-shadow: 0 0.2cqh 0 rgba(0, 0, 0, 0.85);
+}
+
 /* ---- the match clock, top-centre ----
    Gameplay tier, the one element that may stay big: the timer is the match.
    Plain gold numerals floating over the arena — no backing at all — so it
@@ -296,6 +349,56 @@ export const FIGHT_HUD_CSS = `
 		0 0.2cqh 0 rgba(0, 0, 0, 0.8),
 		0 0 0.8cqw rgba(0, 0, 0, 0.4);
 }
+/* ---- the team scoreboard, under the clock (TDM only) ----
+   Two round scores in their own colours with the living count between them.
+   In a wipe-out mode "4 v 2" is the single most decision-changing number on
+   screen — it is what tells you whether to push or to hold — so it sits in the
+   one place the eye already goes for the clock, and nowhere else. */
+.vdh-teams {
+	display: flex;
+	align-items: baseline;
+	justify-content: center;
+	gap: 0.9cqw;
+	margin-top: 0.3cqh;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+.vdh-team-score {
+	font-size: 2.6cqw;
+	font-weight: bold;
+	line-height: 1;
+	text-shadow:
+		0 0.2cqh 0 rgba(0, 0, 0, 0.8),
+		0 0 0.9cqw rgba(0, 0, 0, 0.45);
+}
+/* The side that just took a round flares once, then settles. A score that
+   changed silently is a score nobody saw change. */
+.vdh-team-score.vdh-team-won {
+	animation: vdh-team-won 900ms ease-out;
+}
+@keyframes vdh-team-won {
+	0% { transform: scale(1.55); filter: brightness(1.8); }
+	100% { transform: scale(1); filter: none; }
+}
+.vdh-team-alive {
+	font-size: 1.15cqw;
+	letter-spacing: 0.1em;
+	color: rgba(226, 236, 245, 0.75);
+	text-shadow: 0 0.2cqh 0 rgba(0, 0, 0, 0.8);
+}
+/* The side with nobody left is one hit from losing the round; say so. */
+.vdh-team-alive.vdh-team-critical {
+	color: #ff9c6b;
+}
+.vdh-round {
+	margin-top: 0.25cqh;
+	font-size: 1.2cqw;
+	letter-spacing: 0.2em;
+	text-transform: uppercase;
+	color: rgba(243, 212, 136, 0.75);
+	text-shadow: 0 0.2cqh 0 rgba(0, 0, 0, 0.8);
+}
+
 .vdh-clock.vdh-clock-danger .vdh-clock-time {
 	color: #ff5d5d;
 	animation: vdh-clock-danger 1s ease-in-out infinite;

@@ -32,6 +32,7 @@ npm run dev:herdr      # or: npm run dev:all
 # then open one of (all served by the authoritative server):
 #   http://localhost:8080/                        solo vs server bot
 #   http://localhost:8080/?ai=true                AI vs AI, one tab
+#   http://localhost:8080/?mode=tdm&bots=7        team deathmatch, two sides
 #   http://localhost:8080/?online=true            player vs player (two tabs)
 #   http://localhost:8080/?online=true&ai=true    AI vs AI, two clients
 #   http://localhost:8080/?offline=true           escape hatch, no server

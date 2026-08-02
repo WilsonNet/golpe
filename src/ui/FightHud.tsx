@@ -20,13 +20,15 @@
  * No JS measurement, no drift on a wide window or a portrait phone.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { EventBus } from "../game/EventBus";
 import { HUD_EVENTS, type HudState } from "../game/hud";
 import { bindings, codeLabel } from "../game/input/Bindings";
 import { ULT_MAX_CHARGE } from "../game/simulation/Physics";
+import { TEAM_COUNT, TEAM_NAMES } from "../game/simulation/Teams";
+import { teamCss } from "../game/teamPalette";
 import { FIGHT_HUD_CSS } from "./fightHudStyles";
-import { formatClock, useMatch } from "./useMatch";
+import { formatClock, type MatchView, useMatch } from "./useMatch";
 
 /** The live fight state, or null before the first snapshot. */
 function useHudState(): HudState | null {
@@ -75,9 +77,16 @@ function FighterPanel({
 	const flashing = useDamageFlash(hp);
 	const name = foe ? hud.foeName || "FOE" : hud.name || "YOU";
 
+	// The panel wears its own side. One colour, on the one element a player never
+	// has to search for — everything else they are asked to read in team colour is
+	// read *relative* to this.
+	const edge =
+		hud.team === null ? undefined : { borderColor: teamCss(hud.team) };
+
 	return (
 		<section
 			className={`vdh-panel${foe ? " vdh-foe" : " vdh-self"}${flashing ? " vdh-damaged" : ""}${training ? " vdh-beside-training" : ""}`}
+			style={foe ? undefined : edge}
 		>
 			<div className="vdh-plaque">
 				<span className="vdh-name">{name}</span>
@@ -155,6 +164,103 @@ function FragsRow({ foe }: { foe: boolean }) {
 	);
 }
 
+/**
+ * Freezetime: the round number, a big countdown, and who is on which side.
+ *
+ * Read straight off `status.teams.freezeMs` rather than counted locally. It is
+ * the same number every fighter is carrying in their own `freezeTimer`, so the
+ * moment the HUD says zero is the moment they can actually move — a HUD clock
+ * of its own would drift against the simulation and let somebody push on a "1"
+ * that was really a "2".
+ */
+function FreezeTime({
+	teams,
+}: {
+	teams: NonNullable<MatchView["status"]["teams"]>;
+}) {
+	const seconds = Math.ceil(teams.freezeMs / 1000);
+	return (
+		<div className="vdh-freeze">
+			<div className="vdh-freeze-round">round {teams.round}</div>
+			<div
+				key={seconds}
+				className={`vdh-freeze-count${seconds <= 3 ? " vdh-freeze-soon" : ""}`}
+			>
+				{seconds}
+			</div>
+			<div className="vdh-freeze-sides">
+				<span style={{ color: teamCss(0) }}>
+					{TEAM_NAMES[0]} {teams.seated[0] ?? 0}
+				</span>
+				<span style={{ opacity: 0.6 }}> vs </span>
+				<span style={{ color: teamCss(1) }}>
+					{TEAM_NAMES[1]} {teams.seated[1] ?? 0}
+				</span>
+			</div>
+		</div>
+	);
+}
+
+/**
+ * The round score, the living count and which round this is.
+ *
+ * Replaces the clock's "FIRST TO N" line in a team match, rather than sitting
+ * beside it: the HUD's rule is that nothing permanent may read as furniture, and
+ * two subtitles under one clock is furniture. The frag limit is not interesting
+ * in a mode where frags do not win anything — the round score is.
+ */
+function TeamScores({
+	teams,
+	limit,
+}: {
+	teams: NonNullable<MatchView["status"]["teams"]>;
+	limit: number;
+}) {
+	// Which side's number just moved, so it can flare. Keyed on the score itself:
+	// re-mounting the span is what restarts the animation, exactly as the frag
+	// popup does it.
+	const sides = Array.from({ length: TEAM_COUNT }, (_, t) => ({
+		team: t,
+		score: teams.scores[t] ?? 0,
+		alive: teams.alive[t] ?? 0,
+	}));
+
+	return (
+		<>
+			<div className="vdh-teams">
+				{sides.map((side, i) => (
+					<Fragment key={side.team}>
+						{i > 0 ? (
+							<span
+								className={`vdh-team-alive${
+									sides.some((s) => s.alive === 1) ? " vdh-team-critical" : ""
+								}`}
+							>
+								{`(${sides.map((s) => s.alive).join(" v ")})`}
+							</span>
+						) : null}
+						<span
+							key={`${side.team}:${side.score}`}
+							className={`vdh-team-score${
+								teams.lastRoundWinner === side.team && teams.resetInMs > 0
+									? " vdh-team-won"
+									: ""
+							}`}
+							style={{ color: teamCss(side.team as 0 | 1) }}
+							title={TEAM_NAMES[side.team]}
+						>
+							{side.score}
+						</span>
+					</Fragment>
+				))}
+			</div>
+			<div className="vdh-round">
+				round {teams.round} · first to {limit}
+			</div>
+		</>
+	);
+}
+
 /** The battle message window: CT's narration, told once and then gone. */
 function useBattleMessage(): [
 	message: string,
@@ -182,6 +288,7 @@ export function FightHud({ training = false }: { training?: boolean }) {
 	const [message, announce] = useBattleMessage();
 
 	// The clock, once the server says what the match is.
+	const teams = match?.status.teams ?? null;
 	const clock = match
 		? {
 				time: formatClock(match.status.timeLimitMs - match.status.elapsedMs),
@@ -196,12 +303,17 @@ export function FightHud({ training = false }: { training?: boolean }) {
 		? match.standings.length === 2
 		: (hud?.fighterCount ?? 0) === 2;
 
-	// A match starting is an announcement worth making: "FIGHT — FIRST TO 21".
+	// A match starting is an announcement worth making: "FIGHT — FIRST TO 21",
+	// or in a team match what the rounds are actually worth.
 	const lastPhase = useRef<string | null>(null);
 	useEffect(() => {
 		const phase = match?.status.phase ?? null;
 		if (phase === "live" && lastPhase.current !== "live" && match) {
-			announce(`FIGHT — FIRST TO ${match.status.scoreLimit}`);
+			announce(
+				match.status.mode === "tdm"
+					? `TEAM DEATHMATCH — FIRST TO ${match.status.scoreLimit} ROUNDS`
+					: `FIGHT — FIRST TO ${match.status.scoreLimit}`,
+			);
 		}
 		lastPhase.current = phase;
 	}, [match, announce]);
@@ -226,7 +338,11 @@ export function FightHud({ training = false }: { training?: boolean }) {
 					className={`vdh-clock${clock.danger ? " vdh-clock-danger" : ""}`}
 				>
 					<div className="vdh-clock-time">{clock.time}</div>
-					<div className="vdh-clock-sub">{clock.sub}</div>
+					{teams ? (
+						<TeamScores teams={teams} limit={match?.status.scoreLimit ?? 0} />
+					) : (
+						<div className="vdh-clock-sub">{clock.sub}</div>
+					)}
 				</section>
 			) : null}
 
@@ -249,6 +365,8 @@ export function FightHud({ training = false }: { training?: boolean }) {
 				</span>
 				{ultKey ? <span className="vdh-ult-key">{ultKey}</span> : null}
 			</section>
+
+			{teams && teams.freezeMs > 0 ? <FreezeTime teams={teams} /> : null}
 
 			<div className={`vdh-frame vdh-msg${message ? " vdh-msg-show" : ""}`}>
 				{message}

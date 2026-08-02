@@ -2,6 +2,10 @@ import { randomUUID } from "node:crypto";
 import geckos, { type ServerChannel } from "@geckos.io/server";
 import { RELIABLE } from "../src/game/online/types.js";
 import { MAX_SCREENS } from "../src/game/simulation/Arena.js";
+import {
+	type MatchMode,
+	TDM_MIN_SCREENS,
+} from "../src/game/simulation/Teams.js";
 import { GameRoom } from "./GameRoom.js";
 
 const io = geckos({ iceServers: [] });
@@ -88,6 +92,24 @@ interface JoinMsg {
 	 * the room, and a latecomer must not be able to hand everybody an ultimate.
 	 */
 	ultCharge?: number;
+	/**
+	 * Which ruleset the room plays: `"tdm"` for team deathmatch, anything else
+	 * for the free-for-all.
+	 *
+	 * **Creator-only**, like the rest of this block, and more so: the mode decides
+	 * how big the arena is, how many people are on your side, and what a point
+	 * even means. A latecomer switching it would be reshaping a match in progress.
+	 */
+	mode?: string;
+	/**
+	 * Freezetime in **seconds**, for a team room. Creator-only like the rest.
+	 *
+	 * Ten seconds is what the mode is designed around and what a player gets. A
+	 * probe that had to sit through ten of them per round is a probe nobody waits
+	 * for — this is the same argument as the shortened score and time limits, and
+	 * it is honoured on the same terms.
+	 */
+	freezeTime?: number;
 }
 
 function clamp(
@@ -128,6 +150,25 @@ function botFill(msg: JoinMsg): number {
 	return 0;
 }
 
+/** Which ruleset the room asked for. Anything unrecognised is a deathmatch. */
+function matchMode(raw: unknown): MatchMode {
+	return raw === "tdm" || raw === "team" ? "tdm" : "ffa";
+}
+
+/**
+ * How wide the room's arena is, honouring the mode's floor.
+ *
+ * Team deathmatch is played on **at least three screens** — wipe-out rounds need
+ * ground to give and take, and on one screen the two sides start inside each
+ * other's reach. See `TDM_MIN_SCREENS`. A bigger `?screen=` is still honoured;
+ * only the floor is imposed.
+ */
+function roomScreens(msg: JoinMsg, mode: MatchMode): number {
+	const asked =
+		msg.screens === undefined ? 1 : clamp(msg.screens, 1, MAX_SCREENS, 1);
+	return mode === "tdm" ? Math.max(asked, TDM_MIN_SCREENS) : asked;
+}
+
 /** Create a room and register it. Its rules and size are fixed here, for good. */
 function createRoom(
 	id: string,
@@ -137,12 +178,14 @@ function createRoom(
 		fillTarget?: number;
 		screens?: number;
 		startUltCharge?: number;
+		mode?: MatchMode;
+		freezeTimeMs?: number;
 	},
 ): GameRoom {
 	const room = new GameRoom(id, rules);
 	rooms.set(id, room);
 	console.log(
-		`[MATCH] Created room ${id} (fill ${room.fillTarget}, ${room.world.screens} screens)`,
+		`[MATCH] Created room ${id} (${room.mode}, fill ${room.fillTarget}, ${room.world.screens} screens)`,
 	);
 	return room;
 }
@@ -168,6 +211,7 @@ function seated(room: GameRoom, channel: ServerChannel) {
 			playerCount: room.playerCount,
 			youId: String(channel.id),
 			screens: room.world.screens,
+			mode: room.mode,
 		},
 		RELIABLE,
 	);
@@ -213,8 +257,13 @@ io.onConnection((channel) => {
 		const id = roomId(msg.room);
 		let room = rooms.get(id);
 		if (!room) {
-			// First one through the door sets the rules and the size.
+			// First one through the door sets the rules, the size and the mode.
+			const mode = matchMode(msg.mode);
 			room = createRoom(id, {
+				mode,
+				...(msg.freezeTime === undefined
+					? {}
+					: { freezeTimeMs: clamp(msg.freezeTime, 0, 60, 4) * 1000 }),
 				fillTarget: botFill(msg),
 				...(msg.scoreLimit === undefined
 					? {}
@@ -222,9 +271,9 @@ io.onConnection((channel) => {
 				...(msg.timeLimitMs === undefined
 					? {}
 					: { timeLimitMs: clamp(msg.timeLimitMs, 5000, 3_600_000, 300_000) }),
-				...(msg.screens === undefined
-					? {}
-					: { screens: clamp(msg.screens, 1, MAX_SCREENS, 1) }),
+				// Always passed, unlike the rest: a team room has a floor on its
+				// arena, so "the client said nothing" is still a decision to make.
+				screens: roomScreens(msg, mode),
 				...(msg.ultCharge === undefined
 					? {}
 					: { startUltCharge: clamp(msg.ultCharge, 0, 100, 0) }),

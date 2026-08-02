@@ -18,6 +18,8 @@ import {
 	type PlayerPosition,
 	type Singularity,
 } from "../simulation/Physics";
+import { hostile, type MatchMode, type TeamId } from "../simulation/Teams";
+import { TINT, teamTint } from "../teamPalette";
 import type { TrainingConfigMsg, TrainingStateMsg } from "../training/types";
 import { ServerClock } from "./Interpolation";
 import { type JoinOptions, OnlineManager } from "./OnlineManager";
@@ -38,6 +40,8 @@ import type {
 	MatchStatus,
 	MeleeEventMsg,
 	RosterEntry,
+	RoundLiveMsg,
+	RoundWonMsg,
 	SnapshotBullet,
 	SnapshotCinematic,
 	SnapshotGrenade,
@@ -59,10 +63,18 @@ interface FighterInfo {
 	alive: boolean;
 	/** Ultimate charge, 0..100. Server-owned; the client only draws it. */
 	ult: number;
+	/**
+	 * Which side, or `null` in a free-for-all.
+	 *
+	 * Read on every fixed step — the black hole's friendly-fire rule is an
+	 * argument to `tickPlayer` for every fighter this client predicts — which is
+	 * exactly why it arrives in the snapshot beside `hp` and not in the roster.
+	 */
+	team: TeamId | null;
 }
 
 function newInfo(): FighterInfo {
-	return { hp: 100, kills: 0, deaths: 0, alive: true, ult: 0 };
+	return { hp: 100, kills: 0, deaths: 0, alive: true, ult: 0, team: null };
 }
 
 export interface OnlineCallbacks {
@@ -103,6 +115,21 @@ export interface OnlineCallbacks {
 	/** The match ended. Final standings, sent once. */
 	onMatchOver: (msg: MatchOverMsg) => void;
 	/**
+	 * A team deathmatch round ended in a wipe-out.
+	 *
+	 * Announced separately from the arena reset that follows it: the banner goes
+	 * up the instant the last fighter falls, and the survivors keep playing for
+	 * the couple of seconds before everybody respawns.
+	 */
+	onRoundWon: (msg: RoundWonMsg) => void;
+	/**
+	 * Freezetime ended: the round is live.
+	 *
+	 * The countdown itself is in every snapshot; this is the one moment that has
+	 * to land together on every screen.
+	 */
+	onRoundLive: (msg: RoundLiveMsg) => void;
+	/**
 	 * Seated, in the room the server chose.
 	 *
 	 * Not always the room that was asked for, which is why it is reported: the
@@ -113,7 +140,7 @@ export interface OnlineCallbacks {
 	 * what the URL asked for — a latecomer's `?screen=` is ignored, so the world
 	 * must be rebuilt from this number.
 	 */
-	onSeated: (roomId: string, screens: number) => void;
+	onSeated: (roomId: string, screens: number, mode: MatchMode) => void;
 	/** The room asked for is full of humans. */
 	onRoomFull: (roomId: string) => void;
 }
@@ -264,6 +291,16 @@ export class OnlineSession {
 		return this.info.get(id)?.hp ?? 100;
 	}
 
+	/** Which side a fighter is on, or `null` in a free-for-all. */
+	teamOf(id: string): TeamId | null {
+		return this.info.get(id)?.team ?? null;
+	}
+
+	/** The local fighter's side. What every "is that a teammate" question starts from. */
+	get myTeam(): TeamId | null {
+		return this.teamOf(this.manager.myId);
+	}
+
 	/** Ultimate charge for one fighter, 0..100. */
 	ultOf(id: string): number {
 		return this.info.get(id)?.ult ?? 0;
@@ -333,6 +370,7 @@ export class OnlineSession {
 				kills: info.kills,
 				deaths: info.deaths,
 				bot: roster?.bot ?? false,
+				team: info.team,
 			});
 		}
 		return rankScores(entries);
@@ -428,12 +466,20 @@ export class OnlineSession {
 		return this.primary?.state ?? null;
 	}
 
-	/** The nearest living opponent, for a client-side AI brain. */
+	/**
+	 * The nearest living *opponent*, for a client-side AI brain.
+	 *
+	 * Teammates are filtered here rather than inside the brain, exactly as they
+	 * are on the server: a brain is only ever handed an enemy, so it has no way to
+	 * decide to attack its own side. See `GameRoom.nearestFoe`.
+	 */
 	nearestFoe(from: PlayerPosition): PlayerPosition | null {
+		const mine = this.myTeam;
 		let best: PlayerPosition | null = null;
 		let bestDist = Number.POSITIVE_INFINITY;
 		for (const [id, fighter] of this.fighters) {
 			if (!(this.info.get(id)?.alive ?? true)) continue;
+			if (!hostile(mine, this.teamOf(id))) continue;
 			const dist = Math.hypot(
 				fighter.state.x - from.x,
 				fighter.state.y - from.y,
@@ -455,7 +501,10 @@ export class OnlineSession {
 				onRoster: (msg) => this.onRoster(msg.players),
 				onRespawn: (msg) => this.onRespawn(msg.id),
 				onMatchOver: (msg) => this.callbacks.onMatchOver(msg),
-				onSeated: (roomId, screens) => this.callbacks.onSeated(roomId, screens),
+				onRoundWon: (msg) => this.callbacks.onRoundWon(msg),
+				onRoundLive: (msg) => this.callbacks.onRoundLive(msg),
+				onSeated: (roomId, screens, mode) =>
+					this.callbacks.onSeated(roomId, screens, mode),
 				onRoomFull: (roomId) => this.callbacks.onRoomFull(roomId),
 			},
 			join,
@@ -586,7 +635,7 @@ export class OnlineSession {
 	 * place on the client and it is the same shared predicate the server uses.
 	 */
 	private fieldOn(id: string): Singularity | null {
-		return fieldFor(this.field, id);
+		return fieldFor(this.field, id, this.teamOf(id));
 	}
 
 	/**
@@ -696,6 +745,12 @@ export class OnlineSession {
 				sprite = this.bulletPool.acquire();
 				this.bulletSprites.set(b.id, sprite);
 			}
+			// Whose shot this is, in one glance. A projectile is the one thing in the
+			// arena that arrives *before* you can look at who fired it, so it is
+			// tinted at full strength — the fireball's own colour carries no combat
+			// information to lose. Set on every frame rather than at acquisition
+			// because the pool hands the same sprite to a different owner's bullet.
+			sprite.tint = teamTint(0xffffff, this.teamOf(b.ownerId), TINT.full);
 			sprite.position.set(x, y);
 			this.renderedBullets.push({ id: b.id, x, y });
 		}
@@ -793,6 +848,7 @@ export class OnlineSession {
 		info.deaths = p.deaths;
 		info.alive = p.alive;
 		info.ult = p.ult ?? 0;
+		info.team = p.team ?? null;
 		this.info.set(p.id, info);
 		if (p.id === this.manager.myId) this.callbacks.onLocalHp(p.hp);
 	}

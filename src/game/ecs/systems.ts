@@ -12,7 +12,9 @@ import { syncSpriteToBody } from "../render/ArenaRenderer";
 import { dudeFrames, TEX, tex } from "../render/assets";
 import type { MeleeFx } from "../render/MeleeFx";
 import type { Nameplates } from "../render/Nameplates";
+import type { Shadows } from "../render/Shadows";
 import { PLAYER_WIDTH } from "../simulation/Physics";
+import { TINT, teamTint } from "../teamPalette";
 import type { AnimState, Queries } from "./world";
 
 /**
@@ -122,6 +124,15 @@ export function spriteSyncSystem(queries: Queries) {
 		syncSpriteToBody(e.sprite, at.x, at.y);
 		// A dead fighter fades rather than vanishing, so a KO reads as a KO.
 		e.sprite.alpha = e.fighter.hp <= 0 ? 0.3 : 1;
+		// The fighter themself wears their side, faintly.
+		//
+		// Faintly is the whole trick: the character sprite is one shared strip, so
+		// this is the only mark that is on the *body* rather than near it — and it
+		// is also the mark a player reads while looking at nothing in particular.
+		// Pushed any further it stops being a fighter with a team colour and
+		// becomes a blue fighter, which throws away the art. `TINT.subtle` on a
+		// white multiplier leaves the sprite's own palette recognisable.
+		e.sprite.tint = teamTint(0xffffff, e.fighter.team, TINT.subtle);
 	}
 
 	for (const e of queries.bullets) {
@@ -147,7 +158,13 @@ export function meleeFxSystem(
 	holdingUlt: (id: string) => boolean,
 ) {
 	for (const e of queries.fighters) {
-		fx.updateFighter(e.fighter.id, e.body, dtMs, holdingUlt(e.fighter.id));
+		fx.updateFighter(
+			e.fighter.id,
+			e.body,
+			dtMs,
+			holdingUlt(e.fighter.id),
+			e.fighter.team,
+		);
 	}
 }
 
@@ -169,7 +186,22 @@ export function nameplateSystem(queries: Queries, plates: Nameplates) {
 			e.fighter.maxHp,
 			e.fighter.name,
 			e.fighter.local,
+			e.fighter.team,
 		);
+	}
+}
+
+/**
+ * Cast a team-tinted shadow under every fighter.
+ *
+ * Reads the *drawn* position for the same reason the nameplates do — the
+ * smoother deliberately offsets a sprite from its body, and a shadow anchored to
+ * the body would slide out from under its own fighter by exactly that much.
+ */
+export function shadowSystem(queries: Queries, shadows: Shadows) {
+	for (const e of queries.drawnFighters) {
+		const at = e.renderPos ?? e.body;
+		shadows.sync(e.fighter.id, at.x, at.y, e.fighter.team, e.fighter.hp > 0);
 	}
 }
 

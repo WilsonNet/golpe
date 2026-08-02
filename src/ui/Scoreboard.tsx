@@ -10,7 +10,10 @@
  * scoreboard ends up disagreeing with the podium it turns into.
  */
 
+import type { MatchStatus } from "../game/online/types";
 import type { Standing } from "../game/simulation/Deathmatch";
+import { TEAM_COUNT, TEAM_NAMES, type TeamId } from "../game/simulation/Teams";
+import { teamCss } from "../game/teamPalette";
 import { HUD_CSS } from "./hudStyles";
 import {
 	formatClock,
@@ -34,13 +37,16 @@ export function Scoreboard() {
 	if (!held) return null;
 
 	const { status, standings, myId } = match;
+	const teams = status.teams;
 	return (
 		<div className="vd-board">
 			<style>{HUD_CSS}</style>
 			<div className="vd-board-card">
 				<div className="vd-board-head">
 					<span>
-						Deathmatch — first to {status.scoreLimit}
+						{teams
+							? `Teams — round ${teams.round}, first to ${status.scoreLimit}`
+							: `Deathmatch — first to ${status.scoreLimit}`}
 						{/* Which room, so a player can tell whether the friend who said
 						    "I'm in" is actually in this one. Shortened: a full uuid is
 						    unreadable and the address bar has the whole thing. */}
@@ -50,9 +56,58 @@ export function Scoreboard() {
 					</span>
 					<span>{formatClock(status.timeLimitMs - status.elapsedMs)}</span>
 				</div>
-				<ScoreTable standings={standings} myId={myId} />
+				{teams ? (
+					<TeamTables standings={standings} myId={myId} teams={teams} />
+				) : (
+					<ScoreTable standings={standings} myId={myId} />
+				)}
 			</div>
 		</div>
+	);
+}
+
+/**
+ * One block per side: the round score as the headline, then that side's
+ * fighters in the same order a free-for-all would rank them.
+ *
+ * The order *within* a block is `rankScores`'s, untouched — the standings are
+ * ranked once, by the same pure function the server uses, and this only filters
+ * them. Re-sorting here is how a scoreboard ends up disagreeing with the podium
+ * it turns into.
+ */
+function TeamTables({
+	standings,
+	myId,
+	teams,
+}: {
+	standings: Standing[];
+	myId: string;
+	teams: NonNullable<MatchStatus["teams"]>;
+}) {
+	return (
+		<>
+			{Array.from({ length: TEAM_COUNT }, (_, t) => t as TeamId).map((team) => {
+				const rows = standings.filter((s) => s.team === team);
+				return (
+					<div
+						key={team}
+						className="vd-team-block"
+						style={{ color: teamCss(team) }}
+					>
+						<div className="vd-team-head">
+							<span>{TEAM_NAMES[team]}</span>
+							<span className="vd-team-alive">
+								{teams.alive[team] ?? 0} of {teams.seated[team] ?? 0} standing
+							</span>
+							<span className="vd-team-rounds">{teams.scores[team] ?? 0}</span>
+						</div>
+						{rows.length > 0 ? (
+							<ScoreTable standings={rows} myId={myId} />
+						) : null}
+					</div>
+				);
+			})}
+		</>
 	);
 }
 
