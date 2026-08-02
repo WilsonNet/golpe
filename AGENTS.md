@@ -38,6 +38,7 @@ skill({ name: "feedback-loop" })    # the full workflow
 | Question | File |
 |---|---|
 | What should the game *do*? | [`specs/`](specs/README.md) — the source of truth |
+| What should the menu do? | [`specs/menu.md`](specs/menu.md) — when it shows, and how choices become URLs |
 | What rule will I break if I'm careless? | [`docs/invariants.md`](docs/invariants.md) |
 | Where does this code live, and who owns it? | [`docs/architecture.md`](docs/architecture.md) |
 | How do I measure anything? | [`docs/diagnostics.md`](docs/diagnostics.md) + the `feedback-loop` skill |
@@ -152,6 +153,12 @@ One line each; the war story behind every one is in
 - **A clean run is not a good run.** Read `arenaSummary` and the `meleeSummary`
   counters: every must-be-zero metric is satisfied by a build where nothing
   happens.
+- **The root URL is a menu; the menu is a URL generator, never a matchmaker.**
+  It writes the launch request to the query string and the game boots because
+  the URL now carries one — one parser (`online/launch.ts`) serves menu, boot
+  and probes, so they cannot disagree. A launch key in the URL always boots
+  straight into the match it asks for, menu or no menu: agents and shared links
+  never see a click.
 
 ## Commands
 
@@ -169,6 +176,7 @@ node scripts/verify-modes.mjs                          # smoke-check every mode
 node scripts/aim-probe.mjs                             # cursor, facing and shot direction
 node scripts/pad-probe.mjs                             # controller aim, gamepad and the phone deck
 node scripts/training-probe.mjs                        # one interaction, against a scripted dummy
+node scripts/menu-probe.mjs                            # the root menu: every click a URL, boots a match
 node scripts/dash-probe.mjs                            # double-tap dash delivery, at a forced frame rate
 node scripts/screens-probe.mjs                         # ?screen=N room: spawn spread + follow camera
 node scripts/ultimate-probe.mjs                        # the black hole: hold to aim, release to cast, freeze, capture
@@ -209,7 +217,9 @@ sword/gun stance · **P** toggle AI vs AI · **hold Tab** scoreboard · **Esc**
 menu. Sword is the default stance.
 
 **Every button is rebindable, and these are only the defaults.** Esc → Controls
-captures the key, mouse button *or gamepad button* you press. Bindings live in
+captures the key, mouse button *or gamepad button* you press — and the root
+menu's *Options* opens the same dialog before a match exists, because a new
+player should not have to guess that. Bindings live in
 `localStorage`, never on the wire — the simulation is handed `block`, never
 `ShiftLeft`. A DOM overlay that takes the keyboard must emit `input-suspended`,
 or the canvas keeps playing the game with keys meant for the dialog. Nothing in
@@ -367,6 +377,9 @@ skill verifies it.
   damage feedback, and the gotchas that made the first HUD invisible.
 - **`specs`** — Keeping `specs/` authoritative: read before implementing, update
   in the same commit as any behaviour change.
+- **`ux-menu`** — The root menu and every pre-match screen: Norman's principles
+  and Nielsen's heuristics applied, the URL-as-state model, the host/join
+  nesting rules, and the menu probe.
 - **`knowledge-sharpener`** — Run at the END of a substantial session: fold what
   was learned into the docs and skills, verify the indexes, and review the
   routine itself — the run is evidence about the routine, and step 6 fixes it in

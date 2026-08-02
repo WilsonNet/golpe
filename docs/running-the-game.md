@@ -87,22 +87,33 @@ The deathmatch is the mode: **sixteen fighters, first to 21 frags, or the best
 score in five minutes.** Full rules in
 [specs/deathmatch.md](../specs/deathmatch.md).
 
-**Rooms are addressed, not matchmade.** Opening the game with no `?room=` makes a
-new room; opening it with `?room=<id>` puts you in *that* room. So one person
-hosts and everyone else follows their link.
+**The root URL is a menu, not a match.** Opening the game with no launch
+parameters shows the menu: *Quick match*, *Host a match*, *Join a match*,
+*Practice*, and the options. Every choice the menu commits lands in the query
+string, so the address bar is always the truth and a link shared from it always
+works. See [specs/menu.md](../specs/menu.md).
+
+**Rooms are addressed, not matchmade.** A URL with a `room=` puts you in *that*
+room; one without makes a new one. So one person hosts and everyone else
+follows their link.
 
 1. Start both servers, and make sure port **8080** and port **9208** are both
    reachable from wherever the players are. The client connects to the game server
    at `location.hostname:9208`, so anyone typing your machine's address or hostname
    in the browser gets there — but `localhost` will not work from another machine.
-2. **One person opens** `http://<your-host>:8080/?online=true`. The address bar
-   immediately gains a `?room=<uuid>`, and the name popup shows that link with a
-   **Copy** button.
-3. **They send that link to everyone else.** Anyone who opens it lands in the same
-   room. Opening the bare URL instead makes a *different* room — that is the one
-   mistake to watch for, and holding Tab shows the room id so it is easy to check.
+2. **One person opens** `http://<your-host>:8080/`. The menu greets them: name
+   themselves, then *Quick match* for an immediate duel or *Host a match* for the
+   mode, arena and rules.
+3. **They send their link to everyone else.** The room's link lands in the address
+   bar the moment the room is created, and the name prompt (or a message in the
+   fight window, for a player who already has a name) says so. Anyone who opens the
+   link lands in the same room. Opening the bare URL instead makes a *different*
+   room — that is the one mistake to watch for, and holding Tab shows the room id
+   so it is easy to check. *Join a match* in the menu takes a link or a bare room
+   id typed by hand.
 4. Each player **types a name** and presses *Enter the arena*. It is remembered, so
-   they only do it once per browser.
+   they only do it once per browser — and a player who named themselves in the menu
+   never sees the prompt at all.
 
 **Bots are opt-in**, so the room holds exactly the people in it. If you would
 rather not wait around for a full arena, the host adds bots when they create the
@@ -144,17 +155,18 @@ for everything except `?offline=true`.
 
 | Mode | URL | Tabs |
 |---|---|---|
-| Empty room | `http://localhost:8080/` | 1 |
+| The menu | `http://localhost:8080/` | 1 |
 | Player vs AI (solo) | `http://localhost:8080/?bots=1` | 1 |
 | AI vs AI | `http://localhost:8080/?ai=true&bots=1` | 1 |
 | Sixteen-fighter deathmatch | `http://localhost:8080/?ai=true&bots=15` | 1 |
-| Player vs Player | `http://localhost:8080/?online=true` + the room link | 2 |
+| Player vs Player | the menu's Quick match / Host, then the room link | 2 |
 | AI vs AI, two clients | `?online=true&ai=true&room=x` | 2 |
 | Offline escape hatch | `http://localhost:8080/?offline=true` | 1 |
 
-`?ai=true` makes *your* fighter AI-driven. **`?bots=N` is what puts bots in the
-room** — without it there are none, so the bare URL is an empty arena. Two tabs
-only share a match if they share a `?room=`.
+**The bare URL is the menu now.** `?ai=true` makes *your* fighter AI-driven.
+**`?bots=N` is what puts bots in the room** — without it there are none, so
+`?bots=0` is the empty arena, and the menu's Quick match is exactly `?bots=1`.
+Two tabs only share a match if they share a `?room=`.
 
 ### 1. Player vs AI (solo)
 
@@ -165,12 +177,12 @@ http://localhost:8080/?bots=1
 You control your fighter; the other is a **server-hosted bot** running the same
 `EnemyBrain`. This is a real online match — same rooms, same authoritative tick,
 same prediction and reconciliation as PvP — so playing solo exercises the whole
-netcode path.
+netcode path. The menu's **Quick match** is exactly this URL.
 
-**`?bots=1` is required, not decoration.** Bots are opt-in, so the bare URL gives
-you an empty room. That is a legitimate mode of its own — fully served, predicted
-and reconciled, with nobody else in it — and it is what `aim-probe.mjs` measures
-in, because a bot closing to melee range eats the measurement.
+**`?bots=1` is required, not decoration.** Bots are opt-in, so `?bots=0` gives
+you an empty room — a legitimate mode of its own (fully served, predicted and
+reconciled, with nobody else in it) and what `aim-probe.mjs` measures in,
+because a bot closing to melee range eats the measurement.
 
 ### 2. AI vs AI
 
@@ -189,11 +201,13 @@ sixteen-fighter test.
 ### 3. Player vs Player
 
 ```
-http://localhost:8080/?online=true                       # the host opens this
-http://localhost:8080/?online=true&room=<the same uuid>   # everyone else follows
+http://localhost:8080/                                  # the host opens the menu
+http://localhost:8080/?room=<the same uuid>             # everyone else follows the link
 ```
 
-The host's address bar gains a `?room=<uuid>`; **that link is the invitation.**
+The host opens the bare URL, picks **Quick match** (a duel with a bot to warm
+the arena) or **Host a match** for a custom room — and the address bar gains a
+`?room=<uuid>` the moment the room is created; **that link is the invitation.**
 Two tabs at the bare URL are two separate rooms, because rooms are addressed
 rather than matchmade. No bots unless the host asked for them.
 
@@ -330,11 +344,14 @@ Off. They are two separate settings precisely so that this works.
 press the key, mouse button or gamepad button you want, and that is the binding.
 Escape cancels a capture, right-click clears a slot, and *Reset to defaults* puts
 everything back. There are three slots per action — a key, an alternate and a pad
-button — and bindings are kept in `localStorage` per browser.
+button — and bindings are kept in `localStorage` per browser. The same dialog is
+reachable before a match from the root menu's *Options*.
 
 The menu **does not pause the match** — the server is authoritative and the other
 fifteen fighters are still swinging. What it does is take the keyboard away from
-the game, so choosing a key does not also play the game with it.
+the game, so choosing a key does not also play the game with it. *Exit to menu*
+leaves the match for good (your fighter leaves the room; the fight goes on), and
+asks before it does.
 
 Defaults and the reasoning behind them are in
 [`specs/controls.md`](../specs/controls.md).
@@ -345,10 +362,10 @@ Defaults and the reasoning behind them are in
 
 | Parameter | Effect |
 |---|---|
-| *(none)* | A new room, one server-hosted bot |
+| *(none)* | **The root menu** — choose a mode there, or see below for a direct boot |
 | `?room=<id>` | Play in that room. **This is how two people meet** |
-| `?online=true` | Vestigial — every room is online. Kept for older links |
-| `?bots=N` | **N bots to fight. Absent means none** |
+| `?online=true` | Vestigial — every room is online. Kept for older links; alone it is the menu |
+| `?bots=N` | **N bots to fight. Absent means none** (`?bots=0` is the empty room) |
 | `?fill=N` | Keep the room at N fighters, bots as ballast |
 | `?ai=true` | Make **your** fighter AI-driven (and skip the name prompt) |
 | `?mode=tdm` | **Team deathmatch**: two sides, no friendly fire, wipe-out rounds, first to 15. Forces the arena to at least 3 screens |
@@ -358,6 +375,12 @@ Defaults and the reasoning behind them are in
 | `?timeLimit=S` | Match length in seconds |
 | `?training=true` | A scriptable practice dummy and its menu |
 | `?offline=true` | Escape hatch: no server, no netcode (unsupported) |
+
+**A launch parameter in the URL always boots straight into the match it asks
+for — the menu only appears for the bare URL.** That is what keeps shared links
+and automated probes working with no clicks in between. The menu is the
+discoverable face of the same parameters, and commits them to the address bar
+exactly as they appear here. See [specs/menu.md](../specs/menu.md).
 
 `mode`, `screen`, `freezeTime`, `fill`, `scoreLimit` and `timeLimit` are honoured **only for
 the client that creates the room** — everyone arriving later gets the room as it already is. One
@@ -391,6 +414,7 @@ prints a digest:
 node scripts/diagnose.mjs --mode=online --runs=3  # the canonical duel
 node scripts/deathmatch-probe.mjs                 # 16 AI fighters, played to a winner
 node scripts/tdm-probe.mjs                       # two sides, wipe-out rounds, no friendly fire
+node scripts/menu-probe.mjs                       # the root menu: every click a URL, boots a match
 npm run diagnose                                  # offline + online, 8s each
 node scripts/verify-modes.mjs                     # smoke-check every launch mode
 node scripts/probe-online.mjs                     # raw console from one online client

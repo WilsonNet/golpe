@@ -44,8 +44,10 @@ import {
 import { HUD_EVENTS, type HudState } from "./hud";
 import { Input } from "./input/Input";
 import { inputSettings } from "./input/Scheme";
+import { parseLaunchParams } from "./online/launch";
 import { OnlineSession } from "./online/OnlineSession";
 import { requestedRoomId, showRoomInUrl } from "./online/room";
+import { readStoredName, storeName } from "./playerName";
 import { AimLine } from "./render/AimLine";
 import { bodyCentre, drawArena } from "./render/ArenaRenderer";
 import { dudeFrames, TEX, tex } from "./render/assets";
@@ -113,9 +115,6 @@ const START_ENEMY_Y = 480;
 /** The offline escape hatch's single opponent. Never used in an online match. */
 const OFFLINE_FOE_ID = "offline-foe";
 const LOCAL_ID = "local";
-
-/** Where a returning player's name is kept, so they only type it once. */
-const NAME_KEY = "vento.playerName";
 
 const NO_INTENT: PlayerIntent = { ...NEUTRAL_INTENT };
 
@@ -243,6 +242,8 @@ export class Match {
 	private roomId = "";
 	/** Torn down on destroy, so a remounted match does not connect twice. */
 	private nameUnsubscribe: (() => void) | undefined;
+	/** The one-time "your room link is in the address bar" narration timer. */
+	private shareHintTimer: number | undefined;
 
 	constructor(
 		private readonly stage: Stage,
@@ -250,19 +251,19 @@ export class Match {
 		/** Logical view size — `app.screen`, never the canvas backing store. */
 		screen: { readonly width: number; readonly height: number },
 	) {
+		// The launch request, read once and used for every choice below. This is
+		// the same parser the main menu writes the URL with, so a menu commit and a
+		// hand-typed link can never disagree — see `online/launch.ts`.
+		const launch = parseLaunchParams(window.location.search);
 		// `?screen=N` widens the arena to N 800px screens. The URL proposes; the
 		// room decides (the creator's value sticks, and the `match` message says
 		// what it actually is), so the authoritative correction happens on
 		// `onSeated`.
-		const rawScreens = numberParam(
-			new URLSearchParams(window.location.search),
-			"screen",
-		);
-		// `?mode=tdm` is read again below; here it only decides how wide to build
-		// the arena before connecting. A team room has a three-screen floor, and
-		// building one screen first would draw the whole level twice — once wrong.
-		const wantsTeams =
-			new URLSearchParams(window.location.search).get("mode") === "tdm";
+		const rawScreens = launch.screens;
+		// `?mode=tdm` only decides how wide to build the arena before connecting.
+		// A team room has a three-screen floor, and building one screen first
+		// would draw the whole level twice — once wrong.
+		const wantsTeams = launch.mode === "tdm";
 		const askedScreens =
 			rawScreens === undefined
 				? 1
@@ -332,8 +333,7 @@ export class Match {
 		);
 		this.installDebugHooks();
 
-		const params = new URLSearchParams(window.location.search);
-		this.aiMode = params.get("ai") === "true";
+		this.aiMode = launch.ai;
 		// Which room, from the URL — or a new one. There is no matchmaking queue:
 		// sharing the link is how two people end up in the same match.
 		this.roomId = requestedRoomId();
@@ -341,33 +341,28 @@ export class Match {
 		// addressed by id, so there is no "solo" placement to choose — and bots are
 		// opt-in, so this no longer decides how a room is filled either. Every room is
 		// served, predicted, reconciled, and a room somebody else can be sent to.
-		this.soloMatch = params.get("online") !== "true";
+		this.soloMatch = !launch.online;
 		// `?offline=true` is an escape hatch for working without a game server. It
 		// is not the supported path — it bypasses the netcode entirely.
-		this.onlineMode = params.get("offline") !== "true";
-		// Both spellings, because both get typed.
-		this.trainingMode =
-			params.get("training") === "true" ||
-			params.get("training-room") === "true";
+		this.onlineMode = !launch.offline;
+		this.trainingMode = launch.training;
 		// `bots=0` is meaningful — an empty room — so it cannot go through the
 		// positive-integer parser the other counts use.
-		this.botCount = countParam(params, "bots");
-		this.fillCount = numberParam(params, "fill");
+		this.botCount = launch.bots;
+		this.fillCount = launch.fill;
 		// Shortened rules, for a probe. Honoured server-side only for the client that
 		// *creates* the room, so a latecomer cannot end a match already in progress.
-		this.scoreLimit = numberParam(params, "scoreLimit");
+		this.scoreLimit = launch.scoreLimit;
 		// `?ultCharge=N` seats everybody with N charge. Creator-only server-side,
-		// like the shortened rules — see specs/ultimate.md. `countParam`, not
-		// `numberParam`, because 0 is the real default and a legitimate thing to ask
-		// for explicitly.
-		this.ultCharge = countParam(params, "ultCharge");
+		// like the shortened rules — see specs/ultimate.md. Zero is the real
+		// default and a legitimate thing to ask for explicitly.
+		this.ultCharge = launch.ultCharge;
 		// Both spellings, like `training`, and both are only a request.
-		const rawMode = params.get("mode");
-		this.mode = rawMode === "tdm" || rawMode === "team" ? "tdm" : "ffa";
+		this.mode = launch.mode ?? "ffa";
 		// Zero is a legitimate request — "no countdown, start fighting" — so this
 		// goes through the parser that accepts it.
-		this.freezeTime = countParam(params, "freezeTime");
-		const timeLimitSec = numberParam(params, "timeLimit");
+		this.freezeTime = launch.freezeTime;
+		const timeLimitSec = launch.timeLimitSec;
 		this.timeLimitMs =
 			timeLimitSec === undefined ? undefined : timeLimitSec * 1000;
 
@@ -705,6 +700,20 @@ export class Match {
 					if (!this.trainingMode) {
 						showRoomInUrl(roomId);
 						EventBus.emit("room-id", roomId);
+						// The name prompt teaches the invite link with a copyable
+						// field — and only appears for a player who has no stored
+						// name. One named by the menu (or a previous match) never
+						// sees it, so the link is said once here instead. It waits
+						// out the FIGHT banner's 3.5s so the two narrations do not
+						// fight — the message window is last-write-wins.
+						if (readStoredName()) {
+							this.shareHintTimer = window.setTimeout(() => {
+								EventBus.emit(
+									HUD_EVENTS.status,
+									"Your room link is in the address bar — send it to play together.",
+								);
+							}, 4000);
+						}
 					}
 					console.log(`[ONLINE] room ${roomId}`);
 				},
@@ -1667,45 +1676,12 @@ export class Match {
 
 	destroy() {
 		this.nameUnsubscribe?.();
+		window.clearTimeout(this.shareHintTimer);
 		this.input.destroy();
 		this.blackHole.destroy();
 		this.aimLine.destroy();
 		this.ultAim.destroy();
 		this.training?.destroy();
 		this.online?.disconnect();
-	}
-}
-
-/** A positive integer URL parameter, or undefined when absent or nonsense. */
-function numberParam(params: URLSearchParams, key: string): number | undefined {
-	const raw = params.get(key);
-	if (raw === null) return undefined;
-	const n = Number.parseInt(raw, 10);
-	return Number.isFinite(n) && n > 0 ? n : undefined;
-}
-
-/** Like `numberParam`, but zero is a legitimate answer. */
-function countParam(params: URLSearchParams, key: string): number | undefined {
-	const raw = params.get(key);
-	if (raw === null) return undefined;
-	const n = Number.parseInt(raw, 10);
-	return Number.isFinite(n) && n >= 0 ? n : undefined;
-}
-
-function readStoredName(): string | null {
-	try {
-		return window.localStorage.getItem(NAME_KEY);
-	} catch {
-		// Private browsing, or storage disabled. A name prompt every session is a
-		// far better failure than a game that will not start.
-		return null;
-	}
-}
-
-function storeName(name: string) {
-	try {
-		window.localStorage.setItem(NAME_KEY, name);
-	} catch {
-		/* not fatal — see readStoredName */
 	}
 }

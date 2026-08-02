@@ -25,6 +25,7 @@ it.
 | [deathmatch.md](deathmatch.md) | 16 fighters, frags, respawns, the win condition, names, the podium |
 | [team-deathmatch.md](team-deathmatch.md) | Two sides, no friendly fire, wipe-out rounds, and the team colour scheme |
 | [netcode.md](netcode.md) | Online-first model, rollback, reconciliation, the wire format, projectiles, bots |
+| [menu.md](menu.md) | The root menu: when it shows, how choices become URLs, hosting and joining |
 | [training-room.md](training-room.md) | The scriptable practice dummy, its beat format, and the agent API |
 
 ## Rules

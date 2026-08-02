@@ -14,7 +14,7 @@
 const PARAM = "room";
 
 /** Same charset the server validates against, so a proposal is rarely rejected. */
-const ROOM_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+export const ROOM_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
 /**
  * A v4-shaped id, without assuming a secure context.

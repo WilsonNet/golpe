@@ -384,6 +384,20 @@ export const HUD_CSS = `
 	flex-direction: column;
 	gap: 10px;
 }
+/* Exiting a match is the one destructive choice in the Esc menu — the fighter
+   leaves the room. The confirm says what that means in the same sentence it
+   asks in, and the red is the only red button in the whole UI. */
+.vd-exit-note {
+	margin: 2px 0 -2px;
+}
+.vd-exit-yes {
+	border-color: rgba(255, 143, 107, 0.6);
+	color: #ff8f6b;
+}
+.vd-exit-yes:hover:not(:disabled) {
+	border-color: #ff8f6b;
+	color: #ff8f6b;
+}
 /* ---- a setting with a small set of answers ----
    Chips rather than a <select>, because both of these are things a player flips
    back and forth while working out which they prefer, and a dropdown hides the

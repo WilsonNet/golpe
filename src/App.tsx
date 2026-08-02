@@ -1,6 +1,12 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { GameCanvas } from "./GameCanvas";
+import {
+	isMenuShape,
+	type LaunchParams,
+	serializeLaunchParams,
+} from "./game/online/launch";
 import { FightHud } from "./ui/FightHud";
+import { MainMenu } from "./ui/MainMenu";
 import { MatchOver } from "./ui/MatchOver";
 import { NamePrompt } from "./ui/NamePrompt";
 import { PauseMenu } from "./ui/PauseMenu";
@@ -15,6 +21,8 @@ import { UltimateCinematic } from "./ui/UltimateCinematic";
  * Read from the URL rather than asked of the game: the overlay mounts before
  * the Pixi application has finished its async boot, so asking the match would
  * mean rendering nothing on the first frame and flashing the panel in after it.
+ * By the time `started` flips, the address bar already carries the committed
+ * launch request, so reading here is reading the match the user asked for.
  */
 function isTrainingMode(): boolean {
 	const params = new URLSearchParams(window.location.search);
@@ -34,9 +42,41 @@ function isTrainingMode(): boolean {
  *
  * The deathmatch overlays render in every mode, including training: they draw
  * nothing until the game emits a match status, and a training room never does.
+ *
+ * **The root is a menu, not a match.** A URL with no launch request shows the
+ * menu; committing a choice writes the URL first and then boots the game, so
+ * the address bar is always the truth (see `online/launch.ts`). A URL that
+ * already asks for a match boots straight into it — no menu, no ceremony —
+ * which is how shared links and every automated probe behave.
  */
 function App() {
-	const [training] = useState(isTrainingMode);
+	const [started, setStarted] = useState(
+		() => !isMenuShape(window.location.search),
+	);
+
+	/** Commit a menu choice: make the URL the launch request, then boot. */
+	const launch = useCallback((params: LaunchParams) => {
+		const url = new URL(window.location.href);
+		url.search = serializeLaunchParams(params);
+		window.history.replaceState(null, "", url.toString());
+		setStarted(true);
+	}, []);
+
+	/** Back to the menu: drop the launch request from the URL, stop the game. */
+	const exitToMenu = useCallback(() => {
+		window.history.replaceState(null, "", window.location.pathname);
+		setStarted(false);
+	}, []);
+
+	if (!started) {
+		return (
+			<div id="app">
+				<MainMenu onLaunch={launch} />
+			</div>
+		);
+	}
+
+	const training = isTrainingMode();
 
 	return (
 		<div id="app">
@@ -62,7 +102,7 @@ function App() {
 			{/* Last, so it draws over the podium: a player who wants to rebind
 			    something at the end of a match should not have to wait for the next
 			    one to start. */}
-			<PauseMenu />
+			<PauseMenu onExitToMenu={exitToMenu} />
 		</div>
 	);
 }
