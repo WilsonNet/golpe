@@ -75,6 +75,19 @@ interface JoinMsg {
 	 * `?screen=` is ignored like the shortened rules are.
 	 */
 	screens?: number;
+	/**
+	 * Ultimate charge every fighter starts and respawns with, 0..100.
+	 *
+	 * The same argument as the shortened rules, for the same reason: the ultimate
+	 * takes ~71s of passive charge to arm, which is the right pace to play and the
+	 * wrong pace to measure — a probe that has to wait out the meter is a probe
+	 * nobody runs. `?ultCharge=100` makes the cast testable in seconds, and it is
+	 * how somebody practises the throw without earning it thirty times.
+	 *
+	 * **Creator-only**, like everything else in this block. It is a property of
+	 * the room, and a latecomer must not be able to hand everybody an ultimate.
+	 */
+	ultCharge?: number;
 }
 
 function clamp(
@@ -123,6 +136,7 @@ function createRoom(
 		timeLimitMs?: number;
 		fillTarget?: number;
 		screens?: number;
+		startUltCharge?: number;
 	},
 ): GameRoom {
 	const room = new GameRoom(id, rules);
@@ -179,7 +193,14 @@ io.onConnection((channel) => {
 		 * the second slot is the thing under the practising player's control.
 		 */
 		if (msg.training) {
-			const room = createRoom(randomUUID(), {});
+			// `?ultCharge` is honoured here too, and this is the room it was really
+			// for: the training room is the practice room, and practising a throw
+			// against a meter that takes 71s to fill is not practising.
+			const room = createRoom(randomUUID(), {
+				...(msg.ultCharge === undefined
+					? {}
+					: { startUltCharge: clamp(msg.ultCharge, 0, 100, 0) }),
+			});
 			room.addPlayer(channel, name);
 			room.addDummy();
 			console.log(
@@ -204,6 +225,9 @@ io.onConnection((channel) => {
 				...(msg.screens === undefined
 					? {}
 					: { screens: clamp(msg.screens, 1, MAX_SCREENS, 1) }),
+				...(msg.ultCharge === undefined
+					? {}
+					: { startUltCharge: clamp(msg.ultCharge, 0, 100, 0) }),
 			});
 		}
 

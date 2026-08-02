@@ -335,6 +335,30 @@ export const DECK_CSS = `
 	color: #0ec3c9;
 }
 
+/* ---- the ultimate pill ----
+   Drawn only when the meter is full, which is the point: a button that appears
+   is a louder "you have it" than a button that changes colour, and a phone has
+   no room for a control that does nothing for sixty seconds at a time. The
+   violet is the black hole's own colour, used nowhere else on the deck. */
+.vg-pill.ult {
+	color: #f2e2ff;
+	background: linear-gradient(180deg, #7b3fd4, #3d1d70);
+	border-color: rgba(214, 168, 255, 0.55);
+	box-shadow: 0 2px 0 rgba(0, 0, 0, 0.5), 0 0 14px rgba(150, 90, 255, 0.55);
+	animation: vg-ult-ready 1.4s ease-in-out infinite;
+}
+.vg-pill.ult.held {
+	color: #fff;
+	animation: none;
+}
+@keyframes vg-ult-ready {
+	0%, 100% { box-shadow: 0 2px 0 rgba(0, 0, 0, 0.5), 0 0 10px rgba(150, 90, 255, 0.45); }
+	50% { box-shadow: 0 2px 0 rgba(0, 0, 0, 0.5), 0 0 22px rgba(180, 120, 255, 0.9); }
+}
+@media (prefers-reduced-motion: reduce) {
+	.vg-pill.ult { animation: none; }
+}
+
 /* ---- the speaker ----
    Pure decoration, and worth the twenty lines: the shell is otherwise a flat
    slab under the buttons, and the raked grille is the single detail that makes

@@ -12,9 +12,11 @@ import {
 	type Standing,
 } from "../simulation/Deathmatch";
 import {
+	fieldFor,
 	isBulletOutOfBounds,
 	type PlayerIntent,
 	type PlayerPosition,
+	type Singularity,
 } from "../simulation/Physics";
 import type { TrainingConfigMsg, TrainingStateMsg } from "../training/types";
 import { ServerClock } from "./Interpolation";
@@ -37,6 +39,8 @@ import type {
 	MeleeEventMsg,
 	RosterEntry,
 	SnapshotBullet,
+	SnapshotCinematic,
+	SnapshotGrenade,
 	SnapshotPlayer,
 } from "./types";
 import { unpackIntent, unpackState } from "./wire";
@@ -53,10 +57,12 @@ interface FighterInfo {
 	kills: number;
 	deaths: number;
 	alive: boolean;
+	/** Ultimate charge, 0..100. Server-owned; the client only draws it. */
+	ult: number;
 }
 
 function newInfo(): FighterInfo {
-	return { hp: 100, kills: 0, deaths: 0, alive: true };
+	return { hp: 100, kills: 0, deaths: 0, alive: true, ult: 0 };
 }
 
 export interface OnlineCallbacks {
@@ -81,6 +87,17 @@ export interface OnlineCallbacks {
 	onFighterAdded: (id: string) => void;
 	/** A fighter is no longer in the room. */
 	onFighterRemoved: (id: string) => void;
+	/**
+	 * An ultimate was cast: freeze, and put the portrait up.
+	 *
+	 * Fired once per cast, on the first snapshot that carries the cinematic —
+	 * the snapshot repeats it for the whole freeze precisely so a client that
+	 * lost the first datagram still joins the freeze one tick late instead of
+	 * playing on alone through a cutscene everybody else is watching.
+	 */
+	onUltimateCast: (casterId: string) => void;
+	/** A grenade collapsed. Position and owner of the new hole, for effects. */
+	onSingularityOpened: (field: Singularity) => void;
 	/** The match clock, scores or phase changed. */
 	onMatch: (status: MatchStatus, standings: Standing[]) => void;
 	/** The match ended. Final standings, sent once. */
@@ -157,6 +174,31 @@ export class OnlineSession {
 	private _matchStatus: MatchStatus | undefined;
 	private _matched = false;
 
+	// ---- the ultimate ----
+	//
+	/**
+	 * The room's open black hole, mirrored from the snapshot.
+	 *
+	 * Fed into every `tickPlayer` this client runs — its own prediction, its own
+	 * replays, and every remote's rollback — so what a player watches the hole do
+	 * is the same computation the server is doing. `remainingMs` is decayed
+	 * locally between snapshots and corrected by each one; nothing else about it
+	 * ever changes while it is open, which is what makes replaying through it
+	 * safe. See specs/ultimate.md.
+	 */
+	private field: Singularity | null = null;
+	/** Ids of holes already announced, so the detonation FX fires exactly once. */
+	private seenSingularities = new Set<number>();
+	/**
+	 * The cast currently freezing the room, or null.
+	 *
+	 * While this is set, `Match` runs no fixed steps at all: no local prediction,
+	 * no input sent, no remote advanced. See `GameRoom.tickCinematic` for why
+	 * that keeps the two sides exactly as far apart as they were before.
+	 */
+	private _cinematic: SnapshotCinematic | null = null;
+	private announcedCast: string | null = null;
+
 	/**
 	 * Wire size of recent snapshots, in bytes.
 	 *
@@ -220,6 +262,42 @@ export class OnlineSession {
 
 	hpOf(id: string): number {
 		return this.info.get(id)?.hp ?? 100;
+	}
+
+	/** Ultimate charge for one fighter, 0..100. */
+	ultOf(id: string): number {
+		return this.info.get(id)?.ult ?? 0;
+	}
+
+	/** The local fighter's ultimate charge, for the HUD meter. */
+	get localUlt(): number {
+		return this.ultOf(this.manager.myId);
+	}
+
+	/**
+	 * True while the room is frozen for an ultimate cast.
+	 *
+	 * `Match` must run **no fixed steps** while this holds — that is the entire
+	 * contract, and skipping the fixed step is what makes it safe: no step means
+	 * no prediction, no input sent and no remote advanced, which is exactly what
+	 * the server is doing. Presentation keeps running on wall-clock time.
+	 */
+	get frozen(): boolean {
+		return this._cinematic !== null;
+	}
+
+	get cinematic(): SnapshotCinematic | null {
+		return this._cinematic;
+	}
+
+	/** The open black hole, or null. Read by the renderer; owned by the server. */
+	get singularity(): Singularity | null {
+		return this.field;
+	}
+
+	/** Grenades in flight, straight off the newest snapshot. */
+	get grenades(): readonly SnapshotGrenade[] {
+		return this.latestSnapshot?.grenades ?? [];
 	}
 
 	nameOf(id: string): string {
@@ -434,6 +512,12 @@ export class OnlineSession {
 	 * the arena instead of reappearing at their spawns.
 	 */
 	private onRoundReset() {
+		// The server clears both on a reset; mirroring it here means a client cannot
+		// spend the first tick of a new match still dragging fighters toward the last
+		// match's hole.
+		this.field = null;
+		this._cinematic = null;
+		this.announcedCast = null;
 		this.smoother.reset();
 		this.bulletPool.releaseAll();
 		this.bulletSprites.clear();
@@ -454,22 +538,61 @@ export class OnlineSession {
 	 * input at the same rate — and so every fighter on screen is on the same tick.
 	 */
 	fixedStep(intent: PlayerIntent, aimAngle: number, dt: number) {
-		const seq = this.predicted.step(intent, dt);
+		// The hole as the local fighter feels it — null if this client cast it.
+		const seq = this.predicted.step(
+			intent,
+			dt,
+			this.fieldOn(this.manager.myId),
+		);
 		// Spread the intent rather than listing its fields: `PlayerInput` extends
 		// `PlayerIntent` precisely so a field added to the simulation cannot be
 		// silently left out of the packet, which would make the server replay a
 		// different input than the client predicted.
 		this.manager.sendInput({ ...intent, seq, aimAngle });
 
+		// The field's own clock, advanced on the fixed step like everything else it
+		// affects. Corrected by every snapshot; this only carries it between them,
+		// so a hole does not linger for up to 50ms past its expiry on a client.
+		if (this.field) {
+			this.field.remainingMs -= dt * 1000;
+			if (this.field.remainingMs <= 0) this.field = null;
+		}
+
 		// Remotes advance on the same step, on their carried-forward inputs. Doing
 		// this per rendered frame instead would put them on a different clock from
 		// the local fighter, and two fighters on two clocks cannot be shown trading
 		// blows honestly.
-		for (const fighter of this.fighters.values()) fighter.predict(dt);
+		for (const [id, fighter] of this.fighters) {
+			fighter.predict(dt, this.fieldOn(id));
+		}
 	}
+
+	/**
+	 * The room's field as one fighter experiences it.
+	 *
+	 * Every `tickPlayer` this client runs goes through here rather than reading
+	 * `this.field` directly, so the friendly-fire rule is applied in exactly one
+	 * place on the client and it is the same shared predicate the server uses.
+	 */
+	private fieldOn(id: string): Singularity | null {
+		return fieldFor(this.field, id);
+	}
+
+	/**
+	 * A monotonic millisecond clock for ballistics that **stops during a
+	 * cinematic freeze**.
+	 *
+	 * Deliberately not `performance.now()`. A bullet is dead-reckoned from an
+	 * anchor and the local clock, which is exact — right up until the server stops
+	 * simulating for 1100ms and the wall clock does not. Bullets would fly on
+	 * through the cutscene, arrive nowhere the server has them, and snap back when
+	 * it lifted. Everything the freeze stops has to stop on the same clock.
+	 */
+	private renderClockMs = 0;
 
 	/** Per-frame presentation update: render offsets and bullets. */
 	render(dtSec: number): { x: number; y: number } {
+		if (!this.frozen) this.renderClockMs += dtSec * 1000;
 		this.renderBullets(this.clock.now(Date.now()));
 		const at = this.smoother.apply(
 			this.predicted.state.x,
@@ -510,7 +633,7 @@ export class OnlineSession {
 
 		this.renderedBullets.length = 0;
 		const live = new Set<number>();
-		const now = performance.now();
+		const now = this.renderClockMs;
 
 		for (const b of snap.bullets) {
 			live.add(b.id);
@@ -609,6 +732,11 @@ export class OnlineSession {
 		// array of every snapshot ever seen is a leak with a graph attached.
 		if (this.snapshotBytes.length > 200) this.snapshotBytes.shift();
 
+		// Before anything is reconciled or rolled back, because the field is an
+		// argument to every one of those `tickPlayer` calls. Adopting it afterwards
+		// would replay this snapshot's ticks against the *previous* snapshot's hole.
+		this.absorbUltimate(snap);
+
 		const mine = snap.players.find((p) => p.id === this.manager.myId);
 		// The local player is reconciled first, because its unacknowledged input
 		// count *is* the rollback depth for everybody else. See Rollback.ts.
@@ -653,8 +781,53 @@ export class OnlineSession {
 		info.kills = p.kills;
 		info.deaths = p.deaths;
 		info.alive = p.alive;
+		info.ult = p.ult ?? 0;
 		this.info.set(p.id, info);
 		if (p.id === this.manager.myId) this.callbacks.onLocalHp(p.hp);
+	}
+
+	/**
+	 * Adopt the room's ultimate state: the freeze and the field.
+	 *
+	 * Both are **full state, every snapshot**, not events — which is what makes
+	 * them self-healing over unreliable datagrams. A client that loses the first
+	 * cinematic snapshot joins the freeze on the next one 50ms later instead of
+	 * playing on alone through a cutscene; a client that loses the snapshot where
+	 * a hole closes stops pulling on the following one rather than forever.
+	 *
+	 * The two *derived* one-shots — "a cast just started", "a hole just opened" —
+	 * are edge-detected here against an id, so each fires exactly once no matter
+	 * how many snapshots repeat the state that implies it.
+	 */
+	private absorbUltimate(snap: GameSnapshot) {
+		const cine = snap.cinematic ?? null;
+		this._cinematic = cine;
+		if (cine === null) {
+			this.announcedCast = null;
+		} else if (this.announcedCast !== cine.casterId) {
+			this.announcedCast = cine.casterId;
+			this.callbacks.onUltimateCast(cine.casterId);
+		}
+
+		const field = snap.singularity ?? null;
+		if (field === null) {
+			this.field = null;
+			return;
+		}
+		// Copied, never aliased into the snapshot: `fixedStep` decays `remainingMs`
+		// in place between snapshots, and mutating the snapshot object would make
+		// every later read of it disagree with what actually arrived.
+		this.field = { ...field };
+		if (!this.seenSingularities.has(field.id)) {
+			this.seenSingularities.add(field.id);
+			// Bounded: ids only ever grow, and a match that ran for hours would
+			// otherwise keep every one of them.
+			if (this.seenSingularities.size > 64) {
+				const oldest = this.seenSingularities.values().next().value;
+				if (oldest !== undefined) this.seenSingularities.delete(oldest);
+			}
+			this.callbacks.onSingularityOpened(this.field);
+		}
 	}
 
 	/** Fold the authoritative local state in, and report how far ahead we are. */
@@ -664,6 +837,7 @@ export class OnlineSession {
 			unpackState(p.state),
 			p.lastSeq,
 			PHYSICS_DT,
+			this.fieldOn(p.id),
 		);
 		this.smoother.absorb(
 			this.predicted.state.x - before.x,
@@ -704,6 +878,7 @@ export class OnlineSession {
 			intent,
 			leadTicks,
 			PHYSICS_DT,
+			this.fieldOn(p.id),
 		);
 		this.rollbackStats.record(result);
 		// A jump this large is a respawn the announcement lost the race to, or a

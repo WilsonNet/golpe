@@ -20,6 +20,7 @@ it.
 | [movement.md](movement.md) | Walking, jumping, dashing, wall jumps, the feel constants and why they hold |
 | [combat.md](combat.md) | Stances, ranged attacks, damage, round lifecycle |
 | [melee.md](melee.md) | Sword combat: frame data, blocking, parries, the butterfly, the Massive Strike |
+| [ultimate.md](ultimate.md) | The black hole grenade: charge, the cinematic freeze, the field, no friendly fire |
 | [arena.md](arena.md) | World bounds, platform layout, reachability rules, spawn points |
 | [deathmatch.md](deathmatch.md) | 16 fighters, frags, respawns, the win condition, names, the podium |
 | [netcode.md](netcode.md) | Online-first model, rollback, reconciliation, the wire format, projectiles, bots |

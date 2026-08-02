@@ -32,6 +32,12 @@ import {
 	meleePhase as meleePhaseOf,
 	tickMelee,
 } from "./Melee.js";
+import {
+	SINGULARITY_HOLD_STUN_MS,
+	type Singularity,
+	singularityGrip,
+	singularityPull,
+} from "./Ultimate.js";
 
 export type { Rect, SpawnPoint, World } from "./Arena.js";
 export {
@@ -114,6 +120,50 @@ export {
 	tickMelee,
 	zeroMoveCounts,
 } from "./Melee.js";
+
+export type {
+	GrenadeEnd,
+	GrenadeState,
+	Grip,
+	Singularity,
+} from "./Ultimate.js";
+/**
+ * The ultimate, re-exported by name for the same reason melee is: `server/`
+ * reaches this module through `server/physics.ts`, and anything behind an
+ * `export *` arrives as an empty namespace with no resolution error to show for
+ * it.
+ */
+export {
+	addCharge,
+	fieldAffects,
+	fieldFor,
+	GRENADE_FUSE_MS,
+	GRENADE_GRAVITY,
+	GRENADE_MAX_RANGE_PX,
+	GRENADE_SPEED,
+	GRENADE_TOUCH_PX,
+	grenadeEnd,
+	grenadeTouches,
+	launchGrenade,
+	SINGULARITY_DAMAGE_INTERVAL_MS,
+	SINGULARITY_DRAW_SPEED,
+	SINGULARITY_DURATION_MS,
+	SINGULARITY_HOLD_STUN_MS,
+	SINGULARITY_PULL_ACCEL,
+	SINGULARITY_RADIUS,
+	SINGULARITY_REACH,
+	SINGULARITY_TICK_DAMAGE,
+	SINGULARITY_TUG_ACCEL,
+	singularityGrip,
+	singularityPull,
+	tickGrenade,
+	ULT_CHARGE_PER_DAMAGE,
+	ULT_CHARGE_PER_KILL,
+	ULT_CINEMATIC_MS,
+	ULT_MAX_CHARGE,
+	ULT_PASSIVE_PER_SEC,
+	ultReady,
+} from "./Ultimate.js";
 
 /** @deprecated use `Rect` — kept so existing imports keep compiling. */
 export type Platform = Rect;
@@ -224,6 +274,16 @@ export interface PlayerIntent extends MeleeIntent {
 	right: boolean;
 	/** Jump, held. Held-ness drives variable jump height, so pass the raw key state. */
 	up: boolean;
+	/**
+	 * The ultimate button, held.
+	 *
+	 * `tickPlayer` does nothing with it — casting is the server's decision alone,
+	 * like firing a bullet, because it depends on a charge meter only the server
+	 * keeps. It lives in the intent anyway so it travels on the *one* input path
+	 * every other button uses: a second message for "I pressed R" would arrive on
+	 * its own schedule and be applied on a tick neither side agreed on.
+	 */
+	ultimate: boolean;
 }
 
 /** Everything false: neutral input, and what a stunned fighter is reduced to. */
@@ -237,6 +297,7 @@ export const NEUTRAL_INTENT: Readonly<PlayerIntent> = Object.freeze({
 	swordStance: true,
 	face: 0,
 	dash: 0,
+	ultimate: false,
 });
 
 export interface PlayerPosition extends MeleeState {
@@ -356,14 +417,32 @@ function decay(timerMs: number, dt: number): number {
  * server and the predicting client pass their room's `World`, and because it
  * is the same deterministic geometry on both sides, prediction stays
  * bit-identical.
+ *
+ * `field` is the open black hole **as this fighter experiences it** — the
+ * caller has already applied the friendly-fire rule with `fieldFor`, so the
+ * caster is simply handed `null` and this function never needs to know whose
+ * hole it is. It is an argument rather than something applied on top of the
+ * result for the reason the dash learned the hard way: anything that moves a
+ * fighter from outside `tickPlayer` is erased by the next reconciliation.
  */
 export function tickPlayer(
 	pos: PlayerPosition,
 	input: PlayerIntent,
 	dt: number,
 	world: World = DEFAULT_WORLD,
+	field: Singularity | null = null,
 ): PlayerPosition {
 	const s: PlayerPosition = { ...pos };
+
+	// Before melee, because being caught has to cancel a swing rather than run
+	// alongside one. Refreshed every tick the fighter is inside the horizon, so
+	// the disable ends a fixed tail after the hole lets go and no state outside
+	// `stunTimer` has to remember it — which is what keeps the wire format and
+	// every stun-aware system unchanged by this whole feature.
+	const grip = singularityGrip(field, s.x, s.y);
+	if (grip === "held") {
+		s.stunTimer = Math.max(s.stunTimer, SINGULARITY_HOLD_STUN_MS);
+	}
 
 	tickMelee(s, input, dt);
 	// A stunned fighter still falls and still collides; it just does not steer.
@@ -495,7 +574,14 @@ export function tickPlayer(
 	// contact is what `grounded` is derived from. Suppressing it made a ground dash
 	// leave the fighter airborne on paper: it could not jump, and coyote time never
 	// started because it never registered as having been grounded to begin with.
-	if (s.dashActiveTimer > 0 && !s.grounded) {
+	//
+	// Being held by a black hole suspends gravity outright, and unlike the dash it
+	// does so on the ground too: a fighter caught while standing has to be able to
+	// leave the floor, or the hole would drag everybody along it instead of into
+	// it.
+	if (grip === "held") {
+		// Nothing. The pull below owns both axes.
+	} else if (s.dashActiveTimer > 0 && !s.grounded) {
 		s.vy = 0;
 	} else {
 		s.vy += (s.vy > 0 ? GRAVITY * FALL_GRAVITY_MULTIPLIER : GRAVITY) * dt;
@@ -507,6 +593,18 @@ export function tickPlayer(
 			s.vy = WALL_SLIDE_SPEED;
 		}
 		if (s.vy > MAX_FALL_SPEED) s.vy = MAX_FALL_SPEED;
+	}
+
+	// ---- the black hole ----
+	//
+	// Last, so it overrides steering, friction and gravity rather than being
+	// averaged with them — inside the horizon the fighter is cargo, and outside it
+	// the tug is a force added to whatever they were already doing. Applied before
+	// the collision move, so nobody is ever dragged through a wall.
+	if (field !== null && grip !== "clear") {
+		const pulled = singularityPull(field, grip, s.x, s.y, s.vx, s.vy, dt);
+		s.vx = pulled.vx;
+		s.vy = pulled.vy;
 	}
 
 	// ---- one collision-resolved move ----

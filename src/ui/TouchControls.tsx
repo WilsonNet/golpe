@@ -60,6 +60,7 @@ const CODES = {
 	block: "Pad6",
 	sword: "Pad4",
 	gun: "Pad5",
+	ult: "Pad1",
 } as const;
 
 const press = (code: string, down: boolean) =>
@@ -327,6 +328,23 @@ export function TouchControls() {
 		}) as never);
 		return off;
 	}, []);
+
+	// The ultimate button is drawn only when the meter is full — see
+	// `deckStyles.ts`. The charge is server-owned and reaches React the same way
+	// the stance does; `Match` emits it, rounded, only when the integer changes.
+	const [ultReadyNow, setUltReady] = useState(false);
+	useEffect(() => {
+		const off = EventBus.on("ult-charge", ((charge: number) => {
+			setUltReady(charge >= 100);
+		}) as never);
+		return off;
+	}, []);
+	// Spending it takes the button away mid-press, and a button that vanishes
+	// never delivers its release — the same trap the stance buttons have.
+	useEffect(() => {
+		if (!ultReadyNow) press(CODES.ult, false);
+	}, [ultReadyNow]);
+
 	// A button that stops being drawn must not leave its code held, or the
 	// fighter would keep blocking (sword-only) while the player watches a deck
 	// with no Block button on it. Released defensively when the stance drops the
@@ -398,6 +416,14 @@ export function TouchControls() {
 						className="vg-pill"
 						title="Gun stance"
 					/>
+					{ultReadyNow && (
+						<PadButton
+							code={CODES.ult}
+							label="Ult"
+							className="vg-pill ult"
+							title="Ultimate — Black Hole"
+						/>
+					)}
 				</div>
 				<div className="vg-cell stick">
 					<AimStick />

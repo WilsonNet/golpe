@@ -42,6 +42,7 @@ export const ACTIONS = [
 	"attack",
 	"block",
 	"uppercut",
+	"ultimate",
 	"sword",
 	"gun",
 	"toggleAi",
@@ -59,6 +60,7 @@ export const ACTION_LABELS: Record<Action, string> = {
 	attack: "Slash / fire",
 	block: "Block",
 	uppercut: "Uppercut",
+	ultimate: "Ultimate — Black Hole",
 	sword: "Sword stance",
 	gun: "Gun stance",
 	toggleAi: "Toggle AI vs AI",
@@ -113,6 +115,11 @@ export const DEFAULT_BINDINGS: Readonly<Record<Action, readonly string[]>> = {
 	// Both shifts, because which one is under the hand depends on which half of
 	// the keyboard the player's movement fingers live on.
 	block: ["ShiftLeft", "ShiftRight", "Pad6"],
+	// R, because every game with an ultimate put it there and a player's hand goes
+	// looking for it. `Pad1` is the right-hand face button (B/Circle) — the one a
+	// thumb hits deliberately rather than in passing, which is right for a button
+	// that spends sixty seconds of earned charge in one press.
+	ultimate: ["KeyR", "Pad1"],
 	uppercut: ["KeyF", "Pad3"],
 	sword: ["KeyQ", "Pad4"],
 	gun: ["KeyE", "Pad5"],

@@ -170,6 +170,48 @@ export interface InputSnapshot {
 	facing: number;
 }
 
+/**
+ * Everything the ultimate is doing, from one client's point of view.
+ *
+ * Its own snapshot because no existing probe can see any of it: AI vs AI never
+ * presses the button (a brain has no charge meter to reason about), the
+ * deathmatch probe reads scores, and the physics diagnostic reads positions.
+ * `scripts/ultimate-probe.mjs` reads exactly this, on two clients at once —
+ * which is the only way to check that the cinematic froze *both* of them.
+ */
+export interface UltSnapshot {
+	myId: string;
+	/** Local fighter's charge, 0..100. Server-owned. */
+	charge: number;
+	ready: boolean;
+	/** True while this client is running no fixed steps at all. */
+	frozen: boolean;
+	cinematic: {
+		casterId: string;
+		remainingMs: number;
+		totalMs: number;
+	} | null;
+	grenades: { id: number; ownerId: string; x: number; y: number }[];
+	singularity: {
+		id: number;
+		ownerId: string;
+		x: number;
+		y: number;
+		remainingMs: number;
+	} | null;
+	/**
+	 * Everybody this client's own grip test says is caught.
+	 *
+	 * Derived with the shared `fieldFor` + `singularityGrip`, so a caster
+	 * appearing in here would be a friendly-fire bug and not a reporting one.
+	 */
+	held: string[];
+	/** Charge for every fighter this client knows about, by id. */
+	charges: Record<string, number>;
+	/** Local simulation state, so a probe can watch the pull directly. */
+	playerPhys: PlayerPosition;
+}
+
 declare global {
 	interface Window {
 		/** Flip AI vs AI, same as pressing P. */
@@ -191,6 +233,8 @@ declare global {
 		__aimState?: () => AimSnapshot;
 		/** Which input scheme is live, and what the two aim layers are doing. */
 		__inputState?: () => InputSnapshot;
+		/** Charge, the cinematic freeze, the grenade and the open black hole. */
+		__ultState?: () => UltSnapshot;
 		/**
 		 * Switch aiming scheme from a script.
 		 *

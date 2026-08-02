@@ -49,6 +49,7 @@ function randomIntent(rand: () => number): PlayerIntent {
 		swordStance: rand() < 0.8,
 		face: axis(rand),
 		dash: axis(rand),
+		ultimate: rand() < 0.05,
 	};
 }
 

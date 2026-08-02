@@ -6,6 +6,7 @@ import { PauseMenu } from "./ui/PauseMenu";
 import { Scoreboard } from "./ui/Scoreboard";
 import { TouchControls } from "./ui/TouchControls";
 import { TrainingPanel } from "./ui/TrainingPanel";
+import { UltimateCinematic } from "./ui/UltimateCinematic";
 
 /**
  * Both spellings of the flag, matched exactly as `Match` matches them.
@@ -45,6 +46,11 @@ function App() {
 			<TouchControls />
 			{training ? <TrainingPanel /> : null}
 			<Scoreboard />
+			{/* Over the scoreboard, under the podium and the menu: a cutscene beats
+			    a stat table, and nothing beats being able to leave. It is
+			    `pointer-events: none` throughout, so it never takes a click from
+			    anything it covers. */}
+			<UltimateCinematic />
 			<MatchOver />
 			<NamePrompt />
 			{/* Last, so it draws over the podium: a player who wants to rebind

@@ -64,6 +64,7 @@ function observed(overrides: Partial<ObservedInput> = {}): ObservedInput {
 		swordStance: true,
 		face: 0,
 		dash: 0,
+		ultimate: false,
 		aimAngle: 0,
 		...overrides,
 	};
@@ -81,6 +82,8 @@ function intentFrom(out: AIOutput): PlayerIntent {
 		swordStance: out.swordStance,
 		face: out.face,
 		dash: out.dash,
+		// A brain never presses it — see `GameRoom.scriptedInput`.
+		ultimate: false,
 	};
 }
 

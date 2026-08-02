@@ -57,9 +57,16 @@ The third slot is a *convention*, not a constraint.
 | Slash / fire | **Left Click** | — | **Pad X** |
 | Block | **Left Shift** | **Right Shift** | **Pad LT** |
 | Uppercut | **F** | — | **Pad Y** |
+| Ultimate — Black Hole | **R** | — | **Pad B** |
 | Sword stance | **Q** | — | **Pad LB** |
 | Gun stance | **E** | — | **Pad RB** |
 | Toggle AI vs AI | **P** | — | — |
+
+**The ultimate is R, and Pad B.** Every game with an ultimate put it on R and a
+player's hand goes looking for it there. On a pad it is the right-hand face
+button — the one a thumb hits deliberately rather than in passing, which is what
+a button that spends a minute of earned charge in one press should require. See
+[ultimate.md](ultimate.md).
 
 **Block is Shift, not right-click.** A guard is held through a whole exchange
 while the same hand aims and slashes, and holding a mouse button down removes the

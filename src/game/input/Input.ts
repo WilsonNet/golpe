@@ -714,6 +714,11 @@ export class Input {
 			attack: this.attackDown(),
 			block: this.actionDown("block"),
 			uppercut: this.actionDown("uppercut"),
+			// Held state, like every other button. The press edge is detected by the
+			// *server*, which is the only thing that can decide a cast happened —
+			// edge-detecting it here as well would mean two sources of truth for one
+			// one-shot, and the client's would be the wrong one.
+			ultimate: this.actionDown("ultimate"),
 			swordStance: this.swordStance,
 			// You face where you aim. That is what lets a player retreat while still
 			// guarding the side the attacker is coming from.

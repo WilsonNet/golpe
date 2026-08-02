@@ -46,6 +46,13 @@ const BTN_FACE_POS = 1 << 7;
 const BTN_FACE_NEG = 1 << 8;
 const BTN_DASH_POS = 1 << 9;
 const BTN_DASH_NEG = 1 << 10;
+/**
+ * Appended, never slotted in beside the other buttons. The bit position *is*
+ * the wire value, so renumbering an existing one would make an old client's
+ * "block" arrive as a new server's "uppercut" — the same rule the melee action
+ * table follows below.
+ */
+const BTN_ULTIMATE = 1 << 11;
 
 /** One tick of intent as a single integer. */
 export type PackedIntent = number;
@@ -63,6 +70,7 @@ export function packIntent(i: PlayerIntent): PackedIntent {
 	else if (i.face < 0) b |= BTN_FACE_NEG;
 	if (i.dash > 0) b |= BTN_DASH_POS;
 	else if (i.dash < 0) b |= BTN_DASH_NEG;
+	if (i.ultimate) b |= BTN_ULTIMATE;
 	return b;
 }
 
@@ -77,6 +85,7 @@ export function unpackIntent(b: PackedIntent): PlayerIntent {
 		swordStance: (b & BTN_SWORD) !== 0,
 		face: (b & BTN_FACE_POS) !== 0 ? 1 : (b & BTN_FACE_NEG) !== 0 ? -1 : 0,
 		dash: (b & BTN_DASH_POS) !== 0 ? 1 : (b & BTN_DASH_NEG) !== 0 ? -1 : 0,
+		ultimate: (b & BTN_ULTIMATE) !== 0,
 	};
 }
 

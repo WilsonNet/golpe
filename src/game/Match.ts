@@ -47,9 +47,11 @@ import { requestedRoomId, showRoomInUrl } from "./online/room";
 import { AimLine } from "./render/AimLine";
 import { bodyCentre, drawArena } from "./render/ArenaRenderer";
 import { dudeFrames, TEX, tex } from "./render/assets";
+import { BlackHoleFx } from "./render/BlackHoleFx";
 import { type ImpactEvent, MeleeFx } from "./render/MeleeFx";
 import { Nameplates } from "./render/Nameplates";
 import type { Stage } from "./render/Stage";
+import { UltMeter } from "./render/UltMeter";
 import {
 	applyWorld,
 	buildWorld,
@@ -64,13 +66,17 @@ import {
 	BULLET_DAMAGE,
 	canFire,
 	createPlayerState,
+	fieldFor,
 	hasLineOfSight,
 	meleePhase,
 	NEUTRAL_INTENT,
 	type PlayerIntent,
 	type PlayerPosition,
 	resolveMelee,
+	type Singularity,
+	singularityGrip,
 	tickPlayer,
+	ULT_MAX_CHARGE,
 } from "./simulation/Physics";
 import { TrainingRoom } from "./training/TrainingRoom";
 
@@ -119,6 +125,10 @@ function intentFromAI(output: AIOutput): PlayerIntent {
 		swordStance: output.swordStance,
 		face: output.face,
 		dash: output.dash,
+		// A brain never presses it: `EnemyBrain` has no notion of a charge meter,
+		// and a random chance to fire would be a fake decision dressed as an AI one.
+		// The ultimate is measured by `scripts/ultimate-probe.mjs` instead.
+		ultimate: false,
 	};
 }
 
@@ -153,6 +163,8 @@ export class Match {
 	/** Logical view size (`app.screen`), for camera clamping. */
 	private readonly view: { readonly width: number; readonly height: number };
 	private readonly fx: MeleeFx;
+	private readonly blackHole: BlackHoleFx;
+	private readonly ultMeter: UltMeter;
 	private readonly plates: Nameplates;
 	private readonly aimLine: AimLine;
 	private readonly input: Input;
@@ -193,6 +205,8 @@ export class Match {
 	private fillCount: number | undefined;
 	private scoreLimit: number | undefined;
 	private timeLimitMs: number | undefined;
+	/** `?ultCharge=N`: what everybody in a freshly created room starts armed with. */
+	private ultCharge: number | undefined;
 	private online: OnlineSession | undefined;
 	private training: TrainingRoom | undefined;
 
@@ -241,6 +255,10 @@ export class Match {
 
 		this.queries = createQueries(this.world);
 		this.fx = new MeleeFx(stage.effects, stage);
+		// Two layers: the hole itself goes *behind* the fighters and its particles in
+		// front of them. See `BlackHoleFx` — a 150px black disc drawn over the actors
+		// hid the fighters it was holding.
+		this.blackHole = new BlackHoleFx(stage.field, stage.effects, stage);
 		this.plates = new Nameplates(stage.nameplates, this.arena);
 		// In the nameplate layer, which is inside the camera and drawn last: the beam
 		// tracks a moving fighter, and one buried behind a ledge or a spark answers
@@ -266,6 +284,7 @@ export class Match {
 		);
 
 		this.buildHud(stage.hud);
+		this.ultMeter = new UltMeter(stage.hud, screen);
 		this.input = new Input(
 			canvas,
 			// A live view: the getters are read on every aim, so a resized window or
@@ -312,6 +331,11 @@ export class Match {
 		// Shortened rules, for a probe. Honoured server-side only for the client that
 		// *creates* the room, so a latecomer cannot end a match already in progress.
 		this.scoreLimit = numberParam(params, "scoreLimit");
+		// `?ultCharge=N` seats everybody with N charge. Creator-only server-side,
+		// like the shortened rules — see specs/ultimate.md. `countParam`, not
+		// `numberParam`, because 0 is the real default and a legitimate thing to ask
+		// for explicitly.
+		this.ultCharge = countParam(params, "ultCharge");
 		const timeLimitSec = numberParam(params, "timeLimit");
 		this.timeLimitMs =
 			timeLimitSec === undefined ? undefined : timeLimitSec * 1000;
@@ -505,6 +529,11 @@ export class Match {
 				onTeleport: () => this.diagnostics.markTeleport(),
 				onRoundReset: () => {
 					this.diagnostics.markRoundReset();
+					// A hole and a portrait both outlive the match they belong to
+					// otherwise: the effect has its own fade and the overlay its own
+					// timer, and neither knows a new match has started.
+					this.blackHole.reset();
+					EventBus.emit("ultimate-clear");
 					// Takes the podium down. Without this the previous match's winner
 					// screen would sit over a live fight forever.
 					EventBus.emit("match-reset");
@@ -528,6 +557,30 @@ export class Match {
 				},
 				onFighterAdded: (id) => this.addRemoteFighter(id),
 				onFighterRemoved: (id) => this.despawnFighter(id),
+				onUltimateCast: (casterId) => {
+					// The cinematic is a dialog with a portrait in it, so it belongs to
+					// the React overlay rather than the canvas — see the
+					// `pixi-text-and-ui` skill on the split. The game hands it a name and
+					// an id and nothing else; everything about how it looks is over
+					// there.
+					EventBus.emit("ultimate-cast", {
+						casterId,
+						casterName: this.online?.nameOf(casterId) ?? casterId,
+						mine: casterId === this.online?.manager.myId,
+						durationMs: this.online?.cinematic?.totalMs ?? 0,
+					});
+					console.log(
+						`[ULT] ${this.online?.nameOf(casterId) ?? casterId} casts`,
+					);
+				},
+				onSingularityOpened: (field) => {
+					this.blackHole.detonate(field.x, field.y);
+					// An announced discontinuity, like a melee hit: the server has just
+					// started yanking fighters toward a point no client could have
+					// predicted, and the first frame of that is tens of pixels. Counting
+					// it as jitter would report a working ultimate as broken physics.
+					this.diagnostics.markTeleport(4);
+				},
 				onMatch: (status, standings) => {
 					const mine = standings.find(
 						(s) => s.id === this.online?.manager.myId,
@@ -587,6 +640,7 @@ export class Match {
 			...(this.timeLimitMs === undefined
 				? {}
 				: { timeLimitMs: this.timeLimitMs }),
+			...(this.ultCharge === undefined ? {} : { ultCharge: this.ultCharge }),
 			screens: this.arena.screens,
 		});
 
@@ -695,6 +749,52 @@ export class Match {
 				worldWidth: this.arena.right,
 			};
 		};
+		// The ultimate's own contract. Nothing else can see it: AI vs AI never
+		// presses the button (a brain has no charge meter to reason about), the
+		// deathmatch probe reads scores, and the physics diagnostic reads positions
+		// — so the freeze, the throw and the capture are invisible to all three.
+		// `scripts/ultimate-probe.mjs` reads exactly this.
+		window.__ultState = () => {
+			const session = this.online;
+			const field = session?.singularity ?? null;
+			const me = session?.manager.myId ?? "";
+			const held: string[] = [];
+			if (field) {
+				for (const e of this.queries.fighters) {
+					const at = e.renderPos ?? e.body;
+					// Reported under the id the *server* scores this fighter by, never
+					// the entity key — a probe comparing `held` against a caster id has
+					// to be comparing the same alphabet. See `serverIdOf`.
+					const id = this.serverIdOf(e.fighter.id);
+					if (singularityGrip(fieldFor(field, id), at.x, at.y) === "held") {
+						held.push(id);
+					}
+				}
+			}
+			return {
+				myId: me,
+				charge: session?.localUlt ?? 0,
+				ready: (session?.localUlt ?? 0) >= ULT_MAX_CHARGE,
+				frozen: session?.frozen ?? false,
+				cinematic: session?.cinematic ?? null,
+				grenades: [...(session?.grenades ?? [])].map((g) => ({
+					id: g.id,
+					ownerId: g.ownerId,
+					x: g.x,
+					y: g.y,
+				})),
+				singularity: field ? { ...field } : null,
+				/** Everyone the *client's own* grip test says is caught, casters excluded. */
+				held,
+				/** Charge for every fighter, so a probe can watch the economy. */
+				charges: Object.fromEntries(
+					[...this.remotes.keys(), me]
+						.filter((id) => id !== "")
+						.map((id) => [id, session?.ultOf(id) ?? 0]),
+				),
+				playerPhys: this.local.body,
+			};
+		};
 		window.__physicsDiagnostic = (durationMs = 5000) =>
 			this.diagnostics.start(durationMs);
 		// Supplying the name from a probe, so an automated run can exercise the same
@@ -791,6 +891,7 @@ export class Match {
 		this.syncAimLine(dtMs);
 		meleeFxSystem(this.queries, this.fx, dtMs);
 		this.fx.update(dtMs);
+		this.updateUltimate(dtMs);
 		this.stage.update(dtMs);
 		this.updateCamera();
 
@@ -826,6 +927,84 @@ export class Match {
 			this.aimAngle,
 			report.blend,
 		);
+	}
+
+	/**
+	 * Everything the ultimate draws: the meter, the grenade and the hole.
+	 *
+	 * Runs on every frame including the frozen ones — the cinematic stops the
+	 * *simulation*, and a cutscene during which the arena stopped animating would
+	 * look like the game had crashed rather than paused for effect.
+	 *
+	 * The victim list is derived with the same `fieldFor` + `singularityGrip` the
+	 * simulation uses, never with a radius the renderer keeps for itself. A hole
+	 * that visibly tears at somebody it is not holding is the most confusing thing
+	 * a field ability can do, and the only way to guarantee it cannot happen is to
+	 * ask the same function.
+	 */
+	private updateUltimate(dtMs: number) {
+		const session = this.online;
+		if (!session) {
+			// The `?offline=true` escape hatch has no server, and the ultimate is
+			// server-owned end to end. It simply does not exist there — see
+			// specs/ultimate.md.
+			this.blackHole.update(null, [], dtMs);
+			this.ultMeter.set(0);
+			this.ultMeter.update(dtMs);
+			return;
+		}
+
+		const charge = session.localUlt;
+		this.ultMeter.set(charge);
+		this.ultMeter.update(dtMs);
+		// The deck draws its ultimate button only when the meter is full, so it is
+		// told on the integer boundary rather than on every frame.
+		const readyNow = charge >= ULT_MAX_CHARGE;
+		if (readyNow !== this.ultReadyLast) {
+			this.ultReadyLast = readyNow;
+			EventBus.emit("ult-charge", charge);
+		}
+
+		const field: Singularity | null = session.singularity;
+		const victims: PlayerPosition[] = [];
+		if (field) {
+			for (const e of this.queries.fighters) {
+				if (e.fighter.hp <= 0) continue;
+				const mine = fieldFor(field, this.serverIdOf(e.fighter.id));
+				const at = e.renderPos ?? e.body;
+				if (singularityGrip(mine, at.x, at.y) === "held") victims.push(e.body);
+			}
+		}
+
+		this.blackHole.syncGrenades(session.grenades, dtMs);
+		this.blackHole.update(field, victims, dtMs);
+	}
+
+	/** Last value pushed over `ult-charge`, so the deck is told only on a change. */
+	private ultReadyLast = false;
+
+	/**
+	 * The id the *server* knows an entity by.
+	 *
+	 * The local fighter's entity is keyed `"local"` — it is created before this
+	 * client has been told who it is, and the key is also its effects key, so it
+	 * cannot be renamed later without orphaning every sprite bound to it.
+	 *
+	 * That is harmless right up until something asks a question the server also
+	 * asks. The black hole's friendly-fire rule compares against `field.ownerId`,
+	 * which is a server id — so `fieldFor(field, "local")` never matched the
+	 * caster, and the caster's *own* client drew them being torn apart inside
+	 * their own hole. Found by `scripts/ultimate-probe.mjs`, which reported the
+	 * held fighter as `"local"` on a client where that was the caster.
+	 *
+	 * The simulation was never wrong: `OnlineSession` looks the field up by
+	 * `manager.myId` and always did. This is the presentation layer needing the
+	 * same name for the same fighter.
+	 */
+	private serverIdOf(entityId: string): string {
+		return entityId === LOCAL_ID
+			? (this.online?.manager.myId ?? entityId)
+			: entityId;
 	}
 
 	/**
@@ -1016,6 +1195,26 @@ export class Match {
 			this.localIntent = this.input.intent(this.aimAngle);
 		}
 
+		// An ultimate is being cast: the room is frozen, so run **no fixed steps**.
+		//
+		// Not a rendering pause — a simulation one, and the only one in the game.
+		// Skipping the step is what makes it safe: no step means no prediction, no
+		// input sent and no remote advanced, which is exactly what the server is
+		// doing for the same range of ticks. The accumulator is drained rather than
+		// left to fill, or the frame the freeze lifts would fire five steps at once
+		// and hand the server a burst of input it never asked for.
+		if (session.frozen) {
+			this.accumulator = 0;
+			this.diagSteps = 0;
+			this.local.body = session.predicted.state;
+			// Presentation still runs. `render` knows it is frozen and holds the
+			// projectile clock still, so bullets hang in the air with everything
+			// else instead of flying on through the cutscene.
+			this.local.renderPos = session.render(dtSec);
+			this.syncRemotes(session, dtSec);
+			return;
+		}
+
 		this.diagSteps = this.runFixedSteps(dtSec, (dt) => {
 			// The one-shot dash is delivered here, at the fixed-step boundary,
 			// rather than by the rendered frame. A frame can run zero fixed steps
@@ -1037,7 +1236,18 @@ export class Match {
 		// a new object.
 		this.local.body = session.predicted.state;
 		this.local.renderPos = session.render(dtSec);
+		this.syncRemotes(session, dtSec);
+	}
 
+	/**
+	 * Re-point every remote entity at its current predicted state.
+	 *
+	 * Its own method because the cinematic freeze needs it too: the simulation
+	 * stands still, but the smoother, the sprites and the nameplates must keep
+	 * being fed or fifteen fighters would blink out for the length of the
+	 * cutscene.
+	 */
+	private syncRemotes(session: OnlineSession, dtSec: number) {
 		for (const [id, entity] of this.remotes) {
 			const fighter = session.remotes.get(id);
 			if (!fighter) continue;
@@ -1256,6 +1466,7 @@ export class Match {
 
 		this.bullets.clear();
 		this.fx.reset();
+		this.blackHole.reset();
 		this.aimLine.reset();
 		this.stage.reset();
 		this.hpText.text = "hp: 100";
@@ -1279,6 +1490,8 @@ export class Match {
 	destroy() {
 		this.nameUnsubscribe?.();
 		this.input.destroy();
+		this.blackHole.destroy();
+		this.ultMeter.destroy();
 		this.aimLine.destroy();
 		this.training?.destroy();
 		this.online?.disconnect();

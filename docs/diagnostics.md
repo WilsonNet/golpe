@@ -218,6 +218,69 @@ the canonical run prints. Damage and bullet counters come from the server, which
 is the only thing that sees a projectile connect or a hit land through
 invincibility.
 
+## The ultimate probe
+
+`node scripts/ultimate-probe.mjs`. Nothing else in the harness can see the black
+hole: **AI vs AI never presses the button**, because a brain has no charge meter
+to reason about — so `diagnose.mjs` and `deathmatch-probe.mjs` both run whole
+matches in which the ability does not exist, and would report a room that froze
+on one client and not the other as excellent jitter numbers.
+
+Two scenarios, because one room cannot answer both questions:
+
+| Question | Room |
+|---|---|
+| Did a cast freeze *both* clients, for the length the server declared, and unfreeze both? | two-client deathmatch |
+| Did one hole open at one position on both, credited to the caster? | two-client deathmatch |
+| Does the client whose own fighter is dragged still reconcile to ~0px? | two-client deathmatch |
+| Was somebody actually caught, held and damaged? | training room |
+| Did the caster take anything from their own hole? | training room |
+
+The split is not tidiness. The capture was originally measured in the deathmatch
+room and every run lost to the *arena* rather than the ability: a bot closes to
+melee range and detonates the grenade on contact inside a single frame, a
+stationary opponent is 660px away and a grenade is a lob so the throw hits the
+underside of a ledge, and walking there means solving two pillars — where a jump
+held *into* a pillar is a wall jump that goes backwards. All of that is the game
+working correctly. The training room stages a dummy 60px away on clear ground,
+which is exactly what it is for.
+
+**`--no-cast` is the control**, and it is load-bearing. The probe's first
+prediction metric read 4.5px of average *rollback* error after a cast and failed
+a 3px budget, which looked precisely like the pull leaking outside `tickPlayer`.
+The control showed 4.0px with no ultimate cast at all: rollback error is about a
+*remote* fighter predicted from a carried-forward input, and a bot changing its
+mind sixty times a second produces that number regardless. The metric could not
+have discriminated. It was replaced by running `__physicsDiagnostic` on the
+client whose **own locally predicted fighter** is the one being dragged — an
+unpredicted pull would show there as double-digit correction on every one of the
+~44 snapshots the hold lasts, and it reads 0.00px.
+
+`?ultCharge=N` is the flag that makes any of this measurable: a creator-only
+*floor* on everybody's meter, so the ultimate re-arms as soon as it is spent
+instead of taking 71s to fill. It is honoured in the training room too, which is
+where a human practising the throw wants it.
+
+## A known flake: "combo links thrown airborne"
+
+`diagnose.mjs --mode=online` fails roughly one run in ten with
+`FAIL: 1 combo links thrown airborne`, and **it is not caused by whatever you
+just changed**. Measured over 29 runs across two builds: 1 failure in 14 on
+`main`, 3 in 15 with a large feature on top — the same message both times, and
+statistically indistinguishable.
+
+The metric samples the server's authoritative state at frame rate and flags any
+sample where a fighter is mid-chain (`comboStep > 1`) and not grounded. A fighter
+that starts a link legally and leaves the floor during it — knocked back, or
+walking off a ledge — trips it.
+
+**Take the tally, not the run.** If a change is suspected of causing a
+regression here, the honest test is five or six runs before *and* after, on the
+same machine, and comparing rates. A single red run proves nothing either way.
+Chasing one cost most of an afternoon — though it did turn up a real regression
+on the way: raising `MAX_QUEUED_INPUTS` from 10 to 24 makes the server execute
+input up to 400ms stale, which is exactly this symptom, deliberately induced.
+
 ## Reading the report
 
 Emitted as `__DIAGNOSTIC_RESULT__{...}__END__` on one console line.

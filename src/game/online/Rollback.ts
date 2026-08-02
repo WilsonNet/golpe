@@ -48,6 +48,7 @@ import {
 	PLAYER_WIDTH,
 	type PlayerIntent,
 	type PlayerPosition,
+	type Singularity,
 	tickPlayer,
 	type World,
 } from "../simulation/Physics";
@@ -139,9 +140,9 @@ export class RemoteFighter {
 	 * Called once per local physics step, so this fighter stays on the same tick
 	 * as the locally predicted player.
 	 */
-	predict(dt: number) {
+	predict(dt: number, field: Singularity | null = null) {
 		if (!this.intent) return;
-		this.state = tickPlayer(this.state, this.intent, dt, this.world);
+		this.state = tickPlayer(this.state, this.intent, dt, this.world, field);
 	}
 
 	/**
@@ -156,6 +157,7 @@ export class RemoteFighter {
 		intent: PlayerIntent | null,
 		leadTicks: number,
 		dt: number,
+		field: Singularity | null = null,
 	): RollbackResult {
 		const beforeX = this.state.x;
 		const beforeY = this.state.y;
@@ -167,7 +169,7 @@ export class RemoteFighter {
 		if (intent) {
 			const depth = Math.max(0, Math.min(leadTicks, MAX_ROLLBACK_TICKS));
 			for (let i = 0; i < depth; i++) {
-				this.state = tickPlayer(this.state, intent, dt, this.world);
+				this.state = tickPlayer(this.state, intent, dt, this.world, field);
 				resimTicks++;
 			}
 		}

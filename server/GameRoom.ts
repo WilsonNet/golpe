@@ -12,6 +12,7 @@ import {
 	type PlayerInput,
 	RELIABLE,
 	type RosterMsg,
+	type SnapshotCinematic,
 	type SnapshotPlayer,
 } from "../src/game/online/types.js";
 import { packIntent, packState } from "../src/game/online/wire.js";
@@ -41,6 +42,7 @@ import type {
 } from "../src/game/training/types.js";
 import { botName, sanitiseName, uniqueName } from "./BotNames.js";
 import {
+	addCharge,
 	applyMeleeResult,
 	BULLET_DAMAGE,
 	BULLET_SPEED,
@@ -50,16 +52,35 @@ import {
 	bulletHitsPlayer,
 	canFire,
 	createPlayerState,
+	fieldFor,
+	type GrenadeState,
+	grenadeEnd,
+	grenadeTouches,
 	hasLineOfSight,
 	isBulletOutOfBounds,
+	isKnockedDown,
+	isStunned,
+	launchGrenade,
 	meleePhase,
 	PLAYER_HEIGHT,
 	PLAYER_WIDTH,
 	type PlayerIntent,
 	type PlayerPosition,
 	resolveMelee,
+	SINGULARITY_DAMAGE_INTERVAL_MS,
+	SINGULARITY_DURATION_MS,
+	SINGULARITY_TICK_DAMAGE,
+	type Singularity,
+	singularityGrip,
 	tickBullet,
+	tickGrenade,
 	tickPlayer,
+	ULT_CHARGE_PER_DAMAGE,
+	ULT_CHARGE_PER_KILL,
+	ULT_CINEMATIC_MS,
+	ULT_MAX_CHARGE,
+	ULT_PASSIVE_PER_SEC,
+	ultReady,
 } from "./physics.js";
 import { TrainingDummy } from "./TrainingDummy.js";
 
@@ -129,6 +150,16 @@ interface ConnectedPlayer {
 	 * clients must reproduce rather than paper over.
 	 */
 	simulatedIntent: PlayerIntent | null;
+	/**
+	 * Ultimate charge, 0..100. Server-owned; see specs/ultimate.md.
+	 *
+	 * **Survives death** — carrying an ult through a respawn is what makes it a
+	 * plan rather than a lottery ticket. Only a match restart zeroes it, along
+	 * with everything else about the match.
+	 */
+	ult: number;
+	/** Press-edge detection for the ultimate button, so a hold casts once. */
+	ultHeld: boolean;
 	stats: ReturnType<typeof newStats>;
 }
 
@@ -151,8 +182,33 @@ const ROSTER_HEARTBEAT_MS = 2000;
 /**
  * Cap on buffered input. A client that floods or lags must not be able to make
  * the server simulate an unbounded backlog in one tick.
+ *
+ * **Ten, and raising it is a regression.** A deep queue is not free storage: it
+ * is *latency*, because the server executes inputs in order, so a ten-deep queue
+ * means acting on what the player pressed 166ms ago. This was briefly raised to
+ * 24 to make room for the cinematic freeze, and `diagnose.mjs` started failing
+ * with "combo links thrown airborne" — an AI vs AI client's brain decides "slash,
+ * I am on the ground", and 400ms later the server applies it to a fighter that
+ * has since jumped. The cap belongs where it was; the freeze gets its own.
  */
 const MAX_QUEUED_INPUTS = 10;
+
+/**
+ * The cap *while the room is frozen for an ultimate*, and briefly afterwards.
+ *
+ * The freeze is the one thing that legitimately parks input: the server stops
+ * consuming the instant a cast lands and a client keeps sending until the news
+ * reaches it, so one-way latency's worth piles up — and dropping any of it would
+ * be a permanent divergence, because the client already simulated those ticks.
+ *
+ * It drains itself, which is why this needs no cleanup. A client freezes when the
+ * message reaches it and unfreezes when the next one does, so it is silent for
+ * exactly as long *after* the server resumes as it was late in stopping; the
+ * server eats the backlog in that window and the queue is back to its ordinary
+ * depth. `CINEMATIC_QUEUE_GRACE_MS` is that window, plus margin.
+ */
+const MAX_QUEUED_INPUTS_FROZEN = 32;
+const CINEMATIC_QUEUE_GRACE_MS = 400;
 
 /** Randomised bot personality, so a solo match is not the same fight every time. */
 function botConfig(): AIConfig {
@@ -190,6 +246,7 @@ function idleInput(seq = 0): PlayerInput {
 		swordStance: true,
 		face: 0,
 		dash: 0,
+		ultimate: false,
 		aimAngle: 0,
 	};
 }
@@ -219,6 +276,39 @@ export class GameRoom {
 	private trainingSignature = "";
 	/** ms since the roster was last sent. */
 	private rosterAccumulator = 0;
+
+	// ---- the ultimate ----
+	//
+	// One cinematic and one singularity per room, both nullable, both owned here
+	// for the same reason bullets are: only the server may decide that an
+	// ultimate happened, and only the server may decide when it is over.
+	private cinematic: { casterId: string; msLeft: number } | null = null;
+	/**
+	 * ms during which input may queue deeper than usual: the freeze itself, plus
+	 * the window in which the backlog it parked is still draining. See
+	 * `MAX_QUEUED_INPUTS`.
+	 */
+	private cinematicGraceMs = 0;
+	/**
+	 * The throw waiting on the far side of the cinematic.
+	 *
+	 * The grenade is launched when the freeze *ends*, not when the button is
+	 * pressed. That ordering is the whole risk in the ability: the room is told a
+	 * black hole is coming and only then does it have to be aimed well. The aim
+	 * angle is captured at the press so a caster cannot re-aim during their own
+	 * cutscene.
+	 */
+	private pendingThrow: {
+		ownerId: string;
+		x: number;
+		y: number;
+		angle: number;
+	} | null = null;
+	private grenades: GrenadeState[] = [];
+	private singularity: Singularity | null = null;
+	/** ms since the open singularity last dealt damage. */
+	private singularityDamageAcc = 0;
+	private nextUltId = 0;
 
 	/** Deathmatch clock and lifecycle. */
 	private phase: MatchPhase = "live";
@@ -262,6 +352,7 @@ export class GameRoom {
 			timeLimitMs?: number;
 			fillTarget?: number;
 			screens?: number;
+			startUltCharge?: number;
 		} = {},
 	) {
 		this.id = id;
@@ -269,7 +360,26 @@ export class GameRoom {
 		this.timeLimitMs = rules.timeLimitMs ?? TIME_LIMIT_MS;
 		this.fillTarget = Math.max(0, Math.min(rules.fillTarget ?? 0, MAX_PLAYERS));
 		this.world = buildWorld(rules.screens ?? 1);
+		this.startUltCharge = Math.max(
+			0,
+			Math.min(rules.startUltCharge ?? 0, ULT_MAX_CHARGE),
+		);
 	}
+
+	/**
+	 * A **floor** on everybody's ultimate charge. Zero in a real match.
+	 *
+	 * `?ultCharge=N`, creator-only. It exists because the meter takes ~71s of
+	 * passive charge to fill, which is unmeasurable in a probe and tedious to
+	 * practise a throw against — see `server/index.ts`.
+	 *
+	 * A floor rather than a starting value, and that is the useful shape: at 100
+	 * it is a practice room where the ultimate re-arms the moment it is spent, so
+	 * a player can learn the arc in a minute instead of an hour and a probe can
+	 * measure two casts in one run. It cannot be used to spam, because a cast is
+	 * refused while a hole is already open.
+	 */
+	private readonly startUltCharge: number;
 
 	get playerCount(): number {
 		return this.channelIds.length;
@@ -325,6 +435,8 @@ export class GameRoom {
 			tickInput: null,
 			pendingInput: null,
 			simulatedIntent: null,
+			ult: this.startUltCharge,
+			ultHeld: false,
 			stats: newStats(),
 		};
 	}
@@ -375,8 +487,12 @@ export class GameRoom {
 			// Ignore replays of inputs already simulated.
 			if (input.seq <= player.lastSeq) return;
 			player.queue.push(input);
-			if (player.queue.length > MAX_QUEUED_INPUTS) {
-				player.queue.splice(0, player.queue.length - MAX_QUEUED_INPUTS);
+			const cap =
+				this.cinematicGraceMs > 0
+					? MAX_QUEUED_INPUTS_FROZEN
+					: MAX_QUEUED_INPUTS;
+			if (player.queue.length > cap) {
+				player.queue.splice(0, player.queue.length - cap);
 			}
 		});
 
@@ -619,6 +735,10 @@ export class GameRoom {
 			swordStance: out.swordStance,
 			face: out.face,
 			dash: out.dash,
+			// Bots do not press it. `EnemyBrain` has no concept of a charge meter, and
+			// giving one a random chance to fire would be a fake decision — the ult is
+			// measured by `scripts/ultimate-probe.mjs`, which presses it deliberately.
+			ultimate: false,
 			aimAngle: out.aimAngle,
 		};
 	}
@@ -749,7 +869,13 @@ export class GameRoom {
 			victim.lastHurtBy && victim.lastHurtBy !== victim.id
 				? this.players.get(victim.lastHurtBy)
 				: undefined;
-		if (killer) killer.kills++;
+		if (killer) {
+			killer.kills++;
+			killer.ult = addCharge(killer.ult, ULT_CHARGE_PER_KILL);
+		}
+		// Deliberately *not* zeroed on the victim. An ultimate survives death — see
+		// specs/ultimate.md — which is what makes it something a losing player can
+		// still plan around.
 		victim.lastHurtBy = null;
 
 		console.log(
@@ -769,7 +895,14 @@ export class GameRoom {
 		victim.stats.damageTaken += amount;
 
 		const source = this.players.get(sourceId);
-		if (source && source !== victim) source.stats.damageDealt += amount;
+		if (source && source !== victim) {
+			source.stats.damageDealt += amount;
+			// The Overwatch economy, in one line: charge is what you are paid for
+			// participating. Paid here rather than in each weapon's code path so a
+			// sword hit, a bullet and the black hole's own tick are all worth the
+			// same per point — and so a weapon added later cannot forget to pay.
+			source.ult = addCharge(source.ult, amount * ULT_CHARGE_PER_DAMAGE);
+		}
 
 		if (victim.hp <= 0) this.killPlayer(victim);
 	}
@@ -808,6 +941,11 @@ export class GameRoom {
 		player.pendingInput = null;
 		player.tickInput = null;
 		player.simulatedIntent = null;
+		// Charge is *not* reset here — an ultimate survives death, deliberately.
+		// The floor only applies in a room that asked for one (`?ultCharge=N`),
+		// where it is there so a probe or a practising player gets more than one
+		// throw per run.
+		player.ult = Math.max(player.ult, this.startUltCharge);
 		this.broadcast("respawn", { id: player.id, t: Date.now() });
 	}
 
@@ -854,6 +992,11 @@ export class GameRoom {
 			player.kills = 0;
 			player.deaths = 0;
 			player.stats = newStats();
+			// A new match starts everybody at zero. Charge survives a death but not a
+			// scoreboard wipe — carrying one over would hand the previous match's
+			// winner an ultimate before the new one has begun.
+			player.ult = this.startUltCharge;
+			player.ultHeld = false;
 			// A fresh personality per match, so sixteen bots do not replay the same
 			// fight every five minutes.
 			if (player.brain) player.brain = new EnemyBrain(botConfig(), this.world);
@@ -886,8 +1029,18 @@ export class GameRoom {
 				kills: p.kills,
 				deaths: p.deaths,
 				alive: p.alive,
+				// Rounded: the HUD draws a bar, and a fractional trickle would make
+				// every snapshot differ in a digit nobody can see.
+				ult: Math.round(p.ult),
 			});
 		}
+		const cinematic: SnapshotCinematic | null = this.cinematic
+			? {
+					casterId: this.cinematic.casterId,
+					remainingMs: Math.max(0, Math.round(this.cinematic.msLeft)),
+					totalMs: ULT_CINEMATIC_MS,
+				}
+			: null;
 		return {
 			t: Date.now(),
 			tick: this.tickCount,
@@ -902,6 +1055,19 @@ export class GameRoom {
 			})),
 			melee: this.meleeEvents.slice(),
 			match: this.matchStatus(),
+			grenades: this.grenades.map((g) => ({
+				id: g.id,
+				ownerId: g.ownerId,
+				x: g.x,
+				y: g.y,
+				vx: g.vx,
+				vy: g.vy,
+			})),
+			// Sent in full every snapshot rather than announced once. It is what every
+			// client feeds into `tickPlayer`, so a lost datagram must never be able to
+			// leave one pulling fighters into a hole that has closed.
+			singularity: this.singularity ? { ...this.singularity } : null,
+			cinematic,
 		};
 	}
 
@@ -981,6 +1147,13 @@ export class GameRoom {
 	private fixedTick(dt: number, now: number) {
 		this.tickCount++;
 
+		// The ultimate's cinematic freeze, and the only thing in the game that gets
+		// to stop the simulation. Everything below is skipped: no input is consumed,
+		// no fighter is advanced, no bullet moves, the match clock does not run and
+		// nobody's respawn gets closer. See `tickCinematic` for why that is safe
+		// here and nowhere else.
+		if (this.tickCinematic(dt)) return;
+
 		// Human slots first, so a dummy's `mirror` and `record` see the player's
 		// input for *this* tick. The map is in insertion order and the human is
 		// always seated before the dummy, but relying on that would make a
@@ -1004,7 +1177,22 @@ export class GameRoom {
 			}
 
 			player.simulatedIntent = input;
-			player.state = tickPlayer(player.state, input, dt, this.world);
+			// The hole this fighter is in, if any — already filtered for friendly
+			// fire, so the caster is handed null and walks through their own field.
+			player.state = tickPlayer(
+				player.state,
+				input,
+				dt,
+				this.world,
+				fieldFor(this.singularity, player.id),
+			);
+
+			// A press edge, not a hold: `ultimate` is held button state on the wire
+			// like every other button, and edge-detecting it here rather than on the
+			// client is the same rule attack and jump follow.
+			if (input.ultimate && !player.ultHeld)
+				this.tryCastUltimate(player, input);
+			player.ultHeld = input.ultimate;
 
 			// A fighter holds a sword or a gun, never both: firing is gated on the
 			// stance the simulation says they are actually in.
@@ -1027,8 +1215,14 @@ export class GameRoom {
 			}
 		}
 
+		// Counted down here rather than in `tickCinematic`, which stops running the
+		// moment the freeze is over — this is the window *after* it, while the
+		// parked backlog is still draining.
+		this.cinematicGraceMs = Math.max(0, this.cinematicGraceMs - dt * 1000);
+
 		this.resolveMeleeHits();
 		this.tickBullets(dt);
+		this.tickUltimate(dt);
 		this.applyTrainingRules(dt);
 
 		// A training session is not a deathmatch. It keeps the old round lifecycle:
@@ -1166,6 +1360,185 @@ export class GameRoom {
 		this.bullets.length = kept;
 	}
 
+	// =========================================================
+	//  THE ULTIMATE
+	// =========================================================
+
+	/**
+	 * Count the cinematic down. Returns true while the room must not simulate.
+	 *
+	 * **This is the only frame freeze the game allows, and the reason it is safe
+	 * is that it is nothing like hitstop.** Hitstop is a local decision one client
+	 * makes about an impact it drew; this is the server declaring a range of ticks
+	 * in which *nobody* — server included — advances anything. A client that sees
+	 * `cinematic` in the snapshot stops running fixed steps, so it also stops
+	 * sending input and stops predicting remotes. It freezes when the message
+	 * reaches it and unfreezes when the next one does, so it is exactly as far
+	 * ahead of the server on the far side as it was on the near side, and the
+	 * handful of inputs already in flight simply wait in the queue. Nothing is
+	 * dropped, so nothing diverges.
+	 *
+	 * `tickCount` still advances: it is a clock and the rollback anchor, and a
+	 * clock that stalls would make every client's `leadTicks` arithmetic lie.
+	 */
+	private tickCinematic(dt: number): boolean {
+		if (!this.cinematic) return false;
+
+		// Every fighter is frozen, and says so. Without this the previous tick's
+		// intent would still be in the snapshot and every other client would predict
+		// motion for a fighter the server is holding perfectly still.
+		for (const player of this.players.values()) player.simulatedIntent = null;
+
+		this.cinematic.msLeft -= dt * 1000;
+		this.cinematicGraceMs = CINEMATIC_QUEUE_GRACE_MS;
+		if (this.cinematic.msLeft > 0) return true;
+
+		this.cinematic = null;
+		this.releasePendingThrow();
+		return true;
+	}
+
+	/**
+	 * Try to cast. Silently refused when the conditions are not met.
+	 *
+	 * Silent on purpose: every refusal is a state the player can already see —
+	 * an empty meter, being stunned, somebody else's cinematic on screen. A
+	 * rejection message would be a second, unreliable channel telling them
+	 * something the first one already did.
+	 */
+	private tryCastUltimate(player: ConnectedPlayer, input: PlayerInput) {
+		if (!ultReady(player.ult)) return;
+		if (!player.alive || this.phase !== "live") return;
+		if (isStunned(player.state) || isKnockedDown(player.state)) return;
+		// One at a time, both ways. Two overlapping holes would have to argue about
+		// which way a fighter between them is pulled, and two overlapping cinematics
+		// would mean one of them was never seen.
+		if (this.cinematic || this.pendingThrow || this.singularity) return;
+
+		// Spent at the press, before the freeze. A caster who disconnects mid
+		// cinematic must not come back still armed.
+		player.ult = 0;
+		this.cinematic = { casterId: player.id, msLeft: ULT_CINEMATIC_MS };
+		this.pendingThrow = {
+			ownerId: player.id,
+			x: player.state.x + PLAYER_WIDTH / 2,
+			y: player.state.y + PLAYER_HEIGHT / 2,
+			// Captured now, so the caster cannot re-aim during their own cutscene.
+			angle: input.aimAngle,
+		};
+		console.log(`[ULT] ${player.name} casts Black Hole`);
+	}
+
+	/** The freeze is over: throw the grenade the caster paid for. */
+	private releasePendingThrow() {
+		const t = this.pendingThrow;
+		this.pendingThrow = null;
+		if (!t) return;
+		this.grenades.push(
+			launchGrenade(this.nextUltId++, t.ownerId, t.x, t.y, t.angle),
+		);
+	}
+
+	/** Advance grenades in flight and the open singularity. */
+	private tickUltimate(dt: number) {
+		this.tickGrenades(dt);
+		this.tickSingularity(dt);
+
+		// The passive trickle, paid only to the living. Damage-based charge is paid
+		// where the damage is counted, in `damage`.
+		const passive = ULT_PASSIVE_PER_SEC * dt;
+		for (const player of this.players.values()) {
+			if (player.alive) player.ult = addCharge(player.ult, passive);
+			// The practice-room floor. No-op in a real match, where it is zero.
+			if (player.ult < this.startUltCharge) player.ult = this.startUltCharge;
+		}
+	}
+
+	private tickGrenades(dt: number) {
+		if (this.grenades.length === 0) return;
+
+		// Compact in place, exactly like the bullets: a grenade that ends this tick
+		// is removed by not being kept, so there is no splice inside the loop.
+		let kept = 0;
+		for (const g of this.grenades) {
+			tickGrenade(g, dt);
+
+			let touched = false;
+			for (const player of this.players.values()) {
+				if (!player.alive) continue;
+				if (!grenadeTouches(g, player.id, player.state.x, player.state.y)) {
+					continue;
+				}
+				touched = true;
+				break;
+			}
+
+			const end = grenadeEnd(g, this.world, touched);
+			if (end === null) {
+				this.grenades[kept++] = g;
+				continue;
+			}
+			// A fizzle is the miss the ability is balanced around: out of the top of
+			// the world, no hole, nothing to show for it.
+			if (end !== "fizzle") this.openSingularity(g);
+			else console.log(`[ULT] grenade ${g.id} fizzled out of the world`);
+		}
+		this.grenades.length = kept;
+	}
+
+	private openSingularity(g: GrenadeState) {
+		this.singularity = {
+			id: g.id,
+			ownerId: g.ownerId,
+			// Clamped into the arena.
+			//
+			// A grenade that leaves through a side wall is detonated by `grenadeEnd`
+			// at the point it was last seen, which is outside the world — and a hole
+			// centred at x=-40 is half a hole, drawn off-screen, that still reaches
+			// 128px into the room. Found by `scripts/ultimate-probe.mjs`, which threw
+			// one into the left wall and reported a singularity outside its own arena.
+			// The wall *is* where it hit, so the boundary is the honest place for it.
+			x: Math.max(this.world.left, Math.min(g.x, this.world.right)),
+			y: Math.max(this.world.top, Math.min(g.y, this.world.bottom)),
+			remainingMs: SINGULARITY_DURATION_MS,
+		};
+		// Damage lands on the first interval, not on the frame it opens: a hole that
+		// hit for 5 the instant it appeared would make the throw itself the damage,
+		// and the point is the hold.
+		this.singularityDamageAcc = 0;
+		console.log(
+			`[ULT] singularity ${g.id} at ${Math.round(g.x)},${Math.round(g.y)}`,
+		);
+	}
+
+	private tickSingularity(dt: number) {
+		const field = this.singularity;
+		if (!field) return;
+
+		field.remainingMs -= dt * 1000;
+		if (field.remainingMs <= 0) {
+			this.singularity = null;
+			return;
+		}
+
+		this.singularityDamageAcc += dt * 1000;
+		if (this.singularityDamageAcc < SINGULARITY_DAMAGE_INTERVAL_MS) return;
+		this.singularityDamageAcc -= SINGULARITY_DAMAGE_INTERVAL_MS;
+
+		for (const player of this.players.values()) {
+			if (!player.alive) continue;
+			// The friendly-fire rule and the "is it holding them" test both come from
+			// the shared module, so the damage can never disagree with the pull the
+			// client is predicting. `fieldFor` returns null for the caster, and a null
+			// field grips nobody.
+			const mine = fieldFor(field, player.id);
+			if (singularityGrip(mine, player.state.x, player.state.y) !== "held") {
+				continue;
+			}
+			this.damage(player, SINGULARITY_TICK_DAMAGE, field.ownerId);
+		}
+	}
+
 	/**
 	 * Put everyone back at a spawn point at once.
 	 *
@@ -1214,6 +1587,15 @@ export class GameRoom {
 		this.bullets = [];
 		this.meleeEvents.length = 0;
 		this.resetTimer = -1;
+		// A hole left open across a reset would grab fighters at their spawns, and a
+		// cinematic left running would freeze a match that has just started. Charge
+		// is *not* cleared here: `restartMatch` owns that, because a training-room
+		// reset should not confiscate an ult somebody spent two minutes earning.
+		this.grenades.length = 0;
+		this.singularity = null;
+		this.cinematic = null;
+		this.pendingThrow = null;
+		this.cinematicGraceMs = 0;
 
 		// Tell clients explicitly. A respawn is a legitimate discontinuity, and
 		// announcing it beats every client guessing from a distance threshold.

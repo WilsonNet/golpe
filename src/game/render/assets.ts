@@ -33,6 +33,12 @@ export const TEX = {
 	disabled: "dude_disabled",
 	/** Flat on the floor, after the chain's finisher. */
 	downed: "dude_downed",
+	/** The black hole's own art — see `createUltimateTextures`. */
+	singularity: "fx_singularity",
+	horizon: "fx_horizon",
+	accretion: "fx_accretion",
+	grenade: "fx_grenade",
+	halo: "fx_halo",
 } as const;
 
 /** The `dude` strip, sliced into its nine 32x48 frames. */
@@ -148,6 +154,96 @@ export function createFxTextures(renderer: Renderer): void {
 	bake(renderer, TEX.guard, guard);
 
 	createHitTextures(renderer);
+	createUltimateTextures(renderer);
+}
+
+/**
+ * The black hole's art.
+ *
+ * The one effect in the game that is **not** flat white waiting for a tint. A
+ * singularity is defined by the contrast between a hole that emits nothing and
+ * a disk that is far too bright, and a single tinted primitive cannot express
+ * both — so the core is baked black-on-transparent, the disk is baked with its
+ * own colour ramp, and only the halo stays white so the detonation can tint it.
+ *
+ * Baked to textures rather than drawn as live `Graphics` because these are
+ * scaled and rotated every frame for two seconds: `generateTexture` pays the
+ * rasterisation once, and a rotating sprite costs the GPU nothing. See the
+ * `pixi-graphics` skill on when to bake.
+ */
+function createUltimateTextures(renderer: Renderer): void {
+	// ---- the core ----
+	//
+	// Pure black with a tight falloff, and nothing else. Drawn at 128px and scaled
+	// down in use, so the edge stays clean at full size.
+	//
+	// **Deliberately small against the field it belongs to.** The first version
+	// faded out over 16px of soft dark, which at a 168px radius washed a third of
+	// the arena grey and made the platforms behind it unreadable — a hole should
+	// swallow light, not fog the room. The *edge* of the ability is drawn by the
+	// horizon ring instead, which is sized from the simulation's own radius.
+	const core = new Graphics();
+	core.circle(64, 64, 62).fill({ color: 0x000000, alpha: 0.18 });
+	core.circle(64, 64, 54).fill({ color: 0x04000c, alpha: 0.72 });
+	core.circle(64, 64, 46).fill(0x000000);
+	bake(renderer, TEX.singularity, core);
+
+	// ---- the event horizon ----
+	//
+	// A ring, drawn at exactly the radius the simulation grabs at — see
+	// `BlackHoleFx`. This is the only part of the effect a player has to be able
+	// to *read*: inside it you are cargo, outside it you can still fight. An
+	// effect whose visible edge is not its real one is the most confusing thing a
+	// field ability can do, and the first version had the black core at 62% of the
+	// radius with nothing marking the rest.
+	const horizon = new Graphics();
+	horizon.circle(64, 64, 60).stroke({ width: 3, color: 0xe6d2ff, alpha: 0.95 });
+	horizon.circle(64, 64, 56).stroke({ width: 6, color: 0x9a5cff, alpha: 0.45 });
+	horizon.circle(64, 64, 51).stroke({ width: 10, color: 0x6a2fd0, alpha: 0.2 });
+	bake(renderer, TEX.horizon, horizon);
+
+	// ---- the accretion disk ----
+	//
+	// An ellipse rather than a circle, because a disk seen from slightly above is
+	// what makes a flat sprite read as a three-dimensional object. Two of these
+	// counter-rotate at different rates in `BlackHoleFx`, which is what sells the
+	// spin — one ring rotating alone reads as a rotating ring.
+	const disk = new Graphics();
+	for (const [r, w, colour, alpha] of [
+		[60, 5, 0xffffff, 0.9],
+		[68, 4, 0xffd9a0, 0.75],
+		[76, 3, 0xff9a4d, 0.55],
+		[84, 2, 0xb14bff, 0.4],
+	] as const) {
+		disk
+			.ellipse(88, 88, r, r * 0.34)
+			.stroke({ width: w, color: colour, alpha });
+	}
+	bake(renderer, TEX.accretion, disk);
+
+	// ---- the grenade ----
+	//
+	// A dark core inside a corona: the same read as the hole it becomes, at a
+	// twentieth the size, so a player who has seen one knows what is arriving.
+	const grenade = new Graphics();
+	grenade.circle(16, 16, 14).fill({ color: 0x9a5cff, alpha: 0.25 });
+	grenade.circle(16, 16, 10).fill({ color: 0x6a2fd0, alpha: 0.65 });
+	grenade.circle(16, 16, 6).fill(0x0a0014);
+	grenade
+		.circle(16, 16, 6.5)
+		.stroke({ width: 1.5, color: 0xd7b3ff, alpha: 0.9 });
+	bake(renderer, TEX.grenade, grenade);
+
+	// ---- the halo ----
+	//
+	// A soft filled disc, white so it can be tinted. Used additively for the
+	// gravitational glow and for the detonation flash — the only two things in
+	// the game that need light rather than an outline.
+	const halo = new Graphics();
+	for (let i = 8; i >= 1; i--) {
+		halo.circle(64, 64, (64 * i) / 8).fill({ color: 0xffffff, alpha: 0.055 });
+	}
+	bake(renderer, TEX.halo, halo);
 }
 
 /**

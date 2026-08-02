@@ -21,6 +21,20 @@ export class Stage {
 	/** Draw order, back to front. */
 	readonly background = new Container();
 	readonly arena = new Container();
+	/**
+	 * World-scale field effects that fighters stand *in front of*.
+	 *
+	 * Exactly one thing lives here and it needs its own layer: the black hole's
+	 * core is a 150px disc of pure black, and drawn in `effects` — above the
+	 * actors, where every other effect belongs — it swallowed the fighters it was
+	 * holding. A player could see the nameplate of somebody being torn apart and
+	 * not the fighter. Behind the actors it does the opposite and better job:
+	 * the caught silhouette reads against the dark.
+	 *
+	 * The hole's *particles* stay in `effects`, in front. Debris in front of the
+	 * fighters and the void behind them is what makes a flat sprite read as depth.
+	 */
+	readonly field = new Container();
 	readonly actors = new Container();
 	readonly projectiles = new Container();
 	readonly effects = new Container();
@@ -43,6 +57,7 @@ export class Stage {
 		this.shake.addChild(
 			this.background,
 			this.arena,
+			this.field,
 			this.actors,
 			this.projectiles,
 			this.effects,

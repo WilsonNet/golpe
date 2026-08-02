@@ -67,6 +67,14 @@ export interface JoinOptions {
 	 * room, and the server says what it actually is in the `match` message.
 	 */
 	screens?: number;
+	/**
+	 * Starting ultimate charge for everybody in the room, 0..100.
+	 *
+	 * `?ultCharge=N`, and creator-only like the rest of this block. The meter
+	 * takes ~71s of passive charge to fill, which is unmeasurable in a probe and
+	 * tedious to practise a throw against.
+	 */
+	ultCharge?: number;
 }
 
 export class OnlineManager {
@@ -142,6 +150,9 @@ export class OnlineManager {
 						? {}
 						: { timeLimitMs: join.timeLimitMs }),
 					...(join.screens === undefined ? {} : { screens: join.screens }),
+					...(join.ultCharge === undefined
+						? {}
+						: { ultCharge: join.ultCharge }),
 				},
 				RELIABLE,
 			);

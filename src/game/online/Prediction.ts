@@ -15,6 +15,7 @@ import {
 	DEFAULT_WORLD,
 	type PlayerIntent,
 	type PlayerPosition,
+	type Singularity,
 	tickPlayer,
 	type World,
 } from "../simulation/Physics";
@@ -110,9 +111,24 @@ export class PredictedPlayer {
 	 * Advance one fixed step locally and remember the input so it can be
 	 * replayed. Returns the sequence number to send to the server.
 	 */
-	step(intent: PlayerIntent, dt: number): number {
+	/**
+	 * `field` is the black hole as *this* fighter feels it — already filtered for
+	 * friendly fire by the caller. It is passed on both the live step and the
+	 * replay, and it is deliberately the *current* field in both cases: the
+	 * singularity's position and strength never change while it is open, so the
+	 * only thing a replayed tick can be wrong about is whether the hole had
+	 * already closed, and only for the handful of ticks at the very end of its
+	 * life. That is a few pixels, absorbed by the smoother. A field whose force
+	 * varied over time would make every replay a different replay and
+	 * reconciliation would never settle — which is why it does not.
+	 */
+	step(
+		intent: PlayerIntent,
+		dt: number,
+		field: Singularity | null = null,
+	): number {
 		const seq = this.nextSeq++;
-		this.state = tickPlayer(this.state, intent, dt, this.world);
+		this.state = tickPlayer(this.state, intent, dt, this.world, field);
 		this.pending.push({ seq, intent: { ...intent } });
 		if (this.pending.length > MAX_PENDING_INPUTS) {
 			this.pending.splice(0, this.pending.length - MAX_PENDING_INPUTS);
@@ -128,6 +144,7 @@ export class PredictedPlayer {
 		authoritative: PlayerPosition,
 		lastSeq: number,
 		dt: number,
+		field: Singularity | null = null,
 	): ReconcileResult {
 		const predictedX = this.state.x;
 		const predictedY = this.state.y;
@@ -143,7 +160,7 @@ export class PredictedPlayer {
 		const rewound = copyPlayerState(authoritative, { ...this.state });
 		let replayed = rewound;
 		for (const p of this.pending) {
-			replayed = tickPlayer(replayed, p.intent, dt, this.world);
+			replayed = tickPlayer(replayed, p.intent, dt, this.world, field);
 		}
 		this.state = replayed;
 

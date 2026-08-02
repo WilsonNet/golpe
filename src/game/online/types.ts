@@ -90,6 +90,16 @@ export interface SnapshotPlayer {
 	kills: number;
 	deaths: number;
 	alive: boolean;
+	/**
+	 * Ultimate charge, 0..100.
+	 *
+	 * Beside `hp` and the scores rather than inside `state`, and for the same
+	 * reason they are: it is paid out of damage, and only the server knows a hit
+	 * landed. Putting it in `PlayerPosition` would oblige the client to predict a
+	 * number it has no way to compute, and would put it on the replay path for no
+	 * benefit — the simulation never reads it.
+	 */
+	ult: number;
 }
 
 export interface SnapshotBullet {
@@ -122,6 +132,49 @@ export interface MatchStatus {
 	nextMatchInMs: number;
 }
 
+/** A black hole grenade in flight. Server-owned, like a bullet. */
+export interface SnapshotGrenade {
+	id: number;
+	ownerId: string;
+	x: number;
+	y: number;
+	/** Carried so the client can dead-reckon the arc between 20Hz snapshots. */
+	vx: number;
+	vy: number;
+}
+
+/**
+ * The open singularity, if there is one. At most one per room.
+ *
+ * Sent in full every snapshot rather than announced once: it is what the client
+ * feeds into `tickPlayer` for every fighter it predicts, so a lost datagram must
+ * not be able to leave a client pulling people into a hole that has closed — or
+ * worse, not pulling them into one that is open.
+ */
+export interface SnapshotSingularity {
+	id: number;
+	ownerId: string;
+	x: number;
+	y: number;
+	remainingMs: number;
+}
+
+/**
+ * The room is frozen for an ultimate cast.
+ *
+ * Present for exactly the ticks the server is not simulating. A client that
+ * sees this stops running fixed steps — see specs/netcode.md for why that is
+ * the *only* safe way to freeze a networked game, and why it is nothing like
+ * the hitstop that is banned everywhere else.
+ */
+export interface SnapshotCinematic {
+	casterId: string;
+	/** ms of freeze left, for the overlay's own progress. */
+	remainingMs: number;
+	/** Total length, so the overlay can animate a fraction without a second constant. */
+	totalMs: number;
+}
+
 export interface GameSnapshot {
 	/** Server time the snapshot was taken, for clock sync and dead reckoning. */
 	t: number;
@@ -137,6 +190,12 @@ export interface GameSnapshot {
 	/** Melee impacts since the previous snapshot. Effects only. */
 	melee: MeleeEventMsg[];
 	match: MatchStatus;
+	/** Black hole grenades in flight. Usually empty; at most one per cast. */
+	grenades: SnapshotGrenade[];
+	/** The open black hole, or null. At most one per room. */
+	singularity: SnapshotSingularity | null;
+	/** Set only while the room is frozen for a cast. */
+	cinematic: SnapshotCinematic | null;
 }
 
 /**

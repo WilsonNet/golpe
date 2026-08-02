@@ -110,6 +110,41 @@ were simply worse. `npm run typecheck` now covers both projects.
 - **Never freeze frames on impact.** Hitstop is the standard way to sell a heavy
   hit and it is unavailable here — pausing one side desyncs it. `MeleeFx` fakes
   it with camera shake and a sprite scale punch, purely in the renderer.
+- **The ultimate's cinematic is the one legal freeze, and it is legal because it
+  is the opposite of hitstop.** Hitstop is a *local* decision one client makes
+  about an impact it drew. The cinematic is the **server** declaring a range of
+  ticks in which nobody — server included — advances anything: it consumes no
+  input, marks every fighter's snapshot `input` as `null`, and a client that sees
+  it stops running fixed steps at all. Each client freezes when the message
+  reaches it and unfreezes when the next one does, so its lead over the server is
+  identical on both sides of the event and the inputs already in flight simply
+  wait in the queue. Nothing is dropped, so nothing diverges. A freeze that any
+  client decides for itself is still forbidden. See
+  [`specs/ultimate.md`](../specs/ultimate.md).
+
+## The ultimate
+
+Full rules in [`specs/ultimate.md`](../specs/ultimate.md).
+
+- **The black hole's pull is an argument to `tickPlayer`, never something applied
+  on top of it.** Anything that moves a fighter from outside the simulation is
+  erased by the next reconciliation — the same lesson the dash taught. Both sides
+  pass the room's field in, so a caught fighter's own client predicts the drag
+  and reconciles to ~0px.
+- **The friendly-fire rule is one predicate, `fieldAffects`.** Nothing compares
+  ids itself. `tickPlayer` never learns whose hole it is; the caller hands it
+  `null` for the caster. A team mode is a change to that one function.
+- **Presentation must ask the simulation where the field reaches.** The renderer
+  sizes the horizon ring from `SINGULARITY_RADIUS` and derives its victim list
+  from `singularityGrip`, because an effect whose visible edge is not its real
+  one is the most confusing thing a field ability can do.
+- **The local fighter's entity key is `"local"`, not its server id.** Anything
+  that asks a question the *server* also asks must translate first — the
+  friendly-fire test did not, and the caster's own client drew them being torn
+  apart inside their own hole.
+- **Ult charge is not in `PlayerPosition`.** It is paid out of damage, which only
+  the server sees, and the simulation never reads it — so it travels beside `hp`
+  in the snapshot rather than on the replay path.
 
 ## Sword combat
 

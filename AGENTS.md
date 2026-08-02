@@ -50,7 +50,8 @@ commit** — and tuning a constant counts as changing behaviour. Read the releva
 spec before implementing: [movement](specs/movement.md) ·
 [combat](specs/combat.md) · [melee](specs/melee.md) · [arena](specs/arena.md) ·
 [deathmatch](specs/deathmatch.md) · [netcode](specs/netcode.md) ·
-[controls](specs/controls.md) · [training room](specs/training-room.md).
+[controls](specs/controls.md) · [training room](specs/training-room.md) ·
+[ultimate](specs/ultimate.md).
 
 ## Tech Stack
 
@@ -102,6 +103,11 @@ One line each; the war story behind every one is in
   `export default` and `export *` silently resolve to the wrong thing, and `tsc`
   cannot see either.
 - **Never freeze frames on impact.** Hitstop desyncs; fake it in the renderer.
+  The ultimate's cinematic is the one exception, and only because the *server*
+  declares the frozen tick range and nobody simulates through it.
+- **The black hole's pull is an argument to `tickPlayer`**, and the friendly-fire
+  rule is one predicate (`fieldAffects`). A pull applied on top of predicted
+  state is erased by the next reconciliation.
 - **A link's hitstun is set by the gap to the next link's hitbox.** Shorten one and
   the combo silently stops being a combo — nothing reports it but a defender who
   blocks the second hit. The chain also pierces melee iframes, and only the chain.
@@ -147,6 +153,7 @@ node scripts/pad-probe.mjs                             # controller aim, gamepad
 node scripts/training-probe.mjs                        # one interaction, against a scripted dummy
 node scripts/dash-probe.mjs                            # double-tap dash delivery, at a forced frame rate
 node scripts/screens-probe.mjs                         # ?screen=N room: spawn spread + follow camera
+node scripts/ultimate-probe.mjs                        # the black hole: freeze, throw, capture, no friendly fire
 ```
 
 Both `diagnose.mjs` and `deathmatch-probe.mjs` take `--screens=N` to run their
@@ -240,6 +247,21 @@ which is why every probe runs that way.
 
 **Deathmatch is the mode.** Up to sixteen fighters, 21 frags or 5 minutes,
 individual respawns.
+
+**There is one ultimate: a black hole grenade, on R.** Earned Overwatch-style
+(1.4 charge/s passive, 0.8 per point of damage dealt, 12 a kill; it survives
+death), spent in one press. Casting **freezes the whole room for 1100ms** behind
+a portrait card — the only legal frame freeze in the game, and legal only because
+the *server* declares the tick range and neither side simulates through it. The
+freeze ends, the grenade launches along the angle you were aiming, and it arcs:
+780 px/s under 860 px/s² gravity, so **707px is as far as it can be thrown** and
+choosing the arc is the skill. Where it lands, a singularity holds for 2200ms —
+168px event horizon (caught: no gravity, no steering, stunned), 260px outer reach
+(a tug you can dash out of), 5 damage every 250ms. **The caster is immune to
+their own hole**, and that exclusion is one predicate. The pull is an argument to
+`tickPlayer`, so a caught fighter's own client predicts it. `?ultCharge=N` is a
+creator-only charge floor — the practice-room flag. See
+[specs/ultimate.md](specs/ultimate.md).
 
 **Bots are opt-in.** A room has none unless asked: `?bots=N` seats N to fight,
 `?fill=N` keeps the room at N fighters with bots as ballast, and neither means
