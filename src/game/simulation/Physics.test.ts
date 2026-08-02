@@ -14,9 +14,13 @@ import {
 import {
 	AIR_JUMP_VELOCITY,
 	AIR_JUMPS,
+	type BulletState,
+	bodyRect,
+	bulletHitsPlayer,
 	COYOTE_TIME_MS,
 	createPlayerState,
 	DASH_DURATION_MS,
+	DASH_LOCKOUT_MS,
 	DASH_SPEED,
 	FALL_GRAVITY_MULTIPLIER,
 	GRAVITY,
@@ -31,6 +35,12 @@ import {
 	PLAYER_WALK_SPEED,
 	type PlayerIntent,
 	type PlayerPosition,
+	playerBodyRect,
+	rectsOverlap,
+	TUMBLE_DURATION_MS,
+	TUMBLE_HEIGHT,
+	TUMBLE_LOCKOUT_MS,
+	TUMBLE_SPEED,
 	tickPlayer,
 	WALL_JUMP_HORIZONTAL,
 	WALL_JUMP_LOCKOUT,
@@ -777,6 +787,185 @@ describe("dash", () => {
 		s = tick(s, { dash: -1 });
 		s = ticks(s, {}, 6);
 		expect(s.dashActiveTimer).toBe(0);
+	});
+});
+
+describe("tumble", () => {
+	/**
+	 * One tick in gun stance, so the next burst reads as a tumble.
+	 *
+	 * `swordStance: false` must ride every burst intent too: the neutral intent
+	 * defaults to sword, and a tick that silently re-stances mid-gesture turns
+	 * the tumble back into a dash — which is exactly why the stance must live on
+	 * the state, not in the gesture.
+	 */
+	const gun = (overrides: Partial<PlayerPosition> = {}) =>
+		tick(state(overrides), { swordStance: false });
+	/** Tumble: a burst intent that holds gun stance. */
+	const roll = (s: PlayerPosition, overrides: Partial<PlayerIntent> = {}) =>
+		tick(s, { swordStance: false, ...overrides });
+
+	it("is the same gesture as the dash, decided by stance", () => {
+		// GunZ's own split: double-tap with a ranged weapon rolls, with a melee
+		// weapon it dashes. The gesture never changes — the stance the simulation
+		// already owns decides, so the input layer needs no knowledge of either.
+		const sword = tick(
+			state({ x: OPEN_X, y: standingOn(GROUND.y), grounded: true }),
+			{ dash: 1 },
+		);
+		expect(sword.vx).toBe(DASH_SPEED);
+		expect(sword.dashActiveTimer).toBeGreaterThan(0);
+		expect(sword.tumbleActiveTimer).toBe(0);
+
+		const tumbling = roll(
+			gun({ x: OPEN_X, y: standingOn(GROUND.y), grounded: true }),
+			{ dash: 1 },
+		);
+		expect(tumbling.vx).toBe(TUMBLE_SPEED);
+		expect(tumbling.tumbleActiveTimer).toBeGreaterThan(0);
+		expect(tumbling.dashActiveTimer).toBe(0);
+	});
+
+	it("is slower than the dash, and locked out longer — the sword's window", () => {
+		// The whole balance: a roll buys the gunner a beat to shoot, and the beat
+		// is exactly what a sword fighter dashes through. If this inverts, swords
+		// can never close and guns are strictly better.
+		expect(TUMBLE_SPEED).toBeLessThan(DASH_SPEED);
+		expect(TUMBLE_LOCKOUT_MS).toBeGreaterThan(DASH_LOCKOUT_MS);
+	});
+
+	it("keeps gravity: an airborne tumble falls", () => {
+		// The dash pins `vy` to zero and flies a flat line; the roll does not.
+		// Falling is the roll's whole difference — a gunner who rolls off a ledge
+		// commits to the drop, and a dash across a gap has no gun equivalent.
+		let s = roll(gun({ x: OPEN_X, y: 300 }), { dash: 1 });
+		expect(s.tumbleActiveTimer).toBeGreaterThan(0);
+
+		const frames = Math.floor(TUMBLE_DURATION_MS / 1000 / DT) - 1;
+		let fell = false;
+		for (let i = 0; i < frames; i++) {
+			s = tick(s, { swordStance: false });
+			if (s.vy > 0) fell = true;
+		}
+		expect(fell).toBe(true);
+		expect(s.y).toBeGreaterThan(300);
+	});
+
+	it("refuses to re-burst — dash or tumble — until both lockouts expire", () => {
+		let s = roll(gun({ x: OPEN_X, y: standingOn(GROUND.y), grounded: true }), {
+			dash: 1,
+		});
+		expect(s.tumbleTimer).toBeGreaterThan(0);
+
+		// Held down, the gesture must not become a speed boost.
+		s = roll(s, { dash: 1 });
+		expect(s.vx).toBeLessThan(TUMBLE_SPEED);
+
+		// Switching stances mid-lockout must not chain a dash out of a tumble.
+		s = tick(s, { swordStance: true, dash: 1 });
+		expect(s.dashActiveTimer).toBe(0);
+	});
+
+	it("carries far enough to actually create separation", () => {
+		let s = roll(gun({ x: OPEN_X, y: standingOn(GROUND.y), grounded: true }), {
+			dash: 1,
+		});
+		const startX = s.x;
+		for (let i = 0; i < 30; i++) s = tick(s, { swordStance: false });
+		expect(s.x - startX).toBeGreaterThan(PLAYER_WALK_SPEED * 0.3);
+	});
+
+	it("is interrupted by a stun, so the reduced hitbox dies with the roll", () => {
+		let s = roll(gun({ x: OPEN_X, y: 300 }), { dash: 1 });
+		expect(s.tumbleActiveTimer).toBeGreaterThan(0);
+
+		// What `applyMeleeResult` does to a fighter it launches.
+		s = { ...s, stunTimer: 400, vy: -620 };
+		s = tick(s, { swordStance: false });
+		expect(s.tumbleActiveTimer).toBe(0);
+		expect(s.vy).toBeLessThan(0);
+	});
+
+	it("ends when a jump leaves the ground", () => {
+		let s = roll(gun({ x: OPEN_X, y: standingOn(GROUND.y), grounded: true }), {
+			dash: 1,
+		});
+		s = tick(s, { swordStance: false, up: true });
+		expect(s.tumbleActiveTimer).toBe(0);
+		expect(s.vy).toBeLessThan(0);
+	});
+
+	it("stays on the floor when rolled along it", () => {
+		// The roll's box is pinned to the feet, so a grounded roll must read as
+		// grounded — the same trap the dash once fell into with gravity.
+		const s = roll(
+			gun({ x: OPEN_X, y: standingOn(GROUND.y), grounded: true }),
+			{ dash: 1 },
+		);
+		expect(s.grounded).toBe(true);
+		expect(s.y).toBe(standingOn(GROUND.y));
+	});
+
+	it("ends against a wall instead of rolling on the spot", () => {
+		let s = roll(gun({ x: 2, y: standingOn(GROUND.y), grounded: true }), {
+			dash: -1,
+		});
+		for (let i = 0; i < 6; i++) s = tick(s, { swordStance: false });
+		expect(s.tumbleActiveTimer).toBe(0);
+	});
+
+	describe("the roll box", () => {
+		/** A fighter mid-roll, standing exactly where `state` puts it. */
+		const rolled = (y: number, x = OPEN_X) =>
+			state({ x, y, grounded: true, tumbleActiveTimer: TUMBLE_DURATION_MS });
+
+		it("is shorter than the standing box, pinned to the feet", () => {
+			const rect = playerBodyRect(rolled(300));
+			expect(rect.h).toBe(TUMBLE_HEIGHT);
+			expect(rect.y + rect.h).toBe(300 + PLAYER_HEIGHT);
+		});
+
+		it("is a strict subset of the standing box, so no path through solids opens", () => {
+			const rolling = playerBodyRect(rolled(300));
+			const standing = playerBodyRect(state({ x: OPEN_X, y: 300 }));
+			expect(rolling.x).toBe(standing.x);
+			expect(rolling.y).toBeGreaterThanOrEqual(standing.y);
+			expect(rolling.y + rolling.h).toBe(standing.y + standing.h);
+		});
+
+		it("lets an upper-body shot pass over, where a standing fighter is hit", () => {
+			// The GunZ sprawl: shots aimed at a standing fighter's head and upper
+			// chest fly over a roller. The bullet's radius margin keeps centre-mass
+			// fire connecting — the roll shrinks the target, it does not erase it —
+			// which is exactly why melee is untouched below.
+			const high: BulletState = {
+				id: 0,
+				ownerId: "x",
+				x: OPEN_X + PLAYER_WIDTH / 2,
+				y: 300 + PLAYER_HEIGHT / 3,
+				vx: 600,
+				vy: 0,
+			};
+			expect(bulletHitsPlayer(high, state({ x: OPEN_X, y: 300 }))).toBe(true);
+			expect(bulletHitsPlayer(high, rolled(300))).toBe(false);
+
+			const legs = { ...high, y: 300 + PLAYER_HEIGHT - 8 };
+			expect(bulletHitsPlayer(legs, rolled(300))).toBe(true);
+		});
+
+		it("does not change melee: a slash still connects with a roller", () => {
+			// The sword is the answer to a roll — a tumble is not a melee dodge,
+			// or there would be no way to punish a chain-rolling gunner.
+			const target = rolled(300);
+			const def = MOVES.slash;
+			const slash = {
+				x: target.x - 10,
+				y: 300 + def.boxTopOffset,
+				w: def.reachPx,
+				h: def.boxHeight,
+			};
+			expect(rectsOverlap(slash, bodyRect(target.x, target.y))).toBe(true);
+		});
 	});
 });
 

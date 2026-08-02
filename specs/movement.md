@@ -120,6 +120,10 @@ rise against the ground jump's 136px.
   lockout **250ms**.
 - A dash is an *impulse on the shared simulation* — it sets velocity, then
   normal physics and collision carry it. It is not a separate movement path.
+- **The stance decides which burst the gesture is.** Double-tap with the sword
+  out dashes; with the gun out it is a tumble — see below. The gesture is the
+  same input in both stances, and the simulation's own `stance` picks, so the
+  input layer never learns what a dash means.
 
 ### A dash in the air is a straight line
 
@@ -183,7 +187,61 @@ keep while dashing the other way); nothing about it reaches the simulation.
 - **A dash is the only way to break away from an equal-speed opponent.** Walking
   backwards from someone who walks at your speed never opens a gap, which is why
   the AI could not disengage — and therefore never used the gun or the upper
-  half of the arena — until it was given one.
+  half of the arena — until it was given one. A gun-stance fighter's breakaway
+  is the tumble below, which serves the same role at a deliberate cost.
+
+## Tumble
+
+The gun's answer to the dash, copied from GunZ: double-tap a direction with a
+ranged weapon out and the fighter rolls that way. One gesture, two tools —
+which burst it is lives entirely on the simulation's stance, so switching
+stances mid-match cannot desync the gesture.
+
+- Tumble speed **720 px/s** (72% of the dash); travel **320ms**; lockout
+  **450ms**.
+- **Slower than the dash, and locked out longer, on purpose.** This is the
+  whole balance: a roll buys the gunner a beat to fire while keeping distance,
+  and the slower burst plus the longer cooldown is the beat the sword gets to
+  close. A chain-rolling gunner sustains ~500 px/s against a chained dasher's
+  ~640 px/s, so a sword fighter can always run one down — while a gunner who
+  could only *walk* away would never escape sword range at all. If these
+  invert, one side is strictly better and this stops being a game.
+- **A tumble keeps gravity, always.** The dash pins `vy` to zero and flies a
+  flat line; the roll does not — grounded or airborne, gravity applies. This is
+  the roll's one deliberate inferiority to the dash: a gunner who rolls off a
+  ledge commits to the drop, and a dash across a gap has no gun equivalent.
+  GunZ's own asymmetry, and it is what stops the tumble from being a ranged
+  flatline.
+- **While rolling, the body is `TUMBLE_HEIGHT` (20px) tall, pinned to the
+  feet** — GunZ's "sprawled almost parallel to the ground". A bullet is judged
+  against this smaller box, so a rolling fighter is ~40% smaller a target and
+  shots aimed at a standing fighter's upper body pass overhead. Two limits keep
+  it honest: the bullet's own radius margin means centre-mass fire still
+  connects, and **melee is never judged against the roll box** — a slash still
+  hits a roller, because the sword is the answer to a roll and must be able to
+  punish one. The roll box is a strict subset of the standing box, so it can
+  never open a path through solids a standing fighter would collide with.
+- **A jump, a wall, or being hit all end it**, exactly like the dash — the
+  reduced hitbox dies with the roll, and a launched roller is a launched
+  fighter.
+- **The two bursts share a lockout.** Dash and tumble are the same gesture
+  slot, so neither can be chained into the other, and switching stances
+  mid-lockout does not buy a second burst.
+- **A tumble is drawn with dust, a dash with wind.** The roll is a body against
+  the ground; its tell is warm kicked-up dust at the feet, thrown backward
+  along the roll and emitted only while grounded — an airborne roll falls
+  silently. Renderer-only, driven from `tumbleActiveTimer` and the direction of
+  `vx` (never facing, which a gunner can keep while rolling the other way); the
+  roll clip is the same `roll` strip for every fighter, spinning exactly once
+  per 320ms travel.
+- **The roll can be fired through.** The gunner is not locked out of shooting
+  mid-roll — it is a movement burst like the dash, not an animation lock, and
+  the reduced hitbox is the cost the move pays. If playtesting reads it as too
+  strong, gate firing on `tumbleActiveTimer` server-side; the constant is one
+  predicate.
+- **The AI gets it for free.** A brain that asks for the burst while the gun is
+  out tumbles, because the decision lives in the simulation. No bot knows what
+  a tumble is.
 
 ## Wall interaction
 

@@ -9,7 +9,7 @@ import {
 	bulletHitsPlayer,
 	DEFAULT_WORLD,
 	isBulletOutOfBounds,
-	type MeleeState,
+	type PlayerPosition,
 	tickBullet,
 	type World,
 } from "../simulation/Physics";
@@ -27,8 +27,11 @@ export interface BulletTarget {
 	x: number;
 	y: number;
 	alive: boolean;
-	/** The fighter's melee state, because a raised guard stops a bullet too. */
-	state: MeleeState;
+	/**
+	 * The fighter's simulation state: a raised guard stops a bullet too, and a
+	 * rolling fighter is judged against its smaller roll box.
+	 */
+	state: PlayerPosition;
 	onHit: () => void;
 }
 
@@ -124,7 +127,7 @@ export class BulletSystem {
 			let consumed = false;
 			for (const target of targets) {
 				if (target.owner === b.ownerId || !target.alive) continue;
-				if (!bulletHitsPlayer(b, target.x, target.y)) continue;
+				if (!bulletHitsPlayer(b, target.state)) continue;
 				// The same rule the server applies, from the same function. The escape
 				// hatch is the one path nobody dogfoods, so it must never become a
 				// second set of combat rules.

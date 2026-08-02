@@ -66,7 +66,7 @@ export interface DummyBeat {
 	swordStance?: boolean;
 	/** -1 or 1 to face that way; 0 (or omitted) leaves the configured facing. */
 	face?: number;
-	/** One-shot dash impulse, applied on the beat's first tick only. */
+	/** One-shot burst impulse, applied on the beat's first tick only. */
 	dash?: -1 | 0 | 1;
 	/** Aim angle in radians, for the gun. Defaults to aiming at the player. */
 	aimAngle?: number;

@@ -59,6 +59,13 @@ const COLOR = {
  */
 const DASH_WIND_COLOR = 0xbfe8ff;
 
+/**
+ * Tumble dust: warm tan, the colour of kicked-up dirt — the opposite read from
+ * the dash's cool wind. A dash leaves *air*; a roll is a body against the
+ * ground, and the two must not share a tell.
+ */
+const TUMBLE_DUST_COLOR = 0xd8c4a0;
+
 /** Cadence of the ultimate charge aura's emissions, in milliseconds. */
 const ULT_AURA_EVERY_MS = 24;
 
@@ -148,6 +155,10 @@ interface FighterFx {
 	dashEmitMs: number;
 	/** Whether the fighter was mid-dash last frame, to notice a dash starting. */
 	wasDashing: boolean;
+	/** Cadence for the tumble's ground dust. */
+	tumbleEmitMs: number;
+	/** Whether the fighter was mid-roll last frame, to notice a roll starting. */
+	wasRolling: boolean;
 	/** Cadence for the ultimate charge aura's motes. */
 	ultEmitMs: number;
 	/** Wall-clock age of the current ultimate hold, for the glow's breathing. */
@@ -227,6 +238,8 @@ export class MeleeFx {
 			punch: 0,
 			dashEmitMs: 0,
 			wasDashing: false,
+			tumbleEmitMs: 0,
+			wasRolling: false,
 			ultEmitMs: 0,
 			ultGlowMs: 0,
 			ultPulseFloor: -1,
@@ -283,6 +296,7 @@ export class MeleeFx {
 		this.drawSwing(f, s, cx, cy, dir);
 		this.drawGuard(f, s, cx, cy, dir);
 		this.drawDashWind(f, s, cx, cy, dtMs);
+		this.drawTumbleDust(f, s, cx, cy, dtMs);
 		this.drawUltAura(f, holdingUlt, cx, cy, dtMs);
 
 		f.emitAccMs += dtMs;
@@ -466,6 +480,69 @@ export class MeleeFx {
 		}
 
 		f.wasDashing = dashing;
+	}
+
+	/**
+	 * Ground dust for a tumble.
+	 *
+	 * The roll is the dash's ground-bound cousin, so its tell is the opposite of
+	 * wind: warm dust kicked up at the feet, thrown backward along the roll.
+	 * Grounded only — an airborne roll falls silently, and the silence is part
+	 * of the read (a roll off a ledge stops making contact).
+	 *
+	 * The kick-off fires once, the moment the roll starts; the puffs continue at
+	 * the cadence of the roll's own rotation so the trail reads as the body
+	 * spinning on the ground.
+	 */
+	private drawTumbleDust(
+		f: FighterFx,
+		s: PlayerPosition,
+		cx: number,
+		cy: number,
+		dtMs: number,
+	) {
+		const rolling = s.tumbleActiveTimer > 0;
+		const dir = s.vx > 0 ? 1 : -1;
+		const baseY = cy + PLAYER_HEIGHT / 2 - 3;
+
+		if (rolling && !f.wasRolling) {
+			this.particles.burst({
+				texture: TEX.shard,
+				count: 6,
+				x: cx - dir * 6,
+				y: baseY,
+				tint: teamTint(TUMBLE_DUST_COLOR, f.team, TINT.medium),
+				angle: dir > 0 ? [0.1, 0.7] : [Math.PI - 0.7, Math.PI - 0.1],
+				speed: [40, 130],
+				lifeMs: 320,
+				scale: [0.9, 0],
+				alpha: [0.42, 0],
+			});
+		}
+
+		if (rolling && s.grounded) {
+			f.tumbleEmitMs += dtMs;
+			// 320ms of roll at ~40ms cadence is about eight puffs — enough to
+			// read as a dusty track without covering the fighter.
+			if (f.tumbleEmitMs >= 40) {
+				f.tumbleEmitMs = 0;
+				this.particles.burst({
+					texture: TEX.shard,
+					count: 2,
+					x: cx - dir * 12,
+					y: baseY + (Math.random() * 2 - 1) * 2,
+					tint: teamTint(TUMBLE_DUST_COLOR, f.team, TINT.medium),
+					// Thrown backward against the travel, low to the ground.
+					angle: dir > 0 ? [Math.PI - 0.5, Math.PI + 0.5] : [-0.5, 0.5],
+					speed: [30, 90],
+					lifeMs: 260,
+					scale: [0.7, 0],
+					alpha: [0.3, 0],
+				});
+			}
+		}
+
+		f.wasRolling = rolling;
 	}
 
 	/**
@@ -832,6 +909,8 @@ export class MeleeFx {
 			f.punch = 0;
 			f.dashEmitMs = 0;
 			f.wasDashing = false;
+			f.tumbleEmitMs = 0;
+			f.wasRolling = false;
 			f.ultEmitMs = 0;
 			f.ultGlowMs = 0;
 			f.ultPulseFloor = -1;

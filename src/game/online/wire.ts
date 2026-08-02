@@ -142,6 +142,8 @@ const NUMBER_FIELDS = [
 	// wire slot, so inserting one in the middle silently renumbers everything
 	// after it — a desync whose only symptom is unexplained correction.
 	"freezeTimer",
+	"tumbleTimer",
+	"tumbleActiveTimer",
 ] as const;
 
 const ENUM_FIELDS = ["wallTouch", "stance", "meleeAction"] as const;

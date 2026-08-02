@@ -261,6 +261,43 @@ export const DASH_LOCKOUT_MS = 250;
  */
 export const DASH_DURATION_MS = 160;
 
+/**
+ * Tumble impulse — the gun's answer to the dash, deliberately slower.
+ *
+ * The double-tap gesture is the *same* in both stances; the stance already on
+ * the simulation decides whether it is a dash or a tumble. GunZ's own
+ * asymmetry: the sword's dash is faster, so a sword fighter can always close
+ * the gap a rolling gunner opens. 720 against the dash's 1000 is ~76% — a
+ * burst, not a cruise, but one a chaser can run down.
+ */
+export const TUMBLE_SPEED = 720;
+/**
+ * A tumble is harder to chain than a dash. The roll is a repositioning tool —
+ * it buys the gunner a beat to shoot, and the bigger cooldown is the beat the
+ * sword gets to close. Longer than `DASH_LOCKOUT_MS` on purpose.
+ */
+export const TUMBLE_LOCKOUT_MS = 450;
+/**
+ * How long the roll travels. Shorter than its lockout (like the dash), and
+ * longer than the dash's line so the two bursts cover similar ground at very
+ * different speeds and rhythms.
+ *
+ * Also the length of one full spin of the roll animation: the `roll` strip is
+ * eight frames at 25fps (see `CLIPS` in `ecs/systems.ts`), so a roll that
+ * ended sooner would pop the fighter upright mid-somersault.
+ */
+export const TUMBLE_DURATION_MS = 320;
+/**
+ * Collision height while rolling — GunZ's "sprawled almost parallel to the
+ * ground". The box is pinned to the feet, so a rolling fighter is a shorter
+ * target and shots aimed at a standing fighter's upper body pass overhead.
+ *
+ * It is a strict *subset* of the standing box: every solid the roll box
+ * touches, the standing box touches too, so a roll can never open a path
+ * through solids a standing fighter would collide with.
+ */
+export const TUMBLE_HEIGHT = 20;
+
 export const BULLET_SPEED = 600;
 export const BULLET_DAMAGE = 10;
 export const ATTACK_COOLDOWN = 250;
@@ -338,6 +375,15 @@ export interface PlayerPosition extends MeleeState {
 	 * different numbers for opposite reasons.
 	 */
 	dashActiveTimer: number;
+	/** ms until another tumble is allowed. Longer than the dash's lockout. */
+	tumbleTimer: number;
+	/**
+	 * ms of roll still travelling. While non-zero the fighter's hitbox is
+	 * `TUMBLE_HEIGHT` tall, pinned to the feet — the sprawl that makes a tumble
+	 * more than a slow dash. Separate from `tumbleTimer` for the same reason
+	 * `dashActiveTimer` is separate from `dashTimer`.
+	 */
+	tumbleActiveTimer: number;
 	/**
 	 * ms of **round freeze** remaining: the fighter is planted and takes no input.
 	 *
@@ -378,6 +424,8 @@ export function createPlayerState(
 		airJumps: AIR_JUMPS,
 		dashTimer: 0,
 		dashActiveTimer: 0,
+		tumbleTimer: 0,
+		tumbleActiveTimer: 0,
 		freezeTimer: 0,
 		...createMeleeState(facing),
 	};
@@ -403,6 +451,8 @@ export function copyPlayerState(
 	target.airJumps = source.airJumps;
 	target.dashTimer = source.dashTimer;
 	target.dashActiveTimer = source.dashActiveTimer;
+	target.tumbleTimer = source.tumbleTimer;
+	target.tumbleActiveTimer = source.tumbleActiveTimer;
 	target.freezeTimer = source.freezeTimer;
 	copyMeleeState(source, target);
 	return target;
@@ -500,13 +550,20 @@ export function tickPlayer(
 	s.wallJumpTimer = decay(s.wallJumpTimer, dt);
 	s.dashTimer = decay(s.dashTimer, dt);
 	s.dashActiveTimer = decay(s.dashActiveTimer, dt);
-	// Being hit ends a dash.
+	s.tumbleTimer = decay(s.tumbleTimer, dt);
+	s.tumbleActiveTimer = decay(s.tumbleActiveTimer, dt);
+	// Being hit ends a burst.
 	//
 	// Not politeness: a dash suppresses gravity and pins `vy` to zero, so a launch
 	// applied between ticks — the uppercut's whole point — would be silently eaten
 	// by the next one. Every launch arrives with stun, which makes this the one
-	// place that has to notice.
-	if (stunned) s.dashActiveTimer = 0;
+	// place that has to notice. A tumble is not a flat line, but the reduced
+	// hitbox it carries must not survive the hit that was supposed to punish the
+	// roll.
+	if (stunned) {
+		s.dashActiveTimer = 0;
+		s.tumbleActiveTimer = 0;
+	}
 	s.coyoteTimer = decay(s.coyoteTimer, dt);
 	s.jumpBufferTimer = decay(s.jumpBufferTimer, dt);
 	s.wallCoyoteTimer = decay(s.wallCoyoteTimer, dt);
@@ -551,18 +608,36 @@ export function tickPlayer(
 		s.vx = approach(s.vx, 0, friction * dt);
 	}
 
-	// ---- dash ----
+	// ---- burst: dash (sword) or tumble (gun) ----
+	// One gesture, two tools. The double-tap is the same input in both stances,
+	// and which burst it is is decided here by the stance the simulation already
+	// owns — the input layer never needs to know what a dash means, so switching
+	// stances mid-match cannot desync the gesture. The two share a lockout, so a
+	// fighter cannot chain one into the other, and GunZ's own asymmetry is
+	// preserved: the sword's dash is faster than the gun's roll, so a sword
+	// fighter can always close the gap a rolling gunner opens.
+	//
 	// An impulse on the shared simulation, not a separate movement path: it sets
 	// velocity and then ordinary physics and collision carry it.
-	if (!rooted && input.dash !== 0 && s.dashTimer <= 0) {
-		s.vx = input.dash > 0 ? DASH_SPEED : -DASH_SPEED;
-		s.dashTimer = DASH_LOCKOUT_MS;
-		s.dashActiveTimer = DASH_DURATION_MS;
-		// Flatten the arc from the first frame, so a dash thrown while rising or
-		// falling travels the same line as one thrown standing still.
-		s.vy = 0;
-		// No longer a jump that can be cut short by releasing the button.
-		s.jumping = false;
+	if (!rooted && input.dash !== 0 && s.dashTimer <= 0 && s.tumbleTimer <= 0) {
+		if (s.stance === "gun") {
+			s.vx = input.dash > 0 ? TUMBLE_SPEED : -TUMBLE_SPEED;
+			s.tumbleTimer = TUMBLE_LOCKOUT_MS;
+			s.tumbleActiveTimer = TUMBLE_DURATION_MS;
+			// The roll keeps gravity: an airborne tumble falls. That is the whole
+			// difference from the dash, which pins `vy` to zero and flies level —
+			// and it is the cost that keeps a gunner honest: the roll is a dodge
+			// along the floor, not a flatline across the arena.
+		} else {
+			s.vx = input.dash > 0 ? DASH_SPEED : -DASH_SPEED;
+			s.dashTimer = DASH_LOCKOUT_MS;
+			s.dashActiveTimer = DASH_DURATION_MS;
+			// Flatten the arc from the first frame, so a dash thrown while rising or
+			// falling travels the same line as one thrown standing still.
+			s.vy = 0;
+			// No longer a jump that can be cut short by releasing the button.
+			s.jumping = false;
+		}
 	}
 
 	// ---- jump (ground jump wins over wall jump) ----
@@ -575,8 +650,10 @@ export function tickPlayer(
 			s.jumping = true;
 			// A jump out of a dash ends the dash. Any vertical velocity set here would
 			// otherwise be zeroed by the dash's own flat line, and the jump would
-			// simply not happen.
+			// simply not happen. It ends a tumble too: the roll is a ground move,
+			// and its reduced hitbox must not ride a jump into the air.
 			s.dashActiveTimer = 0;
+			s.tumbleActiveTimer = 0;
 		} else if (s.wallTouch !== "none" && s.wallJumpTimer <= 0) {
 			const away = s.wallTouch === "left" ? 1 : -1;
 			s.vx = away * WALL_JUMP_HORIZONTAL;
@@ -587,6 +664,7 @@ export function tickPlayer(
 			s.jumpBufferTimer = 0;
 			s.jumping = true;
 			s.dashActiveTimer = 0;
+			s.tumbleActiveTimer = 0;
 			// Deliberately does *not* refill `airJumps`: a fighter that regained its
 			// air jump from a wall could alternate the two up a single flat wall
 			// forever. Landing is the only refill.
@@ -598,6 +676,7 @@ export function tickPlayer(
 			s.jumpBufferTimer = 0;
 			s.jumping = true;
 			s.dashActiveTimer = 0;
+			s.tumbleActiveTimer = 0;
 		}
 	}
 
@@ -630,6 +709,9 @@ export function tickPlayer(
 	} else if (s.dashActiveTimer > 0 && !s.grounded) {
 		s.vy = 0;
 	} else {
+		// A tumble is deliberately **not** in the branch above: it keeps gravity,
+		// grounded or airborne. The roll is the dash's opposite in this one way,
+		// and the fall is what stops it being the gun's flatline.
 		s.vy += (s.vy > 0 ? GRAVITY * FALL_GRAVITY_MULTIPLIER : GRAVITY) * dt;
 
 		const pressingIntoWall =
@@ -654,16 +736,30 @@ export function tickPlayer(
 	}
 
 	// ---- one collision-resolved move ----
-	const box: MovingBox = { x: s.x, y: s.y, w: PLAYER_WIDTH, h: PLAYER_HEIGHT };
+	//
+	// While a tumble is travelling, the body collides as a short box pinned to
+	// the feet — GunZ's sprawl. Bottom-anchored: the feet line never moves, so
+	// grounded, wall and ceiling contact behave exactly as standing does. The
+	// roll box is a strict subset of the standing box, so a rolling fighter can
+	// never open a path through solids that a standing one would collide with —
+	// it only ever *fits in fewer* spaces.
+	const rollHeight = s.tumbleActiveTimer > 0 ? TUMBLE_HEIGHT : PLAYER_HEIGHT;
+	const box: MovingBox = {
+		x: s.x,
+		y: s.y + (PLAYER_HEIGHT - rollHeight),
+		w: PLAYER_WIDTH,
+		h: rollHeight,
+	};
 	const contacts = moveAndCollide(box, s.vx * dt, s.vy * dt, world);
 	s.x = box.x;
-	s.y = box.y;
+	s.y = box.y - (PLAYER_HEIGHT - rollHeight);
 
-	// A dash into a wall is over. Letting the timer run out would leave the fighter
-	// hovering against the wall with nothing left pushing it.
+	// A burst into a wall is over. Letting the timer run out would leave the
+	// fighter hovering against the wall with nothing left pushing it.
 	if (contacts.wall !== "none") {
 		s.vx = 0;
 		s.dashActiveTimer = 0;
+		s.tumbleActiveTimer = 0;
 	}
 	if (contacts.grounded) s.vy = 0;
 	if (contacts.ceiling && s.vy < 0) s.vy = 0;
@@ -728,17 +824,37 @@ export function isBulletOutOfBounds(
 	);
 }
 
-export function bulletHitsPlayer(
-	b: BulletState,
-	px: number,
-	py: number,
-): boolean {
+export type BodyBoxSource = Pick<
+	PlayerPosition,
+	"x" | "y" | "tumbleActiveTimer"
+>;
+
+/**
+ * The box the fighter currently occupies, for anything that must not hit a
+ * fighter by its standing outline.
+ *
+ * While a tumble is travelling, the box is `TUMBLE_HEIGHT` tall, pinned to the
+ * feet — the roll's whole point is to be a smaller target. A bullet is the one
+ * thing judged against this smaller box: a rolling fighter is ~40% smaller a
+ * target, and shots aimed at a standing fighter's upper body pass overhead.
+ * (The bullet's own radius margin keeps centre-mass fire connecting — the roll
+ * shrinks the target, it does not erase it.) Melee deliberately reads the
+ * standing box: a slash still connects with a roller, because the sword is
+ * supposed to be able to punish a roll.
+ */
+export function playerBodyRect(s: BodyBoxSource): Rect {
+	const h = s.tumbleActiveTimer > 0 ? TUMBLE_HEIGHT : PLAYER_HEIGHT;
+	return { x: s.x, y: s.y + (PLAYER_HEIGHT - h), w: PLAYER_WIDTH, h };
+}
+
+export function bulletHitsPlayer(b: BulletState, s: BodyBoxSource): boolean {
+	const box = playerBodyRect(s);
 	const margin = 12;
 	return (
-		b.x > px - margin &&
-		b.x < px + PLAYER_WIDTH + margin &&
-		b.y > py - margin &&
-		b.y < py + PLAYER_HEIGHT + margin
+		b.x > box.x - margin &&
+		b.x < box.x + box.w + margin &&
+		b.y > box.y - margin &&
+		b.y < box.y + box.h + margin
 	);
 }
 

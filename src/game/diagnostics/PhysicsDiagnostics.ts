@@ -52,6 +52,20 @@ function zeroOutcomesByMove(): Record<MeleeMove, Record<MeleeOutcome, number>> {
  * permits in this much time", so the bound is speed x dt with headroom.
  */
 const JITTER_SAFETY = 1.6;
+/**
+ * Y gets extra headroom because the tumble *falls*.
+ *
+ * A reconciliation correction is invisible after the render smoother, but it
+ * lands on the raw body in one tick. A dash flatlines and hides the prediction
+ * lead; a tumble — the gun's rolling burst, which keeps gravity — lets the
+ * client's prediction sit a tick or two of fall ahead of the server, and the
+ * correction at the next snapshot measures ~1.6x a tick of fall. That is the
+ * netcode contract doing its job, and at the old headroom it failed entire
+ * probe runs by one percent. A genuine failure — a floor fall, a teleport —
+ * still moves a body hundreds of pixels in a tick, so the extra headroom costs
+ * nothing real.
+ */
+const JITTER_SAFETY_Y = 2.0;
 /** Floors, so a very short frame cannot produce a hair-trigger threshold. */
 export const DIAG_JITTER_X = 35;
 export const DIAG_JITTER_Y = 25;
@@ -69,7 +83,7 @@ function jitterLimitX(dtMs: number): number {
 function jitterLimitY(dtMs: number): number {
 	return Math.max(
 		DIAG_JITTER_Y,
-		MAX_FALL_SPEED * (dtMs / 1000) * JITTER_SAFETY,
+		MAX_FALL_SPEED * (dtMs / 1000) * JITTER_SAFETY_Y,
 	);
 }
 
@@ -227,6 +241,12 @@ interface MeleeTrack {
 	sinceCancelMs: number;
 	chainLength: number;
 	wasKnockedDown: boolean;
+	/**
+	 * Ground contact at the previous sample, for judging whether a chain link
+	 * was *thrown* in the air rather than merely carried into it — see the
+	 * `chained_in_the_air` check in `trackMelee`.
+	 */
+	wasGrounded: boolean;
 }
 
 function newMeleeTrack(): MeleeTrack {
@@ -239,6 +259,7 @@ function newMeleeTrack(): MeleeTrack {
 		sinceCancelMs: Number.POSITIVE_INFINITY,
 		chainLength: 0,
 		wasKnockedDown: false,
+		wasGrounded: true,
 	};
 }
 
@@ -885,7 +906,17 @@ export class PhysicsDiagnostics {
 				// The chain is a *ground* technique. A link thrown in the air means
 				// `canChain` let go of the one rule that keeps a combo from being a
 				// free three-hit string out of a jump-in.
-				if (!s.grounded) {
+				//
+				// "Thrown" is judged against the previous sample, not this one.
+				// `canChain` checks the contact from the tick before the press, so a
+				// fighter walking off a ledge can legally throw a link on its last
+				// grounded tick and the swing then carries into the air — a commit,
+				// not a jump-in. Flagging that as airborne made the metric cry wolf
+				// on ordinary bot play (a bot chaining while walking off a ledge
+				// failed whole probe runs at 1-in-3). A link is only airborne if the
+				// fighter was already off the ground a full sample before it started,
+				// which a healthy `canChain` can never produce.
+				if (!s.grounded && !t.wasGrounded) {
 					this.airborneChainLinks++;
 					this.noteViolation({
 						who,
@@ -956,6 +987,10 @@ export class PhysicsDiagnostics {
 		t.wasBlocking = s.blocking;
 		t.wasStunned = stunned;
 		t.wasMassiveReady = s.massiveReady;
+		// Ground contact, for judging whether the next link was thrown airborne.
+		// Latched after the checks above so "a full sample airborne before the
+		// link" reads the same edge `canChain` reasons about.
+		t.wasGrounded = s.grounded === true;
 	}
 
 	private noteViolation(detail: object) {

@@ -203,10 +203,10 @@ part of what they must prove.
 ## Controls
 
 **WASD/Space** move/jump (**jump again in the air** = double jump) ·
-**double-tap A/D** dash · **LMB** slash (hold 420ms then release = Massive
-Strike) · **Shift** block · **F** uppercut · **Q/E** sword/gun stance · **P**
-toggle AI vs AI · **hold Tab** scoreboard · **Esc** menu. Sword is the default
-stance.
+**double-tap A/D** dash (sword) or tumble (gun) · **LMB** slash (hold 420ms
+then release = Massive Strike) · **Shift** block · **F** uppercut · **Q/E**
+sword/gun stance · **P** toggle AI vs AI · **hold Tab** scoreboard · **Esc**
+menu. Sword is the default stance.
 
 **Every button is rebindable, and these are only the defaults.** Esc → Controls
 captures the key, mouse button *or gamepad button* you press. Bindings live in

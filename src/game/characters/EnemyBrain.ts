@@ -835,8 +835,10 @@ export class EnemyBrain {
 					output.moveLeft = away < 0;
 					output.moveRight = away >= 0;
 					// Walking away from someone who walks at your speed gains nothing —
-					// the gap never opens. The dash is the only tool that creates
-					// separation against an equal-speed opponent.
+					// the gap never opens. The burst is the only tool that creates
+					// separation against an equal-speed opponent: a dash while the
+					// sword is out, a tumble when the gun is — the simulation decides
+					// which from the stance, so the brain just asks for the burst.
 					if (Math.random() < 0.14) output.dash = away >= 0 ? 1 : -1;
 				} else if (perch) {
 					// Head for a specific ledge and jump when actually underneath it.

@@ -1664,7 +1664,7 @@ export class GameRoom {
 				// on the friendly in front of you would make a firing line impossible
 				// and turn every corridor into a queue.
 				if (shooter && !hostile(shooter.team, player.team)) continue;
-				if (!bulletHitsPlayer(b, player.state.x, player.state.y)) continue;
+				if (!bulletHitsPlayer(b, player.state)) continue;
 
 				// A guard covers the side you face, bullets included. The shot is
 				// consumed either way — it hit something — but an absorbed one deals

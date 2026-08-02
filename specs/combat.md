@@ -28,6 +28,10 @@ produced a second sprite nothing simulated — it froze on screen forever.
   cancellable melee move**, which is GunZ's slash-shot. It cannot escape the
   recovery of a heavy move.
 - Blocking requires the sword; firing requires the gun.
+- **The burst gesture follows the stance**: double-tap dashes with the sword out
+  and tumbles with the gun out. The tumble is the gunner's spacing tool — slower
+  than the dash, affected by gravity, with a reduced hitbox while rolling — and
+  the whole trade-off lives in [movement.md](movement.md).
 
 ## Ranged combat
 

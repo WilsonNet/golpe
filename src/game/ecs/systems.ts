@@ -9,7 +9,7 @@
  */
 
 import { syncSpriteToBody } from "../render/ArenaRenderer";
-import { dudeFrames, TEX, tex } from "../render/assets";
+import { dudeFrames, rollFrames, TEX, tex } from "../render/assets";
 import type { MeleeFx } from "../render/MeleeFx";
 import type { Nameplates } from "../render/Nameplates";
 import type { Shadows } from "../render/Shadows";
@@ -26,15 +26,25 @@ import type { AnimState, Queries } from "./world";
  * and `animationSystem` assigns them directly. They are still clips so that being
  * hit goes through `playClip` like every other state — a fighter that came out of
  * a stun mid-walk-cycle used to resume on whatever frame it was interrupted on.
+ *
+ * The roll clips read the `roll` strip instead (`sheet: "roll"`): 0-7 roll
+ * right, 8-15 roll left. Their 320ms loop is the tumble's own travel time —
+ * 8 x 40ms at 25fps — so the roll spins exactly once per gesture.
  */
 export const CLIPS = {
-	left: { frames: [0, 1, 2, 3], fps: 10 },
-	right: { frames: [5, 6, 7, 8], fps: 10 },
-	turn: { frames: [4], fps: 1 },
-	"left-idle": { frames: [0], fps: 1 },
-	"right-idle": { frames: [5], fps: 1 },
-	disabled: { frames: [], fps: 1 },
-	downed: { frames: [], fps: 1 },
+	left: { frames: [0, 1, 2, 3], fps: 10, sheet: "dude" },
+	right: { frames: [5, 6, 7, 8], fps: 10, sheet: "dude" },
+	turn: { frames: [4], fps: 1, sheet: "dude" },
+	"left-idle": { frames: [0], fps: 1, sheet: "dude" },
+	"right-idle": { frames: [5], fps: 1, sheet: "dude" },
+	disabled: { frames: [], fps: 1, sheet: "dude" },
+	downed: { frames: [], fps: 1, sheet: "dude" },
+	"roll-right": { frames: [0, 1, 2, 3, 4, 5, 6, 7], fps: 25, sheet: "roll" },
+	"roll-left": {
+		frames: [8, 9, 10, 11, 12, 13, 14, 15],
+		fps: 25,
+		sheet: "roll",
+	},
 } as const;
 
 /**
@@ -81,16 +91,24 @@ export function animationSystem(queries: Queries, dtMs: number) {
 			continue;
 		}
 
-		playClip(
-			e.anim,
-			moving
-				? facingLeft
-					? "left"
-					: "right"
-				: facingLeft
-					? "left-idle"
-					: "right-idle",
-		);
+		// A tumble is its own clip, and it outranks the walk cycle for the whole
+		// roll. The direction comes from `vx`, never from facing: a gunner can
+		// roll away while still aiming back at the fighter chasing them, and the
+		// roll's frames must follow the body, not the cursor.
+		if (body.tumbleActiveTimer > 0) {
+			playClip(e.anim, body.vx < 0 ? "roll-left" : "roll-right");
+		} else {
+			playClip(
+				e.anim,
+				moving
+					? facingLeft
+						? "left"
+						: "right"
+					: facingLeft
+						? "left-idle"
+						: "right-idle",
+			);
+		}
 
 		const clip = CLIPS[e.anim.clip];
 		e.anim.elapsedMs += dtMs;
@@ -103,8 +121,8 @@ export function animationSystem(queries: Queries, dtMs: number) {
 		// The hit clips carry no frames — they are assigned above and never reach
 		// here — so a missing index means the strip, not the clip, is wrong.
 		const frameIndex = clip.frames[e.anim.frame] ?? clip.frames[0];
-		const texture =
-			frameIndex === undefined ? undefined : dudeFrames[frameIndex];
+		const frames = clip.sheet === "roll" ? rollFrames : dudeFrames;
+		const texture = frameIndex === undefined ? undefined : frames[frameIndex];
 		if (texture && e.sprite.texture !== texture) e.sprite.texture = texture;
 	}
 }
