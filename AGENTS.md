@@ -303,6 +303,9 @@ skill verifies it.
   scalpel for a single interaction.
 - **`herdr-dev-workspace`** — Starting, inspecting or stopping the dev servers in
   visible herdr panes instead of background processes.
+- **`hud-design`** — The in-match HUD: the canvas/DOM split, the Chrono Trigger /
+  Fire Emblem design language, the `hud-state` contract, container-unit sizing,
+  damage feedback, and the gotchas that made the first HUD invisible.
 - **`specs`** — Keeping `specs/` authoritative: read before implementing, update
   in the same commit as any behaviour change.
 - **`knowledge-sharpener`** — Run at the END of a substantial session: fold what

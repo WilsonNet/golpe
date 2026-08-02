@@ -125,8 +125,26 @@ A human types a name before their client connects, and it is remembered in
 
 ## What a player sees
 
-- **Canvas HUD:** own HP, own frags against the limit, and the clock. Two numbers
-  and a timer — everything a player reads without looking away.
+- **Fight HUD** (a DOM overlay, minimal by design — a competitive game, so
+  nothing on screen may read as furniture). Slim translucent strips in the
+  arena's own dark teal, edged with a hairline of the game's cyan accent: a
+  self panel top-left with name, stance badge (and a gold glow while a Massive
+  Strike is armed), a segmented HP bar with the number read off its end, and
+  frags against the limit; a mirrored foe panel top-right in a two-fighter room
+  only — a deathmatch has no "the opponent" — carrying the foe's own frags so
+  the pair mirrors; the clock as plain gold numerals floating top-centre, the
+  one element allowed to be prominent, pulsing red in the final ten seconds;
+  and the ultimate meter as a thin sliver in the bottom-right corner: a bar
+  too thin to read alone, so a gold percentage answers "how close am I"
+  exactly, turning into a violet breathing READY when armed. Damage snaps the
+  bar down and leaves a white ghost that drains after it; the strip's hairline
+  flashes red on the hit; a low bar turns red and pulses. The HUD scales with
+  the canvas rectangle, and nothing on it can be confused with in-world state
+  — the world's own nameplates stay in the arena.
+- **Announcements interrupt.** "FIGHT — FIRST TO N" and the other battle
+  messages appear in a gold-framed window above the ultimate meter — the
+  Chrono Trigger / Fire Emblem codex is reserved for moments that are meant to
+  take the eye, and everything that is always on screen wears the minimal tier.
 - **Hold Tab:** the full scoreboard, as a DOM overlay. Held rather than toggled,
   because a scoreboard you press twice is one you leave open over a fight.
   Released on window blur as well as on key-up, since switching windows mid-hold

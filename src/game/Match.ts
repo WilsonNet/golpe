@@ -14,7 +14,7 @@
  * code path.
  */
 
-import { type Container, Sprite, Text } from "pixi.js";
+import { Sprite } from "pixi.js";
 import type { AIConfig } from "./characters/AIConfig";
 import EnemyBrain, {
 	type AIInput,
@@ -40,6 +40,7 @@ import {
 	type GameWorld,
 	type Queries,
 } from "./ecs/world";
+import { HUD_EVENTS, type HudState } from "./hud";
 import { Input } from "./input/Input";
 import { inputSettings } from "./input/Scheme";
 import { OnlineSession } from "./online/OnlineSession";
@@ -52,7 +53,6 @@ import { type ImpactEvent, MeleeFx } from "./render/MeleeFx";
 import { Nameplates } from "./render/Nameplates";
 import type { Stage } from "./render/Stage";
 import { UltAimLine } from "./render/UltAimLine";
-import { UltMeter } from "./render/UltMeter";
 import {
 	applyWorld,
 	buildWorld,
@@ -167,7 +167,6 @@ export class Match {
 	private readonly view: { readonly width: number; readonly height: number };
 	private readonly fx: MeleeFx;
 	private readonly blackHole: BlackHoleFx;
-	private readonly ultMeter: UltMeter;
 	private readonly plates: Nameplates;
 	private readonly aimLine: AimLine;
 	private readonly ultAim: UltAimLine;
@@ -180,11 +179,6 @@ export class Match {
 	private readonly remotes = new Map<string, FighterEntity>();
 	/** The offline escape hatch's opponent. Created only when there is no server. */
 	private offlineFoe: FighterEntity | undefined;
-
-	private hpText!: Text;
-	private scoreText!: Text;
-	private timeText!: Text;
-	private statusText!: Text;
 
 	/**
 	 * The game is online-first: every match runs through the authoritative
@@ -291,8 +285,6 @@ export class Match {
 			1,
 		);
 
-		this.buildHud(stage.hud);
-		this.ultMeter = new UltMeter(stage.hud, screen);
 		this.input = new Input(
 			canvas,
 			// A live view: the getters are read on every aim, so a resized window or
@@ -425,26 +417,51 @@ export class Match {
 		this.plates.forget(id);
 	}
 
-	private buildHud(hud: Container) {
-		const style = { fontFamily: "monospace", fontSize: 22, fill: 0x000000 };
-		this.hpText = new Text({ text: "hp: 100", style });
-		this.hpText.position.set(16, 16);
+	/**
+	 * Compose and emit the HUD's view of the fight.
+	 *
+	 * The React HUD subscribes to `hud-state`; this is the only emitter. Sent at
+	 * snapshot cadence (50ms) — the data it carries is server-owned and moves no
+	 * faster — plus immediately whenever damage lands, the stance changes or a
+	 * name arrives, so the player's own hit never waits out the throttle.
+	 */
+	private lastHudSentAt = -1;
+	private lastHudStance: HudState["stance"] = "sword";
+	private lastHudName = "";
 
-		this.scoreText = new Text({ text: "frags: 0/21", style });
-		this.scoreText.position.set(16, 44);
-
-		this.timeText = new Text({ text: "5:00", style });
-		this.timeText.anchor.set(1, 0);
-		this.timeText.position.set(784, 16);
-
-		this.statusText = new Text({
-			text: "",
-			style: { ...style, fontSize: 22, fill: 0xffffff },
-		});
-		this.statusText.anchor.set(0.5);
-		this.statusText.position.set(400, 300);
-
-		hud.addChild(this.hpText, this.scoreText, this.timeText, this.statusText);
+	private emitHud(force = false) {
+		const session = this.online;
+		const state: HudState = {
+			hp: this.local.fighter.hp,
+			maxHp: this.local.fighter.maxHp,
+			ult: session ? session.localUlt : 0,
+			stance: this.local.body.stance,
+			name: this.local.fighter.name,
+			foeName: this.onlineMode
+				? (this.online?.nameOf(this.online?.primaryRemoteId ?? "") ?? "")
+				: (this.offlineFoe?.fighter.name ?? ""),
+			foeHp: this.onlineMode
+				? (this.online?.remoteHp ?? 100)
+				: (this.offlineFoe?.fighter.hp ?? 100),
+			fighterCount:
+				1 +
+				this.remotes.size +
+				// The offline escape hatch's rival is not a remote (it is its own
+				// field, never a roster entry) — count it or a duel shows no foe
+				// panel.
+				(this.offlineFoe ? 1 : 0),
+			online: this.onlineMode,
+			massiveReady: this.local.body.massiveReady,
+		};
+		const stanceChanged = state.stance !== this.lastHudStance;
+		const nameChanged = state.name !== this.lastHudName;
+		this.lastHudStance = state.stance;
+		this.lastHudName = state.name;
+		if (!force && !stanceChanged && !nameChanged) {
+			if (this.elapsed - this.lastHudSentAt < 50) return;
+		}
+		this.lastHudSentAt = this.elapsed;
+		EventBus.emit(HUD_EVENTS.state, state);
 	}
 
 	/**
@@ -476,7 +493,7 @@ export class Match {
 			return;
 		}
 
-		this.statusText.text = "";
+		EventBus.emit(HUD_EVENTS.status, "");
 		EventBus.emit("need-player-name");
 		this.nameUnsubscribe = EventBus.on("player-name", ((name: string) => {
 			this.nameUnsubscribe?.();
@@ -489,7 +506,9 @@ export class Match {
 	private startOnline(name: string) {
 		this.playerName = name;
 		this.local.fighter.name = name;
-		this.statusText.text = "Connecting...";
+		EventBus.emit(HUD_EVENTS.status, "Connecting...");
+		// The name just landed; the plaque must not wait out the 50ms throttle.
+		this.emitHud(true);
 
 		this.online = new OnlineSession(
 			this.stage.projectiles,
@@ -500,11 +519,13 @@ export class Match {
 			{
 				onStatus: (msg) => {
 					if (msg) console.log(`[ONLINE] ${msg}`);
-					this.statusText.text = msg;
+					EventBus.emit(HUD_EVENTS.status, msg);
 				},
 				onLocalHp: (hp) => {
 					this.local.fighter.hp = hp;
-					this.hpText.text = `hp: ${Math.max(0, hp)}`;
+					// Damage lands here on a snapshot — emit immediately so the
+					// player's own hit flashes the bar without the 50ms throttle.
+					this.emitHud(true);
 				},
 				onReconcile: (result) => {
 					// A correction this large is a respawn, not a misprediction. The
@@ -590,15 +611,8 @@ export class Match {
 					this.diagnostics.markTeleport(4);
 				},
 				onMatch: (status, standings) => {
-					const mine = standings.find(
-						(s) => s.id === this.online?.manager.myId,
-					);
-					this.scoreText.text = `frags: ${mine?.kills ?? 0}/${status.scoreLimit}`;
-					this.timeText.text = formatClock(
-						timeLeftMs(status.elapsedMs, status.timeLimitMs),
-					);
-					// The React overlay owns the scoreboard and the podium; the canvas
-					// HUD stays to the two numbers a player reads mid-fight.
+					// The clock, the frags and the standings all live in this event;
+					// the React HUD reads them from it. Nothing else needs them.
 					EventBus.emit("match-status", {
 						status,
 						standings,
@@ -632,7 +646,7 @@ export class Match {
 					console.log(`[ONLINE] room ${roomId}`);
 				},
 				onRoomFull: (roomId) => {
-					this.statusText.text = "That room is full.";
+					EventBus.emit(HUD_EVENTS.status, "That room is full.");
 					console.log(`[ONLINE] room ${roomId} is full`);
 				},
 			},
@@ -907,6 +921,7 @@ export class Match {
 
 		this.training?.update(dtMs);
 		this.record(dtMs);
+		this.emitHud();
 	}
 
 	/**
@@ -959,14 +974,10 @@ export class Match {
 			// server-owned end to end. It simply does not exist there — see
 			// specs/ultimate.md.
 			this.blackHole.update(null, [], dtMs);
-			this.ultMeter.set(0);
-			this.ultMeter.update(dtMs);
 			return;
 		}
 
 		const charge = session.localUlt;
-		this.ultMeter.set(charge);
-		this.ultMeter.update(dtMs);
 		// The deck draws its ultimate button only when the meter is full, so it is
 		// told on the integer boundary rather than on every frame.
 		const readyNow = charge >= ULT_MAX_CHARGE;
@@ -1502,7 +1513,7 @@ export class Match {
 		console.log(`[FIGHT] ${who} hit by ${kind}! HP: ${victim.fighter.hp}`);
 
 		if (victim.fighter.local) {
-			this.hpText.text = `hp: ${victim.fighter.hp}`;
+			this.emitHud(true);
 		}
 
 		if (victim.fighter.hp <= 0 && this.resetAt < 0) {
@@ -1552,7 +1563,7 @@ export class Match {
 		this.aimLine.reset();
 		this.ultAim.reset();
 		this.stage.reset();
-		this.hpText.text = "hp: 100";
+		this.emitHud(true);
 	}
 
 	private toggleAiVsAi() {
@@ -1574,7 +1585,6 @@ export class Match {
 		this.nameUnsubscribe?.();
 		this.input.destroy();
 		this.blackHole.destroy();
-		this.ultMeter.destroy();
 		this.aimLine.destroy();
 		this.ultAim.destroy();
 		this.training?.destroy();
@@ -1596,13 +1606,6 @@ function countParam(params: URLSearchParams, key: string): number | undefined {
 	if (raw === null) return undefined;
 	const n = Number.parseInt(raw, 10);
 	return Number.isFinite(n) && n >= 0 ? n : undefined;
-}
-
-function formatClock(ms: number): string {
-	const total = Math.ceil(ms / 1000);
-	const minutes = Math.floor(total / 60);
-	const seconds = total % 60;
-	return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
 function readStoredName(): string | null {

@@ -125,7 +125,9 @@ While playing:
 - **Hold Tab** for the scoreboard — every fighter, frags and deaths, your own row
   highlighted, bots marked `BOT`, and the room id in the header so you can tell
   whether the friend who said "I'm in" is in *this* room.
-- The canvas HUD keeps your HP, your frags against the limit, and the clock.
+- The fight HUD — a minimal DOM overlay in the arena's own colours — keeps your
+  HP, your frags against the limit, the clock, your stance and your ultimate
+  charge, with a mirrored panel for your opponent in a duel.
 - When the match ends, a **podium** shows first, second and third by name and the
   rest of the field in a table. The next match starts 15 seconds later, with scores
   zeroed and fresh bot personalities.

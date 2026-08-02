@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { GameCanvas } from "./GameCanvas";
+import { FightHud } from "./ui/FightHud";
 import { MatchOver } from "./ui/MatchOver";
 import { NamePrompt } from "./ui/NamePrompt";
 import { PauseMenu } from "./ui/PauseMenu";
@@ -26,9 +27,10 @@ function isTrainingMode(): boolean {
  * The DOM overlay.
  *
  * Everything here is UI the canvas is the wrong tool for — a text field, a
- * sixteen-row table, a podium. The canvas HUD keeps only the two numbers a
- * player reads without looking away from the fight. See the `pixi-text-and-ui`
- * skill for the split.
+ * sixteen-row table, a podium, and the fight HUD itself: ornate frames, text
+ * that stays crisp at any DPR, CSS transitions for bars and pulses. The world
+ * (nameplates, aim beam) stays in Pixi; the *screen* UI is all DOM. See the
+ * `hud-design` skill for the split.
  *
  * The deathmatch overlays render in every mode, including training: they draw
  * nothing until the game emits a match status, and a training room never does.
@@ -38,7 +40,11 @@ function App() {
 
 	return (
 		<div id="app">
-			<GameCanvas />
+			{/* The HUD lives inside the canvas's own box, so it scales with the
+			    arena instead of drifting off it. */}
+			<GameCanvas>
+				<FightHud training={training} />
+			</GameCanvas>
 			{/* Directly after the canvas, because it is part of the *page* rather
 			    than an overlay on it: the deck's presence is what turns a centred
 			    canvas into a handheld, screen above and controls below. It draws

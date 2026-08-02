@@ -45,8 +45,6 @@ export class Stage {
 	 * because a label buried behind a sprite or a spark is worse than no label.
 	 */
 	readonly nameplates = new Container();
-	/** Screen-space, outside the camera, so shake never moves the HUD. */
-	readonly hud = new Container();
 
 	private shakeMs = 0;
 	private shakeDuration = 0;
@@ -63,7 +61,7 @@ export class Stage {
 			this.effects,
 			this.nameplates,
 		);
-		root.addChild(this.scroll, this.hud);
+		root.addChild(this.scroll);
 	}
 
 	/** Camera scroll, in world pixels. Excludes shake, on purpose. */

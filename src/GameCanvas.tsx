@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 import { type GameHandle, startGame } from "./game/app";
 
 /**
@@ -17,7 +17,7 @@ import { type GameHandle, startGame } from "./game/app";
  */
 let bootChain: Promise<void> = Promise.resolve();
 
-export function GameCanvas() {
+export function GameCanvas({ children }: { children?: ReactNode }) {
 	const hostRef = useRef<HTMLDivElement>(null);
 	const gameRef = useRef<GameHandle | null>(null);
 
@@ -46,5 +46,13 @@ export function GameCanvas() {
 		};
 	}, []);
 
-	return <div id="game-container" ref={hostRef} />;
+	return (
+		<div id="game-container" ref={hostRef}>
+			{/* The fight HUD overlays the *canvas rectangle* — inset:0 against this
+			    container, which shrink-wraps the letterboxed canvas exactly, so it
+			    tracks the arena on any window shape. Absolutely positioned, so it
+			    never joins the flex layout that centres the canvas. */}
+			{children}
+		</div>
+	);
 }

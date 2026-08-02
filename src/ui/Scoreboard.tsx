@@ -31,14 +31,7 @@ export function Scoreboard() {
 	// under it put "hold Tab for scores" through the veil at the bottom of the
 	// winner screen.
 	if (over) return null;
-	if (!held) {
-		return (
-			<div className="vd-hint">
-				<style>{HUD_CSS}</style>
-				hold Tab for scores · Esc for controls
-			</div>
-		);
-	}
+	if (!held) return null;
 
 	const { status, standings, myId } = match;
 	return (

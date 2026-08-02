@@ -433,15 +433,4 @@ export const HUD_CSS = `
 	min-height: 1.2em;
 	margin-top: 12px;
 }
-.vd-hint {
-	position: fixed;
-	bottom: 10px;
-	left: 50%;
-	transform: translateX(-50%);
-	font-family: monospace;
-	font-size: 12px;
-	color: rgba(255, 255, 255, 0.45);
-	pointer-events: none;
-	z-index: 20;
-}
 `;

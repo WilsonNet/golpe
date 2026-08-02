@@ -52,8 +52,10 @@ src/ui/           React overlays drawn over the canvas
   Scoreboard.tsx    the held-Tab scoreboard, and the table the podium reuses
   PauseMenu.tsx     the Esc menu and the controls dialog (suspends input, never pauses)
   MatchOver.tsx     the winner podium
+  FightHud.tsx      the in-match HUD — DOM, fed by the hud-state event
   useMatch.ts       EventBus subscriptions and the held-key hook
-  hudStyles.ts      the overlay's own CSS, injected per component
+  hudStyles.ts      dialog/overlay CSS; fightHudStyles.ts the HUD's own, both
+                    injected per component
 
 server/           Geckos.io authoritative server
   physics.ts        re-exports src/game/simulation/Physics

@@ -11,8 +11,8 @@
  *
  * The whole point is telling sixteen fighters apart mid-fight: which one is you,
  * which one is nearly dead, and who the stranger about to swing at you actually
- * is. The canvas HUD answers none of those, and the Tab scoreboard answers them
- * only when you are not fighting.
+ * is. The screen HUD answers the local fighter's own numbers, and the Tab
+ * scoreboard answers the rest only when you are not fighting.
  */
 
 import { Container, Sprite, Text, Texture } from "pixi.js";

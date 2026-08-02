@@ -25,6 +25,9 @@ body {
 }
 
 #game-container {
+    /* Relative so the fight HUD can overlay the canvas rectangle: the HUD is
+       inset:0 against this box, which shrink-wraps the letterboxed canvas. */
+    position: relative;
     display: flex;
     justify-content: center;
     align-items: center;
