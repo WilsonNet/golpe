@@ -16,6 +16,7 @@ import { rankScores } from "../game/simulation/Deathmatch";
 import { TEAM_NAMES } from "../game/simulation/Teams";
 import { teamCss } from "../game/teamPalette";
 import { HUD_CSS } from "./hudStyles";
+import { usePotgActive } from "./PlayOfTheGame";
 import { ScoreTable } from "./Scoreboard";
 import { formatClock, useMatch, useMatchOver } from "./useMatch";
 
@@ -57,7 +58,13 @@ function nameStyle(place: number, name: string) {
 export function MatchOver() {
 	const over = useMatchOver();
 	const match = useMatch();
-	if (!over) return null;
+	// Play of the Game runs first. Both announcements arrive in the same breath —
+	// the reel is sent immediately before the standings — so without this the
+	// podium would be up over the replay of how it was won, which makes both of
+	// them pointless. The podium is not cancelled, only deferred: `useMatchOver`
+	// is still holding the result when the ceremony ends.
+	const ceremony = usePotgActive();
+	if (!over || ceremony) return null;
 
 	// Ranked here as well as on the server. Same function, so the answer is the
 	// same — and the podium does not depend on the order the standings arrived in.

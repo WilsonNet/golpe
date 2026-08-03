@@ -135,6 +135,26 @@ them at 20Hz is ~128 KB/s per client and a datagram well past any sane MTU.
   divergence with nothing in any metric to explain it. See
   [team-deathmatch.md](team-deathmatch.md).
 
+## What does not go on the wire at all
+
+**The Play of the Game footage is fetched over HTTP**, not pushed as datagrams.
+A clip is a few hundred kilobytes of packed fighter state — three orders of
+magnitude past what a datagram wants, and the same argument that made the
+snapshot a packed array in the first place says a ten-second replay does not
+belong on the realtime channel.
+
+- `GET /potg/<roomId>` on the game server's own HTTP port (9208), the same one
+  the WebRTC signalling and the menu's health check already use. No second
+  address, no second origin.
+- The *announcement* (`potg`) is an ordinary reliable datagram and carries
+  everything the splash card needs, so the ceremony is identical whether the
+  footage arrives, arrives late, or never arrives at all. Every fetch failure —
+  404, timeout, version mismatch, malformed JSON — costs the replay and nothing
+  else. A design where the announcement *was* the clip could only fail silently.
+- The footage reuses `packState`, so a replay unpacks into a real
+  `PlayerPosition` and is drawn by the same systems a live fighter is. See
+  [play-of-the-game.md](play-of-the-game.md).
+
 ## Training rooms
 
 Two extra messages, and they are the *only* ones. Both are training-specific and

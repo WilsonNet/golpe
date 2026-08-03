@@ -12,6 +12,8 @@
     "src/game/simulation",
     "src/game/characters",
     "src/game/online/wire.ts",
-    "src/game/online/types.ts"
+    "src/game/online/types.ts",
+    "src/game/potg/scoring.ts",
+    "src/game/potg/types.ts"
   ]
 }

@@ -415,6 +415,7 @@ node scripts/diagnose.mjs --mode=online --runs=3  # the canonical duel
 node scripts/deathmatch-probe.mjs                 # 16 AI fighters, played to a winner
 node scripts/tdm-probe.mjs                       # two sides, wipe-out rounds, no friendly fire
 node scripts/menu-probe.mjs                       # the root menu: every click a URL, boots a match
+node scripts/potg-probe.mjs                      # play of the game — the only probe that reads past the final whistle
 npm run diagnose                                  # offline + online, 8s each
 node scripts/verify-modes.mjs                     # smoke-check every launch mode
 node scripts/probe-online.mjs                     # raw console from one online client

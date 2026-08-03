@@ -399,9 +399,47 @@ httpServer.on("request", (req, res) => {
 		res.end(JSON.stringify({ ok: true, rooms: rooms.size }));
 		return;
 	}
+
+	// The Play of the Game footage, on HTTP rather than on the game channel.
+	//
+	// A clip is a few hundred kilobytes of packed fighter state — three orders of
+	// magnitude past what a datagram wants, and the same argument that made the
+	// snapshot a packed array in the first place says a ten-second replay does
+	// not belong on the realtime path at all. The *announcement* is a reliable
+	// datagram and carries everything the splash card needs, so a client that
+	// cannot reach this endpoint still gets the ceremony and simply skips the
+	// replay. The id is validated with the same regex the rooms are keyed by, so
+	// this cannot be used to probe for anything a room id is not.
+	const clip = req.method === "GET" ? potgRequest(req.url) : null;
+	if (clip !== null) {
+		res.writeHead(clip.body === null ? HTTP_NOT_FOUND : HTTP_OK, {
+			"Content-Type": "application/json",
+			"Access-Control-Allow-Origin": "*",
+		});
+		res.end(clip.body ?? "");
+		return;
+	}
+
 	res.writeHead(HTTP_NOT_FOUND);
 	res.end();
 });
+
+/**
+ * Resolve `GET /potg/<roomId>`, or `null` when this is not that request.
+ *
+ * The two failure modes are deliberately different shapes: a URL that is not a
+ * clip request falls through to the ordinary 404, while a *well-formed* request
+ * for a room with no reel gets a 404 of its own. The client treats both the
+ * same way — no replay, splash only — but the logs do not have to guess.
+ */
+function potgRequest(url: string | undefined): { body: string | null } | null {
+	const path = (url ?? "").split("?")[0] ?? "";
+	if (!path.startsWith("/potg/")) return null;
+	const id = decodeURIComponent(path.slice("/potg/".length));
+	if (!ROOM_ID_RE.test(id)) return { body: null };
+	const clip = rooms.get(id)?.playOfTheGame ?? null;
+	return { body: clip === null ? null : JSON.stringify(clip) };
+}
 
 io.addServer(httpServer);
 httpServer.listen(PORT);

@@ -39,6 +39,7 @@ skill({ name: "feedback-loop" })    # the full workflow
 |---|---|
 | What should the game *do*? | [`specs/`](specs/README.md) — the source of truth |
 | What should the menu do? | [`specs/menu.md`](specs/menu.md) — when it shows, and how choices become URLs |
+| What happens when a match ends? | [`specs/play-of-the-game.md`](specs/play-of-the-game.md) — the reel, the camera edit, then the podium |
 | What rule will I break if I'm careless? | [`docs/invariants.md`](docs/invariants.md) |
 | Where does this code live, and who owns it? | [`docs/architecture.md`](docs/architecture.md) |
 | How do I measure anything? | [`docs/diagnostics.md`](docs/diagnostics.md) + the `feedback-loop` skill |
@@ -53,7 +54,8 @@ spec before implementing: [movement](specs/movement.md) ·
 [deathmatch](specs/deathmatch.md) · [team deathmatch](specs/team-deathmatch.md) ·
 [netcode](specs/netcode.md) ·
 [controls](specs/controls.md) · [training room](specs/training-room.md) ·
-[ultimate](specs/ultimate.md).
+[ultimate](specs/ultimate.md) ·
+[play of the game](specs/play-of-the-game.md).
 
 ## Tech Stack
 
@@ -155,6 +157,17 @@ One line each; the war story behind every one is in
 - **A clean run is not a good run.** Read `arenaSummary` and the `meleeSummary`
   counters: every must-be-zero metric is satisfied by a build where nothing
   happens.
+- **The Play of the Game replay is a projector, never a simulation.** It draws
+  recorded `PackedState`, re-pointing the live entities *after* the live update
+  has pointed them at prediction — last writer wins, and the next live frame
+  restores itself. Re-simulating from recorded input would diverge from the match
+  it is a replay of on the first floating-point difference.
+- **Only the server may decide what the play was.** A play is kills, denies and
+  round wipes, and no client sees all of them; a client-side reel gives sixteen
+  people sixteen different ceremonies.
+- **The announcement is a datagram; the footage is an HTTP fetch.** Every way the
+  fetch can fail costs the replay and leaves the splash card standing. A clip on
+  the realtime channel would be a few hundred kilobytes in a datagram.
 - **The root URL is a menu; the menu is a URL generator, never a matchmaker.**
   It writes the launch request to the query string and the game boots because
   the URL now carries one — one parser (`online/launch.ts`) serves menu, boot
@@ -185,6 +198,8 @@ node scripts/menu-probe.mjs                            # the root menu: every cl
 node scripts/dash-probe.mjs                            # double-tap dash delivery, at a forced frame rate
 node scripts/screens-probe.mjs                         # ?screen=N room: spawn spread + follow camera
 node scripts/ultimate-probe.mjs                        # the black hole: hold to aim, release to cast, freeze, capture
+node scripts/potg-probe.mjs                            # play of the game: the reel, the camera edit, the podium waiting
+python3 scripts/make-potg-art.py                       # regenerate the ceremony's sunburst and medal
 ```
 
 Both `diagnose.mjs` and `deathmatch-probe.mjs` take `--screens=N` to run their
@@ -345,6 +360,24 @@ their own hole**, and that exclusion is one predicate. The pull is an argument t
 `tickPlayer`, so a caught fighter's own client predicts it. `?ultCharge=N` is a
 creator-only charge floor — the practice-room flag. See
 [specs/ultimate.md](specs/ultimate.md).
+
+**A match ends with Play of the Game, and only then the podium.** The server
+films itself: a 19.5s ring buffer of the snapshots it already broadcast, plus a
+running score of every fighter's **plays** — a run of one fighter's kills, denies
+and round wipes with no gap over 5s, escalating +45% per frag so a double kill
+beats two unrelated ones. The best play's clip is cut **the moment the run
+closes**, while the footage still exists. The announcement is a reliable
+datagram; **the footage is `GET /potg/<roomId>` over the game server's HTTP
+port**, because a clip is hundreds of kilobytes. The client replays it as a
+projector — recorded `PackedState` re-pointed onto the live entities, drawn by
+the ordinary animation, nameplate, shadow and sword-effect systems — under a
+**five-movement camera edit**: establish wide, push in to 1.8x, a whip pan that
+overshoots and swings back, the roll with slow motion and a zoom punch on each
+beat, then an outro holding the last frame. `MATCH_OVER_LINGER_MS` is **28s**
+because the ceremony and the podium share it. Measured with
+`scripts/potg-probe.mjs` — no other probe can see any of it, because they all
+stop reading at the frame it begins. See
+[specs/play-of-the-game.md](specs/play-of-the-game.md).
 
 **Bots are opt-in.** A room has none unless asked: `?bots=N` seats N to fight,
 `?fill=N` keeps the room at N fighters with bots as ballast, and neither means

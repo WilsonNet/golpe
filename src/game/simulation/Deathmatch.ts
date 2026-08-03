@@ -25,8 +25,19 @@ export const TIME_LIMIT_MS =
 /** How long a fighter stays down before returning to the arena. */
 export const RESPAWN_DELAY_MS = 2000;
 
-/** How long the podium stays up before the next match starts. */
-export const MATCH_OVER_LINGER_MS = 15000;
+/**
+ * How long the end of a match lasts before the next one starts.
+ *
+ * **Twenty-eight seconds, and it is not all podium.** The ceremony is two
+ * things now: Play of the Game runs first — a pre-roll of camera work, the
+ * footage itself, and a card at the end, up to about twenty seconds for the
+ * longest clip the server will cut — and only then does the podium go up. It
+ * was fifteen seconds when the podium was the whole of it, and leaving it there
+ * would have meant a new match starting underneath a replay of the last one.
+ *
+ * See specs/play-of-the-game.md for where the twenty seconds goes.
+ */
+export const MATCH_OVER_LINGER_MS = 28000;
 
 export type MatchPhase = "live" | "over";
 

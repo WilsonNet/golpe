@@ -23,6 +23,7 @@ import {
 	type TeamStatus,
 } from "../src/game/online/types.js";
 import { packIntent, packState } from "../src/game/online/wire.js";
+import type { PotgClip } from "../src/game/potg/types.js";
 import {
 	buildWorld,
 	pickSpawn,
@@ -64,6 +65,7 @@ import type {
 	TrainingStateMsg,
 } from "../src/game/training/types.js";
 import { botName, sanitiseName, uniqueName } from "./BotNames.js";
+import { PotgRecorder } from "./PlayOfTheGame.js";
 import {
 	addCharge,
 	applyMeleeResult,
@@ -285,6 +287,14 @@ function botConfig(): AIConfig {
  */
 const MAX_STARVED_TICKS = 6;
 
+/**
+ * HP at or below which a frag counts as a clutch, for the highlight reel.
+ *
+ * Just under a third of a bar: low enough that the killer was one exchange from
+ * losing it, high enough that it happens often enough to be worth naming.
+ */
+const POTG_CLUTCH_HP = 30;
+
 function idleInput(seq = 0): PlayerInput {
 	return {
 		seq,
@@ -363,6 +373,28 @@ export class GameRoom {
 	/** ms since the open singularity last dealt damage. */
 	private singularityDamageAcc = 0;
 	private nextUltId = 0;
+
+	// =========================================================
+	//  PLAY OF THE GAME
+	// =========================================================
+
+	/**
+	 * The highlight reel: a ring buffer of broadcast frames, and the running
+	 * judgement of which slice of them was the match. See `PlayOfTheGame.ts`.
+	 */
+	private readonly potg: PotgRecorder;
+
+	/**
+	 * The recorder's clock, in ms since the room started.
+	 *
+	 * Deliberately **not** `matchElapsedMs`. The match clock stops during a team
+	 * round's freezetime and cooldown, and footage stamped with a clock that
+	 * stands still is footage the replay cannot sample — several hundred frames
+	 * would share one timestamp. This one is monotonic and counts every tick the
+	 * room ran, including the ones the ultimate's cinematic froze, so a cast
+	 * replays as the held beat it actually was.
+	 */
+	private potgClockMs = 0;
 
 	/** Deathmatch clock and lifecycle. */
 	private phase: MatchPhase = "live";
@@ -474,6 +506,17 @@ export class GameRoom {
 			0,
 			Math.min(rules.startUltCharge ?? 0, ULT_MAX_CHARGE),
 		);
+		// The room is filmed from the moment it exists. Nothing here is optional or
+		// opt-in: a highlight cannot be recorded retroactively, so the buffer has to
+		// already be running when the moment worth keeping happens.
+		this.potg = new PotgRecorder(
+			() => ({
+				roomId: this.id,
+				hz: BROADCAST_HZ,
+				screens: this.world.screens,
+			}),
+			(id) => this.players.get(id)?.team ?? null,
+		);
 	}
 
 	/**
@@ -506,6 +549,18 @@ export class GameRoom {
 
 	get isFull(): boolean {
 		return this.channelIds.length >= MAX_PLAYERS;
+	}
+
+	/**
+	 * The last match's Play of the Game footage, or null.
+	 *
+	 * Read by the HTTP endpoint in `server/index.ts` — the clip is hundreds of
+	 * kilobytes and does not belong on the realtime channel. See
+	 * `src/game/potg/types.ts` on why the announcement and the footage travel by
+	 * different roads.
+	 */
+	get playOfTheGame(): PotgClip | null {
+		return this.potg.clip;
 	}
 
 	get names(): ReadonlySet<string> {
@@ -1131,6 +1186,42 @@ export class GameRoom {
 				});
 			}
 		}
+		// The highlight reel, before the credit fields are cleared: every question
+		// the scoring asks is about state that is true *now* and about to stop
+		// being — who dealt the last blow, with what, and how close they were to
+		// losing the exchange themselves.
+		//
+		// Modifiers are emitted **before** the frag they describe, so they carry the
+		// same chain multiplier it does rather than the next one's — see
+		// `scorePlay`. Everything shares one timestamp, which is what makes them one
+		// moment instead of six.
+		if (killer) {
+			const t = this.potgClockMs;
+			const actor = { id: killer.id, name: killer.name };
+			const target = { id: victim.id, name: victim.name };
+			if (victim.lastHurtByUlt) {
+				this.potg.note(t, "ultimateKill", actor, target);
+			}
+			if (
+				killer.state.meleeAction === "slash3" ||
+				killer.state.meleeAction === "massive"
+			) {
+				this.potg.note(t, "finisherKill", actor, target);
+			}
+			if (!victim.state.grounded) this.potg.note(t, "airKill", actor, target);
+			if (killer.hp > 0 && killer.hp <= POTG_CLUTCH_HP) {
+				this.potg.note(t, "clutchKill", actor, target);
+			}
+			// The frag that emptied a side. Asked here rather than where the round is
+			// actually scored, because that happens on the next tick and by then
+			// nothing knows whose blow did it.
+			if (this.mode === "tdm" && roundResult(this.members())?.kind === "win") {
+				this.potg.note(t, "wipeKill", actor, target);
+			}
+			if (victim.ultHeld) this.potg.note(t, "deny", actor, target);
+			this.potg.note(t, "kill", actor, target);
+		}
+
 		victim.lastHurtBy = null;
 		victim.lastHurtByUlt = false;
 
@@ -1299,6 +1390,20 @@ export class GameRoom {
 				`[MATCH] ${this.id} over by ${reason}: ${winner?.name ?? "nobody"} wins with ${winner?.kills ?? 0}`,
 			);
 		}
+		// Play of the Game, decided **before** the podium is announced and sent
+		// first, because that is the order it is watched in: the reel, then the
+		// standings. It is a separate message rather than a field on `match-over`
+		// for the same reason the clip is fetched rather than pushed — a room where
+		// nobody scored has no play, and a podium that carried an empty one would
+		// have to say so.
+		const potg = this.potg.finish();
+		if (potg) {
+			console.log(
+				`[POTG] ${this.id}: ${potg.protagonistName} — ${potg.headline} (${potg.score}, clip ${potg.hasClip ? "cut" : "lost"})`,
+			);
+			this.broadcastReliable("potg", potg);
+		}
+
 		// The full standings, once, with names attached. The scoreboard rebuilds
 		// this from the snapshot every frame; the podium is a one-shot announcement
 		// and should not depend on a client having kept up.
@@ -1408,6 +1513,10 @@ export class GameRoom {
 		this.roundFreezeMs = this.freezeTimeMs;
 		this.lastRoundWinner = null;
 		this.winnerTeam = null;
+		// The reel belongs to the match that produced it. A new one starts with an
+		// empty buffer, or the first thirty seconds of it would be footage of a
+		// fight that is already on the scoreboard of nobody.
+		this.potg.reset();
 		console.log(`[MATCH] ${this.id}: new match`);
 		this.resetPlayers();
 	}
@@ -1553,6 +1662,13 @@ export class GameRoom {
 
 	private fixedTick(dt: number, now: number) {
 		this.tickCount++;
+
+		// Before the cinematic's early return, on purpose: the recorder's clock is
+		// the *footage* clock, and a freeze is 1100ms of footage in which nothing
+		// moves. Stopping this here would collapse the whole cast onto one
+		// timestamp and make the replay skip the most cinematic second in the game.
+		this.potgClockMs += dt * MS_PER_SECOND;
+		this.potg.tick(this.potgClockMs);
 
 		// The ultimate's cinematic freeze, and the only thing in the game that gets
 		// to stop the simulation. Everything below is skipped: no input is consumed,
@@ -1937,6 +2053,14 @@ export class GameRoom {
 				// opens. One deny event, over the fighter who blocked it.
 				if (blocksUltimate(player.state, g.vx)) {
 					console.log(`[ULT] grenade ${g.id} DENIED by ${player.name}`);
+					// The other kind of deny, and worth exactly as much: the meter was
+					// spent, the hole never opens, and one fighter's guard is why.
+					this.potg.note(
+						this.potgClockMs,
+						"deny",
+						{ id: player.id, name: player.name },
+						{ id: g.ownerId, name: this.players.get(g.ownerId)?.name ?? "" },
+					);
 					this.denies.push({
 						denierId: player.id,
 						x: player.state.x + PLAYER_WIDTH / 2,
@@ -2128,6 +2252,17 @@ export class GameRoom {
 		this.emitTrainingState();
 
 		const snap = this.snapshot;
+		// Filmed from the broadcast itself, so the reel and the room can never be
+		// showing two different fights. See `PlayOfTheGame.ts`.
+		this.potg.capture(this.potgClockMs, snap, (id) => {
+			const p = this.players.get(id);
+			return {
+				id,
+				name: p?.name ?? id,
+				team: p?.team ?? null,
+				bot: p?.brain !== null && p?.brain !== undefined,
+			};
+		});
 		for (const player of this.players.values()) {
 			player.channel?.emit("state", snap);
 		}

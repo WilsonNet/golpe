@@ -1,4 +1,5 @@
 import geckos from "@geckos.io/client";
+import type { PotgAnnounce } from "../potg/types";
 import type { MatchMode } from "../simulation/Teams";
 import type { TrainingConfigMsg, TrainingStateMsg } from "../training/types";
 import {
@@ -32,6 +33,14 @@ export interface OnlineHandlers {
 	onRoster: (msg: RosterMsg) => void;
 	onRespawn: (msg: RespawnMsg) => void;
 	onMatchOver: (msg: MatchOverMsg) => void;
+	/**
+	 * The match produced a Play of the Game.
+	 *
+	 * Sent just before `match-over` and handled separately, because the ceremony
+	 * runs before the podium does. Absent when nobody scored all match — which is
+	 * a real outcome and better said by silence than by an empty card.
+	 */
+	onPotg: (msg: PotgAnnounce) => void;
 	/** A team deathmatch round was won by wipe-out. */
 	onRoundWon: (msg: RoundWonMsg) => void;
 	/** Freezetime is over: the round is live. */
@@ -226,6 +235,13 @@ export class OnlineManager {
 
 		channel.on("match-over", (data: unknown) => {
 			handlers.onMatchOver(data as MatchOverMsg);
+		});
+
+		// The highlight reel's announcement. Reliable server-side, like the podium
+		// and for the same reason: it happens once, it is the thing everybody looks
+		// up for, and there is no second one to heal a lost datagram with.
+		channel.on("potg", (data: unknown) => {
+			handlers.onPotg(data as PotgAnnounce);
 		});
 
 		// A side was wiped out. The arena reset that follows arrives separately as

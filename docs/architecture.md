@@ -35,6 +35,13 @@ src/game/
     Gamepad.ts      the polled pad, read as codes in that same namespace
     Aim.ts          the two controller aim layers — pure, clock-free, testable
     Scheme.ts       mouse vs controller, and whether the on-screen deck is drawn
+  potg/           Play of the Game: the end-of-match highlight
+    types.ts        the clip and announcement shapes — shared with the server
+    scoring.ts      what a moment is worth and where a play begins and ends; pure,
+                    shared with the server, unit tested
+    Director.ts     the five-movement camera edit; pure — no Pixi, no clock
+    Replay.ts       the projector: samples recorded frames, never simulates
+    clipSource.ts   fetching the footage over HTTP, and surviving every failure
   online/         OnlineManager (channel), OnlineSession (owns netcode)
     Prediction.ts   the local fighter: predict, rewind, replay, and render smoothing
     Rollback.ts     every *other* fighter: carry its input forward, rewind on snapshot
@@ -60,7 +67,8 @@ src/ui/           React overlays drawn over the canvas
   NamePrompt.tsx    the name a player enters before their client connects
   Scoreboard.tsx    the held-Tab scoreboard, and the table the podium reuses
   PauseMenu.tsx     the Esc menu and the controls dialog (suspends input, never pauses)
-  MatchOver.tsx     the winner podium
+  MatchOver.tsx     the winner podium — deferred while the ceremony runs
+  PlayOfTheGame.tsx the end-of-match ceremony's title, name card and skip
   FightHud.tsx      the in-match HUD — DOM, fed by the hud-state event
   useMatch.ts       EventBus subscriptions and the held-key hook
   hudStyles.ts      dialog/overlay CSS; fightHudStyles.ts the HUD's own, both
@@ -69,6 +77,8 @@ src/ui/           React overlays drawn over the canvas
 server/           Geckos.io authoritative server
   physics.ts        re-exports src/game/simulation/Physics
   GameRoom.ts       authoritative tick, bullets, melee resolution, match lifecycle
+  PlayOfTheGame.ts  the highlight reel: a ring buffer of broadcast frames, and the
+                    running judgement of which slice of them was the match
   BotNames.ts       gamertags for bots, and sanitising the ones humans type
   TrainingDummy.ts  the scriptable practice dummy: an input source, like EnemyBrain
   index.ts          matchmaking, room sizing and deferred placement
@@ -79,7 +89,10 @@ scripts/          diagnose.mjs (Playwright harness), deathmatch-probe.mjs (sixte
                   cursor — the only thing that can test mouse aim), pad-probe.mjs
                   (stubs the Gamepad API — the only thing that can test controller
                   aim and the phone deck), training-probe.mjs (one interaction at
-                  a time), dev-herdr.mjs, probe-online.mjs, verify-modes.mjs
+                  a time), potg-probe.mjs (the end-of-match ceremony — the only
+                  thing that reads past the final whistle), make-potg-art.py
+                  (generates the ceremony's sunburst and medal),
+                  dev-herdr.mjs, probe-online.mjs, verify-modes.mjs
 specs/            the source of truth for intended behaviour
 docs/             how to work in this repo
 public/assets/

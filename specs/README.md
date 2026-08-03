@@ -23,6 +23,7 @@ it.
 | [ultimate.md](ultimate.md) | The black hole grenade: charge, the cinematic freeze, the field, no friendly fire |
 | [arena.md](arena.md) | World bounds, platform layout, reachability rules, spawn points |
 | [deathmatch.md](deathmatch.md) | 16 fighters, frags, respawns, the win condition, names, the podium |
+| [play-of-the-game.md](play-of-the-game.md) | The end-of-match highlight: how a play is scored, how it is recorded, and the camera edit |
 | [team-deathmatch.md](team-deathmatch.md) | Two sides, no friendly fire, wipe-out rounds, and the team colour scheme |
 | [netcode.md](netcode.md) | Online-first model, rollback, reconciliation, the wire format, projectiles, bots |
 | [menu.md](menu.md) | The root menu: when it shows, how choices become URLs, hosting and joining |

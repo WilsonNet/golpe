@@ -179,7 +179,12 @@ export function meleeFxSystem(
 	dtMs: number,
 	holdingUlt: (id: string) => boolean,
 ) {
-	for (const e of queries.fighters) {
+	for (const e of queries.drawnFighters) {
+		// A hidden fighter's sword is hidden too. The Play of the Game replay takes
+		// fighters who are not in the clip off the screen while the live match
+		// carries on predicting them underneath — and a swing trail from somebody
+		// who is not on screen is the most confusing artefact a replay can have.
+		if (!e.sprite.visible) continue;
 		fx.updateFighter(
 			e.fighter.id,
 			e.body,
@@ -199,6 +204,14 @@ export function meleeFxSystem(
  */
 export function nameplateSystem(queries: Queries, plates: Nameplates) {
 	for (const e of queries.drawnFighters) {
+		// Never label a fighter nobody can see. Hiding a sprite used to leave its
+		// plate and health bar floating over empty arena, because the entity is
+		// still in the query — the replay hides fighters the clip does not contain,
+		// and that was the first thing it got visibly wrong.
+		if (!e.sprite.visible) {
+			plates.forget(e.fighter.id);
+			continue;
+		}
 		const at = e.renderPos ?? e.body;
 		plates.sync(
 			e.fighter.id,
@@ -222,6 +235,12 @@ export function nameplateSystem(queries: Queries, plates: Nameplates) {
  */
 export function shadowSystem(queries: Queries, shadows: Shadows) {
 	for (const e of queries.drawnFighters) {
+		// Same rule as the nameplates: a shadow with no fighter over it is a stain
+		// on the floor.
+		if (!e.sprite.visible) {
+			shadows.forget(e.fighter.id);
+			continue;
+		}
 		const at = e.renderPos ?? e.body;
 		shadows.sync(e.fighter.id, at.x, at.y, e.fighter.team, e.fighter.hp > 0);
 	}

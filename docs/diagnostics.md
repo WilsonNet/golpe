@@ -317,6 +317,54 @@ unpredicted pull would show there as double-digit correction on every one of the
 instead of taking ~285s to fill. It is honoured in the training room too, which is
 where a human practising the throw wants it.
 
+## The play-of-the-game probe
+
+`node scripts/potg-probe.mjs`. It is the only thing in the suite that reads
+**past the final whistle**.
+
+That is the whole argument for it existing. Every other probe polls
+`__matchState()` until `phase === "over"` and then stops — which is the exact
+frame the ceremony begins. A server that scored nobody, a clip that never
+downloaded, a pre-roll that quietly degraded into a static wide shot, a replay
+drawing an empty arena, a podium sitting on top of the replay: all of it leaves
+`diagnose`, `deathmatch`, `tdm` and `ultimate` green.
+
+It plays a short AI-vs-AI match to a winner, then watches `__potgState()` at
+60ms and the DOM alongside it:
+
+| Question | What it reads |
+|---|---|
+| Was a play announced, with a headline and a protagonist? | `announced` |
+| Did the server keep footage, and is it fetchable? | `GET /potg/<roomId>`, from node |
+| Is the clip real — frames, cast, beats, a lead-in? | the fetched JSON |
+| Did all five movements run, in order? | `phase`, sampled |
+| Was the establish wide, did the push push, did the whip *swing*? | `track` |
+| Did the footage slow at a beat, and reach full speed otherwise? | `track[].minRate` / `maxRate` |
+| Did the shake fire once per beat rather than once per frame? | `track[].shakes` vs the clip's beat count |
+| Did the replay draw anybody? | `drawn` |
+| Did the HUD and the podium stay down, and the overlay come up? | the DOM, while `active` |
+| Did the podium then arrive? | `.vd-veil` |
+
+Two details are load-bearing.
+
+**`track` summarises each movement as a range, not a final sample.** A whip pan
+*ends* back on its subject, so its last position says nothing about whether it
+swung; `travel` is the furthest the camera got from where the movement started,
+and it is the only number that can tell a pan from a static shot. It is recorded
+*after* the clamp, too — the clamp is entirely capable of turning a 400px pan
+into no pan at all at the edge of a one-screen arena, and a metric taken before
+it would have reported a movement the player never saw.
+
+**"Wide" is asserted relative to the push, not against 1.0.** The replay camera
+is floored at the zoom that still fills the arena, and this game's world is
+exactly one viewport tall — so an absolute test for a sub-1.0 establishing shot
+would fail on every arena that exists.
+
+`--ultCharge=100` is worth running: the grenade, the singularity and the
+caster's immunity are all recorded per frame and replayed from the clip rather
+than from the live match, and without an armed room that path is never taken.
+`--mode=tdm` covers the wipe-kill highlight and the team-tinted card.
+
 ## A known flake: "combo links thrown airborne"
 
 `diagnose.mjs --mode=online` fails roughly one run in ten with

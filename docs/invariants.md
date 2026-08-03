@@ -469,6 +469,62 @@ sixteen fighters breaks things two never could.
   `attackerId === myId` was correct in a duel and wrong the instant a third fighter
   existed: every hit between two other players punched the local fighter's sprite.
 
+## Play of the Game
+
+Full detail in [specs/play-of-the-game.md](../specs/play-of-the-game.md). These
+are the ways an end-of-match cinematic breaks a game that is still running
+underneath it.
+
+- **The replay is a projector, never a simulation.** It draws recorded
+  `PackedState` and calls `tickPlayer` exactly zero times. Re-simulating from
+  recorded inputs was the obvious alternative and is the wrong one: it needs the
+  exact server tick alignment, and the first floating-point difference has the
+  replay diverging from the match it is a replay of.
+- **The footage is the broadcast.** Frames are built from the `GameSnapshot` the
+  room already composed, so the reel and the room can never show two different
+  fights — and a field added to `PlayerPosition` reaches both at once. A parallel
+  recording of the server's internal state would have drifted the first time
+  anybody added a timer.
+- **The live match keeps running underneath, and the replay is the last writer.**
+  It re-points entities *after* `updateOnline` has pointed them at prediction, so
+  the moment it stops running the live bindings are back with no restore step to
+  forget. The session never stops predicting, reconciling or sending input.
+- **A hidden fighter's plate, shadow and sword must be hidden too.** Hiding a
+  sprite leaves the entity in every archetype query, so `nameplateSystem`,
+  `shadowSystem` and `meleeFxSystem` all skip invisible fighters now — the first
+  version left health bars floating over empty arena and swing trails coming from
+  nobody.
+- **A cut is made when the play closes, not when the match ends.** By the end of
+  a match the footage of a play from four minutes ago is long gone from the ring
+  buffer, and keeping the whole match to avoid that would be tens of megabytes
+  per room.
+- **The recorder's clock is not the match clock.** `matchElapsedMs` stops during
+  a team round's freezetime and cooldown, and footage stamped with a clock that
+  stands still is footage the replay cannot sample — hundreds of frames would
+  share one timestamp. `potgClockMs` is monotonic and counts every tick,
+  including the ones the ultimate's cinematic froze, so a cast replays as the
+  held beat it actually was.
+- **Beats are moments, not events.** A frag emits one `kill` plus a modifier for
+  each thing notable about it, all at one timestamp; the clip dedupes them, or a
+  single kill would be slowed and shaken six times.
+- **A beat's shake is counted, not time-windowed.** Slow motion holds a beat
+  inside its own window for a dozen frames, and a re-triggered shake is a rattle
+  instead of an impact.
+- **The camera may never go wider than the world.** This game's arena is exactly
+  one viewport tall, so the director's 0.82x establishing shot would draw a
+  656x492 world inside an 800x600 canvas and frame the ceremony with a border of
+  void. The replay floors the zoom at the fit.
+- **`Stage.cameraX` divides the zoom back out.** The diagnostic compares it frame
+  to frame; a getter reading the raw container position would report a cinematic
+  push-in as several hundred pixels of camera jitter.
+- **The podium is deferred, not cancelled.** `match-over` and the announcement
+  arrive in the same breath, and `MATCH_OVER_LINGER_MS` had to go from 15s to 28s
+  to hold both — leaving it would have started a new match underneath a replay of
+  the last one.
+- **A tie between plays is kept by the earlier one.** Any other rule makes the
+  winner depend on the order plays happen to close in, and two identical matches
+  would produce two different cinematics.
+
 ## Teams
 
 Full detail in [specs/team-deathmatch.md](../specs/team-deathmatch.md). These are

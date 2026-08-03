@@ -538,6 +538,7 @@ for fps in [30, 60, 85, 120]:
 | `scripts/aim-probe.mjs` | Drives a real cursor: screen→world mapping, facing, and shot direction, at dpr 1 and 2 |
 | `scripts/pad-probe.mjs` | Stubs the Gamepad API: the two controller aim layers, pad bindings, and the on-screen deck on a phone-shaped context |
 | `scripts/training-probe.mjs` | One interaction at a time against a scripted dummy: block, uppercut, backstab, frame data, determinism |
+| `scripts/potg-probe.mjs` | The end-of-match ceremony — the **only** probe that reads past `phase === "over"`, which is the frame every other one stops on |
 | `server/TrainingDummy.ts` | The scriptable dummy: a deterministic input source with `EnemyBrain`'s contract |
 | `src/game/training/TrainingRoom.ts` | `window.__training`, and the report as a *view* over `PhysicsDiagnostics` |
 | `scripts/dev-herdr.mjs` | Dev servers in visible herdr panes, with real port readiness |

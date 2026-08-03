@@ -17,7 +17,7 @@ const SPRITE_ANCHOR_CENTRE = 0.5;
  * code path.
  */
 
-import { Sprite } from "pixi.js";
+import { Container, Sprite } from "pixi.js";
 import { type AIConfig, randomBotConfig } from "./characters/AIConfig";
 import { EnemyBrain } from "./characters/EnemyBrain";
 import type { AIInput, AIOutput, AllyInfo, FoeInfo } from "./characters/types";
@@ -50,6 +50,14 @@ import { parseLaunchParams } from "./online/launch";
 import { OnlineSession } from "./online/OnlineSession";
 import { requestedRoomId, showRoomInUrl } from "./online/room";
 import { readStoredName, storeName } from "./playerName";
+import { fetchPotgClip } from "./potg/clipSource";
+import { POTG_BAR_FRACTION, type PotgShot } from "./potg/Director";
+import { PotgReplay, type ReplaySample } from "./potg/Replay";
+import type {
+	PotgAnnounce,
+	PotgCastMember,
+	PotgTrackEntry,
+} from "./potg/types";
 import { AimLine } from "./render/AimLine";
 import { bodyCentre, drawArena } from "./render/ArenaRenderer";
 import { dudeFrames, TEX, tex } from "./render/assets";
@@ -58,6 +66,7 @@ import { DenyFx } from "./render/DenyFx";
 import { type ImpactEvent, MeleeFx } from "./render/MeleeFx";
 import { Nameplates } from "./render/Nameplates";
 import { Shadows } from "./render/Shadows";
+import { SpritePool } from "./render/SpritePool";
 import type { Stage } from "./render/Stage";
 import { UltAimLine } from "./render/UltAimLine";
 import {
@@ -123,6 +132,14 @@ const SHARE_HINT_DELAY_MS = 4000;
  * comfortable glide at 60fps and still keeps up with a walking fighter.
  */
 const CAMERA_MAX_STEP_PX = 12;
+
+/**
+ * How long the replay's impact shake lasts on a scoring beat.
+ *
+ * Shorter than a sword impact's, because it fires under slow motion: the same
+ * duration that reads as a thump at full speed reads as a wobble at 0.32x.
+ */
+const POTG_SHAKE_MS = 180;
 
 function clamp(value: number, lo: number, hi: number): number {
 	return Math.max(lo, Math.min(hi, value));
@@ -632,6 +649,12 @@ export class Match {
 					// Takes the podium down. Without this the previous match's winner
 					// screen would sit over a live fight forever.
 					EventBus.emit("match-reset");
+					// And the ceremony with it. A new match has started; a replay of the
+					// last one still running over it would be showing fighters at
+					// positions the live arena has already moved them away from.
+					this.potgAnnounce = null;
+					if (this.potgReplay) this.endPlayOfTheGame();
+					else EventBus.emit("potg-end", null);
 				},
 				onMeleeEvent: (event) => {
 					// The victim comes from the event now. Deriving it from
@@ -729,6 +752,7 @@ export class Match {
 					);
 					EventBus.emit("match-over", msg);
 				},
+				onPotg: (msg) => this.beginPlayOfTheGame(msg),
 				onSeated: (roomId, screens, mode) => {
 					// The room decides the mode as it decides the id and the size. A
 					// client that joined a team room by link learns it here.
@@ -827,7 +851,26 @@ export class Match {
 		console.log("=== AI VS AI MODE ENABLED ===");
 	}
 
+	/** Torn down on destroy, like the name listener. */
+	private potgSkipUnsubscribe: (() => void) | undefined;
+
+	/**
+	 * Let the player out of the ceremony.
+	 *
+	 * The overlay asks; the game decides — the same shape every other overlay
+	 * follows. Skipping ends the replay immediately rather than fast-forwarding
+	 * it: somebody who skips wants the scoreboard, not the same footage sooner.
+	 */
+	private installPotgSkip() {
+		this.potgSkipUnsubscribe = EventBus.on("potg-skip", (() => {
+			this.potgAnnounce = null;
+			if (this.potgReplay) this.endPlayOfTheGame();
+			else EventBus.emit("potg-end", null);
+		}) as never);
+	}
+
 	private installDebugHooks() {
+		this.installPotgSkip();
 		// Typed in src/types/global.d.ts rather than cast through
 		// `Record<string, unknown>`: the harness drives the game through these, so
 		// they are a contract and should break the build when they change.
@@ -950,6 +993,38 @@ export class Match {
 				playerPhys: this.local.body,
 			};
 		};
+		// Play of the Game is invisible to every other probe, and in a way that
+		// would not fail anything: the deathmatch probe stops reading the moment
+		// the match ends, which is the frame this begins. `scripts/potg-probe.mjs`
+		// reads exactly this — including `track`, because the pre-roll's entire job
+		// is to move a camera nothing else in the game measures.
+		window.__potgState = () => {
+			const clip = this.potgReplay?.clip ?? null;
+			const shot = this.potgSample?.shot ?? null;
+			return {
+				announced: this.potgAnnounce,
+				active: this.replaying,
+				phase: shot?.phase ?? null,
+				clipMs: shot?.clipMs ?? 0,
+				rate: shot?.rate ?? 0,
+				zoom: this.stage.zoom,
+				letterbox: shot?.letterbox ?? 0,
+				clip: clip && {
+					roomId: clip.roomId,
+					durationMs: clip.durationMs,
+					actionAtMs: clip.actionAtMs,
+					frames: clip.frames.length,
+					cast: clip.cast.length,
+					beats: clip.beats.length,
+					protagonist: clip.protagonist.name,
+				},
+				/** One entry per camera movement, in the order they ran. */
+				track: this.potgTrack.map((t) => ({ ...t })),
+				/** How many fighters the replay is drawing this frame. */
+				drawn: this.potgSample?.fighters.length ?? 0,
+				ghosts: this.potgGhosts.size,
+			};
+		};
 		window.__physicsDiagnostic = (durationMs = 5000) =>
 			this.diagnostics.start(durationMs);
 		// Supplying the name from a probe, so an automated run can exercise the same
@@ -1038,6 +1113,12 @@ export class Match {
 		if (this.onlineMode) this.updateOnline(dtSec);
 		else this.updateOffline(dtSec);
 
+		// The Play of the Game replay, between the live update and the presentation
+		// systems. That position is the whole trick: the live update has just
+		// re-pointed every entity at predicted state, this re-points them at
+		// recorded state, and the systems below draw whichever one wrote last.
+		const shot = this.stepReplay(dtMs);
+
 		// Presentation, in dependency order: animation picks the frame, sync moves
 		// the sprites, effects read the same state, then the camera settles.
 		animationSystem(this.queries, dtMs);
@@ -1050,7 +1131,8 @@ export class Match {
 		this.denyFx.update(dtMs);
 		this.updateUltimate(dtMs);
 		this.stage.update(dtMs);
-		this.updateCamera();
+		if (shot) this.applyReplayCamera(shot.shot, dtMs);
+		else this.updateCamera();
 
 		this.training?.update(dtMs);
 		this.record(dtMs);
@@ -1076,6 +1158,10 @@ export class Match {
 		const visible =
 			inputSettings.scheme === "controller" &&
 			!this.localBrain &&
+			// A beam out of a fighter in a replay would be pointing wherever this
+			// client's cursor happens to be sitting now, over footage from a minute
+			// ago. Nothing about a replay is aimed.
+			!this.replaying &&
 			this.local.fighter.hp > 0;
 		this.aimLine.update(
 			dtMs,
@@ -1101,6 +1187,33 @@ export class Match {
 	 * ask the same function.
 	 */
 	private updateUltimate(dtMs: number) {
+		// A replay draws the hole *it recorded*, not whatever the live match is
+		// doing underneath — the room keeps playing during the ceremony, and a
+		// black hole that opened after the final whistle would otherwise be drawn
+		// on top of footage of a different one.
+		const replay = this.potgSample;
+		if (replay) {
+			this.ultAim.update(dtMs, false, 0, 0, 0, this.arena);
+			const held: PlayerPosition[] = [];
+			if (replay.singularity) {
+				for (const fighter of replay.fighters) {
+					if (fighter.hp <= 0) continue;
+					const mine = fieldFor(
+						replay.singularity,
+						fighter.member.id,
+						fighter.member.team,
+					);
+					if (
+						singularityGrip(mine, fighter.state.x, fighter.state.y) === "held"
+					)
+						held.push(fighter.state);
+				}
+			}
+			this.blackHole.syncGrenades(replay.grenades, dtMs);
+			this.blackHole.update(replay.singularity, held, dtMs);
+			return;
+		}
+
 		const session = this.online;
 		if (!session) {
 			// The `?offline=true` escape hatch has no server, and the ultimate is
@@ -1273,6 +1386,322 @@ export class Match {
 				this.stage.cameraY + dy * t,
 			);
 		}
+	}
+
+	// =========================================================
+	//  PLAY OF THE GAME
+	// =========================================================
+	//
+	// The ceremony that runs between the final frag and the podium: a pre-roll of
+	// camera work over the moment the server picked, then the footage itself.
+	//
+	// **The replay is a projector bolted onto the live match, not a second
+	// renderer.** Everything below re-points the entities that are already on
+	// screen at recorded state and hands the camera to `PotgDirector`; the
+	// animation, sprite-sync, nameplate, shadow and sword-effect systems then run
+	// exactly as they do in a fight, which is why a replay shows guard sparks and
+	// swing trails without a line of code that knows about replays. Nothing here
+	// touches the netcode: the session keeps predicting, reconciling and sending
+	// input underneath, and the next live frame re-points every body back at it.
+
+	/** The running replay, or undefined outside the ceremony. */
+	private potgReplay: PotgReplay | undefined;
+	/** What the server announced, kept for the overlay and the probe. */
+	private potgAnnounce: PotgAnnounce | null = null;
+	/** The sample drawn this frame, so the camera and the ultimate FX agree on it. */
+	private potgSample: ReplaySample | null = null;
+	/**
+	 * Entities for cast members who are no longer in the room.
+	 *
+	 * A fighter can leave between the play and the ceremony, and a replay missing
+	 * the person who was killed in it is not a replay of that play. Keyed under a
+	 * `potg:` prefix so a ghost's effects, nameplate and shadow can never collide
+	 * with a live fighter's.
+	 */
+	private readonly potgGhosts = new Map<string, FighterEntity>();
+	/** Live fighters hidden for the duration, because the clip does not contain them. */
+	private readonly potgHidden = new Set<string>();
+	/** The replay's own projectile layer, so live bullets can be hidden wholesale. */
+	private potgProjectiles: Container | undefined;
+	private potgBulletPool: SpritePool | undefined;
+	/**
+	 * Where the camera went, sampled per phase, for `scripts/potg-probe.mjs`.
+	 *
+	 * The pre-roll's entire job is to move the camera, and nothing else in the
+	 * game can see that it did: no metric reads zoom, and a cinematic that
+	 * silently degraded into a static shot would still pass every other probe.
+	 */
+	private readonly potgTrack: PotgTrackEntry[] = [];
+
+	/**
+	 * The server picked a play. Put the card up, then go and get the footage.
+	 *
+	 * The card is up *before* the fetch resolves, deliberately: the announcement
+	 * is a datagram that has already arrived and the clip is a few hundred
+	 * kilobytes over HTTP. A ceremony that waited for the footage would show
+	 * nothing at all on a slow link, and nothing is exactly what a lost fetch
+	 * would leave behind.
+	 */
+	private beginPlayOfTheGame(msg: PotgAnnounce) {
+		this.potgAnnounce = msg;
+		this.potgTrack.length = 0;
+		EventBus.emit("potg-begin", msg);
+		console.log(
+			`[POTG] ${msg.protagonistName}: ${msg.headline} (${msg.score})`,
+		);
+		if (!msg.hasClip) {
+			// Scored, but the footage did not survive — a play in the opening seconds
+			// of a match has almost no lead-in to cut from. The card stands on its
+			// own and takes itself down.
+			EventBus.emit("potg-cardonly", msg);
+			return;
+		}
+		void this.loadPlayOfTheGame(msg);
+	}
+
+	private async loadPlayOfTheGame(msg: PotgAnnounce) {
+		const clip = await fetchPotgClip(msg.roomId);
+		// The match may have restarted, or the player skipped, while this was in
+		// flight. Both clear the announcement, and starting a replay against a
+		// match that has moved on is how a cutscene ends up over a live fight.
+		if (!clip || this.potgAnnounce !== msg) {
+			if (this.potgAnnounce === msg) EventBus.emit("potg-cardonly", msg);
+			return;
+		}
+		this.potgReplay = new PotgReplay(clip);
+		this.potgSample = null;
+		this.potgHidden.clear();
+		this.ensurePotgLayers();
+		// The live projectiles belong to a match that is still running underneath
+		// this. Hidden as a layer rather than released one by one: the session owns
+		// that pool and will keep filling it.
+		this.stage.projectiles.visible = false;
+		EventBus.emit("potg-start", {
+			roomId: clip.roomId,
+			durationMs: clip.durationMs,
+			frames: clip.frames.length,
+		});
+	}
+
+	private ensurePotgLayers() {
+		if (this.potgProjectiles) return;
+		const layer = new Container();
+		// Directly above the live projectile layer, so replayed bullets sit in the
+		// same place in the draw order the real ones do — in front of the fighters,
+		// behind the effects and the nameplates.
+		const at = this.stage.shake.getChildIndex(this.stage.projectiles) + 1;
+		this.stage.shake.addChildAt(layer, at);
+		this.potgProjectiles = layer;
+		this.potgBulletPool = new SpritePool(layer, tex(TEX.fireball));
+	}
+
+	/**
+	 * Advance the replay and re-point every entity at recorded state.
+	 *
+	 * Called *after* the live update, which has just re-pointed the same entities
+	 * at predicted state — so this is the last writer and wins for the frame, and
+	 * the moment it stops running the live bindings are back with no restore step
+	 * to forget.
+	 */
+	private stepReplay(dtMs: number): ReplaySample | null {
+		const replay = this.potgReplay;
+		if (!replay) return null;
+
+		const sample = replay.step(dtMs);
+		if (!sample) {
+			this.endPlayOfTheGame();
+			return null;
+		}
+		this.potgSample = sample;
+
+		const present = new Set<string>();
+		for (const fighter of sample.fighters) {
+			const entity = this.replayActor(fighter.member);
+			present.add(fighter.member.id);
+			entity.body = fighter.state;
+			// Pointed at the body rather than cleared: the render smoother's offset
+			// belongs to a prediction that is not happening, and `renderPos` is not
+			// optional-assignable under `exactOptionalPropertyTypes`.
+			entity.renderPos = { x: fighter.state.x, y: fighter.state.y };
+			entity.fighter.hp = fighter.hp;
+			entity.fighter.name = fighter.member.name;
+			entity.fighter.team = fighter.member.team;
+			entity.sprite.visible = true;
+		}
+		this.hideAbsentFighters(present);
+
+		this.syncReplayBullets(sample);
+		EventBus.emit("potg-shot", sample.shot);
+		return sample;
+	}
+
+	/** The entity that draws one cast member, conjuring a ghost if it must. */
+	private replayActor(member: PotgCastMember): FighterEntity {
+		if (member.id === this.online?.manager.myId) return this.local;
+		const live = this.remotes.get(member.id);
+		if (live) return live;
+		const known = this.potgGhosts.get(member.id);
+		if (known) return known;
+		const ghost = this.spawnFighter(`potg:${member.id}`, false, 0, 0, 1);
+		this.potgGhosts.set(member.id, ghost);
+		return ghost;
+	}
+
+	/**
+	 * Take fighters the clip does not contain off the screen.
+	 *
+	 * Somebody who joined after the play was cut is still in the room and still
+	 * being predicted, and leaving them standing in the replay would put a fighter
+	 * in the footage who was demonstrably not there. Their plate and shadow are
+	 * forgotten as well as their sprite hidden — a nameplate floating over an
+	 * invisible fighter is worse than the fighter.
+	 */
+	private hideAbsentFighters(present: ReadonlySet<string>) {
+		for (const [id, entity] of this.remotes) {
+			if (present.has(id) || this.potgHidden.has(id)) continue;
+			this.potgHidden.add(id);
+			entity.sprite.visible = false;
+			this.plates.forget(entity.fighter.id);
+			this.shadows.forget(entity.fighter.id);
+		}
+		const myId = this.online?.manager.myId ?? "";
+		if (!present.has(myId) && !this.potgHidden.has(myId)) {
+			this.potgHidden.add(myId);
+			this.local.sprite.visible = false;
+			this.plates.forget(this.local.fighter.id);
+			this.shadows.forget(this.local.fighter.id);
+		}
+	}
+
+	private syncReplayBullets(sample: ReplaySample) {
+		const pool = this.potgBulletPool;
+		if (!pool) return;
+		const sprites = pool.take(sample.bullets.length);
+		sample.bullets.forEach((b, i) => {
+			sprites[i]?.position.set(b.x, b.y);
+		});
+	}
+
+	/**
+	 * Summarise each camera movement as it runs, for `scripts/potg-probe.mjs`.
+	 *
+	 * Ranges rather than a final sample, and that is the whole value of it: a whip
+	 * pan *ends* back on its subject, so the last position of the movement says
+	 * nothing about whether it swung. `travel` is the furthest the camera got from
+	 * where the movement started, which is the only number that can tell a pan
+	 * from a static shot.
+	 */
+	private trackReplayCamera(shot: PotgShot, dtMs: number) {
+		const x = this.stage.cameraX;
+		const y = this.stage.cameraY;
+		const zoom = this.stage.zoom;
+		const last = this.potgTrack[this.potgTrack.length - 1];
+		if (!last || last.phase !== shot.phase) {
+			this.potgTrack.push({
+				phase: shot.phase,
+				ms: dtMs,
+				x0: x,
+				y0: y,
+				x,
+				y,
+				travel: 0,
+				minZoom: zoom,
+				maxZoom: zoom,
+				minRate: shot.rate,
+				maxRate: shot.rate,
+				shakes: shot.shake > 0 ? 1 : 0,
+			});
+			return;
+		}
+		last.ms += dtMs;
+		last.x = x;
+		last.y = y;
+		last.travel = Math.max(last.travel, Math.hypot(x - last.x0, y - last.y0));
+		last.minZoom = Math.min(last.minZoom, zoom);
+		last.maxZoom = Math.max(last.maxZoom, zoom);
+		last.minRate = Math.min(last.minRate, shot.rate);
+		last.maxRate = Math.max(last.maxRate, shot.rate);
+		if (shot.shake > 0) last.shakes++;
+	}
+
+	/**
+	 * The replay's camera: the director's focus, clamped to the arena at whatever
+	 * zoom it asked for.
+	 *
+	 * The clamp is the only thing this adds, and it is not optional: the director
+	 * frames a fighter, and a fighter standing at the left wall would otherwise be
+	 * centred by scrolling the camera off the end of the world and drawing a
+	 * screen half full of nothing. Wider zooms clamp harder, because the visible
+	 * world is `view / zoom`.
+	 */
+	private applyReplayCamera(shot: PotgShot, dtMs: number) {
+		// **Never wider than the world.** The director asks for an establishing shot
+		// at 0.82, which on an arena exactly one viewport tall would draw a 656x492
+		// world inside an 800x600 canvas and frame the ceremony with a border of
+		// void. The floor is the zoom at which the arena still fills the view, so a
+		// wide shot is as wide as the level allows and no wider — and on a level
+		// that is ever bigger than a screen, the director gets what it asked for.
+		const zoom = Math.max(
+			shot.zoom,
+			this.view.width / this.arena.right,
+			this.view.height / this.arena.bottom,
+		);
+		const halfW = this.view.width / (2 * zoom);
+		const halfH = this.view.height / (2 * zoom);
+		// **The letterbox bars are allowed to hang off the world.** They are opaque
+		// and they cover 8% of the frame each — which, on an arena exactly one
+		// viewport tall, is the floor everybody is standing on and the sky above
+		// them. Letting the camera pan that far past the top and bottom puts the
+		// floor line exactly on the bottom bar's edge instead of behind it, and
+		// nothing is revealed because the bar is what is drawn there.
+		const margin = (this.view.height * POTG_BAR_FRACTION) / zoom;
+		const maxX = Math.max(0, this.arena.right - halfW * 2);
+		const maxY = Math.max(-margin, this.arena.bottom - halfH * 2 + margin);
+		const centreX = shot.focusX + PLAYER_WIDTH / 2;
+		const centreY = shot.focusY + PLAYER_HEIGHT / 2;
+		this.stage.setCamera(
+			clamp(centreX - halfW, 0, maxX),
+			clamp(centreY - halfH, -margin, maxY),
+			zoom,
+		);
+		if (shot.shake > 0) this.stage.startShake(POTG_SHAKE_MS, shot.shake);
+		// Recorded here rather than where the shot was produced, because what the
+		// probe has to be able to prove is where the camera actually *went* — the
+		// clamp above is entirely capable of turning a 400px pan into no pan at all
+		// at the edge of a one-screen arena.
+		this.trackReplayCamera(shot, dtMs);
+	}
+
+	/** Hand the camera and the entities back to the live match. */
+	private endPlayOfTheGame() {
+		this.potgReplay = undefined;
+		this.potgSample = null;
+		this.potgAnnounce = null;
+		for (const ghost of this.potgGhosts.values()) {
+			this.plates.forget(ghost.fighter.id);
+			this.shadows.forget(ghost.fighter.id);
+			this.fx.forget(ghost.fighter.id);
+			ghost.sprite.destroy();
+			this.world.remove(ghost);
+		}
+		this.potgGhosts.clear();
+		for (const id of this.potgHidden) {
+			const entity =
+				id === this.online?.manager.myId ? this.local : this.remotes.get(id);
+			if (entity) entity.sprite.visible = true;
+		}
+		this.potgHidden.clear();
+		this.potgBulletPool?.releaseAll();
+		this.stage.projectiles.visible = true;
+		// Back to a one-to-one camera before the next frame's follow camera runs,
+		// so a live match can never inherit a cinematic's zoom.
+		this.stage.setCamera(this.stage.cameraX, this.stage.cameraY, 1);
+		EventBus.emit("potg-end", null);
+	}
+
+	/** True while the ceremony owns the screen. */
+	private get replaying(): boolean {
+		return this.potgReplay !== undefined;
 	}
 
 	private record(dtMs: number) {
@@ -1815,6 +2244,7 @@ export class Match {
 
 	destroy() {
 		this.nameUnsubscribe?.();
+		this.potgSkipUnsubscribe?.();
 		window.clearTimeout(this.shareHintTimer);
 		this.input.destroy();
 		this.blackHole.destroy();

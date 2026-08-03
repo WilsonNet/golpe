@@ -28,6 +28,7 @@ import { ULT_MAX_CHARGE } from "../game/simulation/Physics";
 import { TEAM_COUNT, TEAM_NAMES } from "../game/simulation/Teams";
 import { teamCss } from "../game/teamPalette";
 import { FIGHT_HUD_CSS } from "./fightHudStyles";
+import { usePotgActive } from "./PlayOfTheGame";
 import { formatClock, type MatchView, useMatch } from "./useMatch";
 
 /** The live fight state, or null before the first snapshot. */
@@ -286,6 +287,7 @@ export function FightHud({ training = false }: { training?: boolean }) {
 	const hud = useHudState();
 	const match = useMatch();
 	const [message, announce] = useBattleMessage();
+	const ceremony = usePotgActive();
 
 	// The clock, once the server says what the match is.
 	const teams = match?.status.teams ?? null;
@@ -326,6 +328,12 @@ export function FightHud({ training = false }: { training?: boolean }) {
 	const ultKey = codeLabel(bindings.codesFor("ultimate")[0] ?? "");
 	const ult = hud ? Math.max(0, Math.min(ULT_MAX_CHARGE, hud.ult)) : 0;
 	const ultReady = ult >= ULT_MAX_CHARGE;
+
+	// The Play of the Game replay owns the whole frame. A live HP bar over
+	// footage from a minute ago is not a HUD, it is a second fight the player
+	// cannot tell from the one being replayed — and the local fighter it
+	// describes is one of the people in the clip.
+	if (ceremony) return null;
 
 	return (
 		<div className="vdh-hud">

@@ -30,6 +30,7 @@ something wears the gold.
 |---|---|---|
 | Fighter sprites, nameplates, aim beams, projectiles, effects | Pixi, inside the camera | They track moving fighters in world space |
 | Fighter panels, clock, ultimate meter, message window, scoreboard, podium, menus | React/DOM overlay | Ornate frames, subpixel-crisp text at any DPR, and CSS transitions/animations are exactly what canvas text is bad at |
+| The Play of the Game ceremony: letterbox, title, name card, skip | React/DOM overlay (`PlayOfTheGame.tsx`) | The *camera* work is in Pixi; a tracked heading and a sliding card are not. It decides nothing — the replay plays identically if it never mounts |
 | HUD container (`stage.hud`) | **Deleted** | Nothing uses it anymore; the whole HUD is DOM |
 
 The world's nameplates (in-world, above each fighter) and the screen HUD (the
@@ -133,6 +134,20 @@ measurement. Never mix in `px` for layout (hairlines at 1-2px are fine).
 5. **20Hz renders are fine; per-frame transitions are not.** HP/charge/clock
    update at snapshot cadence via setState; CSS transitions (240ms fill, 700ms
    ghost) make that look 60fps. Do not add a 60Hz DOM path.
+6. **When an overlay genuinely is per-frame, write CSS variables — not state.**
+   The Play of the Game ceremony is paced by a camera director running at 60Hz
+   over footage at a variable speed, so it cannot be timed in CSS the way the
+   ultimate's fixed 1100ms cutscene is. `PlayOfTheGame.tsx` subscribes to
+   `potg-shot` and sets `--potg-bars`/`--potg-title`/`--potg-card`/
+   `--potg-progress` on the root through a ref: one style recalculation on one
+   element, no reconciliation, and one timeline the overlay cannot fall out of
+   step with. This is the exception that proves gotcha 5, not a licence to
+   re-render at 60Hz.
+7. **An overlay that takes the whole frame must take the HUD down with it.**
+   `usePotgActive()` gates both `FightHud` and `MatchOver`: a live HP bar over
+   footage from a minute ago is a second fight the player cannot distinguish from
+   the one being replayed, and the podium arriving in the same breath as the
+   announcement would sit on top of the replay of how it was won.
 
 ## Verifying a HUD change
 

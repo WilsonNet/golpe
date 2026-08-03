@@ -16,6 +16,8 @@ import type { AIState } from "../game/characters/EnemyBrain";
 import type { AimReport } from "../game/input/Aim";
 import type { AimScheme, DeckSetting } from "../game/input/Scheme";
 import type { TeamStatus } from "../game/online/types";
+import type { PotgPhase } from "../game/potg/Director";
+import type { PotgAnnounce, PotgTrackEntry } from "../game/potg/types";
 import type {
 	MatchEndReason,
 	MatchPhase,
@@ -232,6 +234,51 @@ export interface UltSnapshot {
 	playerPhys: PlayerPosition;
 }
 
+/**
+ * The Play of the Game ceremony, from one client's point of view.
+ *
+ * Nothing else can see any of it. Every other probe stops reading at the frame
+ * the match ends, which is the frame this starts — so a cinematic that
+ * degraded into a static shot, or a clip that never downloaded, would leave the
+ * whole suite green. `scripts/potg-probe.mjs` reads exactly this.
+ */
+export interface PotgSnapshot {
+	/** The reliable announcement, or null before one arrives. */
+	announced: PotgAnnounce | null;
+	/** True while the replay owns the camera and the fighters. */
+	active: boolean;
+	/** Which camera movement is running. */
+	phase: PotgPhase | null;
+	/** Where in the footage the projector is, in ms. */
+	clipMs: number;
+	/** How fast the footage is running: 1 real time, less in slow motion, 0 held. */
+	rate: number;
+	/** The camera's push-in. 1 everywhere except inside a replay. */
+	zoom: number;
+	letterbox: number;
+	clip: {
+		roomId: string;
+		durationMs: number;
+		actionAtMs: number;
+		frames: number;
+		cast: number;
+		beats: number;
+		protagonist: string;
+	} | null;
+	/**
+	 * One entry per camera movement, in order, with where the camera ended up.
+	 *
+	 * The pre-roll exists to move a camera, and no other metric in the game reads
+	 * one. This is the only way to assert that the establish shot was wide, that
+	 * the push actually pushed, and that the whip pan swung.
+	 */
+	track: PotgTrackEntry[];
+	/** Fighters the replay drew this frame. */
+	drawn: number;
+	/** Cast members conjured because they had left the room. */
+	ghosts: number;
+}
+
 declare global {
 	interface Window {
 		/** Flip AI vs AI, same as pressing P. */
@@ -255,6 +302,8 @@ declare global {
 		__inputState?: () => InputSnapshot;
 		/** Charge, the cinematic freeze, the grenade and the open black hole. */
 		__ultState?: () => UltSnapshot;
+		/** The end-of-match ceremony: the announcement, the clip, and the camera edit. */
+		__potgState?: () => PotgSnapshot;
 		/**
 		 * Switch aiming scheme from a script.
 		 *

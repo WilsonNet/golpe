@@ -19,7 +19,7 @@ why the match ends with a podium instead of a number.
 | Frag limit | **21** (`SCORE_LIMIT`) |
 | Time limit | **5 minutes** (`TIME_LIMIT_MS`) |
 | Respawn delay | **2s** (`RESPAWN_DELAY_MS`) |
-| Podium duration | **15s** (`MATCH_OVER_LINGER_MS`), then a new match |
+| End-of-match ceremony | **28s** (`MATCH_OVER_LINGER_MS`), then a new match |
 
 A match ends when **someone reaches the frag limit, or the clock runs out** —
 score is checked first, so a frag landing on the final second reads as a won
@@ -157,7 +157,12 @@ A human types a name before their client connects, and it is remembered in
   because a scoreboard you press twice is one you leave open over a fight.
   Released on window blur as well as on key-up, since switching windows mid-hold
   never delivers a key-up.
-- **Match over:** a podium. First place largest and centred, second and third set
+- **Match over, first:** [Play of the Game](play-of-the-game.md). The server
+  picks the best play of the match, announces it, and the client replays it with
+  a camera edit over it. The podium **waits** — the two announcements arrive in
+  the same breath, and a winner screen up over the replay of how it was won
+  makes both of them pointless.
+- **Then the podium.** First place largest and centred, second and third set
   well above the rest of the field, the remaining places in a plain table. Second
   and third are the places people argue about, so they get names rather than rows.
 - The final standings arrive in their own one-shot `match-over` message. The live
@@ -165,6 +170,10 @@ A human types a name before their client connects, and it is remembered in
   deliberately is not asked to: the podium is the screen a player will remember,
   and it should not depend on their client having kept up with the final datagram
   of a match.
+- **The 28 seconds is the budget for both.** It was 15 when the podium was the
+  whole of it; the ceremony runs up to about twenty seconds for the longest clip
+  the server will cut, and leaving the linger where it was would have meant a new
+  match starting underneath a replay of the last one.
 
 ## Rooms, and how anyone joins one
 

@@ -1,5 +1,6 @@
 import type { Container, Sprite, Texture } from "pixi.js";
 import type { BulletSample } from "../diagnostics/PhysicsDiagnostics";
+import type { PotgAnnounce } from "../potg/types";
 import { SpritePool } from "../render/SpritePool";
 import {
 	DEFAULT_WORLD,
@@ -126,6 +127,14 @@ export interface OnlineCallbacks {
 	onMatch: (status: MatchStatus, standings: Standing[]) => void;
 	/** The match ended. Final standings, sent once. */
 	onMatchOver: (msg: MatchOverMsg) => void;
+	/**
+	 * The match produced a Play of the Game: who, what, and how good.
+	 *
+	 * Everything the splash card needs is in this message. The footage is fetched
+	 * separately over HTTP and may not arrive at all — see `potg/types.ts` — so
+	 * the ceremony is driven from here and the replay is the optional part.
+	 */
+	onPotg: (msg: PotgAnnounce) => void;
 	/**
 	 * A team deathmatch round ended in a wipe-out.
 	 *
@@ -518,6 +527,7 @@ export class OnlineSession {
 				onRoster: (msg) => this.onRoster(msg.players),
 				onRespawn: (msg) => this.onRespawn(msg.id),
 				onMatchOver: (msg) => this.callbacks.onMatchOver(msg),
+				onPotg: (msg) => this.callbacks.onPotg(msg),
 				onRoundWon: (msg) => this.callbacks.onRoundWon(msg),
 				onRoundLive: (msg) => this.callbacks.onRoundLive(msg),
 				onSeated: (roomId, screens, mode) =>

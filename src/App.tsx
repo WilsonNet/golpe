@@ -10,6 +10,7 @@ import { MainMenu } from "./ui/MainMenu";
 import { MatchOver } from "./ui/MatchOver";
 import { NamePrompt } from "./ui/NamePrompt";
 import { PauseMenu } from "./ui/PauseMenu";
+import { PlayOfTheGame } from "./ui/PlayOfTheGame";
 import { Scoreboard } from "./ui/Scoreboard";
 import { TouchControls } from "./ui/TouchControls";
 import { TrainingPanel } from "./ui/TrainingPanel";
@@ -84,6 +85,10 @@ function App() {
 			    arena instead of drifting off it. */}
 			<GameCanvas>
 				<FightHud training={training} />
+				{/* Inside the canvas box, like the HUD: the ceremony's letterbox frames
+				    the *arena*, not the browser window, and a 4:3 game in a wide window
+				    would otherwise get bars across the whole page. */}
+				<PlayOfTheGame />
 			</GameCanvas>
 			{/* Directly after the canvas, because it is part of the *page* rather
 			    than an overlay on it: the deck's presence is what turns a centred

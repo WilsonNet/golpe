@@ -74,13 +74,26 @@ export class Stage {
 		root.addChild(this.scroll);
 	}
 
-	/** Camera scroll, in world pixels. Excludes shake, on purpose. */
+	/**
+	 * Camera scroll, in **world** pixels. Excludes shake, on purpose.
+	 *
+	 * Divided back out of the zoom rather than read raw off the container, so
+	 * this stays the same quantity whether or not anything is zoomed. The
+	 * diagnostic compares it frame to frame to spot camera jitter, and a metric
+	 * whose unit changed the moment a cinematic pushed in would report the push
+	 * as several hundred pixels of defect.
+	 */
 	get cameraX(): number {
-		return -this.scroll.x;
+		return -this.scroll.x / this.scroll.scale.x;
 	}
 
 	get cameraY(): number {
-		return -this.scroll.y;
+		return -this.scroll.y / this.scroll.scale.y;
+	}
+
+	/** How far the camera is pushed in. 1 during a match; only a replay changes it. */
+	get zoom(): number {
+		return this.scroll.scale.x;
 	}
 
 	/**
@@ -92,7 +105,26 @@ export class Stage {
 	 * this call so the movement never reads as jitter.
 	 */
 	setScroll(cameraX: number, cameraY: number) {
-		this.scroll.position.set(-cameraX, -cameraY);
+		this.setCamera(cameraX, cameraY, 1);
+	}
+
+	/**
+	 * Scroll **and** zoom.
+	 *
+	 * Zoom is scale on the same container the scroll lives on, which is what
+	 * keeps the two composable: the position is written in scaled units so
+	 * `cameraX` still answers in world pixels, and every layer inside — arena,
+	 * shadows, actors, nameplates — pushes in together instead of the world
+	 * growing away from its own labels.
+	 *
+	 * **A match never calls this with anything but 1.** The only thing that
+	 * pushes the camera in is the Play of the Game replay, which runs after the
+	 * final whistle: a zoom during play would change how much arena a fighter can
+	 * see, which is a competitive property and not a cosmetic one.
+	 */
+	setCamera(cameraX: number, cameraY: number, zoom: number) {
+		this.scroll.scale.set(zoom);
+		this.scroll.position.set(-cameraX * zoom, -cameraY * zoom);
 	}
 
 	/** Kick off an impact shake. Cosmetic only — never touches the simulation. */
@@ -123,6 +155,6 @@ export class Stage {
 	reset() {
 		this.shakeMs = 0;
 		this.shake.position.set(0, 0);
-		this.scroll.position.set(0, 0);
+		this.setCamera(0, 0, 1);
 	}
 }
