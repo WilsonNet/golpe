@@ -817,6 +817,21 @@ export function blocksBullet(defender: MeleeState, bulletVx: number): boolean {
 	return from !== defender.facing;
 }
 
+/**
+ * Does the sword guard deny this ultimate's projectile?
+ *
+ * **The guard is the universal counter to ultimates.** The black hole arrives
+ * as a thrown grenade — a projectile — so it obeys the same rule a bullet
+ * does: blocking, facing the throw, and it is gone, the meter already spent,
+ * nothing to show for it. Future ultimates that arrive as projectiles get
+ * their deny here for free; one that arrives some other way gets its own
+ * check in this same function, so "the sword denies most ultimates" has one
+ * home rather than a rule per ability.
+ */
+export function blocksUltimate(defender: MeleeState, fromVx: number): boolean {
+	return blocksBullet(defender, fromVx);
+}
+
 export function isBehind(attacker: MeleeBody, defender: MeleeBody): boolean {
 	const ax = attacker.x + PLAYER_WIDTH / 2;
 	const dx = defender.x + PLAYER_WIDTH / 2;

@@ -50,6 +50,7 @@ import { AimLine } from "./render/AimLine";
 import { bodyCentre, drawArena } from "./render/ArenaRenderer";
 import { dudeFrames, TEX, tex } from "./render/assets";
 import { BlackHoleFx } from "./render/BlackHoleFx";
+import { DenyFx } from "./render/DenyFx";
 import { type ImpactEvent, MeleeFx } from "./render/MeleeFx";
 import { Nameplates } from "./render/Nameplates";
 import { Shadows } from "./render/Shadows";
@@ -175,6 +176,7 @@ export class Match {
 	private readonly shadows: Shadows;
 	private readonly aimLine: AimLine;
 	private readonly ultAim: UltAimLine;
+	private readonly denyFx: DenyFx;
 	private readonly input: Input;
 	private readonly diagnostics: PhysicsDiagnostics;
 	private readonly bullets: BulletSystem;
@@ -294,6 +296,10 @@ export class Match {
 		// The ultimate's aim arc is only ever shown while its button is held, so
 		// it never competes with the ordinary beam.
 		this.ultAim = new UltAimLine(stage.nameplates);
+		// Same layer again: the DENY caption is a world-space splash over the
+		// fighter who denied the ultimate, and it must never be buried behind a
+		// sprite it is announcing.
+		this.denyFx = new DenyFx(stage.nameplates);
 		this.bullets = new BulletSystem(
 			stage.projectiles,
 			tex(TEX.fireball),
@@ -628,6 +634,13 @@ export class Match {
 					// mispredicts the stun and knockback and then rewinds into them —
 					// tens of pixels in one frame, from correct netcode.
 					this.diagnostics.markTeleport(2);
+				},
+				onDeny: (event) => {
+					// The caption, and nothing else: the denied meter already travels
+					// in the snapshot, so this is pure presentation. The training room
+					// counts it, because a deny is a first-class outcome there.
+					this.denyFx.deny(event.x, event.y);
+					this.training?.recordDeny();
 				},
 				onFighterAdded: (id) => this.addRemoteFighter(id),
 				onFighterRemoved: (id) => this.despawnFighter(id),
@@ -1019,6 +1032,7 @@ export class Match {
 		this.syncAimLine(dtMs);
 		meleeFxSystem(this.queries, this.fx, dtMs, (id) => this.ultAuraVisible(id));
 		this.fx.update(dtMs);
+		this.denyFx.update(dtMs);
 		this.updateUltimate(dtMs);
 		this.stage.update(dtMs);
 		this.updateCamera();
@@ -1762,6 +1776,7 @@ export class Match {
 		this.bullets.clear();
 		this.fx.reset();
 		this.blackHole.reset();
+		this.denyFx.reset();
 		this.aimLine.reset();
 		this.ultAim.reset();
 		this.stage.reset();
@@ -1790,6 +1805,7 @@ export class Match {
 		this.blackHole.destroy();
 		this.aimLine.destroy();
 		this.ultAim.destroy();
+		this.denyFx.destroy();
 		this.training?.destroy();
 		this.online?.disconnect();
 	}

@@ -246,6 +246,13 @@ after.
 - **Front only, and it covers bullets too.** A raised guard absorbs a shot
   arriving from the front — 0 damage, and the bullet is consumed. See
   [combat.md](combat.md); there is no parry against a bullet.
+- **And it denies ultimates.** The guard is the game's universal answer to an
+  ultimate: a blocking fighter facing the throw catches the black hole's
+  grenade like a bullet, the hole never opens, and the thrower's meter is
+  simply gone — the *DENY*. Same rule that covers bullets, named for the rule
+  it serves (`blocksUltimate`), so every future ultimate that arrives as
+  something throwable inherits the counterplay for free. See
+  [ultimate.md](ultimate.md).
 - **Front only.** A block covers the side the fighter faces. An attack landing
   from behind is not blocked at all — see *Backstab* below.
 - **Blockable attacks are fully absorbed**: zero damage, a small shared

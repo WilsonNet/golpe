@@ -314,7 +314,7 @@ unpredicted pull would show there as double-digit correction on every one of the
 
 `?ultCharge=N` is the flag that makes any of this measurable: a creator-only
 *floor* on everybody's meter, so the ultimate re-arms as soon as it is spent
-instead of taking 71s to fill. It is honoured in the training room too, which is
+instead of taking ~285s to fill. It is honoured in the training room too, which is
 where a human practising the throw wants it.
 
 ## A known flake: "combo links thrown airborne"
@@ -499,7 +499,7 @@ Healthy for the training battery:
 
 | Metric | Healthy |
 |---|---|
-| `verdict` | `PASS`, all 13 rows |
+| `verdict` | `PASS`, all 16 rows — the two deny rows included: a block catches the grenade, and a kill mid-hold throws the meter away |
 | `activity.impacts` | > 0 — a battery that judged no impact proves nothing |
 | `activity.playerMoves` / `dummyMoves` | both > 0 |
 

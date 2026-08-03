@@ -5,6 +5,7 @@ import {
 	BACKSTAB_MIN_SEPARATION_PX,
 	BLOCK_STARTUP_MS,
 	blocksBullet,
+	blocksUltimate,
 	COMBO_CHAIN,
 	COMBO_LINK_MS,
 	createMeleeState,
@@ -912,5 +913,36 @@ describe("blocksBullet", () => {
 		expect(s.stance).toBe("gun");
 		expect(s.blocking).toBe(false);
 		expect(blocksBullet(s, -BULLET_SPEED)).toBe(false);
+	});
+});
+
+describe("blocksUltimate", () => {
+	/** The guard is the universal deny: the same rule as a bullet, by name. */
+	function guard(facing: number, blocking = true): MeleeState {
+		const s = createMeleeState(facing);
+		s.blocking = blocking;
+		return s;
+	}
+
+	it("catches an ultimate thrown from the front", () => {
+		// The black hole's grenade flying right came from the left, so a fighter
+		// facing left is in the way of it.
+		expect(blocksUltimate(guard(-1), 780)).toBe(true);
+		expect(blocksUltimate(guard(1), -780)).toBe(true);
+	});
+
+	it("does not catch a throw from behind", () => {
+		expect(blocksUltimate(guard(1), 780)).toBe(false);
+		expect(blocksUltimate(guard(-1), -780)).toBe(false);
+	});
+
+	it("does nothing without a raised guard", () => {
+		expect(blocksUltimate(guard(-1, false), 780)).toBe(false);
+	});
+
+	it("is unreachable in gun stance, because blocking is", () => {
+		const s = createMeleeState(1);
+		tickMelee(s, intent({ block: true, swordStance: false }), DT);
+		expect(blocksUltimate(s, -780)).toBe(false);
 	});
 });

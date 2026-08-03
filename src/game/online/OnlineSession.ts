@@ -35,6 +35,7 @@ import {
 	RollbackStats,
 } from "./Rollback";
 import type {
+	DenyEventMsg,
 	GameSnapshot,
 	MatchOverMsg,
 	MatchStatus,
@@ -95,6 +96,8 @@ export interface OnlineCallbacks {
 	onRoundReset: () => void;
 	/** A sword impact the server judged, for effects only. */
 	onMeleeEvent: (event: MeleeEventMsg) => void;
+	/** An ultimate was denied, for the "DENY" splash over the denier. */
+	onDeny: (event: DenyEventMsg) => void;
 	/** A fighter appeared in the snapshot for the first time. */
 	onFighterAdded: (id: string) => void;
 	/** A fighter is no longer in the room. */
@@ -832,6 +835,10 @@ export class OnlineSession {
 		// never a consequence — those all travel in `state`.
 		for (const event of snap.melee ?? []) {
 			this.callbacks.onMeleeEvent(event);
+		}
+		// Denies are the same shape: one-shot splashes, consequence in the meter.
+		for (const event of snap.denies ?? []) {
+			this.callbacks.onDeny(event);
 		}
 
 		this._matchStatus = snap.match;

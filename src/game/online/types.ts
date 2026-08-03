@@ -71,6 +71,23 @@ export interface MeleeEventMsg {
 	dir: number;
 }
 
+/**
+ * An ultimate was denied, for the client to play the typography over the
+ * denier.
+ *
+ * Two ways to deny, one event: kill a fighter while they are holding the
+ * button, or block the thrown grenade with a sword guard. Both are one-shot
+ * effects with a lasting consequence (the meter is gone), but the consequence
+ * travels in the charge meter itself — this is only the "DENY" splash.
+ */
+export interface DenyEventMsg {
+	/** The fighter who denied it — the killer, or the guard that blocked the throw. */
+	denierId: string;
+	/** Where the deny happened, in world body space, for the splash. */
+	x: number;
+	y: number;
+}
+
 export interface SnapshotPlayer {
 	id: string;
 	hp: number;
@@ -257,6 +274,8 @@ export interface GameSnapshot {
 	bullets: SnapshotBullet[];
 	/** Melee impacts since the previous snapshot. Effects only. */
 	melee: MeleeEventMsg[];
+	/** Ultimate denies since the previous snapshot. Effects only. */
+	denies: DenyEventMsg[];
 	match: MatchStatus;
 	/** Black hole grenades in flight. Usually empty; at most one per cast. */
 	grenades: SnapshotGrenade[];

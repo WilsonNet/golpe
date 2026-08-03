@@ -36,27 +36,30 @@ export const ULT_MAX_CHARGE = 100;
  * Charge for simply being alive, per second.
  *
  * Overwatch's passive exists so that a fight nobody is winning still eventually
- * produces ultimates. At 1.4/s a fighter who never lands a hit arms in ~71s,
- * which is roughly a quarter of a match — often enough to matter, rare enough
- * that it is not the main way anybody gets one.
+ * produces ultimates. At 0.35/s a fighter who never lands a hit arms in ~285s —
+ * longer than a match — which is the point: the meter is now **won by hits**,
+ * and the passive only keeps a stalled fight from never producing one at all.
+ * The 4x cut (from 1.4/s) went in alongside the hole's 2x duration, so a cast
+ * is rarer and therefore allowed to be stronger.
  *
  * **Paid only while alive.** Otherwise dying would be a way to farm, and the
  * respawn queue is meant to be a punishment.
  */
-export const ULT_PASSIVE_PER_SEC = 1.4;
+export const ULT_PASSIVE_PER_SEC = 0.35;
 
 /**
  * Charge per point of damage dealt to another fighter.
  *
  * Overwatch's rate is 1 charge per 1 damage against ult costs in the thousands.
  * Here a fighter has 100 HP, so the conversion is scaled to keep the same
- * relationship: a full kill's worth of damage is most of an ultimate (80 of
- * 100), and nothing else in the game pays as well.
+ * relationship. 0.2 means a full kill's worth of damage is 20 charge — the
+ * meter is earned across roughly five kills' worth of hits, never by the
+ * ultimate itself (see `GameRoom.damage` on why the hole does not pay).
  */
-export const ULT_CHARGE_PER_DAMAGE = 0.8;
+export const ULT_CHARGE_PER_DAMAGE = 0.2;
 
 /** A finishing blow is worth a little more than the damage that did it. */
-export const ULT_CHARGE_PER_KILL = 12;
+export const ULT_CHARGE_PER_KILL = 3;
 
 /** Cheap predicate so "is it armed" is spelled the same way everywhere. */
 export function ultReady(charge: number): boolean {
@@ -256,11 +259,18 @@ export const SINGULARITY_RADIUS = 168;
  */
 export const SINGULARITY_REACH = 260;
 
-/** How long the hole holds. */
-export const SINGULARITY_DURATION_MS = 2200;
+/**
+ * How long the hole holds.
+ *
+ * 2.2s was a strong moment; 4.4s is a strong *threat*. The charge economy was
+ * cut 4x in the same change, so the hole is a rare event and is allowed to
+ * dominate the arena while it is here — a fighter caught for the full hold
+ * takes ~123 damage, and the escape (dash out of the fringe) is unchanged.
+ */
+export const SINGULARITY_DURATION_MS = 4400;
 
-/** Damage applied on each interval, server-side. 40 over a full hold. */
-export const SINGULARITY_TICK_DAMAGE = 5;
+/** Damage applied on each interval, server-side. 123 over a full hold. */
+export const SINGULARITY_TICK_DAMAGE = 7;
 export const SINGULARITY_DAMAGE_INTERVAL_MS = 250;
 
 /** Terminal speed of the draw-in, and the acceleration that reaches it. */

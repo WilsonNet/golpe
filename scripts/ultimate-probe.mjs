@@ -84,8 +84,8 @@ const GRENADE_SPEED = 780;
 const GRENADE_GRAVITY = 860;
 /** `v² / g`: the range of a 45° lob, and the hard limit on any throw. */
 const GRENADE_MAX_RANGE_PX = (GRENADE_SPEED * GRENADE_SPEED) / GRENADE_GRAVITY;
-/** 5 damage every 250ms over 2200ms. */
-const SINGULARITY_FULL_DAMAGE = 40;
+/** 7 damage every 250ms over 4400ms: 17-18 intervals, 119-126 total. */
+const SINGULARITY_FULL_DAMAGE = 126;
 const CINEMATIC_MS = 1100;
 
 /**
@@ -98,7 +98,7 @@ const CINEMATIC_MS = 1100;
  * specs/ultimate.md.
  *
  * What it has to separate this from is large and unmissable. An unpredicted pull
- * drags a fighter hundreds of pixels over the hold, corrected across ~44
+ * drags a fighter hundreds of pixels over the hold, corrected across ~88
  * snapshots: double digits on every single one.
  */
 const MAX_AVG_ERROR_PX = 3;
@@ -555,8 +555,9 @@ if (CAST) {
 		castAngle,
 	);
 
-	// Through the freeze, the throw and the whole hold.
-	const capFrames = await watch([room], CINEMATIC_MS + 3600);
+	// Through the freeze, the throw and the whole hold — the hole lives 4400ms
+	// now, and the window has to outlast it or the damage tally is a fraction.
+	const capFrames = await watch([room], CINEMATIC_MS + 5800);
 
 	const heldEver = [
 		...new Set(

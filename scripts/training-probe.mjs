@@ -688,6 +688,111 @@ const BATTERY = [
 		},
 	},
 	{
+		/**
+		 * The sword guard is the universal counter to ultimates: the dummy holds
+		 * block, the player casts the black hole straight into it, and the
+		 * grenade is caught on the guard — no hole opens, the meter stays spent,
+		 * and the deny is recorded. This is the whole "sword defend denies
+		 * ultimates" rule, measured as one interaction.
+		 */
+		name: "a block denies an ultimate",
+		async run(page) {
+			const running = page.evaluate(() =>
+				window.__training.run({
+					name: "deny",
+					config: {
+						behaviour: "blockAll",
+						facing: "foe",
+						// Default spawns: 60px apart, both in the clear lane between
+						// the pillars. A 60px throw is a ~77ms flight — comfortably
+						// inside a held guard.
+					},
+					steps: [
+						{
+							intent: { ultimate: true },
+							holdMs: 200,
+							aimAngle: 0,
+							restMs: 500,
+						},
+					],
+					settleMs: 2600,
+				}),
+			);
+			// The hole would live 4400ms if it opened; the deny kills the flight
+			// about 77ms after it starts. Sample the room for a singularity either
+			// way, so "no deny" cannot hide behind "nobody looked".
+			let holeSeen = false;
+			for (let i = 0; i < 40; i++) {
+				const s = await page.evaluate(() => window.__ultState?.() ?? null);
+				if (s?.singularity) holeSeen = true;
+				await page.waitForTimeout(50);
+			}
+			const report_ = await running;
+			return { report: report_, extra: holeSeen };
+		},
+		verify(report, holeSeen) {
+			const c = checks(report);
+			c.atLeast("denies recorded", report.denies, 1);
+			c.eq("no hole opened after a deny", holeSeen, false);
+			return c.fails;
+		},
+	},
+	{
+		/**
+		 * The aim phase is the commitment: killed while holding the button, the
+		 * whole meter is gone and the killer gets the DENY. The dummy uppercuts
+		 * the player to death — the vertical launch drops them back in range,
+		 * where a slash's horizontal shove kept pushing them out of reach —
+		 * while the player holds R and does nothing else.
+		 */
+		name: "killed while holding loses the ultimate",
+		async run(page) {
+			const running = page.evaluate(() =>
+				window.__training.run({
+					name: "deny-kill",
+					config: {
+						behaviour: "massive",
+						facing: "foe",
+						// Player against the left wall, dummy close enough to hit a
+						// wall-pinned player: the first Massive's knockback pins
+						// the victim at x=0, and the dummy at x=70 keeps them
+						// inside the Massive's 56px reach even then — at x=90 the
+						// pinned gap (58px) was a whisker past it and every hit
+						// after the first whiffed.
+						spawn: {
+							player: { x: 40, y: 480 },
+							dummy: { x: 70, y: 480 },
+						},
+						timing: { periodMs: 800 },
+						// The player has to actually die — the default dummy stays
+						// invincible, which is fine, but the player must not.
+						playerInvincible: false,
+					},
+					steps: [
+						{
+							intent: { ultimate: true },
+							holdMs: 9000,
+							aimAngle: 0,
+							restMs: 0,
+						},
+					],
+					settleMs: 500,
+				}),
+			);
+			const report_ = await running;
+			const playerHp = await page.evaluate(
+				() => window.__gameState?.().playerHP ?? 100,
+			);
+			return { report: report_, extra: playerHp };
+		},
+		verify(report, playerHp) {
+			const c = checks(report);
+			c.atLeast("denies recorded", report.denies, 1);
+			c.eq("the player was killed while holding", playerHp <= 0, true);
+			return c.fails;
+		},
+	},
+	{
 		name: "training does not desync",
 		scenario: {
 			name: "desync check",
@@ -763,7 +868,11 @@ async function main() {
 
 	// No `ai=true`: the local fighter has to be driven by `__training.input()`,
 	// and a brain would overwrite every intent it sets.
-	await page.goto(`${BASE_URL}/?training=true`);
+	//
+	// `&ultCharge=100` arms the meter: the deny row needs a castable ultimate,
+	// and at the real 0.35 charge/s the probe would be waiting out ~285s to
+	// measure one interaction.
+	await page.goto(`${BASE_URL}/?training=true&ultCharge=100`);
 	await page.waitForFunction(() => !!window.__training, { timeout: 20000 });
 	const seated = await page.evaluate(() => window.__training.ready(20000));
 	if (!seated) {

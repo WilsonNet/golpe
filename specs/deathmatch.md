@@ -111,7 +111,7 @@ join. The target is a floor on activity, never a cap on people.
   melee rhythms, the jump controller, the ultimate and team play — so a bot
   double-jumps to high ground, throws the black hole (hold, aim a solved lob,
   release) and climbs ledges a single jump cannot reach. `?ultCharge=N` lets a
-  probe watch the casts without waiting out the ~71s passive.
+  probe watch the casts without waiting out the ~285s passive.
 - **Each bot gets a fresh personality every match**, so sixteen of them do not
   replay the same fight every five minutes.
 

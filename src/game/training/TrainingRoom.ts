@@ -182,6 +182,8 @@ export interface TrainingRoomDeps {
 export class TrainingRoom {
 	private latest: TrainingStateMsg | null = null;
 	private readonly events: MeleeEventMsg[] = [];
+	/** Ultimate denies observed since the last reset. */
+	private denies = 0;
 	private readonly watcher = new ExchangeWatcher();
 	private readonly echoWaiters: ((state: TrainingStateMsg) => void)[] = [];
 	private elapsedMs = 0;
@@ -218,6 +220,11 @@ export class TrainingRoom {
 				? MOVES[event.move].damage
 				: 0;
 		this.watcher.noteOutcome(event.outcome, damage);
+	}
+
+	/** An ultimate was denied. Counted, because it is a first-class outcome. */
+	recordDeny() {
+		this.denies++;
 	}
 
 	private onTrainingState(state: TrainingStateMsg) {
@@ -316,6 +323,7 @@ export class TrainingRoom {
 		// measurement would have been reporting its own setup.
 		await wait(RESET_SETTLE_MS);
 		this.events.length = 0;
+		this.denies = 0;
 		this.watcher.reset();
 		this.elapsedMs = 0;
 		this.deps.diagnostics.startOpen();
@@ -470,6 +478,7 @@ export class TrainingRoom {
 				damageTaken: stats.dummy.damageTaken,
 			},
 			events: this.events.slice(),
+			denies: this.denies,
 			outcomes,
 			bullets: {
 				fired: stats.player.bulletsFired,

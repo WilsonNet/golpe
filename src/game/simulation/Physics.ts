@@ -93,6 +93,7 @@ export {
 	BLOCK_PUSHBACK,
 	BLOCK_STARTUP_MS,
 	blocksBullet,
+	blocksUltimate,
 	bodyRect,
 	COMBO_CHAIN,
 	COMBO_LINK_MS,

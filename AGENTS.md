@@ -320,17 +320,24 @@ the surface below them (`render/Shadows.ts`, its own Stage layer), which doubles
 as the game's only altitude cue.
 
 **There is one ultimate: a black hole grenade, on R.** Earned Overwatch-style
-(1.4 charge/s passive, 0.8 per point of damage dealt, 12 a kill; it survives
-death), spent at the **release** of a hold: holding R raises a special aim — the
+(0.35 charge/s passive, 0.2 per point of damage dealt, 3 a kill — 4x slower
+than before, and **the hole itself pays nobody**: the ultimate is the one
+weapon that cannot feed the ultimate meter). It survives death — except the
+death that is a **deny**: killed while holding the button, the whole meter is
+lost, and the killer gets a comic-book **DENY** caption popped over their
+head. The other deny is the sword guard: a blocking fighter facing the throw
+catches the grenade like a bullet, and the blocked ultimate is simply gone.
+Spent at the **release** of a hold: holding R raises a special aim — the
 grenade's own arc traced to its landing — and releasing casts. The cast
 **freezes the whole room for 1100ms** behind a portrait card — the only legal
 frame freeze in the game, and legal only because
 the *server* declares the tick range and neither side simulates through it. The
 freeze ends, the grenade launches along the angle you released on, and it arcs:
 780 px/s under 860 px/s² gravity, so **707px is as far as it can be thrown** and
-choosing the arc is the skill. Where it lands, a singularity holds for 2200ms —
+choosing the arc is the skill. Where it lands, a singularity holds for **4400ms** —
 168px event horizon (caught: no gravity, no steering, stunned), 260px outer reach
-(a tug you can dash out of), 5 damage every 250ms. **The caster is immune to
+(a tug you can dash out of), 7 damage every 250ms — 123 over a full hold. **The
+caster is immune to
 their own hole**, and that exclusion is one predicate. The pull is an argument to
 `tickPlayer`, so a caught fighter's own client predicts it. `?ultCharge=N` is a
 creator-only charge floor — the practice-room flag. See

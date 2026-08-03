@@ -84,7 +84,7 @@ interface JoinMsg {
 	 * Ultimate charge every fighter starts and respawns with, 0..100.
 	 *
 	 * The same argument as the shortened rules, for the same reason: the ultimate
-	 * takes ~71s of passive charge to arm, which is the right pace to play and the
+	 * takes ~285s of passive charge to arm, which is the right pace to play and the
 	 * wrong pace to measure — a probe that has to wait out the meter is a probe
 	 * nobody runs. `?ultCharge=100` makes the cast testable in seconds, and it is
 	 * how somebody practises the throw without earning it thirty times.
@@ -240,7 +240,7 @@ io.onConnection((channel) => {
 		if (msg.training) {
 			// `?ultCharge` is honoured here too, and this is the room it was really
 			// for: the training room is the practice room, and practising a throw
-			// against a meter that takes 71s to fill is not practising.
+			// against a meter that takes 285s to fill is not practising.
 			const room = createRoom(randomUUID(), {
 				...(msg.ultCharge === undefined
 					? {}

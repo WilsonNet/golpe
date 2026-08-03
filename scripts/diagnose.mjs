@@ -30,7 +30,7 @@ const RUNS = Number(arg("runs", 1));
 // follow cam never moves fast enough to read as a defect.
 const SCREENS = Math.max(1, Number(arg("screens", 1)) || 1);
 // `?ultCharge=N` arms everybody from the start. A duel over 14s never earns an
-// ultimate the long way (~71s of passive charge), so the bots' ultimate use is
+// ultimate the long way (~285s of passive charge), so the bots' ultimate use is
 // measured with `--ultCharge=100` and read from `ultimateSummary.localCasts`.
 const ULT_CHARGE = Math.max(0, Number(arg("ultCharge", 0)) || 0);
 const URL_PARAMS =

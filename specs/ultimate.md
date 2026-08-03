@@ -26,7 +26,8 @@ Graviton Surge** for the fact that it is a *thrown* thing you can miss with.
 4. The freeze ends and the **grenade launches**, along the aim angle recorded
    at the release. It arcs under its own gravity.
 5. It **detonates** on a platform, on an enemy fighter, or when its fuse runs
-   out — into a **singularity** that lasts 2200ms.
+   out — into a **singularity** that lasts 4400ms. Unless a sword guard
+   **denied** it first, which is rule 0 and is described below.
 6. Everyone inside the event horizon, **except the caster**, is dragged to the
    centre, held completely still, and damaged four times a second.
 
@@ -42,19 +43,26 @@ The Overwatch model: charge is a currency you are paid for participating.
 
 | Source | Rate |
 |---|---|
-| Passive trickle | **1.4 charge/s** while alive |
-| Damage dealt to another fighter | **0.8 charge per point** |
-| A kill | **12 charge** |
+| Passive trickle | **0.35 charge/s** while alive |
+| Damage dealt to another fighter | **0.2 charge per point** |
+| A kill | **3 charge** |
 
 - The meter is **0..100**. It is **server-owned** — the client displays it and
   never decides it, because charge is paid out of damage and only the server
   knows a hit landed.
-- **Death does not spend it.** Carrying an ult through a respawn is what makes
-  it a plan rather than a lottery ticket, and it is what Overwatch does.
+- **The meter is won by hits, and the ultimate is the one weapon that cannot
+  pay.** The hole's damage feeds nobody: no charge for the caster, no kill
+  bonus for a hole that scores. A caster whose own hole paid them would never
+  have to land a sword hit again, and a hold that rearmed itself would be an
+  infinite loop wearing a cinematic. Sword and gun only.
+- **Death does not spend it — except the one death that is a deny.** Carrying
+  an ult through a respawn is what makes it a plan rather than a lottery
+  ticket; dying *while holding the button* is the aim phase's risk, and that
+  death throws the whole meter away (see *Denying it*).
 - **A match reset zeroes it**, along with the scores.
-- Idling alone reaches 100 in ~71s. Landing a full kill's worth of damage
-  (100 HP) is worth 80 on its own, so a fighter who is actually fighting arms
-  roughly every 35-50s.
+- Idling alone reaches 100 in ~285s — longer than a match. Landing a full
+  kill's worth of damage (100 HP) is worth 20, so a fighter who is actually
+  fighting arms roughly every 3-5 minutes of fighting.
 - The passive is paid **only while alive**, so being dead is not a way to farm.
 
 ## Casting
@@ -155,8 +163,8 @@ inner radius is roughly 3.3 fighter-heights; so is this one.
 |---|---|
 | Event horizon | **168px** radius |
 | Outer reach | **260px** radius |
-| Duration | **2200ms** |
-| Damage | **5 per 250ms** — 40 over a full hold |
+| Duration | **4400ms** |
+| Damage | **7 per 250ms** — 123 over a full hold |
 | Draw-in speed | **260 px/s**, at **1400 px/s²** |
 | Fringe tug | **520 px/s²** at the horizon, falling to zero at the outer reach |
 
@@ -181,13 +189,43 @@ Other rules:
   to `tickPlayer`, so it replays through reconciliation and rollback like
   gravity does — a pull bolted onto predicted state would be erased by the next
   snapshot, which is the same mistake the dash made once already.
-- **Damage is server-side**, on the server's clock, credited to the caster. It
-  therefore feeds their ult charge and gives them the kill.
+- **Damage is server-side**, on the server's clock, credited to the caster.
+  **It feeds nobody's meter** — not the caster's, and not a kill bonus either —
+  because the ultimate is the one weapon that cannot pay for itself. A fighter
+  caught for the whole 4.4s takes 123; the *cage* is the reward, the weapons
+  that finish the job are everyone else's, and those still pay.
 - **One singularity per room.** See the cast conditions.
 
-## No friendly fire
+## Denying it
 
-The caster is immune to their own hole: no pull, no stun, no damage, and the
+**An ultimate can be taken away, and the takedown is loud.** Two ways, one
+result: the meter is gone (it was spent at the cast; a deny does not refund
+it), no hole opens, and the fighter who did it gets a comic-book **"DENY"**
+caption popped over their head — heavy italic type, off-angle, the way a comic
+caption announces that somebody's big moment just got taken.
+
+**Kill while holding.** The hold is the aim phase, the fighter's most
+committed moment, and dying in it is the risk that commitment was always
+carrying: the whole meter is lost. If the death had a killer, the killer is
+the denier and gets the caption; a fall or the arena denies in silence, but
+the meter is still gone.
+
+**Block the throw.** The sword guard is the universal counter to ultimates —
+"most ultimates this game will ever have arrive as something the guard can
+get in front of." For the black hole that something is the grenade: a
+defender who is **blocking, facing the throw** catches it like a bullet
+(the same rule as `blocksBullet`), the grenade is destroyed, no singularity
+opens, and the blocker gets the caption. The caster's own meter was spent at
+the release, so a blocked ultimate is simply *gone* — the deny is not a
+refund, it is an execution. The guard only covers the front, so the answer to
+a defender camping the throw lane is the same as the answer to a guard
+anywhere: go around it, or make them use their sword on something else.
+
+The deny is a **one-shot event in the snapshot** (`denies`), exactly like a
+melee impact: the consequence travels in the meter, and a client that loses
+the datagram loses a caption, never a fact.
+
+## No friendly fireThe caster is immune to their own hole: no pull, no stun, no damage, and the
 grenade passes through them. In **team deathmatch the caster's whole side is
 immune** on the same terms; in a free-for-all everybody else is a target.
 
@@ -218,11 +256,11 @@ every replayed tick a different tick, and reconciliation would never settle.
 
 **`?ultCharge=N`** sets a *floor* on everybody's meter in a freshly created room
 — creator-only, like the shortened match rules and the screen count. At 100 the
-ultimate re-arms the instant it is spent, which turns a minute of waiting into a
+ultimate re-arms the instant it is spent, which turns ~285s of waiting into a
 practice range: the throw is a lob with a 707px ceiling and an arc you have to
-choose, and learning it against a meter that fills once a minute is not
-learning it. It cannot be used to spam, because a cast is refused while a hole
-is already open.
+choose, and learning it against a meter that fills once a match is not learning
+it. It cannot be used to spam, because a cast is refused while a hole is already
+open.
 
 It is honoured in the **training room** too, which is where it is most useful —
 a dummy standing 60px away on clear ground, and a hole you can open on it as
@@ -241,8 +279,10 @@ Two scenarios, because the feature asks two questions:
   opens at one position on both, and that the client whose own fighter is being
   dragged still reconciles to ~0px.
 - **A training room** for the capture: a dummy 60px away, caught, held and
-  damaged for exactly a full hold's 40 — with the caster standing inside the
-  same hole taking nothing.
+  damaged across the whole 4.4s hold — with the caster standing inside the
+  same hole taking nothing. (The deny rows live in the training battery: a
+  block that catches the grenade, and a kill mid-hold that throws the meter
+  away.)
 
 `--no-cast` runs the first scenario with the button never pressed. That control
 is load-bearing: the probe's first prediction metric read 4.5px of rollback

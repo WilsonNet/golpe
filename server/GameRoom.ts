@@ -8,6 +8,7 @@ import type {
 	FoeInfo,
 } from "../src/game/characters/types.js";
 import {
+	type DenyEventMsg,
 	type GameSnapshot,
 	type MatchStatus,
 	type MeleeEventMsg,
@@ -67,6 +68,7 @@ import {
 	BULLET_SPEED,
 	type BulletState,
 	blocksBullet,
+	blocksUltimate,
 	bulletHitsPlatform,
 	bulletHitsPlayer,
 	canFire,
@@ -154,6 +156,14 @@ interface ConnectedPlayer {
 	respawnTimer: number;
 	/** Who last damaged this fighter, for kill credit. */
 	lastHurtBy: string | null;
+	/**
+	 * Whether the last damage came from an ultimate.
+	 *
+	 * The hole pays no charge, and a kill it scores pays no kill bonus either —
+	 * the ultimate is the one weapon that cannot feed the ultimate meter. This
+	 * flag is how the kill credit knows.
+	 */
+	lastHurtByUlt: boolean;
 	lastAttackTime: number;
 	/** Inputs received but not yet simulated, in arrival order. */
 	queue: PlayerInput[];
@@ -297,6 +307,8 @@ export class GameRoom {
 	private nextBulletId = 0;
 	/** Melee impacts accumulated since the last broadcast, for client effects. */
 	private meleeEvents: MeleeEventMsg[] = [];
+	/** Ultimate denies since the last broadcast, for the client's "DENY" splash. */
+	private denies: DenyEventMsg[] = [];
 	private channelIds: string[] = [];
 	private tickAccumulator = 0;
 	private broadcastAccumulator = 0;
@@ -465,7 +477,7 @@ export class GameRoom {
 	/**
 	 * A **floor** on everybody's ultimate charge. Zero in a real match.
 	 *
-	 * `?ultCharge=N`, creator-only. It exists because the meter takes ~71s of
+	 * `?ultCharge=N`, creator-only. It exists because the meter takes ~285s of
 	 * passive charge to fill, which is unmeasurable in a probe and tedious to
 	 * practise a throw against — see `server/index.ts`.
 	 *
@@ -525,6 +537,7 @@ export class GameRoom {
 			alive: true,
 			respawnTimer: 0,
 			lastHurtBy: null,
+			lastHurtByUlt: false,
 			lastAttackTime: 0,
 			queue: [],
 			lastInput: idleInput(),
@@ -1091,12 +1104,33 @@ export class GameRoom {
 				: undefined;
 		if (killer) {
 			killer.kills++;
-			killer.ult = addCharge(killer.ult, ULT_CHARGE_PER_KILL);
+			// The kill bonus is a weapon's payment, and the ultimate is the one
+			// weapon that does not pay: a hole that kills somebody fed nobody.
+			if (!victim.lastHurtByUlt) {
+				killer.ult = addCharge(killer.ult, ULT_CHARGE_PER_KILL);
+			}
 		}
-		// Deliberately *not* zeroed on the victim. An ultimate survives death — see
-		// specs/ultimate.md — which is what makes it something a losing player can
-		// still plan around.
+		// The ultimate survives death — except the one death that is a deny.
+		// Holding the button is the aim phase, the moment of maximum
+		// commitment, and dying in it throws the whole meter away. The killer
+		// gets the "DENY" splash; a fighter who dies holding with no killer to
+		// credit (a fall, the arena) still loses the meter, they just deny
+		// themselves in silence.
+		if (victim.ultHeld) {
+			victim.ult = 0;
+			if (killer) {
+				console.log(
+					`[DENY] ${killer.name} denied ${victim.name}'s ultimate by killing them mid-hold`,
+				);
+				this.denies.push({
+					denierId: killer.id,
+					x: killer.state.x + PLAYER_WIDTH / 2,
+					y: killer.state.y + PLAYER_HEIGHT / 2,
+				});
+			}
+		}
 		victim.lastHurtBy = null;
+		victim.lastHurtByUlt = false;
 
 		console.log(
 			`[FRAG] ${killer?.name ?? "the arena"} killed ${victim.name} (${killer?.kills ?? 0})`,
@@ -1104,7 +1138,12 @@ export class GameRoom {
 	}
 
 	/** Damage one fighter, crediting `sourceId`, and score the kill if it lands. */
-	private damage(victim: ConnectedPlayer, amount: number, sourceId: string) {
+	private damage(
+		victim: ConnectedPlayer,
+		amount: number,
+		sourceId: string,
+		paysCharge = true,
+	) {
 		if (!victim.alive || amount <= 0) return;
 		// Scores are frozen once the podium is decided; the fight is allowed to
 		// keep going, because freezing the simulation is what desyncs it.
@@ -1118,6 +1157,12 @@ export class GameRoom {
 		if (from && from !== victim && !hostile(from.team, victim.team)) return;
 
 		victim.lastHurtBy = sourceId;
+		// The ultimate is the one weapon that does not feed the ultimate meter.
+		// The hole is already a reward — a held enemy is a free window for
+		// everyone else's weapons — and a caster whose own hole paid them charge
+		// would never have to land a sword hit again. `lastHurtByUlt` carries the
+		// distinction into the kill credit, so a hole that scores nobody either.
+		victim.lastHurtByUlt = !paysCharge;
 		victim.hp = Math.max(0, victim.hp - amount);
 		victim.stats.damageTaken += amount;
 
@@ -1125,9 +1170,12 @@ export class GameRoom {
 			from.stats.damageDealt += amount;
 			// The Overwatch economy, in one line: charge is what you are paid for
 			// participating. Paid here rather than in each weapon's code path so a
-			// sword hit, a bullet and the black hole's own tick are all worth the
-			// same per point — and so a weapon added later cannot forget to pay.
-			from.ult = addCharge(from.ult, amount * ULT_CHARGE_PER_DAMAGE);
+			// sword hit and a bullet are worth the same per point — and so a
+			// weapon added later cannot forget to pay. The one weapon that does
+			// not pay passes `paysCharge: false` and this line skips it.
+			if (paysCharge) {
+				from.ult = addCharge(from.ult, amount * ULT_CHARGE_PER_DAMAGE);
+			}
 		}
 
 		if (victim.hp <= 0) this.killPlayer(victim);
@@ -1409,6 +1457,7 @@ export class GameRoom {
 				vy: b.vy,
 			})),
 			melee: this.meleeEvents.slice(),
+			denies: this.denies.slice(),
 			match: this.matchStatus(),
 			grenades: this.grenades.map((g) => ({
 				id: g.id,
@@ -1863,6 +1912,7 @@ export class GameRoom {
 			tickGrenade(g, dt);
 
 			let touched = false;
+			let denied = false;
 			for (const player of this.players.values()) {
 				if (!player.alive) continue;
 				if (
@@ -1876,9 +1926,27 @@ export class GameRoom {
 				) {
 					continue;
 				}
+				// The sword guard is the universal deny: a blocking defender facing
+				// the throw catches the grenade like a bullet, and the ultimate is
+				// gone — the meter was spent at the release, and the hole never
+				// opens. One deny event, over the fighter who blocked it.
+				if (blocksUltimate(player.state, g.vx)) {
+					console.log(`[ULT] grenade ${g.id} DENIED by ${player.name}`);
+					this.denies.push({
+						denierId: player.id,
+						x: player.state.x + PLAYER_WIDTH / 2,
+						y: player.state.y + PLAYER_HEIGHT / 2,
+					});
+					denied = true;
+					break;
+				}
 				touched = true;
 				break;
 			}
+			// A denied grenade opens nothing: it is dropped here, before
+			// `grenadeEnd` gets a say, because the deny is decided by who was
+			// blocking at contact rather than by where the flight happened to be.
+			if (denied) continue;
 
 			const end = grenadeEnd(g, this.world, touched);
 			if (end === null) {
@@ -1946,7 +2014,9 @@ export class GameRoom {
 			if (singularityGrip(mine, player.state.x, player.state.y) !== "held") {
 				continue;
 			}
-			this.damage(player, SINGULARITY_TICK_DAMAGE, field.ownerId);
+			// The hole does not feed the meter — `paysCharge: false` skips the
+			// caster's charge and marks the kill credit non-paying too.
+			this.damage(player, SINGULARITY_TICK_DAMAGE, field.ownerId, false);
 		}
 	}
 
@@ -2008,6 +2078,7 @@ export class GameRoom {
 		});
 		this.bullets = [];
 		this.meleeEvents.length = 0;
+		this.denies.length = 0;
 		this.resetTimer = -1;
 		// The room's copy of the same countdown the fighters are carrying.
 		this.roundFreezeMs = this.freezeTimeMs;
@@ -2058,5 +2129,6 @@ export class GameRoom {
 		// Melee events are one-shot. Cleared unconditionally, so a room with no
 		// listening humans does not accumulate them forever.
 		this.meleeEvents.length = 0;
+		this.denies.length = 0;
 	}
 }

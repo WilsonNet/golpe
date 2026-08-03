@@ -41,7 +41,7 @@ const TIME_LIMIT_SEC = Number(arg("timeLimit", 180));
 const DIAG_MS = Number(arg("diagnostic", 12000));
 /**
  * `?ultCharge=N` arms everybody from the start. A round lasts seconds and the
- * passive charge takes ~71s, so the bots' ultimate use — the team probe's other
+ * passive charge takes ~285s, so the bots' ultimate use — the team probe's other
  * new question — is only observable with `--ultCharge=100`.
  */
 const ULT_CHARGE = Math.max(0, Number(arg("ultCharge", 0)) || 0);
