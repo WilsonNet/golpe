@@ -53,10 +53,14 @@ export const CLIPS = {
  * `AnimState.clip` is this union rather than `string`, so a clip lookup can
  * never miss and a typo is a compile error instead of a sprite that silently
  * stops animating.
+ *
+ * Exported because Match picks its spawn-facing idle frames out of it — the
+ * strip layout is owned here, and asking it for a frame beats re-declaring
+ * the strip's indices in a second file.
  */
 export type ClipName = keyof typeof CLIPS;
 
-export function playClip(anim: AnimState, clip: ClipName) {
+function playClip(anim: AnimState, clip: ClipName) {
 	if (anim.clip === clip) return;
 	anim.clip = clip;
 	anim.frame = 0;

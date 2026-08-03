@@ -102,8 +102,10 @@ One line each; the war story behind every one is in
 - **Add a field to `PlayerPosition` and the wire packer stops compiling.** That is
   deliberate: see `src/game/online/wire.ts`.
 - **Anything `server/` reaches through must be an explicit named export** — both
-  `export default` and `export *` silently resolve to the wrong thing, and `tsc`
-  cannot see either.
+  `export default` and `export *` silently resolve to the wrong thing, and
+  neither `tsc` nor knip can see through them: the explicit re-export block in
+  `simulation/Physics.ts` is what keeps the server's imports compiling *and*
+  keeps dead-code analysis honest.
 - **Never freeze frames on impact.** Hitstop desyncs; fake it in the renderer.
   The ultimate's cinematic is the one exception, and only because the *server*
   declares the frozen tick range and nobody simulates through it.
@@ -167,8 +169,9 @@ npm run dev:herdr        # both servers in visible panes, waits for the ports
 npm run dev:herdr:logs   # read their output
 npm run dev:herdr:down
 
-npm run verify           # typecheck (client AND server) + tests + build
+npm run verify           # typecheck (client AND server) + tests + build + dead-code (knip)
 npm run lint             # biome, across src/ server/ scripts/
+npm run knip             # unused exports/files/dependencies — run before believing the tree is lean
 node scripts/diagnose.mjs --mode=online --runs=3       # the feedback loop, in a duel
 node scripts/diagnose.mjs --mode=online --ultCharge=100 # ...and the bots cast their ultimates
 node scripts/deathmatch-probe.mjs                      # sixteen AI fighters, to a winner
@@ -404,6 +407,10 @@ skill verifies it.
   was learned into the docs and skills, verify the indexes, and review the
   routine itself — the run is evidence about the routine, and step 6 fixes it in
   the same commit.
+- **`tidying-up`** — A maintenance day: knip-driven dead-code removal, constants
+  and single source of truth, the noMagicNumbers art/logic scoping, the
+  performance verdicts (esbuild, no worker_threads, no SoA), and the docs pass.
+  Ends with the online probes proving the cleanup changed nothing.
 
 ### Engine and architecture reference
 

@@ -77,9 +77,9 @@ const JITTER_SAFETY_X = 2.0;
  */
 const JITTER_SAFETY_Y = 2.0;
 /** Floors, so a very short frame cannot produce a hair-trigger threshold. */
-export const DIAG_JITTER_X = 35;
-export const DIAG_JITTER_Y = 25;
-export const DIAG_JITTER_CAM = 15;
+const DIAG_JITTER_X = 35;
+const DIAG_JITTER_Y = 25;
+const DIAG_JITTER_CAM = 15;
 /** Fastest an actor can move horizontally: a dash. */
 const MAX_DASH_SPEED = 1000;
 

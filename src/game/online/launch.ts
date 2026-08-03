@@ -171,10 +171,3 @@ export function serializeLaunchParams(params: LaunchParams): string {
 	if (params.screens !== undefined) url.set("screen", String(params.screens));
 	return url.toString();
 }
-
-/** The absolute URL a launch request means, on this origin and path. */
-export function launchUrl(params: LaunchParams): string {
-	const url = new URL(window.location.href);
-	url.search = serializeLaunchParams(params);
-	return url.toString();
-}

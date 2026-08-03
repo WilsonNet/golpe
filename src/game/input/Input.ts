@@ -172,7 +172,7 @@ const VERTICAL_AIM_COS = 0.08;
 const EMPTY_CODES: ReadonlySet<string> = new Set<string>();
 
 /** Which way an aim angle says to face, or 0 for "let the feet decide". */
-export function faceFor(aimAngle: number): -1 | 0 | 1 {
+function faceFor(aimAngle: number): -1 | 0 | 1 {
 	const c = Math.cos(aimAngle);
 	if (Math.abs(c) < VERTICAL_AIM_COS) return 0;
 	return c > 0 ? 1 : -1;

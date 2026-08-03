@@ -41,7 +41,7 @@ export const PRESS_MS = 55;
 
 /** Jump held long enough for a full-height jump, then released to re-arm it. */
 export const JUMP_HOLD_MS = 240;
-export const JUMP_RELEASE_MS = 60;
+const JUMP_RELEASE_MS = 60;
 
 /**
  * How long the attack button is held to arm and fire a Massive Strike.
@@ -74,7 +74,7 @@ function rest(periodMs: number, usedMs: number): number {
  * `SLASH_CANCELLED_MS` is the exact moment both are avoided: the hitbox has had
  * its full window, and 170ms of recovery is skipped.
  */
-export function butterflyBeats(): DummyBeat[] {
+function butterflyBeats(): DummyBeat[] {
 	return [
 		{ ms: PRESS_MS, hold: { attack: true } },
 		{ ms: Math.max(1, SLASH_CANCELLED_MS - PRESS_MS) },
@@ -93,7 +93,7 @@ export function butterflyBeats(): DummyBeat[] {
  * literals they would silently stop being a combo the first time the frame data
  * moved, which is the failure mode this whole file exists to avoid.
  */
-export function comboBeats(periodMs: number): DummyBeat[] {
+function comboBeats(periodMs: number): DummyBeat[] {
 	const link = (from: "slash" | "slash2") =>
 		MOVES[from].startupMs + MOVES[from].activeMs;
 	const used =
@@ -116,7 +116,7 @@ export function slashBeats(periodMs: number): DummyBeat[] {
 	];
 }
 
-export function uppercutBeats(periodMs: number): DummyBeat[] {
+function uppercutBeats(periodMs: number): DummyBeat[] {
 	return [
 		{ ms: PRESS_MS, hold: { uppercut: true } },
 		{ ms: rest(periodMs, PRESS_MS) },
@@ -124,14 +124,14 @@ export function uppercutBeats(periodMs: number): DummyBeat[] {
 }
 
 /** Charge past `MASSIVE_CHARGE_MS`, then let go — the release is what fires. */
-export function massiveBeats(periodMs: number): DummyBeat[] {
+function massiveBeats(periodMs: number): DummyBeat[] {
 	return [
 		{ ms: MASSIVE_HOLD_MS, hold: { attack: true } },
 		{ ms: rest(periodMs, MASSIVE_HOLD_MS) },
 	];
 }
 
-export function jumpBeats(periodMs: number): DummyBeat[] {
+function jumpBeats(periodMs: number): DummyBeat[] {
 	return [
 		{ ms: JUMP_HOLD_MS, hold: { jump: true } },
 		{ ms: JUMP_RELEASE_MS },

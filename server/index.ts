@@ -1,15 +1,38 @@
 import { randomUUID } from "node:crypto";
 import http from "node:http";
 import geckos, { type ServerChannel } from "@geckos.io/server";
-import { RELIABLE } from "../src/game/online/types.js";
+import { GAME_SERVER_PORT, RELIABLE } from "../src/game/online/types.js";
 import { MAX_SCREENS } from "../src/game/simulation/Arena.js";
 import {
 	type MatchMode,
 	TDM_MIN_SCREENS,
 } from "../src/game/simulation/Teams.js";
+import { ULT_MAX_CHARGE } from "../src/game/simulation/Ultimate.js";
+import { MS_PER_SECOND } from "../src/game/simulation/units.js";
 import { GameRoom } from "./GameRoom.js";
 
 const io = geckos({ iceServers: [] });
+
+/**
+ * Guardrails for the creator-only `?` URL parameters. Every value a player can
+ * put in a URL is clamped to its floor and ceiling here, so a typo (or a
+ * probe) cannot build a match nobody can play — `?freezeTime=600` would
+ * otherwise freeze a round for ten minutes.
+ */
+const FREEZE_TIME_MIN_S = 0;
+const FREEZE_TIME_MAX_S = 60;
+const FREEZE_TIME_DEFAULT_S = 4;
+const SCORE_LIMIT_MIN = 1;
+const SCORE_LIMIT_MAX = 999;
+const SCORE_LIMIT_DEFAULT = 21;
+const TIME_LIMIT_MIN_MS = 5_000;
+const TIME_LIMIT_MAX_MS = 3_600_000;
+const TIME_LIMIT_DEFAULT_MS = 300_000;
+/** One frame of a 60Hz clock — the room loop reconciles at the fight's cadence. */
+const ROOM_LOOP_MS = 16;
+/** HTTP answers the menu's health check can read without any client-side help. */
+const HTTP_OK = 200;
+const HTTP_NOT_FOUND = 404;
 
 /**
  * Every live room, by id.
@@ -122,6 +145,11 @@ function clamp(
 	const n =
 		typeof value === "number" && Number.isFinite(value) ? value : fallback;
 	return Math.max(lo, Math.min(hi, Math.round(n)));
+}
+
+/** A `?ultCharge` value, clamped to the meter the simulation owns. */
+function clampUltCharge(value: unknown): number {
+	return clamp(value, 0, ULT_MAX_CHARGE, 0);
 }
 
 function roomId(raw: unknown): string {
@@ -244,7 +272,7 @@ io.onConnection((channel) => {
 			const room = createRoom(randomUUID(), {
 				...(msg.ultCharge === undefined
 					? {}
-					: { startUltCharge: clamp(msg.ultCharge, 0, 100, 0) }),
+					: { startUltCharge: clampUltCharge(msg.ultCharge) }),
 			});
 			room.addPlayer(channel, name);
 			room.addDummy();
@@ -264,20 +292,42 @@ io.onConnection((channel) => {
 				mode,
 				...(msg.freezeTime === undefined
 					? {}
-					: { freezeTimeMs: clamp(msg.freezeTime, 0, 60, 4) * 1000 }),
+					: {
+							freezeTimeMs:
+								clamp(
+									msg.freezeTime,
+									FREEZE_TIME_MIN_S,
+									FREEZE_TIME_MAX_S,
+									FREEZE_TIME_DEFAULT_S,
+								) * MS_PER_SECOND,
+						}),
 				fillTarget: botFill(msg),
 				...(msg.scoreLimit === undefined
 					? {}
-					: { scoreLimit: clamp(msg.scoreLimit, 1, 999, 21) }),
+					: {
+							scoreLimit: clamp(
+								msg.scoreLimit,
+								SCORE_LIMIT_MIN,
+								SCORE_LIMIT_MAX,
+								SCORE_LIMIT_DEFAULT,
+							),
+						}),
 				...(msg.timeLimitMs === undefined
 					? {}
-					: { timeLimitMs: clamp(msg.timeLimitMs, 5000, 3_600_000, 300_000) }),
+					: {
+							timeLimitMs: clamp(
+								msg.timeLimitMs,
+								TIME_LIMIT_MIN_MS,
+								TIME_LIMIT_MAX_MS,
+								TIME_LIMIT_DEFAULT_MS,
+							),
+						}),
 				// Always passed, unlike the rest: a team room has a floor on its
 				// arena, so "the client said nothing" is still a decision to make.
 				screens: roomScreens(msg, mode),
 				...(msg.ultCharge === undefined
 					? {}
-					: { startUltCharge: clamp(msg.ultCharge, 0, 100, 0) }),
+					: { startUltCharge: clampUltCharge(msg.ultCharge) }),
 			});
 		}
 
@@ -319,10 +369,11 @@ function loop(time: number) {
 		if (room.humanCount === 0) dead.push(id);
 	}
 	for (const id of dead) rooms.delete(id);
-	setTimeout(() => loop(performance.now()), 16);
+	// One frame of a 60Hz clock: rooms reconcile at the same cadence as a fight.
+	setTimeout(() => loop(performance.now()), ROOM_LOOP_MS);
 }
 
-const PORT = 9208;
+const PORT = GAME_SERVER_PORT;
 
 /**
  * The game server's own HTTP endpoint, for the root menu's status line.
@@ -341,14 +392,14 @@ httpServer.on("request", (req, res) => {
 		req.method === "GET" &&
 		(req.url === "/health" || req.url === "/health/")
 	) {
-		res.writeHead(200, {
+		res.writeHead(HTTP_OK, {
 			"Content-Type": "application/json",
 			"Access-Control-Allow-Origin": "*",
 		});
 		res.end(JSON.stringify({ ok: true, rooms: rooms.size }));
 		return;
 	}
-	res.writeHead(404);
+	res.writeHead(HTTP_NOT_FOUND);
 	res.end();
 });
 

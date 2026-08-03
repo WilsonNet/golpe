@@ -30,6 +30,7 @@
     "build": "vite build --config vite/config.prod.mjs",
     "lint": "biome check --write src server scripts",
     "format": "biome format --write src",
+    "knip": "knip",
     "dev:server": "tsx server/index.ts",
     "dev:all": "concurrently \"npm run dev\" \"npm run dev:server\"",
     "test": "vitest run",
@@ -40,7 +41,7 @@
     "diagnose": "node scripts/diagnose.mjs",
     "deathmatch": "node scripts/deathmatch-probe.mjs",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json",
-    "verify": "npm run typecheck && npm run test && npm run build"
+    "verify": "npm run typecheck && npm run test && npm run build && npm run knip"
   },
   "dependencies": {
     "@geckos.io/client": "^3.1.0",
@@ -58,8 +59,8 @@
     "@types/react-dom": "^19.0.4",
     "@vitejs/plugin-react": "^4.3.4",
     "concurrently": "^10.0.4",
+    "knip": "^6.31.0",
     "playwright": "^1.61.1",
-    "terser": "^5.28.1",
     "tsx": "^4.22.0",
     "typescript": "~5.7.2",
     "vite": "^6.3.1",

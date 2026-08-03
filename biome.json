@@ -1,34 +1,69 @@
 {
 	"$schema": "https://biomejs.dev/schemas/2.5.5/schema.json",
-	"vcs": {
-		"enabled": true,
-		"clientKind": "git",
-		"useIgnoreFile": true
-	},
-	"files": {
-		"includes": ["**", "!!**/dist", "!!server/dist"]
-	},
-	"formatter": {
-		"enabled": true,
-		"indentStyle": "tab"
-	},
+	"vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+	"files": { "includes": ["**", "!!**/dist", "!!server/dist"] },
+	"formatter": { "enabled": true, "indentStyle": "tab" },
 	"linter": {
 		"enabled": true,
 		"rules": {
-			"recommended": true
-		}
-	},
-	"javascript": {
-		"formatter": {
-			"quoteStyle": "double"
-		}
-	},
-	"assist": {
-		"enabled": true,
-		"actions": {
-			"source": {
-				"organizeImports": "on"
+			"preset": "recommended",
+			"style": {
+				"noMagicNumbers": "warn"
 			}
 		}
-	}
+	},
+	"overrides": [
+		{
+			"includes": [
+				"**/*.test.ts",
+				"**/*.test.tsx",
+				"scripts/**/*.mjs",
+				"vite/**/*.mjs"
+			],
+			"linter": {
+				"rules": {
+					"style": {
+						"noMagicNumbers": "off"
+					}
+				}
+			}
+		},
+		{
+			// Art, measurement and device wiring: a pixel coordinate, a colour
+			// channel or an axis threshold is data the drawing code was written
+			// around, not a tuning value — naming each one would double the file
+			// for zero tuning benefit. The rule stays on where a number is a game
+			// rule: server/, simulation/, characters/, combat/, online/.
+			"includes": [
+				"src/game/render/**",
+				"src/ui/**",
+				"src/game/ecs/**",
+				"src/game/input/**",
+				"src/game/diagnostics/**",
+				"src/game/training/**",
+				"src/game/teamPalette.ts"
+			],
+			"linter": {
+				"rules": {
+					"style": {
+						"noMagicNumbers": "off"
+					}
+				}
+			}
+		},
+		{
+			// The UUID fallback re-implements RFC 4122 — every number there is the
+			// spec (byte offsets, version/variant nibbles, hyphenation), not a
+			// tuning value.
+			"includes": ["src/game/online/room.ts"],
+			"linter": {
+				"rules": {
+					"style": {
+						"noMagicNumbers": "off"
+					}
+				}
+			}
+		}
+	],
+	"javascript": { "formatter": { "quoteStyle": "double" } }
 }

@@ -18,11 +18,9 @@ export default defineConfig({
 				},
 			},
 		},
-		minify: "terser",
-		terserOptions: {
-			compress: { passes: 2 },
-			mangle: true,
-			format: { comments: false },
-		},
+		// esbuild minifies ~5-20x faster than terser for a couple of percent more
+		// bytes — the extra passes were shaving kilobytes off a bundle nobody
+		// reads on the wire. Fast rebuilds are the feedback loop.
+		minify: "esbuild",
 	},
 });

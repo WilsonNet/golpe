@@ -30,6 +30,33 @@ const UPPERCUT_RANGE_PX = 58;
 /** Near enough to be worth charging at, far enough not to be punished for it. */
 const CHARGE_RANGE_PX = 150;
 
+// Decision ranges, in px past a move's own reach. Generous on purpose: these
+// reads must fire often enough that the mechanic they feed is actually tested.
+/** A swing already in flight threatens a blocker this far beyond its reach. */
+const GUARD_READ_GRACE_PX = 30;
+/** A paid Massive may be spent this far before the walk closes the gap. */
+const MASSIVE_SPEND_GRACE_PX = 20;
+/** A turtle is read as coverable this far beyond the uppercut's reach. */
+const TURTLE_READ_GRACE_PX = 25;
+
+// Chance knobs, rolled once per decision. They scale with the config's
+// personality: skill shifts the *skill-dependent* roll, aggressiveness shifts
+// the *temperament* one. Split this way so the two knobs stay independent.
+const STUN_PUNISH_BASE_CHANCE = 0.3;
+const STUN_PUNISH_AGGRO_WEIGHT = 0.4;
+/** Below this fraction of max HP a hurt fighter answers with a guard. */
+const HURT_HP = 60;
+const TURTLE_BASE_CHANCE = 0.4;
+const TURTLE_SKILL_WEIGHT = 0.2;
+const COMBO_BASE_CHANCE = 0.35;
+const COMBO_SKILL_WEIGHT = 0.2;
+const LONE_SLASH_CHANCE = 0.25;
+/** Charge roll per point of skill — a maxed bot charges a quarter of the time. */
+const CHARGE_CHANCE_PER_SKILL = 0.25;
+/** How many times the butterfly loops before the bot returns to neutral. */
+const BUTTERFLY_LOOPS_MIN = 2;
+const BUTTERFLY_LOOPS_RANGE = 3;
+
 /** One phase of a scripted melee rhythm: which buttons, for how long. */
 interface MeleeBeat {
 	ms: number;
@@ -257,7 +284,7 @@ export class MeleeBrain {
 			// swing would leave a bot standing still through the two that follow it.
 			isComboSlash(input.enemyAction) &&
 			(input.enemyPhase === "startup" || input.enemyPhase === "active") &&
-			distance < STRIKE_RANGE_PX + 30;
+			distance < STRIKE_RANGE_PX + GUARD_READ_GRACE_PX;
 		// A hurt fighter answers a read by covering up rather than by timing a
 		// single parry. That is also the only way a guard ever gets held past the
 		// parry window in an AI match — a purely reactive guard is always fresh,
@@ -297,7 +324,10 @@ export class MeleeBrain {
 
 		// A charge that is already paid for. Spend it when there is no swing to
 		// answer and the target is in reach.
-		if (input.selfMassiveReady && distance < STRIKE_RANGE_PX + 20) {
+		if (
+			input.selfMassiveReady &&
+			distance < STRIKE_RANGE_PX + MASSIVE_SPEND_GRACE_PX
+		) {
 			return RELEASE_MASSIVE;
 		}
 
@@ -308,7 +338,10 @@ export class MeleeBrain {
 		// arena, close-range guard reads became rare enough that the uppercut —
 		// the designed answer to a guard — stopped happening at all across whole
 		// matches. A mechanic that never fires is untested.
-		if (input.enemyBlocking && distance < UPPERCUT_RANGE_PX + 25) {
+		if (
+			input.enemyBlocking &&
+			distance < UPPERCUT_RANGE_PX + TURTLE_READ_GRACE_PX
+		) {
 			return UPPERCUT_BEATS;
 		}
 
@@ -322,7 +355,10 @@ export class MeleeBrain {
 			return false;
 		}
 		if (this.stunPunishDecision === null) {
-			this.stunPunishDecision = Math.random() < 0.3 + 0.4 * this.aggressiveness;
+			this.stunPunishDecision =
+				Math.random() <
+				STUN_PUNISH_BASE_CHANCE +
+					STUN_PUNISH_AGGRO_WEIGHT * this.aggressiveness;
 		}
 		return this.stunPunishDecision;
 	}
@@ -356,8 +392,12 @@ export class MeleeBrain {
 			// Hurt fighters cover up. This is the only way a guard gets held past
 			// the parry window, so it is also the only thing that makes the
 			// uppercut's whole purpose reachable.
-			const hurt = input.selfHP <= 60;
-			if (hurt && Math.random() < 0.4 - 0.2 * skill) return TURTLE;
+			const hurt = input.selfHP <= HURT_HP;
+			if (
+				hurt &&
+				Math.random() < TURTLE_BASE_CHANCE - TURTLE_SKILL_WEIGHT * skill
+			)
+				return TURTLE;
 
 			// Close quarters. The butterfly is the default because it is safe *and*
 			// it hurts; the ground chain is what a reeling opponent is *for*, and a
@@ -366,10 +406,14 @@ export class MeleeBrain {
 			// The chain needs the floor — `canChain` refuses in the air — so a bot
 			// that started one mid-jump would throw one slash and then press twice
 			// into nothing.
-			if (input.touchingDown && Math.random() < 0.35 + 0.2 * skill) {
+			if (
+				input.touchingDown &&
+				Math.random() < COMBO_BASE_CHANCE + COMBO_SKILL_WEIGHT * skill
+			) {
 				return COMBO;
 			}
-			const greedy = input.enemyAction === "none" && Math.random() < 0.25;
+			const greedy =
+				input.enemyAction === "none" && Math.random() < LONE_SLASH_CHANCE;
 			return greedy ? LONE_SLASH : BUTTERFLY;
 		}
 
@@ -379,7 +423,7 @@ export class MeleeBrain {
 		if (
 			distance < CHARGE_RANGE_PX &&
 			input.enemyAction === "none" &&
-			Math.random() < 0.25 * skill
+			Math.random() < CHARGE_CHANCE_PER_SKILL * skill
 		) {
 			return CHARGE_BEATS;
 		}
@@ -397,7 +441,10 @@ export class MeleeBrain {
 		this.beatElapsed = 0;
 		// Only the butterfly repeats; everything else is a single commitment.
 		this.beatLoops =
-			beats === BUTTERFLY ? 2 + Math.floor(Math.random() * 3) : 0;
+			beats === BUTTERFLY
+				? BUTTERFLY_LOOPS_MIN +
+					Math.floor(Math.random() * BUTTERFLY_LOOPS_RANGE)
+				: 0;
 	}
 
 	/** Emit the current beat's buttons and advance the rhythm. */

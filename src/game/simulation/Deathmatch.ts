@@ -11,12 +11,16 @@
  */
 
 import type { TeamId } from "./Teams.js";
+import { MS_PER_SECOND, SECONDS_PER_MINUTE } from "./units.js";
 
 /** Frags that end the match. */
 export const SCORE_LIMIT = 21;
 
 /** Wall-clock length of a match, when nobody reaches the score limit. */
-export const TIME_LIMIT_MS = 5 * 60 * 1000;
+/** A deathmatch runs for this many minutes, unless somebody hits the score limit. */
+const DEFAULT_MATCH_MINUTES = 5;
+export const TIME_LIMIT_MS =
+	DEFAULT_MATCH_MINUTES * SECONDS_PER_MINUTE * MS_PER_SECOND;
 
 /** How long a fighter stays down before returning to the arena. */
 export const RESPAWN_DELAY_MS = 2000;

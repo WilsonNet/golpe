@@ -1,4 +1,4 @@
-import { type Container, Graphics, Sprite } from "pixi.js";
+import { type Container, Sprite } from "pixi.js";
 import {
 	DEFAULT_WORLD,
 	PLAYER_HEIGHT,
@@ -72,19 +72,4 @@ export function syncSpriteToBody(
 /** Centre point of a physics body, for aiming and bullet spawns. */
 export function bodyCentre(bodyX: number, bodyY: number) {
 	return { x: bodyX + PLAYER_WIDTH / 2, y: bodyY + PLAYER_HEIGHT / 2 };
-}
-
-/** Debug overlay: outlines every collider so mismatches are obvious on sight. */
-export function drawColliderDebug(
-	layer: Container,
-	world: World = DEFAULT_WORLD,
-): Graphics {
-	const g = new Graphics();
-	for (const p of world.platforms) {
-		g.rect(p.x, p.y, p.w, p.h);
-	}
-	g.stroke({ width: 1, color: 0x00ff00, alpha: 0.8 });
-	g.zIndex = 1000;
-	layer.addChild(g);
-	return g;
 }

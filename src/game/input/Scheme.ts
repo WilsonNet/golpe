@@ -56,12 +56,12 @@ export function isTouchPrimary(): boolean {
  * starts on the mouse, because that is the scheme this game was designed around
  * and a player with a pad can say so in two clicks.
  */
-export function defaultSettings(): InputSettings {
+function defaultSettings(): InputSettings {
 	return { scheme: isTouchPrimary() ? "controller" : "mouse", deck: "auto" };
 }
 
 /** Take whatever was in storage and make it usable. Unknown values default. */
-export function sanitiseSettings(raw: unknown): InputSettings {
+function sanitiseSettings(raw: unknown): InputSettings {
 	const out = defaultSettings();
 	if (!raw || typeof raw !== "object") return out;
 	const source = raw as Record<string, unknown>;
@@ -72,7 +72,7 @@ export function sanitiseSettings(raw: unknown): InputSettings {
 	return out;
 }
 
-export class InputSettingsStore {
+class InputSettingsStore {
 	private settings: InputSettings;
 	private readonly listeners = new Set<() => void>();
 

@@ -24,6 +24,7 @@ import {
 	type World,
 } from "./Arena.js";
 import { hostile, type TeamId } from "./Teams.js";
+import { MS_PER_SECOND } from "./units.js";
 
 // ---------------------------------------------------------------------------
 // Charge
@@ -122,7 +123,12 @@ export const GRENADE_MAX_RANGE_PX =
 /** Detonates on its own after this long, wherever it happens to be. */
 export const GRENADE_FUSE_MS = 1400;
 /** Radius used for the fighter-contact test. Generous: this is not a bullet. */
-export const GRENADE_TOUCH_PX = 20;
+const GRENADE_TOUCH_PX = 20;
+/** A grenade past the world edge by this much is gone (generous: it is a lob). */
+const GRENADE_OOB_X_MARGIN_PX = 40;
+const GRENADE_OOB_Y_MARGIN_PX = 80;
+/** A pull target this close to the hole is exactly at it; stop dividing by zero. */
+const PULL_EPSILON = 0.001;
 
 export interface GrenadeState {
 	id: number;
@@ -172,7 +178,7 @@ export function tickGrenade(g: GrenadeState, dt: number): void {
 	g.vy += GRENADE_GRAVITY * dt;
 	g.x += g.vx * dt;
 	g.y += g.vy * dt;
-	g.fuseMs -= dt * 1000;
+	g.fuseMs -= dt * MS_PER_SECOND;
 }
 
 /**
@@ -194,11 +200,11 @@ export function grenadeEnd(
 	// Out of the top is the only fizzle. The other three edges are walls, and a
 	// grenade cannot reach them without passing through solid geometry first —
 	// but the test is written against the bounds rather than assuming that.
-	if (g.y < world.top - 80) return "fizzle";
+	if (g.y < world.top - GRENADE_OOB_Y_MARGIN_PX) return "fizzle";
 	if (
-		g.x < world.left - 40 ||
-		g.x > world.right + 40 ||
-		g.y > world.bottom + 80
+		g.x < world.left - GRENADE_OOB_X_MARGIN_PX ||
+		g.x > world.right + GRENADE_OOB_X_MARGIN_PX ||
+		g.y > world.bottom + GRENADE_OOB_Y_MARGIN_PX
 	) {
 		return "platform";
 	}
@@ -274,8 +280,8 @@ export const SINGULARITY_TICK_DAMAGE = 7;
 export const SINGULARITY_DAMAGE_INTERVAL_MS = 250;
 
 /** Terminal speed of the draw-in, and the acceleration that reaches it. */
-export const SINGULARITY_DRAW_SPEED = 260;
-export const SINGULARITY_PULL_ACCEL = 1400;
+const SINGULARITY_DRAW_SPEED = 260;
+const SINGULARITY_PULL_ACCEL = 1400;
 
 /**
  * The fringe tug, at the horizon. Falls linearly to zero at the outer reach.
@@ -284,7 +290,7 @@ export const SINGULARITY_PULL_ACCEL = 1400;
  * px/s and loses ground near the lip. That gap is the counterplay — there is an
  * answer, and it costs you your dash.
  */
-export const SINGULARITY_TUG_ACCEL = 520;
+const SINGULARITY_TUG_ACCEL = 520;
 
 /**
  * Stun carried while held, refreshed every tick inside the horizon.
@@ -398,7 +404,7 @@ export function singularityPull(
 	const dy = field.y - (bodyY + PLAYER_HEIGHT / 2);
 	const dist = Math.sqrt(dx * dx + dy * dy);
 	// Dead centre. No direction to pull in, and normalising would divide by zero.
-	if (dist < 0.001) return { vx: 0, vy: 0 };
+	if (dist < PULL_EPSILON) return { vx: 0, vy: 0 };
 	const nx = dx / dist;
 	const ny = dy / dist;
 

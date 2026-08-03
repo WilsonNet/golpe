@@ -139,8 +139,8 @@ export async function copyText(
 	if (fallbackField) {
 		fallbackField.select();
 		try {
-			// biome-ignore lint: execCommand is deprecated and is the only copy path
-			// that works on a plain-HTTP origin, which is where LAN games are served.
+			// execCommand is deprecated, but it is the only copy path that works on
+			// a plain-HTTP origin, which is where LAN games are served.
 			return document.execCommand("copy");
 		} catch {
 			return false;
@@ -149,8 +149,8 @@ export async function copyText(
 	return false;
 }
 
-/** `m:ss`, for the match clock. */
+import { MS_PER_SECOND, SECONDS_PER_MINUTE } from "../game/simulation/units";
 export function formatClock(ms: number): string {
-	const total = Math.max(0, Math.ceil(ms / 1000));
-	return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+	const total = Math.max(0, Math.ceil(ms / MS_PER_SECOND));
+	return `${Math.floor(total / SECONDS_PER_MINUTE)}:${String(total % SECONDS_PER_MINUTE).padStart(2, "0")}`;
 }

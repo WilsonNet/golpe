@@ -8,7 +8,7 @@
  * modal fires — one path in.
  */
 
-export const PLAYER_NAME_KEY = "vento.playerName";
+const PLAYER_NAME_KEY = "vento.playerName";
 
 /** Matches the server's cap, so nothing a player types is silently truncated. */
 export const MAX_NAME = 16;

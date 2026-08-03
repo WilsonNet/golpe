@@ -13,8 +13,8 @@ import { Match } from "./Match";
 import { createFxTextures, loadAssets } from "./render/assets";
 import { Stage } from "./render/Stage";
 
-export const GAME_WIDTH = 800;
-export const GAME_HEIGHT = 600;
+const GAME_WIDTH = 800;
+const GAME_HEIGHT = 600;
 
 export interface GameHandle {
 	app: Application;

@@ -1,5 +1,8 @@
 import type { ServerChannel } from "@geckos.io/server";
-import type { AIConfig } from "../src/game/characters/AIConfig.js";
+import {
+	type AIConfig,
+	randomBotConfig,
+} from "../src/game/characters/AIConfig.js";
 import { EnemyBrain } from "../src/game/characters/EnemyBrain.js";
 import type {
 	AIInput,
@@ -84,6 +87,8 @@ import {
 	isKnockedDown,
 	isStunned,
 	launchGrenade,
+	MAX_HP,
+	MS_PER_SECOND,
 	meleePhase,
 	PLAYER_HEIGHT,
 	PLAYER_WIDTH,
@@ -221,8 +226,9 @@ const START_Y = 480;
  * always has somewhere to go that nobody is standing on.
  */
 const MAX_PLAYERS = 16;
-const TICK_RATE = 1000 / 60;
-const BROADCAST_RATE = 1000 / 20;
+const TICK_RATE = MS_PER_SECOND / 60;
+const BROADCAST_HZ = 20;
+const BROADCAST_RATE = MS_PER_SECOND / BROADCAST_HZ;
 const RESET_DELAY_MS = 1500;
 
 /** How often the roster is re-sent even when nothing changed. See `tick`. */
@@ -258,16 +264,12 @@ const MAX_QUEUED_INPUTS = 10;
  */
 const MAX_QUEUED_INPUTS_FROZEN = 32;
 const CINEMATIC_QUEUE_GRACE_MS = 400;
+/** A stalled client may be caught up by at most this many ticks in one loop. */
+const MAX_CATCH_UP_TICKS = 5;
 
 /** Randomised bot personality, so a solo match is not the same fight every time. */
 function botConfig(): AIConfig {
-	return {
-		skillLevel: 4 + Math.floor(Math.random() * 4),
-		reactionTime: 150 + Math.floor(Math.random() * 250),
-		accuracy: 0.45 + Math.random() * 0.4,
-		aggressiveness: 0.35 + Math.random() * 0.45,
-		dodgeChance: 0.2 + Math.random() * 0.4,
-	};
+	return randomBotConfig();
 }
 
 /**
@@ -613,7 +615,7 @@ export class GameRoom {
 			id,
 			name,
 			this.spawnFor(team),
-			100,
+			MAX_HP,
 			{ channel },
 			team,
 		);
@@ -697,7 +699,7 @@ export class GameRoom {
 			id,
 			botName(this.names),
 			this.spawnFor(team),
-			100,
+			MAX_HP,
 			{ brain: new EnemyBrain(botConfig(), this.world) },
 			team,
 		);
@@ -1184,7 +1186,7 @@ export class GameRoom {
 	private tickRespawns(dt: number) {
 		for (const player of this.players.values()) {
 			if (player.alive) continue;
-			player.respawnTimer -= dt * 1000;
+			player.respawnTimer -= dt * MS_PER_SECOND;
 			if (player.respawnTimer > 0) continue;
 			this.respawn(player);
 		}
@@ -1208,7 +1210,7 @@ export class GameRoom {
 				? pickSpawn(occupied, this.world)
 				: pickTeamSpawn(occupied, this.world, player.team);
 		player.state = createPlayerState(spawn.x, spawn.y, spawn.facing);
-		player.hp = 100;
+		player.hp = MAX_HP;
 		player.alive = true;
 		player.respawnTimer = 0;
 		player.lastHurtBy = null;
@@ -1226,7 +1228,7 @@ export class GameRoom {
 
 	private tickMatchClock(dt: number) {
 		if (this.phase === "over") {
-			this.overTimer -= dt * 1000;
+			this.overTimer -= dt * MS_PER_SECOND;
 			if (this.overTimer <= 0) this.restartMatch();
 			return;
 		}
@@ -1244,7 +1246,7 @@ export class GameRoom {
 		const paused =
 			this.mode === "tdm" &&
 			(this.roundFreezeMs > 0 || this.roundResetTimer > 0);
-		if (!paused) this.matchElapsedMs += dt * 1000;
+		if (!paused) this.matchElapsedMs += dt * MS_PER_SECOND;
 
 		const reason =
 			this.mode === "tdm"
@@ -1327,7 +1329,7 @@ export class GameRoom {
 		// that inside `tickPlayer` — so there is nothing to score and no round to
 		// end until it runs out.
 		if (this.roundFreezeMs > 0) {
-			this.roundFreezeMs = Math.max(0, this.roundFreezeMs - dt * 1000);
+			this.roundFreezeMs = Math.max(0, this.roundFreezeMs - dt * MS_PER_SECOND);
 			if (this.roundFreezeMs === 0) {
 				console.log(`[ROUND] ${this.id}: round ${this.roundNumber} live`);
 				// Announced, so the banner lands at the same moment on every client
@@ -1338,7 +1340,7 @@ export class GameRoom {
 		}
 
 		if (this.roundResetTimer > 0) {
-			this.roundResetTimer -= dt * 1000;
+			this.roundResetTimer -= dt * MS_PER_SECOND;
 			if (this.roundResetTimer <= 0) {
 				this.roundResetTimer = -1;
 				// Only if the match is still running. A wipe that decided the match
@@ -1499,12 +1501,12 @@ export class GameRoom {
 		this.broadcastAccumulator += elapsed;
 
 		// Bound catch-up so a stalled process cannot spiral.
-		if (this.tickAccumulator > TICK_RATE * 5) {
-			this.tickAccumulator = TICK_RATE * 5;
+		if (this.tickAccumulator > TICK_RATE * MAX_CATCH_UP_TICKS) {
+			this.tickAccumulator = TICK_RATE * MAX_CATCH_UP_TICKS;
 		}
 
 		while (this.tickAccumulator >= TICK_RATE) {
-			this.fixedTick(TICK_RATE / 1000, time);
+			this.fixedTick(TICK_RATE / MS_PER_SECOND, time);
 			this.tickAccumulator -= TICK_RATE;
 		}
 
@@ -1572,7 +1574,7 @@ export class GameRoom {
 		for (const player of this.players.values()) {
 			const input =
 				player.brain || player.dummy
-					? this.scriptedInput(player, dt * 1000, now)
+					? this.scriptedInput(player, dt * MS_PER_SECOND, now)
 					: player.pendingInput;
 			if (!input) {
 				// Frozen. Recorded as frozen, so every other client freezes it too
@@ -1629,7 +1631,10 @@ export class GameRoom {
 		// Counted down here rather than in `tickCinematic`, which stops running the
 		// moment the freeze is over — this is the window *after* it, while the
 		// parked backlog is still draining.
-		this.cinematicGraceMs = Math.max(0, this.cinematicGraceMs - dt * 1000);
+		this.cinematicGraceMs = Math.max(
+			0,
+			this.cinematicGraceMs - dt * MS_PER_SECOND,
+		);
 
 		this.resolveMeleeHits();
 		this.tickBullets(dt);
@@ -1655,7 +1660,7 @@ export class GameRoom {
 
 	private tickTrainingRound(dt: number) {
 		if (this.resetTimer > 0) {
-			this.resetTimer -= dt * 1000;
+			this.resetTimer -= dt * MS_PER_SECOND;
 			if (this.resetTimer <= 0) this.resetPlayers();
 			return;
 		}
@@ -1683,12 +1688,12 @@ export class GameRoom {
 		const cfg = this.trainingConfig;
 		if (!cfg) return;
 
-		this.trainingElapsedMs += dt * 1000;
+		this.trainingElapsedMs += dt * MS_PER_SECOND;
 		for (const player of this.players.values()) {
 			if (player.dummy) {
 				if (cfg.dummyInvincible) player.hp = cfg.dummyHp;
 			} else if (cfg.playerInvincible) {
-				player.hp = 100;
+				player.hp = MAX_HP;
 			}
 		}
 	}
@@ -1815,7 +1820,7 @@ export class GameRoom {
 		// motion for a fighter the server is holding perfectly still.
 		for (const player of this.players.values()) player.simulatedIntent = null;
 
-		this.cinematic.msLeft -= dt * 1000;
+		this.cinematic.msLeft -= dt * MS_PER_SECOND;
 		this.cinematicGraceMs = CINEMATIC_QUEUE_GRACE_MS;
 		if (this.cinematic.msLeft > 0) return true;
 
@@ -1994,13 +1999,13 @@ export class GameRoom {
 		const field = this.singularity;
 		if (!field) return;
 
-		field.remainingMs -= dt * 1000;
+		field.remainingMs -= dt * MS_PER_SECOND;
 		if (field.remainingMs <= 0) {
 			this.singularity = null;
 			return;
 		}
 
-		this.singularityDamageAcc += dt * 1000;
+		this.singularityDamageAcc += dt * MS_PER_SECOND;
 		if (this.singularityDamageAcc < SINGULARITY_DAMAGE_INTERVAL_MS) return;
 		this.singularityDamageAcc -= SINGULARITY_DAMAGE_INTERVAL_MS;
 
@@ -2065,7 +2070,7 @@ export class GameRoom {
 			// Planted for the countdown. Zero outside team deathmatch, so every
 			// other reset in the game behaves exactly as it always has.
 			p.state.freezeTimer = this.freezeTimeMs;
-			p.hp = p.dummy ? (cfg?.dummyHp ?? 100) : 100;
+			p.hp = p.dummy ? (cfg?.dummyHp ?? MAX_HP) : MAX_HP;
 			p.alive = true;
 			p.respawnTimer = 0;
 			p.lastHurtBy = null;

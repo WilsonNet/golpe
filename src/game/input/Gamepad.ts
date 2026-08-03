@@ -66,12 +66,12 @@ const PAD_LABELS: Record<string, string> = {
 };
 
 /** A gamepad button index, in the same namespace as keys and mouse buttons. */
-export function padCode(button: number): string {
+function padCode(button: number): string {
 	return `Pad${button}`;
 }
 
 /** True for any code this module can produce. */
-export function isPadCode(code: string): boolean {
+function isPadCode(code: string): boolean {
 	return code.startsWith("Pad");
 }
 

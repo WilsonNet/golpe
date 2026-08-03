@@ -10,6 +10,7 @@ import {
 	PLAYER_WIDTH,
 	penetrationDepth,
 	platforms,
+	SCREEN_W,
 } from "./Arena.js";
 import {
 	AIR_JUMP_VELOCITY,
@@ -46,7 +47,6 @@ import {
 	WALL_JUMP_LOCKOUT,
 	WALL_JUMP_VERTICAL,
 	WALL_SLIDE_SPEED,
-	WORLD_RIGHT,
 } from "./Physics.js";
 
 const DT = 1 / 60;
@@ -494,11 +494,11 @@ describe("solid collision", () => {
 		expect(left.x).toBe(0);
 
 		const right = ticks(
-			state({ x: WORLD_RIGHT - PLAYER_WIDTH - 5, y: 300, vx: 400 }),
+			state({ x: SCREEN_W - PLAYER_WIDTH - 5, y: 300, vx: 400 }),
 			{ right: true },
 			10,
 		);
-		expect(right.x).toBe(WORLD_RIGHT - PLAYER_WIDTH);
+		expect(right.x).toBe(SCREEN_W - PLAYER_WIDTH);
 	});
 
 	it("never tunnels through geometry at dash speed", () => {
@@ -996,9 +996,9 @@ describe("level reachability", () => {
 			if (hold <= -3 && s.wallTouch === "right" && s.grounded) hold = 12;
 			s = tick(s, { right: true, up: hold > 0 });
 			hold--;
-			if (s.x > WORLD_RIGHT - PLAYER_WIDTH - 10) break;
+			if (s.x > SCREEN_W - PLAYER_WIDTH - 10) break;
 		}
-		expect(s.x).toBeGreaterThan(WORLD_RIGHT - PLAYER_WIDTH - 10);
+		expect(s.x).toBeGreaterThan(SCREEN_W - PLAYER_WIDTH - 10);
 	});
 });
 

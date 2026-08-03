@@ -35,6 +35,15 @@ function gamertag(raw: string): string {
  */
 const MAX_NAME = 16;
 
+/** How many attempts to draw a name before falling back to a numeric suffix. */
+const MAX_ATTEMPTS = 40;
+/** Characters a fallback suffix (`2`..`99`) may eat before the cap. */
+const FALLBACK_SUFFIX_SLACK = 3;
+/** Characters a uniqueName suffix (`2`..) may eat before the cap. */
+const UNIQUE_SUFFIX_SLACK = 2;
+/** Largest numeric suffix tried before the fallback chain gives up. */
+const MAX_UNIQUE_SUFFIX = 99;
+
 /**
  * A gamertag-shaped name not already in `taken`.
  *
@@ -44,7 +53,7 @@ const MAX_NAME = 16;
  * unbounded loop on the server's boot path.
  */
 export function botName(taken: ReadonlySet<string>): string {
-	for (let attempt = 0; attempt < 40; attempt++) {
+	for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
 		const name = gamertag(
 			uniqueNamesGenerator({
 				dictionaries:
@@ -67,7 +76,7 @@ export function botName(taken: ReadonlySet<string>): string {
 			length: 1,
 			style: "lowerCase",
 		}),
-	).slice(0, MAX_NAME - 3);
+	).slice(0, MAX_NAME - FALLBACK_SUFFIX_SLACK);
 	let n = 2;
 	while (taken.has(`${base}${n}`)) n++;
 	return `${base}${n}`;
@@ -87,16 +96,18 @@ export function botName(taken: ReadonlySet<string>): string {
 export function uniqueName(base: string, taken: ReadonlySet<string>): string {
 	if (!taken.has(base)) return base;
 	// Trimmed so the suffix fits inside the cap rather than pushing past it.
-	const stem = base.slice(0, MAX_NAME - 2);
+	const stem = base.slice(0, MAX_NAME - UNIQUE_SUFFIX_SLACK);
 	let n = 2;
-	while (taken.has(`${stem}${n}`) && n < 99) n++;
+	while (taken.has(`${stem}${n}`) && n < MAX_UNIQUE_SUFFIX) n++;
 	return `${stem}${n}`;
 }
 
 /** Printable, in the sense a scoreboard cares about. */
+const PRINTABLE_MIN_CODE = 0x20;
+const DELETE_CODE_POINT = 0x7f;
 function isPrintable(ch: string): boolean {
 	const code = ch.codePointAt(0) ?? 0;
-	return code >= 0x20 && code !== 0x7f;
+	return code >= PRINTABLE_MIN_CODE && code !== DELETE_CODE_POINT;
 }
 
 /**
@@ -113,6 +124,6 @@ function isPrintable(ch: string): boolean {
  */
 export function sanitiseName(raw: unknown, fallback: string): string {
 	if (typeof raw !== "string") return fallback;
-	const clean = [...raw].filter(isPrintable).join("").trim().slice(0, 16);
+	const clean = [...raw].filter(isPrintable).join("").trim().slice(0, MAX_NAME);
 	return clean.length > 0 ? clean : fallback;
 }

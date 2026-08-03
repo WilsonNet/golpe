@@ -50,7 +50,81 @@ const PERCH_MIN_RISE_PX = 30;
  * double jump exactly when the perch needs it. This is what lets a zoning bot
  * actually use the upper ledges instead of hopping under them.
  */
-const PERCH_MAX_RISE_PX = JUMP_HEIGHT_PX * 1.7;
+/** A double jump reaches ~1.8x a single; the perch cap sits just under it. */
+const PERCH_RISE_FACTOR = 1.7;
+const PERCH_MAX_RISE_PX = JUMP_HEIGHT_PX * PERCH_RISE_FACTOR;
+
+// ---------------------------------------------------------------------------
+// Decision table. Every literal below is a roll the brain makes against the
+// config's personality knobs; each one is named so a tune is a single edit
+// instead of a hunt through a state machine.
+// ---------------------------------------------------------------------------
+
+/** HP bands (0..100): below `LOW_HP` a fighter is hurt, above `HIGH_HP` hale. */
+const LOW_HP = 30;
+const HIGH_HP = 80;
+/** HP below which a fighter retreats rather than holds the line. */
+const FLEE_HP = 40;
+/** How far ahead a hurt fighter leads when the bot is dodgey. */
+const DODGE_SKILL_SCALE = 0.6;
+const DODGE_HURT_MULTIPLIER = 1.5;
+const DODGE_HALE_MULTIPLIER = 0.7;
+const DODGE_NEUTRAL_MULTIPLIER = 1.0;
+/** A dodge only triggers inside this range — far away there is nothing to dodge. */
+const DODGE_RANGE_PX = 350;
+/** Half-width of the aim jitter band: (1 - accuracy) * 0.5 radians. */
+const AIM_JITTER_SPREAD = 0.5;
+/** The roll that centres the jitter on the true aim. */
+const AIM_JITTER_CENTRE = 0.5;
+/** A foe more than this many px above means the high ground — climb to it. */
+const HIGH_GROUND_PX = 40;
+/** A perch is only worth a double jump if it needs this much of a full one. */
+const PERCH_DOUBLE_JUMP_FACTOR = 0.95;
+/** Stuck detection: no movement beyond this for this long, this many times. */
+const STUCK_WINDOW_MS = 600;
+const STUCK_TOLERANCE_PX = 15;
+const STUCK_THRESHOLD = 4;
+/** A zoning phase ends early if the gap has opened this far past its aim. */
+const ZONE_ESCAPE_FACTOR = 1.4;
+/** The "sometimes break away instead of brawling" roll, by aggressiveness. */
+const WANTS_SPACE_BASE = 0.5;
+const WANTS_SPACE_AGGRO_WEIGHT = 0.28;
+/** Range bands for the four engagement decisions. */
+const EVADE_RANGE_PX = 500;
+const EVADE_COINFLIP = 0.5;
+const EXECUTE_RANGE_PX = 300;
+const FINISH_CHASE_CHANCE = 0.7;
+const ATTACK_RANGE_PX = 280;
+const CHASE_RANGE_PX = 400;
+/** In attack range, a fighter this aggressive holds the chase instead of attacking. */
+const STAY_BIAS = 0.3;
+/** Reaction time worsens by this per point of missing skill, plus this jitter. */
+const REACTION_SKILL_STEP_MS = 40;
+const REACTION_JITTER_MS = 100;
+/** A chase that has been stuck for this long flips into anti-stuck steering. */
+const STUCK_ESCALATE_MS = 1200;
+/** Chance rolls for the jump/strafe/counter reflexes, hurt vs hale where they differ. */
+const RETREAT_JUMP_CHANCE = 0.7;
+const WALL_CLIMB_CHANCE = 0.6;
+const SKILL_JUMP_CHANCE_PER_POINT = 0.01;
+const WALL_JUMP_CHANCE = 0.1;
+const RETREAT_JUMP_HURT_CHANCE = 0.4;
+const RETREAT_JUMP_HALE_CHANCE = 0.1;
+const COUNTER_HALE_SCALE = 0.5;
+/** Walk-in targets: a little inside sword range, or a gun's kite distance. */
+const SWORD_SETTLE_GRACE_PX = 12;
+const GUN_KITE_RANGE_PX = 80;
+const STRAFE_HURT_CHANCE = 0.2;
+const STRAFE_HALE_CHANCE = 0.4;
+const STRAFE_DIR_COINFLIP = 0.5;
+const STRAFE_JUMP_HURT_CHANCE = 0.3;
+const STRAFE_JUMP_HALE_CHANCE = 0.15;
+/** Zoning stops once the gap clears the sword's disengage range by this much. */
+const DISENGAGE_GRACE_PX = 40;
+/** How often the escape burst is thrown while backing off. */
+const DASH_ESCAPE_CHANCE = 0.14;
+const ZONE_JUMP_HURT_CHANCE = 0.6;
+const ZONE_JUMP_HALE_CHANCE = 0.3;
 
 /**
  * The nearest ledge that is above the fighter and within a jump or two.
@@ -191,23 +265,27 @@ export class EnemyBrain {
 		this.zoneCooldown = Math.max(0, this.zoneCooldown - delta);
 		this.trackStuck(input, delta);
 
-		const isLowHP = input.selfHP <= 30;
-		const isHighHP = input.selfHP >= 80;
-		const isEnemyLow = input.enemyHP <= 30;
+		const isLowHP = input.selfHP <= LOW_HP;
+		const isHighHP = input.selfHP >= HIGH_HP;
+		const isEnemyLow = input.enemyHP <= LOW_HP;
 
 		const playerFacesMe =
 			input.playerFacingDirection * (input.selfX - input.playerX) > 0;
 
 		const dodgeRoll = Math.random();
-		const dodgeMultiplier = isLowHP ? 1.5 : isHighHP ? 0.7 : 1.0;
+		const dodgeMultiplier = isLowHP
+			? DODGE_HURT_MULTIPLIER
+			: isHighHP
+				? DODGE_HALE_MULTIPLIER
+				: DODGE_NEUTRAL_MULTIPLIER;
 		const dodgeThreshold =
 			this.config.dodgeChance *
 			(this.config.skillLevel / 10) *
-			0.6 *
+			DODGE_SKILL_SCALE *
 			dodgeMultiplier;
 		const shouldEvade =
 			playerFacesMe &&
-			input.distanceToPlayer < 350 &&
+			input.distanceToPlayer < DODGE_RANGE_PX &&
 			dodgeRoll < dodgeThreshold;
 
 		if (this.decisionCooldown <= 0) {
@@ -280,10 +358,10 @@ export class EnemyBrain {
 		const px = input.playerX + input.enemyVX * timeOfFlight;
 		const py = input.playerY + input.enemyVY * timeOfFlight;
 		const accuracyFactor = this.config.accuracy * (this.config.skillLevel / 10);
-		const aimJitter = (1 - accuracyFactor) * 0.5;
+		const aimJitter = (1 - accuracyFactor) * AIM_JITTER_SPREAD;
 		return (
 			Math.atan2(py - input.selfY, px - input.selfX) +
-			(Math.random() - 0.5) * aimJitter
+			(Math.random() - AIM_JITTER_CENTRE) * aimJitter
 		);
 	}
 
@@ -306,17 +384,17 @@ export class EnemyBrain {
 				// The foe holds the high ground. A blind chase is *not* enough: a
 				// double jump every time the line of sight broke measured the bots
 				// airborne 80% of a duel, hopping through it instead of walking.
-				return input.playerY < input.selfY - 40;
+				return input.playerY < input.selfY - HIGH_GROUND_PX;
 			case AIState.ZONE: {
 				const perch = perchAbove(input.selfX, input.selfY, this.world);
 				if (!perch) return false;
 				// Only the ledges a single jump cannot reach need the second press.
 				const rise = input.selfY - (perch.y - PLAYER_HEIGHT);
-				return rise > JUMP_HEIGHT_PX * 0.95;
+				return rise > JUMP_HEIGHT_PX * PERCH_DOUBLE_JUMP_FACTOR;
 			}
 			case AIState.EVADE:
 			case AIState.RETREAT:
-				return input.selfHP <= 40;
+				return input.selfHP <= FLEE_HP;
 			default:
 				return false;
 		}
@@ -328,10 +406,10 @@ export class EnemyBrain {
 
 	private trackStuck(input: AIInput, delta: number) {
 		this.stuckTimer += delta;
-		if (this.stuckTimer > 600) {
+		if (this.stuckTimer > STUCK_WINDOW_MS) {
 			const dx = Math.abs(input.selfX - this.stuckCheckX);
 			const dy = Math.abs(input.selfY - this.stuckCheckY);
-			if (dx < 15 && dy < 15) {
+			if (dx < STUCK_TOLERANCE_PX && dy < STUCK_TOLERANCE_PX) {
 				this.stuckCount++;
 			} else {
 				this.stuckCount = Math.max(0, this.stuckCount - 1);
@@ -343,7 +421,7 @@ export class EnemyBrain {
 	}
 
 	private isStuck(): boolean {
-		return this.stuckCount >= 4;
+		return this.stuckCount >= STUCK_THRESHOLD;
 	}
 
 	private evaluateState(
@@ -363,7 +441,7 @@ export class EnemyBrain {
 		if (this.state === AIState.ZONE) {
 			const done =
 				this.stateTimer > ZONE_DURATION_MS ||
-				input.distanceToPlayer > ZONE_RANGE_PX * 1.4;
+				input.distanceToPlayer > ZONE_RANGE_PX * ZONE_ESCAPE_FACTOR;
 			if (!done) return AIState.ZONE;
 			this.zoneCooldown = ZONE_COOLDOWN_MS;
 		}
@@ -373,31 +451,35 @@ export class EnemyBrain {
 			// Break away sometimes rather than brawling until someone dies. Cautious
 			// fighters zone more, which is what makes two bots play differently
 			// instead of mirroring each other into the centre of the map.
-			const wantsSpace = 0.5 - 0.28 * this.config.aggressiveness;
+			const wantsSpace =
+				WANTS_SPACE_BASE -
+				WANTS_SPACE_AGGRO_WEIGHT * this.config.aggressiveness;
 			if (this.zoneCooldown <= 0 && Math.random() < wantsSpace) {
 				return AIState.ZONE;
 			}
 			return AIState.ATTACK;
 		}
 		if (isLowHP && !isEnemyLow) {
-			if (input.distanceToPlayer < 500) {
-				return Math.random() < 0.5 ? AIState.ATTACK : AIState.EVADE;
+			if (input.distanceToPlayer < EVADE_RANGE_PX) {
+				return Math.random() < EVADE_COINFLIP ? AIState.ATTACK : AIState.EVADE;
 			}
 			return AIState.CHASE;
 		}
 		if (isEnemyLow && !isLowHP) {
-			if (input.distanceToPlayer < 300) {
+			if (input.distanceToPlayer < EXECUTE_RANGE_PX) {
 				return AIState.ATTACK;
 			}
-			return Math.random() < 0.7 ? AIState.CHASE : AIState.ATTACK;
+			return Math.random() < FINISH_CHASE_CHANCE
+				? AIState.CHASE
+				: AIState.ATTACK;
 		}
-		if (input.distanceToPlayer < 280) {
+		if (input.distanceToPlayer < ATTACK_RANGE_PX) {
 			if (!input.hasLineOfSight) return AIState.CHASE;
 			return AIState.ATTACK;
 		}
-		if (input.distanceToPlayer < 400) {
+		if (input.distanceToPlayer < CHASE_RANGE_PX) {
 			if (!input.hasLineOfSight) return AIState.CHASE;
-			const stayBias = this.state === AIState.ATTACK ? 0.3 : 0;
+			const stayBias = this.state === AIState.ATTACK ? STAY_BIAS : 0;
 			const decision =
 				Math.random() < this.config.aggressiveness - stayBias
 					? AIState.CHASE
@@ -408,8 +490,10 @@ export class EnemyBrain {
 	}
 
 	private getReactionTime(): number {
-		const skillBonus = (10 - this.config.skillLevel) * 40;
-		return this.config.reactionTime + skillBonus + Math.random() * 100;
+		const skillBonus = (10 - this.config.skillLevel) * REACTION_SKILL_STEP_MS;
+		return (
+			this.config.reactionTime + skillBonus + Math.random() * REACTION_JITTER_MS
+		);
 	}
 
 	private executeState(
@@ -437,7 +521,8 @@ export class EnemyBrain {
 
 		switch (this.state) {
 			case AIState.CHASE: {
-				const reallyStuck = this.isStuck() && this.stateTimer > 1200;
+				const reallyStuck =
+					this.isStuck() && this.stateTimer > STUCK_ESCALATE_MS;
 				if (reallyStuck) {
 					output.moveRight = !(input.playerX > input.selfX);
 					output.moveLeft = !(input.playerX <= input.selfX);
@@ -445,7 +530,11 @@ export class EnemyBrain {
 					output.moveRight = input.playerX > input.selfX;
 					output.moveLeft = input.playerX <= input.selfX;
 				}
-				if (isLowHP && input.touchingDown && Math.random() < 0.7) {
+				if (
+					isLowHP &&
+					input.touchingDown &&
+					Math.random() < RETREAT_JUMP_CHANCE
+				) {
 					output.jump = true;
 				} else if (
 					// Climbing blind is only worth it against a wall or up to a foe
@@ -458,17 +547,17 @@ export class EnemyBrain {
 				) {
 					if (input.touchingDown) output.jump = true;
 				} else if (this.isStuck() && input.touchingDown) {
-					output.jump = Math.random() < 0.6;
+					output.jump = Math.random() < WALL_CLIMB_CHANCE;
 				} else if (
 					input.touchingDown &&
-					Math.random() < 0.01 * this.config.skillLevel
+					Math.random() < SKILL_JUMP_CHANCE_PER_POINT * this.config.skillLevel
 				) {
 					output.jump = true;
 				}
 				if (
 					!input.touchingDown &&
 					(input.touchingLeft || input.touchingRight) &&
-					Math.random() < 0.1
+					Math.random() < WALL_JUMP_CHANCE
 				) {
 					output.jump = true;
 				}
@@ -480,10 +569,12 @@ export class EnemyBrain {
 				output.moveLeft = input.playerX > input.selfX;
 				output.jump =
 					input.touchingDown &&
-					(isLowHP ? Math.random() < 0.4 : Math.random() < 0.1);
+					(isLowHP
+						? Math.random() < RETREAT_JUMP_HURT_CHANCE
+						: Math.random() < RETREAT_JUMP_HALE_CHANCE);
 				const counterChance = isEnemyLow
 					? Math.min(1, this.config.aggressiveness)
-					: this.config.aggressiveness * 0.5;
+					: this.config.aggressiveness * COUNTER_HALE_SCALE;
 				if (Math.random() < counterChance) {
 					output.attack = input.hasLineOfSight;
 				}
@@ -500,19 +591,24 @@ export class EnemyBrain {
 					// Walk in until a swing can actually reach. The sword is the
 					// primary weapon, so "in position" means sword range, not the
 					// old ranged-duel spacing.
-					const wanted = this.melee.swordDrawn ? STRIKE_RANGE_PX - 12 : 80;
+					const wanted = this.melee.swordDrawn
+						? STRIKE_RANGE_PX - SWORD_SETTLE_GRACE_PX
+						: GUN_KITE_RANGE_PX;
 					if (input.distanceToPlayer > wanted) {
 						output.moveRight = input.playerX > input.selfX;
 						output.moveLeft = input.playerX <= input.selfX;
 					}
 					const strafe =
-						!this.melee.swordDrawn && Math.random() < (isLowHP ? 0.2 : 0.4);
+						!this.melee.swordDrawn &&
+						Math.random() < (isLowHP ? STRAFE_HURT_CHANCE : STRAFE_HALE_CHANCE);
 					if (strafe) {
-						output.moveLeft = Math.random() < 0.5;
+						output.moveLeft = Math.random() < STRAFE_DIR_COINFLIP;
 						output.moveRight = !output.moveLeft;
 						output.jump =
 							input.touchingDown &&
-							(isLowHP ? Math.random() < 0.3 : Math.random() < 0.15);
+							(isLowHP
+								? Math.random() < STRAFE_JUMP_HURT_CHANCE
+								: Math.random() < STRAFE_JUMP_HALE_CHANCE);
 					}
 					output.attack = true;
 				}
@@ -529,7 +625,8 @@ export class EnemyBrain {
 				// left the fighter high but engaged: the gun never came out, because
 				// the stance only holsters past SWORD_DISENGAGE_PX. Getting out of
 				// reach is what makes the ranged game reachable at all.
-				const tooClose = input.distanceToPlayer < SWORD_DISENGAGE_PX + 40;
+				const tooClose =
+					input.distanceToPlayer < SWORD_DISENGAGE_PX + DISENGAGE_GRACE_PX;
 
 				if (tooClose) {
 					output.moveLeft = away < 0;
@@ -539,7 +636,8 @@ export class EnemyBrain {
 					// separation against an equal-speed opponent: a dash while the
 					// sword is out, a tumble when the gun is — the simulation decides
 					// which from the stance, so the brain just asks for the burst.
-					if (Math.random() < 0.14) output.dash = away >= 0 ? 1 : -1;
+					if (Math.random() < DASH_ESCAPE_CHANCE)
+						output.dash = away >= 0 ? 1 : -1;
 				} else if (perch) {
 					// Head for a specific ledge and jump when actually underneath it.
 					// Steering toward a destination is the difference between climbing
@@ -578,7 +676,9 @@ export class EnemyBrain {
 				}
 				output.jump =
 					input.touchingDown &&
-					(isLowHP ? Math.random() < 0.6 : Math.random() < 0.3);
+					(isLowHP
+						? Math.random() < ZONE_JUMP_HURT_CHANCE
+						: Math.random() < ZONE_JUMP_HALE_CHANCE);
 				break;
 			}
 
@@ -603,5 +703,3 @@ export class EnemyBrain {
 		return this.jump.isHolding;
 	}
 }
-
-export default EnemyBrain;

@@ -34,6 +34,11 @@ const NEGLIGIBLE_ERROR_PX = 0.01;
 /** Safety valve: never let unacknowledged input grow without bound. */
 const MAX_PENDING_INPUTS = 180;
 
+/** Per-second decay of the smoothing offset — how fast a pop becomes a glide. */
+const SMOOTH_DECAY_BASE = 0.5;
+/** An offset this small is indistinguishable from zero; snap it exactly. */
+const SNAP_EPSILON = 0.05;
+
 export interface ReconcileResult {
 	/** Distance between where the client predicted and where it ended up. */
 	errorPx: number;
@@ -256,11 +261,11 @@ export class RenderSmoother {
 
 	/** Decay the offset and return where the sprite should actually be drawn. */
 	apply(x: number, y: number, dtSec: number): { x: number; y: number } {
-		const keep = 0.5 ** (dtSec / this.halfLifeSec);
+		const keep = SMOOTH_DECAY_BASE ** (dtSec / this.halfLifeSec);
 		this.offsetX *= keep;
 		this.offsetY *= keep;
-		if (Math.abs(this.offsetX) < 0.05) this.offsetX = 0;
-		if (Math.abs(this.offsetY) < 0.05) this.offsetY = 0;
+		if (Math.abs(this.offsetX) < SNAP_EPSILON) this.offsetX = 0;
+		if (Math.abs(this.offsetY) < SNAP_EPSILON) this.offsetY = 0;
 		return { x: x + this.offsetX, y: y + this.offsetY };
 	}
 

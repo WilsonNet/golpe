@@ -29,6 +29,9 @@ import type { AIInput, TeamRole } from "./types.js";
  * interrupted before the release. A human releases the moment the arc looks
  * right; a bot that holds for half a second is a bot that gets hit.
  */
+/** A support bot holds its cast until the enemy is inside this range. */
+const SUPPORT_CAST_RANGE_PX = 200;
+
 const HOLD_MIN_MS = 220;
 const HOLD_MAX_MS = 420;
 /** Grace after a cast (or a refused one) before the brain will aim again. */
@@ -250,7 +253,7 @@ export class UltimateBrain {
 
 		// A support being rushed answers with the hole under its own feet: the
 		// flat throw detonates on contact, and the hold is what buys the retreat.
-		if (role === "support" && input.distanceToPlayer < 200) {
+		if (role === "support" && input.distanceToPlayer < SUPPORT_CAST_RANGE_PX) {
 			return { x: input.playerX, y: input.playerY };
 		}
 

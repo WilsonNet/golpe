@@ -14,6 +14,8 @@ import {
 import {
 	fieldFor,
 	isBulletOutOfBounds,
+	MAX_HP,
+	MS_PER_SECOND,
 	type PlayerIntent,
 	type PlayerPosition,
 	type Singularity,
@@ -48,10 +50,17 @@ import type {
 	SnapshotGrenade,
 	SnapshotPlayer,
 } from "./types";
+import { GAME_SERVER_PORT } from "./types";
 import { unpackIntent, unpackState } from "./wire";
 
 /** Cap on ballistic extrapolation, so a bad clock estimate cannot fling a bullet. */
 const MAX_EXTRAPOLATION_MS = 250;
+/** The server broadcasts snapshots at this rate; used for byte-per-second math. */
+const SNAPSHOT_HZ = 20;
+/** How many snapshot sizes the byte-history window keeps. */
+const SNAPSHOT_BYTE_WINDOW = 200;
+/** How many seen singularity ids the client remembers. */
+const MAX_SEEN_SINGULARITIES = 64;
 
 /** Fixed step, matching the server's tick. Rollback depth is counted in these. */
 const PHYSICS_DT = 1 / 60;
@@ -252,7 +261,7 @@ export class OnlineSession {
 		this.bulletPool = new SpritePool(layer, bulletTexture);
 		this.manager = new OnlineManager(
 			`${location.protocol}//${location.hostname}`,
-			9208,
+			GAME_SERVER_PORT,
 		);
 	}
 
@@ -265,7 +274,7 @@ export class OnlineSession {
 	}
 
 	get localHp(): number {
-		return this.info.get(this.manager.myId)?.hp ?? 100;
+		return this.info.get(this.manager.myId)?.hp ?? MAX_HP;
 	}
 
 	get matchStatus(): MatchStatus | undefined {
@@ -291,7 +300,7 @@ export class OnlineSession {
 	}
 
 	hpOf(id: string): number {
-		return this.info.get(id)?.hp ?? 100;
+		return this.info.get(id)?.hp ?? MAX_HP;
 	}
 
 	/** Which side a fighter is on, or `null` in a free-for-all. */
@@ -429,7 +438,7 @@ export class OnlineSession {
 	}
 
 	get remoteHp(): number {
-		return this.primaryId === undefined ? 100 : this.hpOf(this.primaryId);
+		return this.primaryId === undefined ? MAX_HP : this.hpOf(this.primaryId);
 	}
 
 	/**
@@ -622,7 +631,7 @@ export class OnlineSession {
 		// affects. Corrected by every snapshot; this only carries it between them,
 		// so a hole does not linger for up to 50ms past its expiry on a client.
 		if (this.field) {
-			this.field.remainingMs -= dt * 1000;
+			this.field.remainingMs -= dt * MS_PER_SECOND;
 			if (this.field.remainingMs <= 0) this.field = null;
 		}
 
@@ -660,7 +669,7 @@ export class OnlineSession {
 
 	/** Per-frame presentation update: render offsets and bullets. */
 	render(dtSec: number): { x: number; y: number } {
-		if (!this.frozen) this.renderClockMs += dtSec * 1000;
+		if (!this.frozen) this.renderClockMs += dtSec * MS_PER_SECOND;
 		this.renderBullets(this.clock.now(Date.now()));
 		const at = this.smoother.apply(
 			this.predicted.state.x,
@@ -716,7 +725,7 @@ export class OnlineSession {
 			if (!flight) {
 				const ageSec =
 					Math.min(Math.max(serverNow - snap.t, 0), MAX_EXTRAPOLATION_MS) /
-					1000;
+					MS_PER_SECOND;
 				flight = {
 					x0: b.x + b.vx * ageSec,
 					y0: b.y + b.vy * ageSec,
@@ -727,7 +736,7 @@ export class OnlineSession {
 				this.bulletFlights.set(b.id, flight);
 			}
 
-			const t = (now - flight.t0) / 1000;
+			const t = (now - flight.t0) / MS_PER_SECOND;
 			const x = flight.x0 + flight.vx * t;
 			const y = flight.y0 + flight.vy * t;
 
@@ -792,7 +801,7 @@ export class OnlineSession {
 			maxSnapshotBytes: bytes.reduce((m, b) => Math.max(m, b), 0),
 			/** At the server's 20Hz broadcast rate. */
 			estBytesPerSec:
-				bytes.length > 0 ? Math.round((total / bytes.length) * 20) : 0,
+				bytes.length > 0 ? Math.round((total / bytes.length) * SNAPSHOT_HZ) : 0,
 			rollback: this.rollbackStats.summary(),
 		};
 	}
@@ -804,7 +813,8 @@ export class OnlineSession {
 		this.snapshotBytes.push(JSON.stringify(snap).length);
 		// A bounded window: this runs for the length of a match, and an unbounded
 		// array of every snapshot ever seen is a leak with a graph attached.
-		if (this.snapshotBytes.length > 200) this.snapshotBytes.shift();
+		if (this.snapshotBytes.length > SNAPSHOT_BYTE_WINDOW)
+			this.snapshotBytes.shift();
 
 		// Before anything is reconciled or rolled back, because the field is an
 		// argument to every one of those `tickPlayer` calls. Adopting it afterwards
@@ -901,7 +911,7 @@ export class OnlineSession {
 			this.seenSingularities.add(field.id);
 			// Bounded: ids only ever grow, and a match that ran for hours would
 			// otherwise keep every one of them.
-			if (this.seenSingularities.size > 64) {
+			if (this.seenSingularities.size > MAX_SEEN_SINGULARITIES) {
 				const oldest = this.seenSingularities.values().next().value;
 				if (oldest !== undefined) this.seenSingularities.delete(oldest);
 			}

@@ -38,19 +38,13 @@ import type { TeamId } from "./simulation/Teams";
  * spark, which is the weakest tint anything here uses — a duller pair simply
  * disappeared at that strength.
  */
-export const TEAM_COLORS: readonly number[] = [
+const TEAM_COLORS: readonly number[] = [
 	/** AZURE — a cool, saturated blue. */ 0x4ea8ff,
 	/** EMBER — a warm orange, its complement. */ 0xff8a4c,
 ];
 
 /** The same colours as CSS, for the DOM overlay. */
-export const TEAM_CSS: readonly string[] = ["#4ea8ff", "#ff8a4c"];
-
-/** A dimmer version for fills the text has to be readable on top of. */
-export const TEAM_CSS_DIM: readonly string[] = [
-	"rgba(78, 168, 255, 0.22)",
-	"rgba(255, 138, 76, 0.22)",
-];
+const TEAM_CSS: readonly string[] = ["#4ea8ff", "#ff8a4c"];
 
 /** Untinted white, for a fighter with no team. */
 const NEUTRAL = 0xffffff;

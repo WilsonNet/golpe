@@ -26,6 +26,17 @@ import type { MeleeBrain } from "./MeleeBrain.js";
 import type { AIInput, AIOutput, TeamRole } from "./types.js";
 
 /** A hostile inside this much of an ally means the ally is being threatened. */
+// Team reflexes, rolled per decision. Each is a chance per frame the reflex
+// fires, deliberately low: a strafe that flipped constantly would read as a
+// fighter having a seizure rather than as dodging.
+const STRAFE_FLIP_CHANCE = 0.03;
+const ESCAPE_DASH_CHANCE = 0.06;
+const COVER_JUMP_CHANCE = 0.12;
+/** Within this range of a threat, a support reacts as if engaged. */
+const THREAT_RANGE_PX = 300;
+/** A support stops backing off once its ally is this far ahead. */
+const ALLY_SPACING_PX = 400;
+
 const THREAT_RADIUS_PX = 330;
 /** The support's comfort band: inside the floor it runs, outside the ceiling it advances. */
 const SUPPORT_FLOOR_PX = 240;
@@ -183,15 +194,17 @@ export class TeamBrain {
 			if (atHomeEdge) {
 				// No more room to run: turn and fight from the last stand. The
 				// vanguard's line is right behind, so this is where the cover is.
-				if (Math.random() < 0.03) this.strafeDir *= -1;
+				if (Math.random() < STRAFE_FLIP_CHANCE) this.strafeDir *= -1;
 				output.moveLeft = this.strafeDir < 0;
 				output.moveRight = this.strafeDir > 0;
 			} else {
 				// Kite: away, and burst when the gap refuses to open.
 				output.moveLeft = away < 0;
 				output.moveRight = away >= 0;
-				if (Math.random() < 0.06) output.dash = away >= 0 ? 1 : -1;
-				if (input.touchingDown && Math.random() < 0.12) output.jump = true;
+				if (Math.random() < ESCAPE_DASH_CHANCE)
+					output.dash = away >= 0 ? 1 : -1;
+				if (input.touchingDown && Math.random() < COVER_JUMP_CHANCE)
+					output.jump = true;
 			}
 		} else if (d > SUPPORT_CEIL_PX) {
 			// Advance onto the enemy: the band is what stops the walk, and the
@@ -211,7 +224,7 @@ export class TeamBrain {
 			}
 		} else {
 			// In the band: strafe and keep the angle open.
-			if (Math.random() < 0.03) this.strafeDir *= -1;
+			if (Math.random() < STRAFE_FLIP_CHANCE) this.strafeDir *= -1;
 			output.moveLeft = this.strafeDir < 0;
 			output.moveRight = this.strafeDir > 0;
 		}
@@ -277,7 +290,7 @@ export class TeamBrain {
 			if (
 				threat.distanceToSupport < COVER_RANGE_PX &&
 				swinging &&
-				distToThreat < 300
+				distToThreat < THREAT_RANGE_PX
 			) {
 				melee.interruptWithGuard(output);
 				output.face = threat.x >= input.selfX ? 1 : -1;
@@ -303,7 +316,7 @@ export class TeamBrain {
 	/** Is the nearest teammate far enough that this fighter is truly alone? */
 	private allySeparated(input: AIInput): boolean {
 		const ally = this.nearestAlly(input);
-		return ally !== null && ally.distance > 400;
+		return ally !== null && ally.distance > ALLY_SPACING_PX;
 	}
 
 	/** Step away from a teammate standing on top of this fighter. */

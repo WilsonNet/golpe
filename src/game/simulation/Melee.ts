@@ -18,6 +18,7 @@ import {
 	type Rect,
 	rectsOverlap,
 } from "./Arena.js";
+import { MS_PER_SECOND } from "./units.js";
 
 export type MeleeMove = "slash" | "slash2" | "slash3" | "uppercut" | "massive";
 export type MeleeAction = "none" | MeleeMove;
@@ -296,7 +297,7 @@ export const KNOCKDOWN_MS = 520;
  * somebody in the air — an uppercut's victim comes back down *hard* rather than
  * drifting through their own knockdown.
  */
-export const KNOCKDOWN_SLAM_VY = 520;
+const KNOCKDOWN_SLAM_VY = 520;
 
 /** Hold the attack button this long to arm a Massive Strike. */
 export const MASSIVE_CHARGE_MS = 420;
@@ -335,7 +336,7 @@ export const BACKSTAB_BONUS_STUN_MS = 500;
  */
 export const MELEE_IFRAME_MS = 180;
 /** Shared shove when an attack is absorbed. Nobody wins, both get space. */
-export const BLOCK_PUSHBACK = 90;
+const BLOCK_PUSHBACK = 90;
 /**
  * How far past the defender's centre an attacker must be for a backstab.
  *
@@ -615,7 +616,7 @@ export function tickMelee(
 	input: MeleeIntent,
 	dt: number,
 ): void {
-	const dtMs = dt * 1000;
+	const dtMs = dt * MS_PER_SECOND;
 
 	s.stunTimer = decay(s.stunTimer, dtMs);
 	s.knockdownTimer = decay(s.knockdownTimer, dtMs);

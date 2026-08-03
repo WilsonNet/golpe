@@ -9,7 +9,6 @@ import {
 	type Rect,
 	SCREEN_W,
 	WORLD_BOTTOM,
-	WORLD_RIGHT,
 } from "./Arena.js";
 
 /** The base layout for one screen: ground + eight ledges/pillars. */
@@ -31,7 +30,7 @@ describe("buildWorld", () => {
 	it("builds the classic single-screen arena by default", () => {
 		const w = buildWorld(1);
 		expect(w.screens).toBe(1);
-		expect(w.right).toBe(WORLD_RIGHT);
+		expect(w.right).toBe(SCREEN_W);
 		expect(w.bottom).toBe(WORLD_BOTTOM);
 		expect(w.platforms).toHaveLength(BASE_PLATFORM_COUNT);
 		expect(w.spawnPoints).toHaveLength(BASE_SPAWN_COUNT);

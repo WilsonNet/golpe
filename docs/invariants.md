@@ -68,6 +68,12 @@ are perfectly fine.
   explicitly-named symbol arrived and every starred one vanished, with no
   resolution error — just `SyntaxError: does not provide an export named
   'applyMeleeResult'` on boot.
+- **knip goes blind at the same boundary.** A `server/physics.ts` `export *`
+  is untraceable, so *every* name behind it reports as an unused export —
+  which is the whole reason the explicit re-export block in `Physics.ts` is
+  load-bearing. When knip flags a line of that block, trace the name
+  (`npx knip --trace-export <name>`) and check `server/GameRoom.ts`'s
+  `./physics.js` import before deleting anything.
 
 To debug this class of bug, write a `.mts` probe that imports each layer of the
 chain and diffs `Object.keys`. It localises the break in one run.

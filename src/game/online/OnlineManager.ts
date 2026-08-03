@@ -13,9 +13,9 @@ import {
 	type RoundWonMsg,
 } from "./types";
 
-export type OnlineStateHandler = (state: GameSnapshot) => void;
-export type OnlineStatusHandler = (status: string) => void;
-export type OnlineResetHandler = () => void;
+type OnlineStateHandler = (state: GameSnapshot) => void;
+type OnlineStatusHandler = (status: string) => void;
+type OnlineResetHandler = () => void;
 export type TrainingStateHandler = (state: TrainingStateMsg) => void;
 
 /**

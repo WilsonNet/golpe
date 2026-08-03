@@ -25,7 +25,7 @@ import type { ClipName } from "./systems";
  * fighter's swing trail, guard and impact punch would land on one shared set of
  * sprites. A fighter is identified by the id the server scores it under.
  */
-export type FighterId = string;
+type FighterId = string;
 
 export interface AnimState {
 	clip: ClipName;
@@ -38,7 +38,7 @@ export interface AnimState {
  * so a query for `("body", "sprite")` matches exactly the things that both
  * simulate and draw.
  */
-export interface Entity {
+interface Entity {
 	/** Stable identity, for effects and debugging. */
 	key: string;
 

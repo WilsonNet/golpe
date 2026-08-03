@@ -32,6 +32,9 @@ import type { PackedIntent, PackedState } from "./wire.js";
  * has its own 2s heartbeat) or `respawn` (which a >100px correction covers) — a
  * message that repeats or self-heals does not need paying for ten times.
  */
+/** The Geckos signalling port — the number both the server binds and every client dials. */
+export const GAME_SERVER_PORT = 9208;
+
 export const RELIABLE = { reliable: true } as const;
 
 /**
@@ -230,7 +233,7 @@ export interface SnapshotGrenade {
  * not be able to leave a client pulling people into a hole that has closed — or
  * worse, not pulling them into one that is open.
  */
-export interface SnapshotSingularity {
+interface SnapshotSingularity {
 	id: number;
 	ownerId: string;
 	/**

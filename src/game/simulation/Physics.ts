@@ -39,41 +39,21 @@ import {
 	singularityPull,
 } from "./Ultimate.js";
 
-export type { Rect, SpawnPoint, World } from "./Arena.js";
+export type { World } from "./Arena.js";
 export {
-	applyWorld,
-	buildWorld,
 	DEFAULT_WORLD,
 	hasLineOfSight,
-	MAX_SCREENS,
 	PLAYER_HEIGHT,
 	PLAYER_WIDTH,
 	penetrationDepth,
-	pickSpawn,
-	platforms,
-	playerBox,
 	rectsOverlap,
-	SCREEN_H,
-	SCREEN_W,
-	SPAWN_POINTS,
-	WORLD_BOTTOM,
-	WORLD_LEFT,
-	WORLD_RIGHT,
-	WORLD_TOP,
 } from "./Arena.js";
 export type { WallSide } from "./Collision.js";
 export type {
-	ComboSlash,
 	MeleeAction,
-	MeleeBody,
-	MeleeIntent,
 	MeleeMove,
 	MeleeOutcome,
 	MeleePhase,
-	MeleeResult,
-	MeleeState,
-	MeleeTickState,
-	MoveDef,
 	Stance,
 } from "./Melee.js";
 /**
@@ -89,45 +69,25 @@ export type {
  */
 export {
 	applyMeleeResult,
-	BACKSTAB_BONUS_STUN_MS,
-	BLOCK_PUSHBACK,
-	BLOCK_STARTUP_MS,
 	blocksBullet,
 	blocksUltimate,
 	bodyRect,
 	COMBO_CHAIN,
-	COMBO_LINK_MS,
-	copyMeleeState,
-	createMeleeState,
-	GUARD_BREAK_STUN_MS,
-	isBehind,
-	isCancellable,
 	isComboSlash,
-	isCommitted,
 	isKnockedDown,
 	isStunned,
-	KNOCKDOWN_MS,
-	KNOCKDOWN_SLAM_VY,
 	MASSIVE_CHARGE_MS,
-	MELEE_IFRAME_MS,
 	MELEE_MOVES,
 	MOVES,
-	meleeHitbox,
 	meleePhase,
 	moveDuration,
 	PARRY_WINDOW_MS,
 	resolveMelee,
 	SLASH_CANCELLED_MS,
-	tickMelee,
 	zeroMoveCounts,
 } from "./Melee.js";
 
-export type {
-	GrenadeEnd,
-	GrenadeState,
-	Grip,
-	Singularity,
-} from "./Ultimate.js";
+export type { GrenadeState, Singularity } from "./Ultimate.js";
 /**
  * The ultimate, re-exported by name for the same reason melee is: `server/`
  * reaches this module through `server/physics.ts`, and anything behind an
@@ -140,23 +100,16 @@ export {
 	fieldFor,
 	GRENADE_FUSE_MS,
 	GRENADE_GRAVITY,
-	GRENADE_MAX_RANGE_PX,
 	GRENADE_SPEED,
-	GRENADE_TOUCH_PX,
 	grenadeEnd,
 	grenadeTouches,
 	launchGrenade,
 	SINGULARITY_DAMAGE_INTERVAL_MS,
-	SINGULARITY_DRAW_SPEED,
 	SINGULARITY_DURATION_MS,
-	SINGULARITY_HOLD_STUN_MS,
-	SINGULARITY_PULL_ACCEL,
 	SINGULARITY_RADIUS,
 	SINGULARITY_REACH,
 	SINGULARITY_TICK_DAMAGE,
-	SINGULARITY_TUG_ACCEL,
 	singularityGrip,
-	singularityPull,
 	tickGrenade,
 	ULT_CHARGE_PER_DAMAGE,
 	ULT_CHARGE_PER_KILL,
@@ -165,9 +118,6 @@ export {
 	ULT_PASSIVE_PER_SEC,
 	ultReady,
 } from "./Ultimate.js";
-
-/** @deprecated use `Rect` — kept so existing imports keep compiling. */
-export type Platform = Rect;
 
 // ---------------------------------------------------------------------------
 // Movement tuning
@@ -182,6 +132,13 @@ export const GRAVITY = 1800;
 /** Falling is heavier than rising: the classic platformer "snap". */
 export const FALL_GRAVITY_MULTIPLIER = 1.35;
 export const MAX_FALL_SPEED = 950;
+
+import { MS_PER_SECOND } from "./units.js";
+
+export { MS_PER_SECOND } from "./units.js";
+
+/** A fighter's full health. The bar's denominator, and every spawn's starting HP. */
+export const MAX_HP = 100;
 
 export const JUMP_VELOCITY = -700;
 /** Peak rise of a full jump: v² / 2g = 136px. */
@@ -211,17 +168,17 @@ export const AIR_JUMP_VELOCITY = -620;
 export const JUMP_BUFFER_MS = 120;
 
 export const PLAYER_WALK_SPEED = 220;
-export const GROUND_ACCEL = 2600;
-export const AIR_ACCEL = 1800;
-export const GROUND_FRICTION = 2600;
-export const AIR_FRICTION = 500;
+const GROUND_ACCEL = 2600;
+const AIR_ACCEL = 1800;
+const GROUND_FRICTION = 2600;
+const AIR_FRICTION = 500;
 /**
  * Ground friction while stunned. Normal friction kills a knockback impulse in
  * two frames, so no shove would ever be visible: a Massive Strike's 420 px/s
  * would move the target 34px at 2600, versus 73px here. Being hit hard should
  * look like being hit hard.
  */
-export const STUN_GROUND_FRICTION = 1200;
+const STUN_GROUND_FRICTION = 1200;
 
 export const WALL_SLIDE_SPEED = 160;
 export const WALL_JUMP_HORIZONTAL = 230;
@@ -234,14 +191,14 @@ export const WALL_JUMP_VERTICAL = -640;
  */
 export const WALL_JUMP_LOCKOUT = 140;
 /** Wall contact lingers briefly so a wall jump does not need frame-perfect timing. */
-export const WALL_COYOTE_MS = 100;
+const WALL_COYOTE_MS = 100;
 
 /**
  * Walking while blocking. A guard you can carry at full speed is a guard with no
  * cost, and it would make circling behind a blocker — the intended answer to a
  * turtle — impossible to actually perform.
  */
-export const BLOCK_MOVE_MULTIPLIER = 0.55;
+const BLOCK_MOVE_MULTIPLIER = 0.55;
 
 /** Dash impulse. An impulse on the shared simulation, not a movement mode. */
 export const DASH_SPEED = 1000;
@@ -301,7 +258,7 @@ export const TUMBLE_HEIGHT = 20;
 
 export const BULLET_SPEED = 600;
 export const BULLET_DAMAGE = 10;
-export const ATTACK_COOLDOWN = 250;
+const ATTACK_COOLDOWN = 250;
 
 // ---------------------------------------------------------------------------
 // Player state
@@ -467,7 +424,7 @@ function approach(value: number, target: number, maxDelta: number): number {
 }
 
 function decay(timerMs: number, dt: number): number {
-	return Math.max(0, timerMs - dt * 1000);
+	return Math.max(0, timerMs - dt * MS_PER_SECOND);
 }
 
 /**
@@ -818,12 +775,15 @@ export function isBulletOutOfBounds(
 	// A 50px margin is the original one-screen tolerance; it scales with the
 	// world so a wide room's bullets are judged against the room's walls.
 	return (
-		b.x < world.left - 50 ||
-		b.x > world.right + 50 ||
-		b.y < world.top - 50 ||
-		b.y > world.bottom + 50
+		b.x < world.left - BULLET_OOB_MARGIN_PX ||
+		b.x > world.right + BULLET_OOB_MARGIN_PX ||
+		b.y < world.top - BULLET_OOB_MARGIN_PX ||
+		b.y > world.bottom + BULLET_OOB_MARGIN_PX
 	);
 }
+
+/** A bullet past the world edge by this much is gone. */
+const BULLET_OOB_MARGIN_PX = 50;
 
 export type BodyBoxSource = Pick<
 	PlayerPosition,

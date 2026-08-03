@@ -23,7 +23,7 @@ export interface Rect {
 
 /** One screen's width/height, in world px. The whole game is authored at this scale. */
 export const SCREEN_W = 800;
-export const SCREEN_H = 600;
+const SCREEN_H = 600;
 /** Upper bound on `?screen=N`, so a typo cannot build a world nobody can load. */
 export const MAX_SCREENS = 8;
 
@@ -46,9 +46,8 @@ export interface World {
 	spawnPoints: readonly SpawnPoint[];
 }
 
-export const WORLD_LEFT = 0;
-export const WORLD_TOP = 0;
-export const WORLD_RIGHT = SCREEN_W;
+const WORLD_LEFT = 0;
+const WORLD_TOP = 0;
 export const WORLD_BOTTOM = SCREEN_H;
 
 export const PLAYER_WIDTH = 32;
@@ -76,11 +75,11 @@ export const GROUND: Rect = { x: 0, y: 568, w: SCREEN_W, h: 32 };
  *   y=568   ==================== ground ====================
  */
 export const LOW_LEFT: Rect = { x: 90, y: 450, w: 130, h: LEDGE_H };
-export const LOW_RIGHT: Rect = { x: 580, y: 450, w: 130, h: LEDGE_H };
+const LOW_RIGHT: Rect = { x: 580, y: 450, w: 130, h: LEDGE_H };
 export const MID: Rect = { x: 330, y: 360, w: 140, h: LEDGE_H };
-export const HIGH_LEFT: Rect = { x: 60, y: 250, w: 120, h: LEDGE_H };
-export const HIGH_RIGHT: Rect = { x: 620, y: 250, w: 120, h: LEDGE_H };
-export const TOP_CENTRE: Rect = { x: 350, y: 170, w: 100, h: LEDGE_H };
+const HIGH_LEFT: Rect = { x: 60, y: 250, w: 120, h: LEDGE_H };
+const HIGH_RIGHT: Rect = { x: 620, y: 250, w: 120, h: LEDGE_H };
+const TOP_CENTRE: Rect = { x: 350, y: 170, w: 100, h: LEDGE_H };
 
 /**
  * Ground-level pillars: cover to break line-of-sight, plus wall-jump surfaces
@@ -349,7 +348,7 @@ export function rectsOverlap(a: Rect, b: Rect): boolean {
 	);
 }
 
-export function pointInRect(px: number, py: number, r: Rect): boolean {
+function pointInRect(px: number, py: number, r: Rect): boolean {
 	return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
 }
 
@@ -414,7 +413,7 @@ export function narrowGaps(
 }
 
 /** Player-sized AABB at a position. */
-export function playerBox(x: number, y: number): Rect {
+function playerBox(x: number, y: number): Rect {
 	return { x, y, w: PLAYER_WIDTH, h: PLAYER_HEIGHT };
 }
 

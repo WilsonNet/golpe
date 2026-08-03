@@ -84,10 +84,13 @@ export function legaliseDrawn(
  * it hides, which is why rollback implementations converge on roughly this
  * number regardless of topology.
  */
-export const MAX_ROLLBACK_TICKS = 9;
+/** How quickly a remote's drawn offset decays toward its true position. */
+const REMOTE_SMOOTH_FACTOR = 0.06;
+
+const MAX_ROLLBACK_TICKS = 9;
 
 /** Above this, a remote correction is a respawn or a teleport, not a mistake. */
-export const REMOTE_TELEPORT_PX = 100;
+const REMOTE_TELEPORT_PX = 100;
 
 export interface RollbackResult {
 	/** How far the fighter moved when the authoritative state was folded in. */
@@ -132,7 +135,10 @@ export class RemoteFighter {
 		return this.intent?.ultimate === true;
 	}
 
-	private readonly smoother = new RenderSmoother(0.06, REMOTE_TELEPORT_PX);
+	private readonly smoother = new RenderSmoother(
+		REMOTE_SMOOTH_FACTOR,
+		REMOTE_TELEPORT_PX,
+	);
 
 	/**
 	 * The geometry this fighter is predicted against — the room's, not the
@@ -288,6 +294,7 @@ export class RollbackStats {
 	}
 
 	summary() {
+		// Two decimal places is the report's own precision, not a physics number.
 		const round = (n: number) => Math.round(n * 100) / 100;
 		return {
 			/** Authoritative states folded into a predicted fighter. Zero means no netcode ran. */

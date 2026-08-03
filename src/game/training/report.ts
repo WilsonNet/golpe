@@ -97,7 +97,7 @@ export interface TrainingReport {
  * is a JSON document by design — it is printed to a console line and parsed by
  * a harness, so its shape is a wire format rather than a class.
  */
-export interface MeleeSummaryView {
+interface MeleeSummaryView {
 	slashes: number;
 	/** The ground chain: continuations thrown, chains that reached the finisher. */
 	comboLinks: number;
@@ -121,7 +121,7 @@ export interface MeleeSummaryView {
 	violations: unknown[];
 }
 
-export interface ReconciliationView {
+interface ReconciliationView {
 	totalCorrections: number;
 	avgErrorPx: number;
 	maxErrorPx: number;
@@ -157,7 +157,7 @@ export interface TrainingState {
 	lastExchange: TrainingExchange | null;
 }
 
-export interface TrainingStep {
+interface TrainingStep {
 	intent: Partial<PlayerIntent>;
 	holdMs: number;
 	/**

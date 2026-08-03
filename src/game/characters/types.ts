@@ -44,7 +44,7 @@ export interface FoeInfo {
  * bot can tell its own side's hole from the enemy's without re-deriving a rule
  * the simulation owns.
  */
-export interface FieldInfo {
+interface FieldInfo {
 	x: number;
 	y: number;
 	hostile: boolean;

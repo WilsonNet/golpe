@@ -1,3 +1,6 @@
+/** Sprites are anchored at their centre; bodies are top-left — see `syncSpriteToBody`. */
+const SPRITE_ANCHOR_CENTRE = 0.5;
+
 /**
  * One match: the fixed-timestep loop, the entity world, and the wiring between
  * the simulation, the netcode and the renderer.
@@ -15,8 +18,8 @@
  */
 
 import { Sprite } from "pixi.js";
-import type { AIConfig } from "./characters/AIConfig";
-import EnemyBrain from "./characters/EnemyBrain";
+import { type AIConfig, randomBotConfig } from "./characters/AIConfig";
+import { EnemyBrain } from "./characters/EnemyBrain";
 import type { AIInput, AIOutput, AllyInfo, FoeInfo } from "./characters/types";
 import { BulletSystem, type BulletTarget } from "./combat/BulletSystem";
 import {
@@ -27,6 +30,7 @@ import { EventBus } from "./EventBus";
 import {
 	animationSystem,
 	bindFxBodies,
+	CLIPS,
 	meleeFxSystem,
 	nameplateSystem,
 	shadowSystem,
@@ -75,6 +79,8 @@ import {
 	hasLineOfSight,
 	isKnockedDown,
 	isStunned,
+	MAX_HP,
+	MS_PER_SECOND,
 	meleePhase,
 	NEUTRAL_INTENT,
 	type PlayerIntent,
@@ -98,6 +104,15 @@ import { TrainingRoom } from "./training/TrainingRoom";
 const PHYSICS_DT = 1 / 60;
 const MAX_PHYSICS_STEPS = 5;
 const RESET_DELAY_MS = 2000;
+
+/** Longest a single rendered frame may simulate — a stall must not rubber-band the world. */
+const MAX_FRAME_DT_S = 0.05;
+/** HUD state is throttled to this cadence; the snapshot itself is the truth. */
+const HUD_MIN_INTERVAL_MS = 50;
+/** Frames of jitter measurement skipped after an announced teleport (the ultimate's pull). */
+const TELEPORT_GRACE_FRAMES = 4;
+/** The room-link hint waits out the FIGHT banner's 3.5s so the two narrations do not overlap. */
+const SHARE_HINT_DELAY_MS = 4000;
 
 /**
  * How far the follow camera may move in one rendered frame, in world px.
@@ -141,18 +156,14 @@ function intentFromAI(output: AIOutput): PlayerIntent {
 }
 
 function fightConfig(): AIConfig {
-	return {
-		skillLevel: 4 + Math.floor(Math.random() * 4),
-		reactionTime: 150 + Math.floor(Math.random() * 250),
-		accuracy: 0.45 + Math.random() * 0.4,
-		aggressiveness: 0.35 + Math.random() * 0.45,
-		dodgeChance: 0.2 + Math.random() * 0.4,
-	};
+	return randomBotConfig();
 }
 
 /** A name for a client whose fighter is a bot, so the scoreboard is readable. */
+const AI_NAME_MIN = 100;
+const AI_NAME_SPAN = 900;
 function aiClientName(): string {
-	const n = 100 + Math.floor(Math.random() * 900);
+	const n = AI_NAME_MIN + Math.floor(Math.random() * AI_NAME_SPAN);
 	return `AI-${n}`;
 }
 
@@ -385,7 +396,7 @@ export class Match {
 		this.freezeTime = launch.freezeTime;
 		const timeLimitSec = launch.timeLimitSec;
 		this.timeLimitMs =
-			timeLimitSec === undefined ? undefined : timeLimitSec * 1000;
+			timeLimitSec === undefined ? undefined : timeLimitSec * MS_PER_SECOND;
 
 		if (this.trainingMode) {
 			// A training room is an ordinary online, single-human match by
@@ -424,8 +435,12 @@ export class Match {
 		y: number,
 		facing: number,
 	): FighterEntity {
-		const sprite = new Sprite(dudeFrames[facing < 0 ? 0 : 5]);
-		sprite.anchor.set(0.5);
+		// The strip's idle frames are the strip's own table — see `CLIPS` in
+		// ecs/systems.ts, where `left-idle` and `right-idle` name these indices.
+		const idleClip = facing < 0 ? CLIPS["left-idle"] : CLIPS["right-idle"];
+		const [idleFrame] = idleClip.frames;
+		const sprite = new Sprite(dudeFrames[idleFrame]);
+		sprite.anchor.set(SPRITE_ANCHOR_CENTRE);
 		this.stage.actors.addChild(sprite);
 
 		const entity = this.world.add({
@@ -435,7 +450,7 @@ export class Match {
 			// client who that is yet.
 			// No side until a snapshot says otherwise, which is also what every
 			// fighter in a free-for-all keeps for the whole match.
-			fighter: { id, local, hp: 100, maxHp: 100, name: "", team: null },
+			fighter: { id, local, hp: MAX_HP, maxHp: MAX_HP, name: "", team: null },
 			body: createPlayerState(x, y, facing),
 			sprite,
 			anim: { clip: "right-idle", frame: 0, elapsedMs: 0 },
@@ -491,8 +506,8 @@ export class Match {
 				? (this.online?.nameOf(this.online?.primaryRemoteId ?? "") ?? "")
 				: (this.offlineFoe?.fighter.name ?? ""),
 			foeHp: this.onlineMode
-				? (this.online?.remoteHp ?? 100)
-				: (this.offlineFoe?.fighter.hp ?? 100),
+				? (this.online?.remoteHp ?? MAX_HP)
+				: (this.offlineFoe?.fighter.hp ?? MAX_HP),
 			fighterCount:
 				1 +
 				this.remotes.size +
@@ -509,7 +524,7 @@ export class Match {
 		this.lastHudStance = state.stance;
 		this.lastHudName = state.name;
 		if (!force && !stanceChanged && !nameChanged) {
-			if (this.elapsed - this.lastHudSentAt < 50) return;
+			if (this.elapsed - this.lastHudSentAt < HUD_MIN_INTERVAL_MS) return;
 		}
 		this.lastHudSentAt = this.elapsed;
 		EventBus.emit(HUD_EVENTS.state, state);
@@ -672,7 +687,7 @@ export class Match {
 					// started yanking fighters toward a point no client could have
 					// predicted, and the first frame of that is tens of pixels. Counting
 					// it as jitter would report a working ultimate as broken physics.
-					this.diagnostics.markTeleport(4);
+					this.diagnostics.markTeleport(TELEPORT_GRACE_FRAMES);
 				},
 				onMatch: (status, standings) => {
 					// The clock, the frags and the standings all live in this event;
@@ -746,7 +761,7 @@ export class Match {
 									HUD_EVENTS.status,
 									"Your room link is in the address bar — send it to play together.",
 								);
-							}, 4000);
+							}, SHARE_HINT_DELAY_MS);
 						}
 					}
 					console.log(`[ONLINE] room ${roomId}`);
@@ -825,8 +840,8 @@ export class Match {
 			trainingMode: this.trainingMode,
 			playerHP: this.local.fighter.hp,
 			enemyHP: this.onlineMode
-				? (this.online?.remoteHp ?? 100)
-				: (this.offlineFoe?.fighter.hp ?? 100),
+				? (this.online?.remoteHp ?? MAX_HP)
+				: (this.offlineFoe?.fighter.hp ?? MAX_HP),
 			playerState: this.localBrain?.getCurrentState(),
 			enemyState: this.remoteBrain?.getCurrentState(),
 			playerPhys: this.local.body,
@@ -1012,7 +1027,7 @@ export class Match {
 	// =========================================================
 
 	update(dtMs: number) {
-		const dtSec = Math.min(dtMs / 1000, 0.05);
+		const dtSec = Math.min(dtMs / MS_PER_SECOND, MAX_FRAME_DT_S);
 		this.elapsed += dtMs;
 
 		// Before anything reads an aim or an intent. The gamepad has no events, so
@@ -1509,7 +1524,7 @@ export class Match {
 						session.remoteHp,
 					),
 					this.elapsed,
-					dtSec * 1000,
+					dtSec * MS_PER_SECOND,
 				);
 				this.localIntent = intentFromAI(output);
 				this.aimAngle = output.aimAngle;
@@ -1601,7 +1616,7 @@ export class Match {
 	}
 
 	private gatherOfflineIntents(dtSec: number, foe: FighterEntity) {
-		const dtMs = dtSec * 1000;
+		const dtMs = dtSec * MS_PER_SECOND;
 
 		if (this.localBrain) {
 			const output = this.localBrain.decide(
@@ -1740,7 +1755,7 @@ export class Match {
 
 	private tickReset(dtSec: number) {
 		if (this.resetAt < 0) return;
-		this.resetAt -= dtSec * 1000;
+		this.resetAt -= dtSec * MS_PER_SECOND;
 		if (this.resetAt > 0) return;
 		this.resetFight();
 		console.log("=== FIGHT RESET ===");
@@ -1755,7 +1770,7 @@ export class Match {
 		this.resetAt = -1;
 
 		this.local.body = createPlayerState(START_PLAYER_X, START_PLAYER_Y, 1);
-		this.local.fighter.hp = 100;
+		this.local.fighter.hp = MAX_HP;
 		this.localIntent = { ...NO_INTENT };
 		this.remoteIntent = { ...NO_INTENT };
 
@@ -1765,7 +1780,7 @@ export class Match {
 				START_ENEMY_Y,
 				-1,
 			);
-			this.offlineFoe.fighter.hp = 100;
+			this.offlineFoe.fighter.hp = MAX_HP;
 		}
 
 		if (this.localBrain)

@@ -24,7 +24,7 @@ export const ROOM_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
  * alone would leave every guest on `http://192.168.x.x:8080` unable to start a
  * match. `getRandomValues` has no such restriction.
  */
-export function newRoomId(): string {
+function newRoomId(): string {
 	if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
 		try {
 			return crypto.randomUUID();
@@ -33,6 +33,9 @@ export function newRoomId(): string {
 		}
 	}
 
+	// RFC 4122: sixteen random bytes with the version nibble set to 4 and the
+	// variant to 10xx, hyphenated 8-4-4-4-12. Every number below is the spec,
+	// not a tuning value — the rule is disabled for this file in biome.json.
 	const bytes = new Uint8Array(16);
 	if (typeof crypto !== "undefined" && crypto.getRandomValues) {
 		crypto.getRandomValues(bytes);
@@ -41,8 +44,6 @@ export function newRoomId(): string {
 			bytes[i] = Math.floor(Math.random() * 256);
 		}
 	}
-	// Version 4, variant 1 — cosmetic here, but a well-formed uuid is easier to
-	// recognise in a URL as "the bit you share".
 	bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x40;
 	bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80;
 

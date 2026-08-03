@@ -50,7 +50,7 @@ export type DummyBehaviour =
  * point: the simulation does its own press-edge detection, so a rhythm is
  * defined as much by its gaps as by its presses.
  */
-export type DummyHold = Partial<
+type DummyHold = Partial<
 	Pick<
 		AIOutput,
 		"moveLeft" | "moveRight" | "jump" | "attack" | "block" | "uppercut"
@@ -85,7 +85,7 @@ export interface DummyScript {
  * so proving that getting behind a guard beats it requires a guard that is
  * deliberately pointed the wrong way.
  */
-export type DummyFacing = "foe" | "away" | "left" | "right";
+type DummyFacing = "foe" | "away" | "left" | "right";
 
 /** Behaviour timings. Every behaviour that has a clock reads one of these. */
 export interface TrainingTiming {
@@ -104,12 +104,12 @@ export interface TrainingTiming {
 	recordMaxMs: number;
 }
 
-export interface TrainingSpawnPoint {
+interface TrainingSpawnPoint {
 	x: number;
 	y: number;
 }
 
-export interface TrainingSpawn {
+interface TrainingSpawn {
 	player: TrainingSpawnPoint;
 	dummy: TrainingSpawnPoint;
 }
@@ -231,7 +231,7 @@ export interface TrainingConfigMsg {
  *   is comfortably past `BACKSTAB_MIN_SEPARATION_PX`, so a dummy facing away
  *   can actually be backstabbed rather than being too close to count.
  */
-export const DEFAULT_TRAINING_SPAWN: TrainingSpawn = {
+const DEFAULT_TRAINING_SPAWN: TrainingSpawn = {
 	player: { x: 360, y: 480 },
 	dummy: { x: 420, y: 480 },
 };

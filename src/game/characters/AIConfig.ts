@@ -6,41 +6,34 @@ export interface AIConfig {
 	dodgeChance: number;
 }
 
-export const DEFAULT_AI_CONFIG: AIConfig = {
-	skillLevel: 5,
-	reactionTime: 150,
-	accuracy: 0.7,
-	aggressiveness: 0.5,
-	dodgeChance: 0.5,
-};
-
-export const difficultyPresets: Record<string, AIConfig> = {
-	easy: {
-		skillLevel: 2,
-		reactionTime: 400,
-		accuracy: 0.2,
-		aggressiveness: 0.2,
-		dodgeChance: 0.1,
-	},
-	medium: {
-		skillLevel: 5,
-		reactionTime: 200,
-		accuracy: 0.5,
-		aggressiveness: 0.5,
-		dodgeChance: 0.4,
-	},
-	hard: {
-		skillLevel: 8,
-		reactionTime: 80,
-		accuracy: 0.8,
-		aggressiveness: 0.8,
-		dodgeChance: 0.7,
-	},
-	unfair: {
-		skillLevel: 10,
-		reactionTime: 30,
-		accuracy: 1.0,
-		aggressiveness: 1.0,
-		dodgeChance: 1.0,
-	},
-};
+/**
+ * A randomised bot personality, so a solo match is not the same fight twice.
+ *
+ * One implementation shared by the server and a local client's AI-vs-AI mode:
+ * the two used to roll their own copies of the same five ranges, and a tune
+ * that moved one but not the other made online and offline bots play
+ * differently.
+ *
+ * Each roll is `min + random * span`. Skill skews the dice rather than being a
+ * fixed draw, so the distribution leans on the weaker side on purpose.
+ */
+const SKILL_MIN = 4;
+const SKILL_SPAN = 4;
+const REACTION_MIN_MS = 150;
+const REACTION_SPAN_MS = 250;
+const ACCURACY_MIN = 0.45;
+const ACCURACY_SPAN = 0.4;
+const AGGRESSION_MIN = 0.35;
+const AGGRESSION_SPAN = 0.45;
+const DODGE_MIN = 0.2;
+const DODGE_SPAN = 0.4;
+export function randomBotConfig(): AIConfig {
+	return {
+		skillLevel: SKILL_MIN + Math.floor(Math.random() * SKILL_SPAN),
+		reactionTime:
+			REACTION_MIN_MS + Math.floor(Math.random() * REACTION_SPAN_MS),
+		accuracy: ACCURACY_MIN + Math.random() * ACCURACY_SPAN,
+		aggressiveness: AGGRESSION_MIN + Math.random() * AGGRESSION_SPAN,
+		dodgeChance: DODGE_MIN + Math.random() * DODGE_SPAN,
+	};
+}
