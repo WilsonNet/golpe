@@ -5,13 +5,17 @@ import {
 	type Rect,
 	type World,
 } from "../simulation/Arena.js";
-import {
-	isComboSlash,
-	type MeleeAction,
-	type MeleePhase,
-} from "../simulation/Melee.js";
-import { JUMP_HEIGHT_PX } from "../simulation/Physics.js";
+import { BULLET_SPEED, JUMP_HEIGHT_PX } from "../simulation/Physics.js";
 import type { AIConfig } from "./AIConfig.js";
+import { JumpBrain } from "./JumpBrain.js";
+import {
+	MeleeBrain,
+	STRIKE_RANGE_PX,
+	SWORD_DISENGAGE_PX,
+} from "./MeleeBrain.js";
+import { TeamBrain } from "./TeamBrain.js";
+import type { AIInput, AIOutput } from "./types.js";
+import { UltimateBrain } from "./UltimateBrain.js";
 
 export enum AIState {
 	IDLE = "IDLE",
@@ -31,95 +35,25 @@ export enum AIState {
 	ZONE = "ZONE",
 }
 
-export interface AIInput {
-	playerX: number;
-	playerY: number;
-	selfX: number;
-	selfY: number;
-	distanceToPlayer: number;
-	playerFacingDirection: number;
-	touchingDown: boolean;
-	touchingLeft: boolean;
-	touchingRight: boolean;
-	hasLineOfSight: boolean;
-	selfHP: number;
-	enemyHP: number;
-	/** What the opponent is doing with their sword, for reads and punishes. */
-	enemyAction: MeleeAction;
-	enemyPhase: MeleePhase;
-	enemyBlocking: boolean;
-	enemyStunned: boolean;
-	/** Own melee state, so the brain does not fight its own animations. */
-	selfAction: MeleeAction;
-	selfStunned: boolean;
-	selfMassiveReady: boolean;
-}
-
-export interface AIOutput {
-	moveLeft: boolean;
-	moveRight: boolean;
-	jump: boolean;
-	/** Slash, or release a charged Massive Strike. */
-	attack: boolean;
-	block: boolean;
-	uppercut: boolean;
-	/** Absolute stance request, never a toggle — see specs/netcode.md. */
-	swordStance: boolean;
-	/** -1/1 to face that way, 0 to let movement decide. */
-	face: number;
-	/** Dash impulse: -1, 1, or 0. */
-	dash: number;
-	aimAngle: number;
-	evadeActive: boolean;
-}
-
-/**
- * How long the AI holds the jump button once it decides to jump.
- *
- * Jump height is analogue — releasing early cuts the arc — so an AI that
- * emits `jump` on scattered single frames can only ever produce a minimum-height
- * hop and can never reach the upper ledges. Holding commits to a real jump.
- */
-const JUMP_HOLD_MS = 240;
-/**
- * Forced release afterwards. `tickPlayer` only starts a jump on a press *edge*,
- * so without a gap the AI would hold the button forever and never jump again.
- */
-const JUMP_RELEASE_MS = 60;
-
-// ---------------------------------------------------------------------------
-// Sword fighting
-//
-// Melee inputs are edge-triggered and analogue, exactly like the jump, so the
-// brain cannot simply hold a button and hope. Every technique below is a short
-// scripted rhythm of presses and releases — which is also what a human does,
-// since the butterfly is a rhythm before it is anything else.
-// ---------------------------------------------------------------------------
-
-/** Draw the sword inside this range; holster it beyond `SWORD_DISENGAGE_PX`. */
-const SWORD_ENGAGE_PX = 210;
-/**
- * Hysteresis on the stance decision. Without a gap, a fighter hovering at the
- * boundary would switch weapons every few frames — and since a stance switch
- * cancels a slash, it would cancel its own attacks forever.
- */
-const SWORD_DISENGAGE_PX = 280;
-/** Close enough for a slash to reach: body width plus the slash's 42px. */
-const STRIKE_RANGE_PX = 70;
-/** The uppercut's shorter reach. It has to be walked into. */
-const UPPERCUT_RANGE_PX = 58;
-/** Near enough to be worth charging at, far enough not to be punished for it. */
-const CHARGE_RANGE_PX = 150;
-
 /** Zoning aims to get at least this far away — comfortably outside sword range. */
 const ZONE_RANGE_PX = 330;
 /** How long a zoning phase lasts before the bot re-evaluates. */
 const ZONE_DURATION_MS = 2600;
 /** Minimum gap between zoning phases, so a bot cannot simply never engage. */
 const ZONE_COOLDOWN_MS = 2200;
+/** The nearest ledge that is above the fighter and reachable with a jump. */
+const PERCH_MIN_RISE_PX = 30;
+/**
+ * The perch cap: how high above the fighter a ledge may be and still be worth
+ * jumping for. A single jump reaches `JUMP_HEIGHT_PX`; a double jump reaches
+ * roughly 1.8× that, so the cap sits between the two and the brain arms the
+ * double jump exactly when the perch needs it. This is what lets a zoning bot
+ * actually use the upper ledges instead of hopping under them.
+ */
+const PERCH_MAX_RISE_PX = JUMP_HEIGHT_PX * 1.7;
 
 /**
- * The nearest ledge that is above the fighter and within a single jump.
+ * The nearest ledge that is above the fighter and within a jump or two.
  *
  * Zoning without a destination just means jumping on the spot: a fighter has to
  * be standing under a ledge for a jump to reach one, and left to chance that
@@ -134,7 +68,7 @@ function perchAbove(selfX: number, selfY: number, world: World): Rect | null {
 		const standingY = p.y - PLAYER_HEIGHT;
 		const rise = selfY - standingY;
 		// Must be genuinely above, and reachable from here.
-		if (rise < 30 || rise > JUMP_HEIGHT_PX * 0.9) continue;
+		if (rise < PERCH_MIN_RISE_PX || rise > PERCH_MAX_RISE_PX) continue;
 		// Wide enough to land on.
 		if (p.w < PLAYER_WIDTH) continue;
 
@@ -147,76 +81,17 @@ function perchAbove(selfX: number, selfY: number, world: World): Rect | null {
 	return best;
 }
 
-/** One phase of a scripted melee rhythm: which buttons, for how long. */
-interface MeleeBeat {
-	ms: number;
-	attack?: boolean;
-	block?: boolean;
-	uppercut?: boolean;
-}
-
 /**
- * The butterfly: slash, cancel it into a block, release, repeat.
+ * One brain, four modules.
  *
- * The gap matters as much as the presses. A slash needs a press *edge*, so
- * without releasing the attack button between cycles the fighter would swing
- * once and then stand there holding it — which is exactly the bug that made an
- * earlier AI look like it was attacking while dealing no damage.
- */
-const BUTTERFLY: MeleeBeat[] = [
-	{ ms: 55, attack: true },
-	{ ms: 95, block: true },
-	{ ms: 40 },
-];
-
-/** A plain committed swing, for when there is no need to be safe. */
-const LONE_SLASH: MeleeBeat[] = [{ ms: 55, attack: true }, { ms: 90 }];
-
-/**
- * The ground chain: three presses, spaced to land the moment each link is
- * chainable.
+ * The brain owns the state machine and the navigation; each weapon and each
+ * team concern is a module with one job, and a future weapon is a new module
+ * writing the same `AIOutput` instead of a new branch in a growing class. The
+ * modules share no state between them except through this coordinator, which
+ * is also what keeps the whole thing a single `decide(input) => output` for the
+ * server and the training dummy.
  *
- * The gaps are the technique. A link becomes available when the previous one
- * enters recovery — 160ms after it started — so a press at 170ms catches the
- * window with a frame to spare, and a press any earlier is simply swallowed by
- * the swing already running. Mashing does not produce a combo; this rhythm does,
- * which is the same thing a human has to learn.
- */
-const COMBO: MeleeBeat[] = [
-	{ ms: 55, attack: true },
-	{ ms: 115 },
-	{ ms: 55, attack: true },
-	{ ms: 115 },
-	{ ms: 55, attack: true },
-	{ ms: 120 },
-];
-
-const UPPERCUT_BEATS: MeleeBeat[] = [{ ms: 60, uppercut: true }, { ms: 120 }];
-
-/**
- * Charge, then let go. The release is what fires the Massive Strike, and it has
- * to be long enough to register as a release before the next press.
- */
-const CHARGE_BEATS: MeleeBeat[] = [{ ms: 470, attack: true }, { ms: 90 }];
-
-/** Fire an already-armed Massive: one clean press. */
-const RELEASE_MASSIVE: MeleeBeat[] = [{ ms: 60, attack: true }, { ms: 80 }];
-
-const GUARD: MeleeBeat[] = [{ ms: 260, block: true }];
-
-/**
- * Sit behind the guard rather than reading a specific swing.
- *
- * A purely reactive fighter only ever blocks with a *fresh* guard, which is
- * always inside the parry window — so it parries everything and never simply
- * blocks. Turtling is the other half of the defensive game, and it is what the
- * uppercut exists to punish: without anyone ever holding a guard, the answer to
- * a guard has nothing to answer.
- */
-const TURTLE: MeleeBeat[] = [{ ms: 700, block: true }];
-
-/**
- * Named export matters: this class is imported by the server too, and a
+ * **Named export matters**: this class is imported by the server too, and a
  * default export resolves to the module namespace object rather than the class
  * under the server's ESM/CJS interop. Everything shared with `server/` must be
  * a named export.
@@ -230,20 +105,16 @@ export class EnemyBrain {
 	private stuckCheckX = 0;
 	private stuckCheckY = 0;
 	private stuckCount = 0;
-	private jumpHoldTimer = 0;
-	private jumpReleaseTimer = 0;
-	private beats: MeleeBeat[] | null = null;
-	private beatIndex = 0;
-	private beatElapsed = 0;
-	/** Loops left on a repeating rhythm (the butterfly). */
-	private beatLoops = 0;
-	private swordDrawn = true;
-	/** Whether this particular incoming swing will be guarded. Rolled once. */
-	private guardDecision: boolean | null = null;
-	/** Whether this particular stun will be punished with a charge. Rolled once. */
-	private stunPunishDecision: boolean | null = null;
-	/** ms until this fighter is willing to break away and zone again. */
 	private zoneCooldown = 0;
+
+	/** The sword game: techniques, rhythms, stance hysteresis. */
+	private readonly melee = new MeleeBrain();
+	/** The jump button: committed presses and the scripted double jump. */
+	private readonly jump = new JumpBrain();
+	/** The black hole: when to aim, where to throw, when to release. */
+	private readonly ultimate = new UltimateBrain();
+	/** Team roles, spacing and the cover guard. */
+	private readonly team: TeamBrain;
 
 	/**
 	 * The geometry this brain reasons about — ledges to perch on, cover to use.
@@ -255,6 +126,7 @@ export class EnemyBrain {
 	constructor(config: AIConfig, world: World = DEFAULT_WORLD) {
 		this.config = config;
 		this.world = world;
+		this.team = new TeamBrain(world);
 	}
 
 	getConfig(): AIConfig {
@@ -273,44 +145,47 @@ export class EnemyBrain {
 		this.stuckCheckX = 0;
 		this.stuckCheckY = 0;
 		this.stuckCount = 0;
-		this.jumpHoldTimer = 0;
-		this.jumpReleaseTimer = 0;
-		this.beats = null;
-		this.beatIndex = 0;
-		this.beatElapsed = 0;
-		this.beatLoops = 0;
-		this.swordDrawn = true;
-		this.guardDecision = null;
-		this.stunPunishDecision = null;
 		this.zoneCooldown = 0;
+		this.melee.reset();
+		this.jump.reset();
+		this.ultimate.reset();
+		this.team.reset();
 	}
 
 	getCurrentState(): AIState {
 		return this.state;
 	}
 
-	/**
-	 * Convert a per-frame "I want to jump" impulse into a held-then-released
-	 * button press that the physics can read as a real jump.
-	 */
-	private resolveJump(wantsJump: boolean, delta: number): boolean {
-		if (this.jumpHoldTimer > 0) {
-			this.jumpHoldTimer -= delta;
-			if (this.jumpHoldTimer <= 0) this.jumpReleaseTimer = JUMP_RELEASE_MS;
-			return true;
-		}
-		if (this.jumpReleaseTimer > 0) {
-			this.jumpReleaseTimer -= delta;
-			return false;
-		}
-		if (wantsJump) {
-			this.jumpHoldTimer = JUMP_HOLD_MS;
-			return true;
-		}
-		return false;
+	/** The last perception this brain reasoned over, for the diagnostic. */
+	private lastInput: AIInput | null = null;
+
+	/** What this brain is doing right now, for the diagnostic. */
+	getInsight() {
+		const i = this.lastInput;
+		const minFoeDistRaw =
+			i?.foes.reduce(
+				(m, f) => Math.min(m, f.distance),
+				Number.POSITIVE_INFINITY,
+			) ?? Number.POSITIVE_INFINITY;
+		return {
+			state: this.state,
+			...this.team.insight,
+			ultimate: this.ultimate.insight,
+			// The perception itself, so a probe can tell "the brain decided not
+			// to cast" from "the brain never saw a target".
+			foes: i?.foes.length ?? 0,
+			minFoeDist: Number.isFinite(minFoeDistRaw)
+				? Math.round(minFoeDistRaw)
+				: null,
+			allies: i?.allies.length ?? 0,
+			selfUlt: i?.selfUltCharge ?? 0,
+			openFields: i?.fields.length ?? 0,
+			stunned: i?.selfStunned ?? false,
+		};
 	}
 
 	decide(input: AIInput, _time: number, delta: number): AIOutput {
+		this.lastInput = input;
 		this.decisionCooldown -= delta;
 		this.stateTimer += delta;
 		this.zoneCooldown = Math.max(0, this.zoneCooldown - delta);
@@ -354,280 +229,102 @@ export class EnemyBrain {
 		}
 
 		const output = this.executeState(input, isLowHP, isEnemyLow);
-		this.decideSword(input, output, delta);
-		output.jump = this.resolveJump(output.jump, delta);
+
+		// ---- the weapon modules ----
+		//
+		// Order is the whole design: the state machine decides where to stand,
+		// the melee module decides what the sword does from there, the team module
+		// reshapes movement around the side, and the ultimate module asks for the
+		// hole last — each layer may override the last, exactly like a human
+		// reconsidering.
+		const role = this.team.roleFor(input);
+		this.melee.decide(input, output, delta, {
+			role,
+			skill: this.config.skillLevel,
+			aggressiveness: this.config.aggressiveness,
+		});
+		this.team.decide(input, output, this.melee, role, delta);
+		this.ultimate.decide(input, delta, role);
+		output.ultimate = this.ultimate.hold;
+		if (this.ultimate.aimOverride !== null) {
+			output.aimAngle = this.ultimate.aimOverride;
+		} else {
+			output.aimAngle = this.aimAt(input);
+		}
+
+		// ---- the jump ----
+		output.jump = this.jump.resolve(
+			input,
+			output.jump,
+			this.wantsHeight(input),
+			delta,
+		);
 		return output;
 	}
 
 	// -------------------------------------------------------------------------
-	// Sword fighting
+	// Aiming
 	// -------------------------------------------------------------------------
 
 	/**
-	 * Choose and play a melee rhythm, overriding the ranged attack decision.
+	 * The angle to point the gun: lead the target, then miss by accuracy.
 	 *
-	 * Runs after `executeState` because movement and positioning come first: the
-	 * sword game is decided by where you are standing, and a brain that picked
-	 * its attack before its position would swing at nothing.
+	 * A bullet takes `distance / BULLET_SPEED` to arrive, and in that time the
+	 * target has moved — a fighter strafing at walk speed is ~30px off by the
+	 * time a shot from 80px... a shot from 300px arrives 0.5s later and the
+	 * target has moved ~110px. A brain that aimed at where the foe *was* would
+	 * be training the ranged game to miss, so the aim is at where it will be.
 	 */
-	private decideSword(input: AIInput, output: AIOutput, delta: number) {
-		const distance = input.distanceToPlayer;
-
-		// Hysteresis, so a fighter at the boundary does not switch weapons every
-		// frame — a stance switch cancels a slash, so flicker would cancel every
-		// attack it ever started.
-		if (this.swordDrawn && distance > SWORD_DISENGAGE_PX)
-			this.swordDrawn = false;
-		else if (!this.swordDrawn && distance < SWORD_ENGAGE_PX)
-			this.swordDrawn = true;
-
-		output.swordStance = this.swordDrawn;
-
-		if (!this.swordDrawn) {
-			this.beats = null;
-			return;
-		}
-
-		// Stunned: nothing to decide. The simulation discards the input anyway, but
-		// dropping the rhythm here means the fighter does not resume a half-played
-		// butterfly the instant it recovers.
-		if (input.selfStunned) {
-			this.beats = null;
-			output.attack = false;
-			return;
-		}
-
-		// The gun's fire button is the sword's swing button, so a ranged decision
-		// left standing here would mash the sword. Melee decides from now on.
-		output.attack = false;
-
-		// Reactions interrupt; pressure only fills the gaps.
-		//
-		// A rhythm once started used to run to completion, which meant a fighter
-		// mid-butterfly was deaf for up to ~950ms — long enough to miss every
-		// swing aimed at it. Measured: 10 guards raised, 0 hits ever blocked. A
-		// block that cannot be raised in time is not a mechanic.
-		const reaction = this.reactiveTechnique(input, distance);
-		// Never interrupt a turtle with a reactive guard. Restarting the block
-		// would reset its timer back inside the parry window, so a fighter trying
-		// to hold a guard would silently parry instead — and the uppercut would
-		// again have nothing to punish.
-		const turtling = this.beats === TURTLE && reaction === GUARD;
-		if (reaction && !turtling) {
-			// Compared by identity, so re-reading the same threat continues the
-			// rhythm instead of restarting it from the first beat every tick.
-			if (this.beats !== reaction) this.startBeats(reaction);
-		} else if (!this.beats) {
-			this.startBeats(this.pressureTechnique(input, distance));
-		}
-
-		this.playBeats(output, delta);
+	private aimAt(input: AIInput): number {
+		const timeOfFlight = input.distanceToPlayer / BULLET_SPEED;
+		const px = input.playerX + input.enemyVX * timeOfFlight;
+		const py = input.playerY + input.enemyVY * timeOfFlight;
+		const accuracyFactor = this.config.accuracy * (this.config.skillLevel / 10);
+		const aimJitter = (1 - accuracyFactor) * 0.5;
+		return (
+			Math.atan2(py - input.selfY, px - input.selfX) +
+			(Math.random() - 0.5) * aimJitter
+		);
 	}
+
+	// -------------------------------------------------------------------------
+	// Height: the double jump
+	// -------------------------------------------------------------------------
 
 	/**
-	 * Techniques chosen in answer to what the opponent is doing *right now*.
+	 * "This jump is for height", per state.
 	 *
-	 * Re-evaluated every tick and allowed to interrupt whatever is playing,
-	 * because every one of these has a window measured in tens of milliseconds.
-	 * Returns null when there is nothing to react to.
+	 * The double jump is a resource with a cost (it cannot be used again until
+	 * landing), so the brain only asks for it when the situation actually wants
+	 * it: closing on an enemy that holds the high ground, climbing to a ledge a
+	 * single jump cannot reach, or fleeing with no health to spare.
 	 */
-	private reactiveTechnique(
-		input: AIInput,
-		distance: number,
-	): MeleeBeat[] | null {
-		// The opponent has committed to something long and uncancellable. This is
-		// the punish window the heavy moves exist to create.
-		const punishable =
-			input.enemyPhase === "recovery" &&
-			(input.enemyAction === "massive" ||
-				input.enemyAction === "uppercut" ||
-				// The chain's finisher recovers for 420ms and cannot be cancelled out
-				// of, so a whiffed one is the same gift a whiffed Massive is.
-				input.enemyAction === "slash3");
-		if (punishable && distance < STRIKE_RANGE_PX) {
-			return LONE_SLASH;
-		}
-
-		// A swing is coming. Blocking it early enough guard-breaks them; blocking
-		// late at least survives it.
-		//
-		// This outranks releasing an armed Massive on purpose. A Massive needs
-		// 190ms of startup against a slash that connects in 75, so answering a
-		// swing with one loses the exchange *and* the charge.
-		const incoming =
-			// Any link of the chain, not just its opener: reading only the first
-			// swing would leave a bot standing still through the two that follow it.
-			isComboSlash(input.enemyAction) &&
-			(input.enemyPhase === "startup" || input.enemyPhase === "active") &&
-			distance < STRIKE_RANGE_PX + 30;
-		// A hurt fighter answers a read by covering up rather than by timing a
-		// single parry. That is also the only way a guard ever gets held past the
-		// parry window in an AI match — a purely reactive guard is always fresh,
-		// so it always parries and a plain block never happens at all.
-		if (this.willGuard(incoming)) {
-			return input.selfHP <= 60 ? TURTLE : GUARD;
-		}
-
-		// They are stunned and cannot answer — the one safe moment to spend 190ms
-		// of startup. Rolled once per stun rather than held as a standing rule:
-		// charging on every single stun produced a degenerate match that was
-		// nothing but stun → charge → Massive → stun, with 6-9 Massives per fight.
-		// Since a heavy move forbids blocking for its whole 720ms, that left both
-		// fighters unable to guard for most of the match, and not one slash was
-		// ever blocked or parried.
-		// Already in sword range with the target reeling: this is what the chain is
-		// *for*, and it beats charging from here. A Massive from inside strike range
-		// spends 190ms of startup to deal 24; the chain spends 75 to open and deals
-		// 25 with a knockdown at the end of it.
-		//
-		// Ordering this above the charge is also what keeps the match a sword fight:
-		// longer hitstun made the stun-punish branch fire far more often, and every
-		// one of those became a Massive — 11 Massives to 10 slashes in a measured
-		// match, with one hit landing all game.
-		if (
-			input.enemyStunned &&
-			input.touchingDown &&
-			distance < STRIKE_RANGE_PX &&
-			!input.selfMassiveReady
-		) {
-			return COMBO;
-		}
-
-		if (this.willPunishStun(input.enemyStunned) && distance < CHARGE_RANGE_PX) {
-			return input.selfMassiveReady ? RELEASE_MASSIVE : CHARGE_BEATS;
-		}
-
-		// A charge that is already paid for. Spend it when there is no swing to
-		// answer and the target is in reach.
-		if (input.selfMassiveReady && distance < STRIKE_RANGE_PX + 20) {
-			return RELEASE_MASSIVE;
-		}
-
-		// They are turtling. A block only covers the front and cannot stop an
-		// uppercut, so there are two answers; take the one the range allows.
-		//
-		// The window is generous on purpose: once fighters started using the whole
-		// arena, close-range guard reads became rare enough that the uppercut —
-		// the designed answer to a guard — stopped happening at all across whole
-		// matches. A mechanic that never fires is untested.
-		if (input.enemyBlocking && distance < UPPERCUT_RANGE_PX + 25) {
-			return UPPERCUT_BEATS;
-		}
-
-		return null;
-	}
-
-	/** Roll once per stun, so a long stun is one decision and not fifty. */
-	private willPunishStun(stunned: boolean): boolean {
-		if (!stunned) {
-			this.stunPunishDecision = null;
-			return false;
-		}
-		if (this.stunPunishDecision === null) {
-			this.stunPunishDecision =
-				Math.random() < 0.3 + 0.4 * this.config.aggressiveness;
-		}
-		return this.stunPunishDecision;
-	}
-
-	/**
-	 * Roll once per threat, not once per tick.
-	 *
-	 * Reading a swing is a single decision a fighter either makes or does not.
-	 * Re-rolling every frame would turn any non-zero skill into a certainty
-	 * within a few frames, so every bot would block everything.
-	 */
-	private willGuard(incoming: boolean): boolean {
-		if (!incoming) {
-			this.guardDecision = null;
-			return false;
-		}
-		if (this.guardDecision === null) {
-			this.guardDecision = Math.random() < this.config.skillLevel / 10;
-		}
-		return this.guardDecision;
-	}
-
-	/** What to do when the opponent is not offering anything to answer. */
-	private pressureTechnique(
-		input: AIInput,
-		distance: number,
-	): MeleeBeat[] | null {
-		const skill = this.config.skillLevel / 10;
-
-		if (distance < STRIKE_RANGE_PX) {
-			// Hurt fighters cover up. This is the only way a guard gets held past
-			// the parry window, so it is also the only thing that makes the
-			// uppercut's whole purpose reachable.
-			const hurt = input.selfHP <= 60;
-			if (hurt && Math.random() < 0.4 - 0.2 * skill) return TURTLE;
-
-			// Close quarters. The butterfly is the default because it is safe *and*
-			// it hurts; the ground chain is what a reeling opponent is *for*, and a
-			// lone slash is the greedy option when there is no time for either.
-			//
-			// The chain needs the floor — `canChain` refuses in the air — so a bot
-			// that started one mid-jump would throw one slash and then press twice
-			// into nothing.
-			if (input.touchingDown && Math.random() < 0.35 + 0.2 * skill) {
-				return COMBO;
+	private wantsHeight(input: AIInput): boolean {
+		switch (this.state) {
+			case AIState.CHASE:
+			case AIState.ATTACK:
+				// The foe holds the high ground. A blind chase is *not* enough: a
+				// double jump every time the line of sight broke measured the bots
+				// airborne 80% of a duel, hopping through it instead of walking.
+				return input.playerY < input.selfY - 40;
+			case AIState.ZONE: {
+				const perch = perchAbove(input.selfX, input.selfY, this.world);
+				if (!perch) return false;
+				// Only the ledges a single jump cannot reach need the second press.
+				const rise = input.selfY - (perch.y - PLAYER_HEIGHT);
+				return rise > JUMP_HEIGHT_PX * 0.95;
 			}
-			const greedy = input.enemyAction === "none" && Math.random() < 0.25;
-			return greedy ? LONE_SLASH : BUTTERFLY;
+			case AIState.EVADE:
+			case AIState.RETREAT:
+				return input.selfHP <= 40;
+			default:
+				return false;
 		}
-
-		// Out of reach but close enough to threaten: charge, and let the walk
-		// toward them arrive at the same time the Massive does. Only when they are
-		// not already winding up something of their own.
-		if (
-			distance < CHARGE_RANGE_PX &&
-			input.enemyAction === "none" &&
-			Math.random() < 0.25 * skill
-		) {
-			return CHARGE_BEATS;
-		}
-
-		return null;
 	}
 
-	private startBeats(beats: MeleeBeat[] | null) {
-		this.beats = beats;
-		this.beatIndex = 0;
-		this.beatElapsed = 0;
-		// Only the butterfly repeats; everything else is a single commitment.
-		this.beatLoops =
-			beats === BUTTERFLY ? 2 + Math.floor(Math.random() * 3) : 0;
-	}
-
-	/** Emit the current beat's buttons and advance the rhythm. */
-	private playBeats(output: AIOutput, delta: number) {
-		if (!this.beats) return;
-
-		const beat = this.beats[this.beatIndex];
-		// A rhythm can be replaced mid-play by a reaction, so the index is not
-		// guaranteed to still be in range.
-		if (!beat) {
-			this.beats = null;
-			return;
-		}
-		output.attack = beat.attack ?? false;
-		output.block = beat.block ?? false;
-		output.uppercut = beat.uppercut ?? false;
-
-		this.beatElapsed += delta;
-		if (this.beatElapsed < beat.ms) return;
-
-		this.beatElapsed = 0;
-		this.beatIndex++;
-		if (this.beatIndex < this.beats.length) return;
-
-		if (this.beatLoops > 0) {
-			this.beatLoops--;
-			this.beatIndex = 0;
-			return;
-		}
-		this.beats = null;
-	}
+	// -------------------------------------------------------------------------
+	// The state machine
+	// -------------------------------------------------------------------------
 
 	private trackStuck(input: AIInput, delta: number) {
 		this.stuckTimer += delta;
@@ -720,12 +417,6 @@ export class EnemyBrain {
 		isLowHP: boolean,
 		isEnemyLow: boolean,
 	): AIOutput {
-		const accuracyFactor = this.config.accuracy * (this.config.skillLevel / 10);
-		const aimJitter = (1 - accuracyFactor) * 0.5;
-		const aimAngle =
-			Math.atan2(input.playerY - input.selfY, input.playerX - input.selfX) +
-			(Math.random() - 0.5) * aimJitter;
-
 		const output: AIOutput = {
 			moveLeft: false,
 			moveRight: false,
@@ -739,8 +430,9 @@ export class EnemyBrain {
 			// and being backstabbed.
 			face: input.playerX >= input.selfX ? 1 : -1,
 			dash: 0,
-			aimAngle,
+			aimAngle: 0,
 			evadeActive: false,
+			ultimate: false,
 		};
 
 		switch (this.state) {
@@ -755,8 +447,16 @@ export class EnemyBrain {
 				}
 				if (isLowHP && input.touchingDown && Math.random() < 0.7) {
 					output.jump = true;
-				} else if (!input.hasLineOfSight && input.touchingDown) {
-					output.jump = true;
+				} else if (
+					// Climbing blind is only worth it against a wall or up to a foe
+					// that actually holds the high ground. Hopping every grounded frame
+					// while the line of sight is broken measured the bots airborne for
+					// most of a duel, jumping in place instead of walking around cover.
+					(!input.hasLineOfSight &&
+						(input.touchingLeft || input.touchingRight)) ||
+					input.playerY < input.selfY - 60
+				) {
+					if (input.touchingDown) output.jump = true;
 				} else if (this.isStuck() && input.touchingDown) {
 					output.jump = Math.random() < 0.6;
 				} else if (
@@ -800,13 +500,13 @@ export class EnemyBrain {
 					// Walk in until a swing can actually reach. The sword is the
 					// primary weapon, so "in position" means sword range, not the
 					// old ranged-duel spacing.
-					const wanted = this.swordDrawn ? STRIKE_RANGE_PX - 12 : 80;
+					const wanted = this.melee.swordDrawn ? STRIKE_RANGE_PX - 12 : 80;
 					if (input.distanceToPlayer > wanted) {
 						output.moveRight = input.playerX > input.selfX;
 						output.moveLeft = input.playerX <= input.selfX;
 					}
 					const strafe =
-						!this.swordDrawn && Math.random() < (isLowHP ? 0.2 : 0.4);
+						!this.melee.swordDrawn && Math.random() < (isLowHP ? 0.2 : 0.4);
 					if (strafe) {
 						output.moveLeft = Math.random() < 0.5;
 						output.moveRight = !output.moveLeft;
@@ -891,11 +591,16 @@ export class EnemyBrain {
 		const blockedAhead =
 			(output.moveRight && input.touchingRight) ||
 			(output.moveLeft && input.touchingLeft);
-		if (blockedAhead && (input.touchingDown || this.jumpHoldTimer > 0)) {
+		if (blockedAhead && (input.touchingDown || this.jumpHoldActive)) {
 			output.jump = true;
 		}
 
 		return output;
+	}
+
+	/** Whether the jump button is currently held by the jump module. */
+	private get jumpHoldActive(): boolean {
+		return this.jump.isHolding;
 	}
 }
 

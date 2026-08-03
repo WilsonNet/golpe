@@ -29,7 +29,13 @@ const RUNS = Number(arg("runs", 1));
 // camera scroll is read as a jitter signal, so a multi-screen run proves the
 // follow cam never moves fast enough to read as a defect.
 const SCREENS = Math.max(1, Number(arg("screens", 1)) || 1);
-const URL_PARAMS = SCREENS > 1 ? `&screen=${SCREENS}` : "";
+// `?ultCharge=N` arms everybody from the start. A duel over 14s never earns an
+// ultimate the long way (~71s of passive charge), so the bots' ultimate use is
+// measured with `--ultCharge=100` and read from `ultimateSummary.localCasts`.
+const ULT_CHARGE = Math.max(0, Number(arg("ultCharge", 0)) || 0);
+const URL_PARAMS =
+	`${SCREENS > 1 ? `&screen=${SCREENS}` : ""}` +
+	`${ULT_CHARGE > 0 ? `&ultCharge=${ULT_CHARGE}` : ""}`;
 
 /** Attach a console sink to a page and return the collected lines. */
 function sinkConsole(page, lines = []) {
@@ -207,6 +213,8 @@ function digest(r) {
 		arena: r.arenaSummary,
 		bullets: r.bulletSummary,
 		melee: r.meleeSummary,
+		ult: r.ultimateSummary,
+		team: r.teamSummary,
 		recon: r.reconciliationSummary,
 		net: r.netSummary,
 		collisions: r.collisionSummary,

@@ -17,7 +17,7 @@
  * launder its own flakiness into every later result.
  */
 
-import type { AIInput, AIOutput } from "../src/game/characters/EnemyBrain.js";
+import type { AIInput, AIOutput } from "../src/game/characters/types.js";
 import { scriptFor, slashBeats } from "../src/game/training/scripts.js";
 import {
 	type DummyBeat,
@@ -58,6 +58,7 @@ function neutralOutput(): AIOutput {
 		dash: 0,
 		aimAngle: 0,
 		evadeActive: false,
+		ultimate: false,
 	};
 }
 

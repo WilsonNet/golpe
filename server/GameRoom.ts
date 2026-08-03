@@ -1,10 +1,12 @@
 import type { ServerChannel } from "@geckos.io/server";
 import type { AIConfig } from "../src/game/characters/AIConfig.js";
-import {
-	type AIInput,
-	type AIOutput,
-	EnemyBrain,
-} from "../src/game/characters/EnemyBrain.js";
+import { EnemyBrain } from "../src/game/characters/EnemyBrain.js";
+import type {
+	AIInput,
+	AIOutput,
+	AllyInfo,
+	FoeInfo,
+} from "../src/game/characters/types.js";
 import {
 	type GameSnapshot,
 	type MatchStatus,
@@ -69,6 +71,7 @@ import {
 	bulletHitsPlayer,
 	canFire,
 	createPlayerState,
+	fieldAffects,
 	fieldFor,
 	type GrenadeState,
 	grenadeEnd,
@@ -876,10 +879,7 @@ export class GameRoom {
 			swordStance: out.swordStance,
 			face: out.face,
 			dash: out.dash,
-			// Bots do not press it. `EnemyBrain` has no concept of a charge meter, and
-			// giving one a random chance to fire would be a fake decision — the ult is
-			// measured by `scripts/ultimate-probe.mjs`, which presses it deliberately.
-			ultimate: false,
+			ultimate: out.ultimate,
 			aimAngle: out.aimAngle,
 		};
 	}
@@ -920,6 +920,38 @@ export class GameRoom {
 	private perceive(bot: ConnectedPlayer, foe: ConnectedPlayer): AIInput {
 		const dx = foe.state.x - bot.state.x;
 		const dy = foe.state.y - bot.state.y;
+
+		// The whole room, split into sides. The brain reasons about one enemy at a
+		// time for combat, but it needs *everyone* for the team game — how many
+		// enemies there are, where a cluster is, whether an ally is being rushed —
+		// and those facts are not derivable from the nearest enemy.
+		const allies: AllyInfo[] = [];
+		const foes: FoeInfo[] = [];
+		for (const p of this.players.values()) {
+			if (p.id === bot.id) continue;
+			const d = Math.hypot(p.state.x - bot.state.x, p.state.y - bot.state.y);
+			if (hostile(bot.team, p.team)) {
+				if (p.alive) {
+					foes.push({
+						id: p.id,
+						x: p.state.x,
+						y: p.state.y,
+						hp: p.hp,
+						distance: d,
+					});
+				}
+			} else {
+				allies.push({
+					id: p.id,
+					x: p.state.x,
+					y: p.state.y,
+					hp: p.hp,
+					alive: p.alive,
+					distance: d,
+				});
+			}
+		}
+
 		return {
 			playerX: foe.state.x,
 			playerY: foe.state.y,
@@ -952,6 +984,23 @@ export class GameRoom {
 			selfAction: bot.state.meleeAction,
 			selfStunned: bot.state.stunTimer > 0,
 			selfMassiveReady: bot.state.massiveReady,
+			selfId: bot.id,
+			selfAirJumps: bot.state.airJumps,
+			selfUltCharge: bot.ult,
+			enemyVX: foe.state.vx,
+			enemyVY: foe.state.vy,
+			selfTeam: bot.team,
+			allies,
+			foes,
+			fields: this.singularity
+				? [
+						{
+							x: this.singularity.x,
+							y: this.singularity.y,
+							hostile: fieldAffects(this.singularity, bot.id, bot.team),
+						},
+					]
+				: [],
 		};
 	}
 

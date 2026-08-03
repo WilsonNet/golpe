@@ -40,6 +40,12 @@ const SCORE_LIMIT = Number(arg("scoreLimit", 3));
 const TIME_LIMIT_SEC = Number(arg("timeLimit", 180));
 const DIAG_MS = Number(arg("diagnostic", 12000));
 /**
+ * `?ultCharge=N` arms everybody from the start. A round lasts seconds and the
+ * passive charge takes ~71s, so the bots' ultimate use — the team probe's other
+ * new question — is only observable with `--ultCharge=100`.
+ */
+const ULT_CHARGE = Math.max(0, Number(arg("ultCharge", 0)) || 0);
+/**
  * Freezetime, in seconds. **The real one**, unlike the score and time limits.
  *
  * Those are shortened because a probe cannot wait out a five-minute match; four
@@ -48,7 +54,16 @@ const DIAG_MS = Number(arg("diagnostic", 12000));
  * `--freeze=0` is a legitimate "no countdown" run.
  */
 const FREEZE_SEC = Number(arg("freeze", 4));
-const WALL_CLOCK_MS = (TIME_LIMIT_SEC + 60) * 1000;
+/**
+ * Wall-clock budget. The match clock counts *live* time, so freezetime and
+ * round cooldowns (4s + 5s per round) and the ultimate's cinematics (1.1s per
+ * cast) all add wall time the match clock does not see. An armed room
+ * (`--ultCharge=100`) chains cinematics — one every ~4.3s of live time, ~40
+ * casts over 180s — which is another minute of wall time on top of the normal
+ * overhead. The budget grows by that much.
+ */
+const CINEMATIC_OVERHEAD_S = ULT_CHARGE > 0 ? 60 : 0;
+const WALL_CLOCK_MS = (TIME_LIMIT_SEC + 60 + CINEMATIC_OVERHEAD_S) * 1000;
 /** What the server imposes on a team room. Asserted, not requested. */
 const MIN_SCREENS = 3;
 
@@ -94,7 +109,7 @@ async function waitForMatch(page, done, timeoutMs, onSample) {
  * counters are: a room where nobody fought satisfies every correctness check
  * trivially, and a probe that only reports correctness would call it a pass.
  */
-function assess(state, rounds, lines) {
+function assess(state, rounds, lines, diagnostic) {
 	const failures = [];
 	const notes = [];
 	if (!state) {
@@ -213,6 +228,61 @@ function assess(state, rounds, lines) {
 		failures.push(`${desyncs.length} melee prediction desync(s)`);
 	}
 
+	// ---- teamwork ----
+	//
+	// The local fighter is a bot with a side, and the diagnostic watched it for
+	// `DIAG_MS`. A side that "plays together" is measurable: the brain reports
+	// its own role and stance usage, so a support that never picks up the gun
+	// and a vanguard that never draws the sword are both visible as the two
+	// fighters doing the same job. These are *must-haves* for the same reason
+	// the kills check is: a room where everybody stood still satisfies every
+	// correctness rule above.
+	const team = diagnostic?.teamSummary;
+	const movement = diagnostic?.movementSummary;
+	const ult = diagnostic?.ultimateSummary;
+	if (team?.role) {
+		if (team.role === "support") {
+			if (team.gunFrames <= team.swordFrames) {
+				failures.push(
+					`support bot played sword ${team.swordFrames} frames to gun ${team.gunFrames}`,
+				);
+			}
+			if (movement && movement.doubleJumps === 0) {
+				notes.push("support bot never double jumped");
+			}
+		} else if (team.role === "vanguard") {
+			if (team.swordFrames <= team.gunFrames) {
+				failures.push(
+					`vanguard bot played gun ${team.gunFrames} frames to sword ${team.swordFrames}`,
+				);
+			}
+			const blocks = diagnostic?.meleeSummary?.blocksByFighter?.local ?? 0;
+			if (blocks === 0) {
+				notes.push("vanguard bot never raised a guard");
+			}
+			if (movement && movement.doubleJumps === 0) {
+				notes.push("vanguard bot never double jumped");
+			}
+		}
+	} else {
+		notes.push("no team report from the local bot's brain");
+	}
+	// The ultimate is a weapon, and an armed fighter that never aims it is a
+	// fighter ignoring a weapon. The *cast* is not asserted: with every fighter
+	// armed, seven other bots chain cinematics and one hole is open at a time,
+	// so whether the local bot wins a slot in the window is luck — the server
+	// log's `[ULT] ... casts Black Hole` lines are the real cast evidence, and
+	// `localCasts` is reported for the record. The aim phase is the bot's own
+	// decision, and that is what must happen.
+	if (ULT_CHARGE > 0) {
+		const brain = diagnostic?.teamSummary?.ultimate;
+		if (ult && ult.localCasts === 0 && brain?.aimStarts === 0) {
+			failures.push(
+				"every fighter started armed but the local bot never even aimed its ultimate",
+			);
+		}
+	}
+
 	return {
 		failures,
 		notes,
@@ -241,7 +311,8 @@ async function main() {
 	const url =
 		`${BASE_URL}/?ai=true&mode=tdm&bots=${FIGHTERS - 1}` +
 		`&scoreLimit=${SCORE_LIMIT}&timeLimit=${TIME_LIMIT_SEC}` +
-		`&freezeTime=${FREEZE_SEC}`;
+		`&freezeTime=${FREEZE_SEC}` +
+		(ULT_CHARGE > 0 ? `&ultCharge=${ULT_CHARGE}` : "");
 	console.log(`[PROBE] ${url}`);
 	await page.goto(url);
 	await page.waitForFunction(() => typeof window.__matchState === "function", {
@@ -257,6 +328,15 @@ async function main() {
 		`[PROBE] seated: ${seated?.fighterCount ?? 0} fighters, me = ${seated?.myName ?? "?"} on team ${seated?.myTeam ?? "?"}, ${seated?.worldScreens ?? "?"} screens`,
 	);
 
+	// Physics first, while the fight is at its busiest. The report lands on the
+	// console asynchronously, which is why it is collected after the match ends.
+	//
+	// **Deliberately delayed into the fight.** Seated, the local bot is frozen
+	// for the round's freezetime and then walks the length of its side's arena
+	// before contact — a diagnostic started at seating measures the approach and
+	// reports zero melee moves and zero ultimate casts from a bot that fights
+	// perfectly well. Waiting for round two puts the sample window in the fight.
+	await waitForMatch(page, (s) => s.teams?.round === 2, 60000);
 	await page.evaluate((d) => window.__physicsDiagnostic?.(d), DIAG_MS);
 
 	// What the probe *watches*, rather than what it is told at the end: a wipe is
@@ -332,7 +412,7 @@ async function main() {
 	const hit = lines.find((l) => RESULT_RE.test(l));
 	const diagnostic = hit ? JSON.parse(hit.match(RESULT_RE)[1]) : null;
 
-	const verdict = assess(final, rounds, lines);
+	const verdict = assess(final, rounds, lines, diagnostic);
 	console.log("\n===== TEAM DEATHMATCH =====");
 	console.log(
 		JSON.stringify(
@@ -370,6 +450,9 @@ async function main() {
 					recon: diagnostic.reconciliationSummary,
 					collisions: diagnostic.collisionSummary,
 					melee: diagnostic.meleeSummary,
+					movement: diagnostic.movementSummary,
+					ult: diagnostic.ultimateSummary,
+					team: diagnostic.teamSummary,
 				},
 				pageErrors: verdict.errors,
 			},

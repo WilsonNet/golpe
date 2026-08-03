@@ -13,7 +13,7 @@
  * reaches `tickPlayer`, the design has gone wrong.
  */
 
-import type { AIOutput } from "../characters/EnemyBrain.js";
+import type { AIOutput } from "../characters/types.js";
 import type { MeleeAction, MeleePhase } from "../simulation/Physics.js";
 
 /**

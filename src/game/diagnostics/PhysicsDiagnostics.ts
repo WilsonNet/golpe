@@ -16,6 +16,7 @@ import {
 	type World,
 } from "../simulation/Arena";
 import {
+	AIR_JUMPS,
 	BULLET_SPEED,
 	COMBO_CHAIN,
 	isComboSlash,
@@ -51,7 +52,16 @@ function zeroOutcomesByMove(): Record<MeleeMove, Record<MeleeOutcome, number>> {
  * The question the metric should ask is "did this move further than physics
  * permits in this much time", so the bound is speed x dt with headroom.
  */
-const JITTER_SAFETY = 1.6;
+/**
+ * X gets the same headroom Y does, for the same reason: a remote fighter's
+ * burst is mispredicted for a tick or two, and the rollback correction lands on
+ * top of the frame's own motion. Calibrated at 1.6 against a game where dashes
+ * were rare; the bots' zoning dashes measured a dash + one correction at
+ * ~2.0x a tick of dash on a 30fps frame. A genuine failure — a teleport, a
+ * floor fall — still moves a body hundreds of pixels in a tick, so the extra
+ * headroom costs nothing real.
+ */
+const JITTER_SAFETY_X = 2.0;
 /**
  * Y gets extra headroom because the tumble *falls*.
  *
@@ -76,7 +86,7 @@ const MAX_DASH_SPEED = 1000;
 function jitterLimitX(dtMs: number): number {
 	return Math.max(
 		DIAG_JITTER_X,
-		MAX_DASH_SPEED * (dtMs / 1000) * JITTER_SAFETY,
+		MAX_DASH_SPEED * (dtMs / 1000) * JITTER_SAFETY_X,
 	);
 }
 
@@ -178,6 +188,17 @@ export interface DiagnosticSample {
 	bullets?: BulletSample[];
 	cameraX: number;
 	cameraY: number;
+	/**
+	 * The room is frozen for an ultimate's cinematic.
+	 *
+	 * During a freeze no fixed steps run and the projectile clock is held
+	 * still, so a bullet legitimately sits motionless for a second. Counting
+	 * that as a stall would report a working ultimate as broken projectiles —
+	 * which is exactly what happened once the bots learned to cast: their
+	 * cinematics froze the room every few seconds and the probe read 1148
+	 * stalls in 12s.
+	 */
+	frozen?: boolean;
 }
 
 interface BulletTrack {
@@ -370,11 +391,15 @@ export class PhysicsDiagnostics {
 
 	/** Movement-feel counters. */
 	private jumps = 0;
+	private doubleJumps = 0;
 	private wallJumps = 0;
 	private airFrames = 0;
 	private peakRise = 0;
 	private lastGroundY = 0;
 	private wasGrounded = false;
+	private prevAirJumps = AIR_JUMPS;
+	/** Ultimate casts by the fighter this client owns — i.e. by the local AI brain. */
+	private localUltCasts = 0;
 
 	constructor(
 		private readonly modeLabel: () => string,
@@ -394,6 +419,12 @@ export class PhysicsDiagnostics {
 		 * on a multi-screen map instead of always reading 100%.
 		 */
 		private readonly world: World = DEFAULT_WORLD,
+		/**
+		 * The local AI brain's own report, when the local fighter is a bot in a
+		 * team room. Read at report time like the net summary, because the brain
+		 * accumulates these numbers itself.
+		 */
+		private readonly teamSummary: (() => object | null) | undefined = undefined,
 	) {}
 
 	get isActive(): boolean {
@@ -444,10 +475,13 @@ export class PhysicsDiagnostics {
 		this.bulletTracks.clear();
 		this.skipJitterFrames = 1;
 		this.jumps = 0;
+		this.doubleJumps = 0;
 		this.wallJumps = 0;
 		this.airFrames = 0;
 		this.peakRise = 0;
 		this.wasGrounded = false;
+		this.prevAirJumps = AIR_JUMPS;
+		this.localUltCasts = 0;
 		this.surfacesUsed.clear();
 		this.highestY = Number.POSITIVE_INFINITY;
 
@@ -578,6 +612,18 @@ export class PhysicsDiagnostics {
 		}
 	}
 
+	/**
+	 * The local fighter cast its ultimate.
+	 *
+	 * Fired by `Match` from the same snapshot edge that announces the cinematic,
+	 * so a brain that casts is a brain this report can prove cast. Zero here
+	 * alongside a full charge meter is the "the AI never uses its ultimate"
+	 * defect made visible instead of invisible.
+	 */
+	recordUltimateCast() {
+		if (this.active) this.localUltCasts++;
+	}
+
 	record(sample: DiagnosticSample) {
 		if (!this.active) return;
 		this.frameCount++;
@@ -697,7 +743,10 @@ export class PhysicsDiagnostics {
 			if (last) {
 				const step = Math.hypot(b.x - last.x, b.y - last.y);
 				track.steps.push(step);
-				if (expectedStep > 0) {
+				// A bullet parked by an ultimate's cinematic is not a stall: the
+				// projectile clock is held still for the whole freeze, and a frozen
+				// room full of stationary bullets is the ability working.
+				if (!sample.frozen && expectedStep > 0) {
 					const ratio = step / expectedStep;
 					track.stepRatios.push(ratio);
 					if (ratio > BULLET_TELEPORT_RATIO) track.teleports++;
@@ -1074,6 +1123,16 @@ export class PhysicsDiagnostics {
 		}
 		if (p.wallJumpTimer <= 0) this.wallJumpLatch = false;
 
+		// A jump consumed while airborne — `airJumps` only ever drops in the
+		// simulation's airborne-jump branch — is a double jump. Before the AI had
+		// one, this counter was structurally zero and `peakRise` sat at exactly
+		// `JUMP_HEIGHT_PX`: the diagnostic's way of proving the bots never left
+		// the ground floor of their own capabilities.
+		if (p.airJumps < this.prevAirJumps && !p.grounded && p.vy < 0) {
+			this.doubleJumps++;
+		}
+		this.prevAirJumps = p.airJumps;
+
 		this.wasGrounded = p.grounded;
 	}
 
@@ -1213,6 +1272,7 @@ export class PhysicsDiagnostics {
 			/** Movement feel: is the fighter actually using the arena? */
 			movementSummary: {
 				jumps: this.jumps,
+				doubleJumps: this.doubleJumps,
 				wallJumps: this.wallJumps,
 				pctAirborne: Math.round((this.airFrames / totalFrames) * 100),
 				peakRisePx: Math.round(this.peakRise),
@@ -1282,6 +1342,16 @@ export class PhysicsDiagnostics {
 			 * every number above describes a client simulating alone.
 			 */
 			netSummary: this.netSummary?.() ?? undefined,
+			/**
+			 * The local fighter's ultimate use. A duel whose brain never casts
+			 * reads `localCasts: 0` even with `?ultCharge=100` in the URL, which
+			 * is how the "bots never use their ultimate" defect stays visible.
+			 */
+			ultimateSummary: {
+				localCasts: this.localUltCasts,
+			},
+			/** The local AI brain's team report, in a team room with a local bot. */
+			teamSummary: this.teamSummary?.() ?? null,
 			reconciliationSummary:
 				this.recon.length > 0
 					? {

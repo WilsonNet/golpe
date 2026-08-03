@@ -249,6 +249,23 @@ is load-bearing: the probe's first prediction metric read 4.5px of rollback
 error after a cast and looked exactly like the pull leaking outside
 `tickPlayer`, and the control showed the same number with no ultimate at all.
 
+## Bots cast it too
+
+`EnemyBrain`'s `UltimateBrain` holds and releases like a player: it aims a
+solved lob (the throw angle that lands at a given offset is a quadratic, solved
+in `lobAngle`), holds the button briefly, and lets the release cast. When it
+casts is the strategy: a cluster of two or more enemies, an enemy at the team's
+line, a support being rushed (the point-blank throw detonates on contact), an
+outnumbered fight, a killshot — and a **patience rule**: an ultimate held ready
+for ten seconds is spent on the nearest enemy it can still reach, because a
+meter that never empties is a weapon that does not exist.
+
+**The brain is gated on the cinematic freeze, exactly like the fixed steps.**
+The server's bots decide inside `fixedTick`, which the cinematic skips; a
+client brain that kept deciding through a freeze held and released while no
+input could leave the client, and every cast was silently swallowed. The freeze
+is the one moment a bot's own ultimate cannot happen, so it waits it out.
+
 ## Controls
 
 - **R** by default, and **Pad1** (the right-hand face button, B/Circle).

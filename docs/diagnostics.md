@@ -23,8 +23,10 @@ the full workflow** — this file is the reference for the tool itself.
 npm run dev:herdr                               # both servers in visible panes
 node scripts/diagnose.mjs                       # offline + online, 8s each
 node scripts/diagnose.mjs --mode=online --runs=3  # the canonical duel
+node scripts/diagnose.mjs --mode=online --ultCharge=100  # bots cast their ultimates
 node scripts/deathmatch-probe.mjs               # sixteen AI fighters, played to a winner
 node scripts/tdm-probe.mjs                      # two sides, wipe-out rounds, no friendly fire
+node scripts/tdm-probe.mjs --ultCharge=100      # ... and the teams throw black holes
 node scripts/probe-online.mjs                   # dump one online client's console
 node scripts/verify-modes.mjs                   # smoke-check every launch mode
 node scripts/aim-probe.mjs                      # cursor, facing and shot direction, at dpr 1 and 2
@@ -90,6 +92,18 @@ teleports everybody to their spawn and a baseline measured that as a 1008px
 while fighters walked around would say the round had not started while the round
 was being decided. `--freeze=N` overrides the countdown; the default is the real 4s, because unlike
 a five-minute match that is affordable to sit through.
+
+**The diagnostic is delayed into the fight.** Seated, the local bot is frozen
+for freezetime and then walks the length of its side's arena before contact; a
+diagnostic started at seating measured the approach and reported zero melee
+moves from a bot that fought perfectly well. The probe waits for round two and
+samples from there.
+
+**And it reads the team brain's own report.** `teamSummary` carries the local
+bot's role and stance usage, and the probe fails on a side that is not
+complementary: a support that played more sword frames than gun frames, or a
+vanguard that did the reverse. `--ultCharge=100` also asserts the armed local
+bot actually casts — `ultimateSummary.localCasts` must be ≥ 1.
 
 It also fails on: a room the server did not make `tdm`, an arena narrower than
 three screens **that nobody asked to be wide**, a fighter with no side, teams more
@@ -258,11 +272,15 @@ invincibility.
 
 ## The ultimate probe
 
-`node scripts/ultimate-probe.mjs`. Nothing else in the harness can see the black
-hole: **AI vs AI never presses the button**, because a brain has no charge meter
-to reason about — so `diagnose.mjs` and `deathmatch-probe.mjs` both run whole
-matches in which the ability does not exist, and would report a room that froze
-on one client and not the other as excellent jitter numbers.
+`node scripts/ultimate-probe.mjs`. It presses the button deliberately — a real
+human keypress, not a brain — because the probe's questions are about the
+netcode and the capture, and the answers must not depend on a bot's timing.
+(The brains *do* cast now — `diagnose.mjs --ultCharge=100` and
+`tdm-probe.mjs --ultCharge=100` measure that — but they are not the probe's
+subject.) Without this probe the black hole was invisible to the harness:
+`diagnose.mjs` and `deathmatch-probe.mjs` would run whole matches in which the
+ability does not exist, and would report a room that froze on one client and
+not the other as excellent jitter numbers.
 
 Two scenarios, because one room cannot answer both questions:
 
@@ -327,10 +345,12 @@ Emitted as `__DIAGNOSTIC_RESULT__{...}__END__` on one console line.
 |---|---|
 | `verdict` | `PASS` only when nothing violated a rule — **necessary, not sufficient** |
 | `collisionSummary.penetrationFrames` | frames a body was inside solid geometry — **must be 0** |
-| `movementSummary` | `jumps`, `wallJumps`, `pctAirborne`, `peakRisePx` — is the fighter using the arena? |
+| `movementSummary` | `jumps`, `doubleJumps`, `wallJumps`, `pctAirborne`, `peakRisePx` — is the fighter using the arena? `doubleJumps` was structurally 0 and `peakRisePx` sat at exactly one jump's height until the bots learned the air jump |
 | `playerMovement.xRange/yRange` | a tiny range means the AI is stuck, even when the verdict says PASS |
 | `reconciliationSummary.avgErrorPx` | client/server disagreement; **0.00 is achievable and expected** |
 | `reconciliationSummary.visibleCorrections` | corrections > 1px; only respawns should appear |
+| `ultimateSummary.localCasts` | casts by the local fighter. **0 with `--ultCharge=100` means the bots ignore a weapon**, not that the feature is fine |
+| `teamSummary` | the local brain's role, stance-usage frames and ally distance, in a team room with a local bot. `null` outside one |
 | `meleeSummary` violations | `illegalActions`, `blockedUnblockables`, `frameDataViolations`, `stuckActionFrames`, `meleeDesyncFrames` — **all must be 0** |
 | `meleeSummary.meleeReplacements` | sword states the server replaced, with the reconciler's verdict on each: `stun`, `iframe`, `massive-armed` and `respawn` are facts only the server holds; **`unexplained` is the one that is a bug** |
 | `meleeSummary.violations[].replacedThisFrame` | what the server did on the frame a violation fired. `null` means the state machine really did break its own table |
@@ -341,18 +361,23 @@ Emitted as `__DIAGNOSTIC_RESULT__{...}__END__` on one console line.
 | `arenaSummary.xSpanPct` / `ySpanPct` | how much of the arena the fight touched. A duel confined to a narrow band tests almost nothing |
 | `arenaSummary.surfacesUsed` | distinct platforms stood on, out of `surfacesAvailable`. 1 of 9 means the ledges are untested |
 | `bulletSummary.tracked` | projectiles seen. **0 means the entire ranged pipeline went untested**, not that it was flawless |
-| `bulletSummary.teleportFrames` / `frozenFrames` | projectile jumps and stalls — **must be 0** |
+| `bulletSummary.teleportFrames` / `frozenFrames` | projectile jumps and stalls — **must be 0** (a bullet parked by an ultimate's cinematic freeze is not a stall; the projectile clock is held still for the whole cutscene and the metric knows it) |
 | `bulletSummary.maxPathDeviationPx` | bend in a straight path; >0 means a sprite was reassigned |
 | `bulletSummary.maxStepRatio` / `avgStepCv` | step vs expected (1.0 ideal) and evenness (0 ideal) |
 
 ## Designing a metric that works
 
 Jitter thresholds are **derived from the physics constants and the frame's own
-dt** (`speed × dt × 1.6`, floored at 35/25/15px), never hardcoded. The old fixed
+dt** (`speed × dt × 1.6–2.0`, floored at 35/25/15px), never hardcoded. The old fixed
 25px `player_y` was calibrated against `GRAVITY = 300`; once `MAX_FALL_SPEED`
 became 950 a single 30fps frame legitimately moved 31.7px and the metric started
 reporting correct physics as a defect. Announced teleports suppress checking for
-4 frames.
+4 frames. X got the same 2.0 headroom Y has after the bots learned to dash in
+zones: a remote fighter's burst is mispredicted for a tick or two, the rollback
+correction lands on top of the frame's own motion, and the measured
+dash+correction came in at ~2.0× a tick of dash on a 30fps frame. A genuine
+failure — a teleport, a floor fall — still moves a body hundreds of pixels in a
+tick, so the extra headroom costs nothing real.
 
 Three rules learned the hard way, all the same shape — **a metric that flags
 correct behaviour trains you to ignore it**:

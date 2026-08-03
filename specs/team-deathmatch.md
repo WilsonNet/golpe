@@ -158,11 +158,23 @@ code with no mode check in any damage path.
 | Black hole | No pull, no damage — `fieldAffects` excludes the caster *and* the caster's side |
 | `damage()` | Refuses friendly damage outright, as the backstop that makes the four above an optimisation rather than the rule |
 
-**Bots know, and they know by construction.** `EnemyBrain` has no concept of a
-team and never gained one: `nearestFoe` only ever hands it a living *enemy*, so
-every decision it makes is already aimed at somebody it is allowed to hit. A
-teammate is not a target the AI declines — it is a fighter the AI is never told
-about. The same filter runs client-side for `?ai=true` clients.
+**Bots know, and they know by construction.** `EnemyBrain`'s combat is aimed
+only at living enemies — `nearestFoe` filters by `hostile`, so a teammate is
+not a target the AI declines, it is a fighter the brain is never told about.
+The same filter runs client-side for `?ai=true` clients.
+
+**And they play the side, not the fight.** The brain's `TeamBrain` gives every
+bot in a team room a stable role — the n-th fighter of a side alternates
+**vanguard** (sword, holds a line `LINE_OFFSET_PX` ahead of the support, toward
+whatever enemy threatens it) and **support** (gun, keeps the 240–420px band,
+kites what closes — but only as far as its own end screen, where the retreat
+becomes a last stand). The vanguard covers: when an enemy swings inside the
+support's reach it drops its rhythm and holds the guard. Both roles keep off
+each other (spacing), push together (never more than the lead cap ahead of the
+side), and regroup only when actually separated. Two measured failure modes
+the roles exist to prevent: a vanguard that chased a kiting enemy crossed three
+screens without a single swing, and a support that never stopped retreating
+dragged the whole side across the arena.
 
 ## The arena
 

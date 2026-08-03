@@ -21,7 +21,12 @@ src/game/
     systems.ts      animation, sprite sync, melee effects
   Match.ts        the fixed-timestep loop and the wiring between sim, netcode and renderer
   app.ts          Pixi Application bootstrap: init, load, build, tick
-  characters/     EnemyBrain, AIConfig
+  characters/     EnemyBrain (the coordinator) + AIConfig + four tactic modules:
+    MeleeBrain.ts   the sword: techniques, rhythms, stance hysteresis
+    JumpBrain.ts    committed jump presses and the scripted double jump
+    UltimateBrain.ts when to hold the button, where to throw (a solved lob), when to release
+    TeamBrain.ts    team roles (vanguard/support), the cover line, bounded kiting
+    types.ts        AIInput/AIOutput — the input-source contract, shared with the dummy
   combat/         BulletSystem.ts — the only simulated source of bullets offline
   input/          Input.ts — the one place four devices meet: raw held codes, dash
                   gestures, and the cursor->world conversion (logical view +
@@ -113,7 +118,13 @@ codebase that measures 0.00px error at risk, for no benefit at two fighters.
 Systems are plain functions run in an explicit order once a frame, and every one
 of them reads the simulation and writes only presentation. Input, netcode and AI
 are singletons owned by `Match` rather than systems: they have their own
-lifecycles, and forcing them into the world would hide their sequencing.
+lifecycles, and forcing them into the world would hide their sequencing. The AI
+follows the same rule **within** itself — `EnemyBrain` is a coordinator over
+small tactic modules (see `characters/` above), each owning one weapon or one
+team concern and writing the same `AIOutput`, so a future weapon is a new module
+rather than a new branch. An entity world for the AI was considered and rejected
+for the same reason ECS stops at the renderer: the brain is an input source on
+both sides of the wire, and the server has no entity world at all.
 
 ## What the engine does not do
 

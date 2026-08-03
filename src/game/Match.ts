@@ -16,10 +16,8 @@
 
 import { Sprite } from "pixi.js";
 import type { AIConfig } from "./characters/AIConfig";
-import EnemyBrain, {
-	type AIInput,
-	type AIOutput,
-} from "./characters/EnemyBrain";
+import EnemyBrain from "./characters/EnemyBrain";
+import type { AIInput, AIOutput, AllyInfo, FoeInfo } from "./characters/types";
 import { BulletSystem, type BulletTarget } from "./combat/BulletSystem";
 import {
 	PhysicsDiagnostics,
@@ -71,6 +69,7 @@ import {
 	BULLET_DAMAGE,
 	canFire,
 	createPlayerState,
+	fieldAffects,
 	fieldFor,
 	hasLineOfSight,
 	isKnockedDown,
@@ -85,7 +84,13 @@ import {
 	tickPlayer,
 	ULT_MAX_CHARGE,
 } from "./simulation/Physics";
-import { type MatchMode, TDM_MIN_SCREENS, teamName } from "./simulation/Teams";
+import {
+	hostile,
+	type MatchMode,
+	TDM_MIN_SCREENS,
+	type TeamId,
+	teamName,
+} from "./simulation/Teams";
 import { TrainingRoom } from "./training/TrainingRoom";
 
 /** Client physics runs at a fixed 60Hz to match the server, whatever the display does. */
@@ -130,10 +135,7 @@ function intentFromAI(output: AIOutput): PlayerIntent {
 		swordStance: output.swordStance,
 		face: output.face,
 		dash: output.dash,
-		// A brain never presses it: `EnemyBrain` has no notion of a charge meter,
-		// and a random chance to fire would be a fake decision dressed as an AI one.
-		// The ultimate is measured by `scripts/ultimate-probe.mjs` instead.
-		ultimate: false,
+		ultimate: output.ultimate,
 	};
 }
 
@@ -301,6 +303,19 @@ export class Match {
 			() => (this.onlineMode ? "online" : "offline"),
 			() => this.online?.netSummary() ?? null,
 			this.arena,
+			// The team brain's own report: role, stance usage, ally distance.
+			// Measured here so the team probe can assert that a side actually
+			// split into complementary jobs rather than mirroring.
+			() => {
+				const brain = this.localBrain;
+				if (!brain || !this.online?.connected || this.online.myTeam === null) {
+					return null;
+				}
+				return {
+					team: this.online.myTeam,
+					...brain.getInsight(),
+				};
+			},
 		);
 
 		this.local = this.spawnFighter(
@@ -628,6 +643,12 @@ export class Match {
 						mine: casterId === this.online?.manager.myId,
 						durationMs: this.online?.cinematic?.totalMs ?? 0,
 					});
+					// The bots' ultimate is measured through this same event: the local
+					// brain's cast is the one the diagnostic can watch, and it fires
+					// here on the snapshot that announced the cinematic.
+					if (casterId === this.online?.manager.myId) {
+						this.diagnostics.recordUltimateCast();
+					}
 					console.log(
 						`[ULT] ${this.online?.nameOf(casterId) ?? casterId} casts`,
 					);
@@ -1266,6 +1287,9 @@ export class Match {
 			bullets: this.onlineMode
 				? [...(this.online?.bullets ?? [])]
 				: this.bullets.snapshot(),
+			// The ultimate's cinematic freeze holds the projectile clock still —
+			// see `PhysicsDiagnostics` on why a parked bullet is not a stall.
+			frozen: this.online?.frozen ?? false,
 			// Camera *scroll*, never the shake offset: shake is cosmetic and would
 			// otherwise report every heavy sword impact as camera jitter.
 			cameraX: this.stage.cameraX,
@@ -1301,7 +1325,15 @@ export class Match {
 		return steps;
 	}
 
-	/** Build the perception an AI brain reads, from simulation state only. */
+	/**
+	 * Build the perception an AI brain reads, from simulation state only.
+	 *
+	 * The online room is the full picture: the brain gets its own side, every
+	 * living enemy and every teammate with positions, plus the charge meter and
+	 * the open black holes — the facts the team and ultimate modules reason over.
+	 * Offline there is exactly one opponent and none of the rest, which is honest
+	 * for a mode with no server and no sides.
+	 */
 	private perceive(
 		self: PlayerPosition,
 		foe: PlayerPosition,
@@ -1310,6 +1342,65 @@ export class Match {
 	): AIInput {
 		const dx = foe.x - self.x;
 		const dy = foe.y - self.y;
+
+		const allies: AllyInfo[] = [];
+		const foes: FoeInfo[] = [];
+		let selfTeam: TeamId | null = null;
+		let selfUltCharge = 0;
+		const fields: { x: number; y: number; hostile: boolean }[] = [];
+		let selfId = "local";
+
+		const session = this.online;
+		if (session?.connected) {
+			const myId = session.manager.myId;
+			selfId = myId;
+			selfTeam = session.myTeam;
+			selfUltCharge = session.localUlt;
+			for (const [id, fighter] of session.remotes) {
+				const d = Math.hypot(
+					fighter.state.x - self.x,
+					fighter.state.y - self.y,
+				);
+				const team = session.teamOf(id);
+				if (hostile(selfTeam, team)) {
+					if (session.aliveOf(id)) {
+						foes.push({
+							id,
+							x: fighter.state.x,
+							y: fighter.state.y,
+							hp: session.hpOf(id),
+							distance: d,
+						});
+					}
+				} else {
+					allies.push({
+						id,
+						x: fighter.state.x,
+						y: fighter.state.y,
+						hp: session.hpOf(id),
+						alive: session.aliveOf(id),
+						distance: d,
+					});
+				}
+			}
+			const field = session.singularity;
+			if (field) {
+				fields.push({
+					x: field.x,
+					y: field.y,
+					hostile: fieldAffects(field, myId, selfTeam),
+				});
+			}
+		} else if (this.offlineFoe) {
+			foes.push({
+				id: OFFLINE_FOE_ID,
+				x: foe.x,
+				y: foe.y,
+				hp: enemyHP,
+				distance: Math.hypot(dx, dy),
+			});
+		}
+
 		return {
 			playerX: foe.x,
 			playerY: foe.y,
@@ -1337,6 +1428,15 @@ export class Match {
 			selfAction: self.meleeAction,
 			selfStunned: self.stunTimer > 0,
 			selfMassiveReady: self.massiveReady,
+			selfId,
+			selfAirJumps: self.airJumps,
+			selfUltCharge,
+			enemyVX: foe.vx,
+			enemyVY: foe.vy,
+			selfTeam,
+			allies,
+			foes,
+			fields,
 		};
 	}
 
@@ -1347,6 +1447,36 @@ export class Match {
 	private updateOnline(dtSec: number) {
 		const session = this.online;
 		if (!session?.connected) return;
+
+		// An ultimate is being cast: the room is frozen, so run **no fixed steps**.
+		//
+		// Not a rendering pause — a simulation one, and the only one in the game.
+		// Skipping the step is what makes it safe: no step means no prediction, no
+		// input sent and no remote advanced, which is exactly what the server is
+		// doing for the same range of ticks. The accumulator is drained rather than
+		// left to fill, or the frame the freeze lifts would fire five steps at once
+		// and hand the server a burst of input it never asked for.
+		//
+		// **The brain is gated on this too.** The server's bots decide inside
+		// `fixedTick`, which the cinematic skips entirely, so their holds and
+		// releases only ever happen in gaps between freezes. A client brain that
+		// kept deciding through the freeze measured the opposite: it held and
+		// released an ultimate while no input could leave the client, and every
+		// cast was silently swallowed — zero of zero in a room where the bots
+		// chained cinematics. Deciding only in the gaps makes the client brain
+		// pause its hold mid-freeze and release it the moment inputs flow again.
+		if (session.frozen) {
+			this.accumulator = 0;
+			this.diagSteps = 0;
+			this.local.body = session.predicted.state;
+			this.local.fighter.team = session.myTeam;
+			// Presentation still runs. `render` knows it is frozen and holds the
+			// projectile clock still, so bullets hang in the air with everything
+			// else instead of flying on through the cutscene.
+			this.local.renderPos = session.render(dtSec);
+			this.syncRemotes(session, dtSec);
+			return;
+		}
 
 		if (this.aiMode && this.localBrain) {
 			// The nearest living opponent's full authoritative state, not just a
@@ -1373,27 +1503,6 @@ export class Match {
 		} else {
 			this.aimAngle = this.input.aimAngle(this.local.body.x, this.local.body.y);
 			this.localIntent = this.input.intent(this.aimAngle);
-		}
-
-		// An ultimate is being cast: the room is frozen, so run **no fixed steps**.
-		//
-		// Not a rendering pause — a simulation one, and the only one in the game.
-		// Skipping the step is what makes it safe: no step means no prediction, no
-		// input sent and no remote advanced, which is exactly what the server is
-		// doing for the same range of ticks. The accumulator is drained rather than
-		// left to fill, or the frame the freeze lifts would fire five steps at once
-		// and hand the server a burst of input it never asked for.
-		if (session.frozen) {
-			this.accumulator = 0;
-			this.diagSteps = 0;
-			this.local.body = session.predicted.state;
-			this.local.fighter.team = session.myTeam;
-			// Presentation still runs. `render` knows it is frozen and holds the
-			// projectile clock still, so bullets hang in the air with everything
-			// else instead of flying on through the cutscene.
-			this.local.renderPos = session.render(dtSec);
-			this.syncRemotes(session, dtSec);
-			return;
 		}
 
 		this.diagSteps = this.runFixedSteps(dtSec, (dt) => {

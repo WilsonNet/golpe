@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AIInput, AIOutput } from "../src/game/characters/EnemyBrain.js";
+import type { AIInput, AIOutput } from "../src/game/characters/types.js";
 import { DEFAULT_TRAINING_TIMING } from "../src/game/training/types.js";
 import {
 	createPlayerState,
@@ -49,6 +49,15 @@ function perception(overrides: Partial<AIInput> = {}): AIInput {
 		selfAction: "none",
 		selfStunned: false,
 		selfMassiveReady: false,
+		selfId: "dummy",
+		selfAirJumps: 1,
+		selfUltCharge: 0,
+		enemyVX: 0,
+		enemyVY: 0,
+		selfTeam: null,
+		allies: [],
+		foes: [],
+		fields: [],
 		...overrides,
 	};
 }

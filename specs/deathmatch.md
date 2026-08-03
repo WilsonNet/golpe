@@ -107,6 +107,11 @@ join. The target is a floor on activity, never a cap on people.
   exactly one enemy, so at sixteen somebody has to choose which — and "whoever is
   closest and still standing" is the choice that reads as fighting rather than as
   commuting across the arena at a fixed rival.
+- **A bot uses the whole moveset.** The brain is four modules over one `decide` —
+  melee rhythms, the jump controller, the ultimate and team play — so a bot
+  double-jumps to high ground, throws the black hole (hold, aim a solved lob,
+  release) and climbs ledges a single jump cannot reach. `?ultCharge=N` lets a
+  probe watch the casts without waiting out the ~71s passive.
 - **Each bot gets a fresh personality every match**, so sixteen of them do not
   replay the same fight every five minutes.
 

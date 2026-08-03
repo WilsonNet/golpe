@@ -170,8 +170,10 @@ npm run dev:herdr:down
 npm run verify           # typecheck (client AND server) + tests + build
 npm run lint             # biome, across src/ server/ scripts/
 node scripts/diagnose.mjs --mode=online --runs=3       # the feedback loop, in a duel
+node scripts/diagnose.mjs --mode=online --ultCharge=100 # ...and the bots cast their ultimates
 node scripts/deathmatch-probe.mjs                      # sixteen AI fighters, to a winner
 node scripts/tdm-probe.mjs                             # two sides, wipe-out rounds, no friendly fire
+node scripts/tdm-probe.mjs --ultCharge=100             # ...and the teams throw black holes
 node scripts/verify-modes.mjs                          # smoke-check every mode
 node scripts/aim-probe.mjs                             # cursor, facing and shot direction
 node scripts/pad-probe.mjs                             # controller aim, gamepad and the phone deck
@@ -342,6 +344,17 @@ room. **`?screen=N` widens the arena to N 800px screens** (1–8) — the same
 creator-only rule, with the follow camera capping at 12px/frame so scroll never
 reads as camera jitter. See [specs/deathmatch.md](specs/deathmatch.md) and
 [specs/arena.md](specs/arena.md).
+
+**Bots play the whole game, in modules.** `EnemyBrain` is a coordinator over four
+tactic modules (`characters/`): melee rhythms, the jump controller (scripted
+double jumps for high ground), the ultimate (hold, aim a solved lob, release)
+and team play. A team room splits each side into **vanguards** (sword, the cover
+line) and **supports** (gun, kiting bounded at their own end screen) — measured
+complementary roles, not mirror fighters. A future weapon is a new module, never
+a new branch. The brain decides inside the same gaps the server's tick allows:
+a client brain that kept deciding through an ultimate's cinematic freeze held
+and released while no input could leave the client, so it is gated on the freeze
+exactly like the fixed steps.
 
 **Rooms are addressed, not matchmade.** `?room=<uuid>` joins that room; no
 `?room=` makes a new one, and the client writes the id into the address bar so the

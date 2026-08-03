@@ -296,6 +296,11 @@ export class OnlineSession {
 		return this.info.get(id)?.team ?? null;
 	}
 
+	/** Is this fighter up? Dead fighters are still simulated, just not scoring. */
+	aliveOf(id: string): boolean {
+		return this.info.get(id)?.alive ?? true;
+	}
+
 	/** The local fighter's side. What every "is that a teammate" question starts from. */
 	get myTeam(): TeamId | null {
 		return this.teamOf(this.manager.myId);
