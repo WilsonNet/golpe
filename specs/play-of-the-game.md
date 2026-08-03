@@ -17,10 +17,11 @@ play starts.
 1. The match ends. Before the podium, the server picks the best **play** of the
    match and sends one reliable message naming it: who, what it was called, and
    what it scored.
-2. The client puts the **splash card** up immediately and fetches the footage
-   over HTTP in the background.
-3. The **pre-roll** runs: five camera movements over the seconds of footage
-   *before* the play, with the title card and then the name card over them.
+2. The client closes a **curtain over the arena** and slams the **title card**
+   up — wordmark, medal, flare, and the line "<name> · TRIPLE KILL" — while it
+   fetches the footage over HTTP behind it.
+3. The curtain **wipes open** into the letterbox bars, and the **pre-roll**'s
+   camera movements run over the seconds of footage *before* the play.
 4. The **roll**: the footage itself, at speed, the camera leading the
    protagonist, dropping into slow motion and punching the zoom on every scoring
    beat.
@@ -28,8 +29,16 @@ play starts.
    returned.
 6. Only then does the **podium** appear.
 
-The whole ceremony fits inside `MATCH_OVER_LINGER_MS` (28s), which was raised
+The whole ceremony fits inside `MATCH_OVER_LINGER_MS` (30s), which was raised
 from 15s to make room for it — see [deathmatch.md](deathmatch.md).
+
+**The title card is the part that does the hyping, and it is not optional.** The
+first version of this had no card at all: it faded the words in *over* an
+already-playing replay, and the result read as a subtitle on footage rather than
+as an event. Overwatch's ceremony turns on a card that owns the screen first and
+then gets out of the way — and the getting out of the way is a wipe, not a fade.
+The `curtain` number in the shot is exactly that difference, and the probe
+asserts it reaches 1.
 
 ## What counts as a play
 
@@ -38,7 +47,7 @@ moments with no gap longer than **5000ms** between them. That is the whole idea:
 three frags in four seconds is a story and three frags across a minute is a
 scoreboard, and a system that ranked individual kills could not tell them apart.
 
-- A run is capped at **9000ms** of span. Whatever comes after starts a new play
+- A run is capped at **8000ms** of span. Whatever comes after starts a new play
   that has to win on its own merit.
 - Runs are tracked **per fighter**, so two people trading kills across the same
   five seconds are two plays. A protagonist who is in half of their own
@@ -92,7 +101,7 @@ decide a hit landed: a play is made of kills, denies and round wipes, and no
 client knows about all of them. A client-side reel would give every player a
 different Play of the Game, which is the one thing the ceremony cannot survive.
 
-- The recorder keeps a **ring buffer** of the last **19.5s** of broadcast frames
+- The recorder keeps a **ring buffer** of the last **18.5s** of broadcast frames
   — exactly the lead-in, the longest possible play and the silence that closes
   it. Trimmed on every capture; bounded by construction.
 - **A frame is the broadcast, not a second recording.** Each one is built from
@@ -111,7 +120,7 @@ different Play of the Game, which is the one thing the ceremony cannot survive.
 - A clip is cut **the moment its play closes**, not at the end of the match: by
   then the footage of a play from four minutes ago is long gone.
 - The clip runs from **2500ms before** the first scoring moment to **2200ms
-  after** the last, capped at 13.7s.
+  after** the last, capped at 12.7s.
 - A clip shorter than **10 frames** is not cut at all. The announcement still
   names the player, which is the part that mattered.
 
@@ -133,20 +142,26 @@ A design where the announcement *was* the clip could only fail silently.
 
 ## The camera edit
 
-Five movements. The timings are wall clock; the footage runs at its own,
+Six movements. The timings are wall clock; the footage runs at its own,
 variable speed underneath them.
 
 | Movement | Length | What it does |
 |---|---|---|
-| **Establish** | 1200ms | Wide, slightly off the protagonist, drifting onto them. Title card over it. The only moment the whole arena is legible. |
-| **Push** | 1000ms | A hard push in to a tight framing (1.8x), name card sliding under it. The sentence "it was *this* one". |
-| **Whip** | 700ms | A fast pan that overshoots by 150px and swings back, easing out to the roll's framing. |
+| **Intro** | 2800ms | The arena is **hidden**. The title card slams in over a flare, and the curtain wipes off in the last 450ms. |
+| **Establish** | 900ms | The reveal: wide, slightly off the protagonist, drifting onto them. The only moment the whole arena is legible. |
+| **Push** | 900ms | A hard push in to a tight framing (1.8x), name card sliding under it. The sentence "it was *this* one". |
+| **Whip** | 650ms | A fast pan that overshoots by 150px and swings back, easing out to the roll's framing. |
 | **Roll** | the footage | The play, at speed. Camera leads the fighter's movement; slow motion and a zoom punch on every beat. |
 | **Outro** | 1800ms | The last frame held, camera pulled back, name card returned. |
 
-- The footage **crawls at 0.35x through the pre-roll**, so the world is alive
-  while the camera works and the pre-roll only eats about 1.2s of the 2.5s
-  lead-in. The play still arrives with footage to spare.
+- **The intro holds the footage completely still.** The lead-in is a 2.5s budget
+  and there is nothing on screen to spend it on; a crawling clip behind an opaque
+  card is a clip spent on nobody.
+- The camera is **parked on the establishing framing** for the whole intro, so
+  the wipe reveals a composed frame rather than a camera arriving into one.
+- The footage **crawls at 0.35x through the rest of the pre-roll**, so the world
+  is alive while the camera works and it only eats about 0.9s of the lead-in. The
+  play still arrives with footage to spare.
 - At a scoring beat the footage drops to **0.32x**, ramping in and out over
   420ms either side. A hard cut to 0.32x reads as a dropped frame; the ramp is
   what makes it read as emphasis.
@@ -171,15 +186,31 @@ disagree with.
 
 ## The overlay
 
-Bars, a title, a name card and a way out — all DOM, like the ultimate's
+Bars, a title card, a name card and a way out — all DOM, like the ultimate's
 cutscene, because a tracked heading and a sliding card are things CSS does
 better than a `Graphics` call.
 
-- **Letterbox bars** (8% each) frame the ceremony, sliding in over 400ms and out
-  at the end. Bars rather than a dim: the arena underneath is the point.
-- **"PLAY OF THE GAME"** over the establish, gone by the time the push lands.
-  Behind it, a gold sunburst generated by `scripts/make-potg-art.py`, and a
-  laurel-and-blade medal.
+- **The letterbox bars are also the curtain.** One pair of elements does both
+  jobs: at `curtain: 1` the two halves meet in the middle and the arena is gone;
+  at 0 they are exactly the 8% bars. The reveal is therefore not a fade but a
+  curtain opening into the frame it was always going to be.
+- **The wordmark is art, not text**, and one PNG per word. Overwatch sets this
+  card in Big Noodle Too — a condensed uppercase grotesque — and there is no
+  such face present on Windows, macOS and Linux alike; a CSS stack would have
+  looked right on one machine and like Arial Bold on the next. Rendering it in
+  `scripts/make-potg-art.py` also bakes in the gold gradient and the outline,
+  neither of which CSS does well on text, and one file per word is what lets
+  each one arrive on its own.
+- **The card's entrance:** a beat of black, a white flash and a scale-slam, then
+  PLAY / OF / THE / GAME each arriving from the left with motion blur and a
+  slight overshoot, 130ms apart; a light sweep across them; the byline and its
+  rule last. Behind it all, a gold sunburst and drifting diagonal speed lines.
+- **The card's timings are CSS keyframes, and that is legal here.** Everything
+  else in the ceremony is driven by the director because it runs against footage
+  at a variable speed — but the intro has a *fixed* length, exactly like the
+  ultimate's 1100ms cutscene. `Director.test.ts` asserts the card's whole
+  animation budget fits inside the intro with the wipe still to come, so the two
+  cannot drift.
 - **The name card** — headline, name, subtitle — slides in under the push and
   returns for the outro, tinted to the protagonist's side in a team match.
 - **A `REPLAY · <name>` tag** is the only thing on screen through the roll. A
@@ -234,8 +265,10 @@ static wide shot, a replay drawing zero fighters — all of it leaves `diagnose`
 
 The probe asserts, in one run: a play was announced with a headline and a
 protagonist; the footage was fetchable over HTTP and is a real clip; every
-movement ran, in order; the establish was wide, the push pushed and the whip
-actually swung; the footage slowed at a beat and shook once per beat rather than
+movement ran, in order; the curtain reached 1 and then opened, so the card was a
+card and not a caption; the intro held the footage still and stood for at least
+two seconds; the establish was wide, the push pushed and the whip actually
+swung; the footage slowed at a beat and shook once per beat rather than
 once per frame; the replay drew fighters rather than an empty arena; the HUD and
 the podium stayed down; and the podium then arrived.
 

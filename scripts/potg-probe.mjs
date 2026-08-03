@@ -53,7 +53,7 @@ const MATCH_TIMEOUT_MS = (TIME_LIMIT_SEC + 60) * 1000;
 const CEREMONY_TIMEOUT_MS = 45000;
 
 /** The movements, in the order the director must run them. */
-const MOVEMENTS = ["establish", "push", "whip", "roll", "outro"];
+const MOVEMENTS = ["intro", "establish", "push", "whip", "roll", "outro"];
 
 function sinkConsole(page, lines = []) {
 	page.on("console", (msg) => lines.push(msg.text()));
@@ -97,6 +97,8 @@ async function watchCeremony(page) {
 	let maxZoom = 0;
 	let maxDrawn = 0;
 	let minRate = Number.POSITIVE_INFINITY;
+	let maxCurtain = 0;
+	let curtainOpened = false;
 
 	while (Date.now() < deadline) {
 		const state = await page.evaluate(() => window.__potgState?.() ?? null);
@@ -107,6 +109,11 @@ async function watchCeremony(page) {
 				minZoom = Math.min(minZoom, state.zoom);
 				maxZoom = Math.max(maxZoom, state.zoom);
 				maxDrawn = Math.max(maxDrawn, state.drawn);
+				maxCurtain = Math.max(maxCurtain, state.curtain);
+				// Opened, and *stayed* open: the arena has to be visible for the
+				// footage, and a curtain that never lifted would leave a ceremony
+				// that is nothing but a title card.
+				if (maxCurtain > 0.9 && state.curtain < 0.05) curtainOpened = true;
 				if (state.rate > 0) minRate = Math.min(minRate, state.rate);
 				if (state.phase && phases[phases.length - 1] !== state.phase) {
 					phases.push(state.phase);
@@ -120,14 +127,33 @@ async function watchCeremony(page) {
 		await page.waitForTimeout(60);
 	}
 
-	return { best, phases, sawActive, minZoom, maxZoom, maxDrawn, minRate };
+	return {
+		best,
+		phases,
+		sawActive,
+		minZoom,
+		maxZoom,
+		maxDrawn,
+		minRate,
+		maxCurtain,
+		curtainOpened,
+	};
 }
 
 function assess({ ceremony, clipOverHttp, final, podium, lines, hudDuring }) {
 	const failures = [];
 	const notes = [];
-	const { best, phases, sawActive, minZoom, maxZoom, maxDrawn, minRate } =
-		ceremony;
+	const {
+		best,
+		phases,
+		sawActive,
+		minZoom,
+		maxZoom,
+		maxDrawn,
+		minRate,
+		maxCurtain,
+		curtainOpened,
+	} = ceremony;
 
 	if (!best?.announced) {
 		failures.push("no play of the game was announced");
@@ -187,10 +213,22 @@ function assess({ ceremony, clipOverHttp, final, podium, lines, hudDuring }) {
 		}
 	}
 
+	// The title card has to *own* the screen and then hand it over. A card that
+	// faded in over a visible replay would satisfy every other check here, and it
+	// is exactly what the first version did — it read as a subtitle on footage
+	// that was already playing.
+	if (!(maxCurtain > 0.9)) {
+		failures.push(
+			`the title card never covered the arena (curtain peaked at ${maxCurtain.toFixed(2)})`,
+		);
+	}
+	if (!curtainOpened) failures.push("the curtain never opened onto the replay");
+
 	// The pre-roll's whole job is to move a camera, and this is the only thing
 	// that can tell it did. A static shot passes every other check in this file.
 	const track = best.track ?? [];
 	const byPhase = new Map(track.map((t) => [t.phase, t]));
+	const intro = byPhase.get("intro");
 	const establish = byPhase.get("establish");
 	const push = byPhase.get("push");
 	const whip = byPhase.get("whip");
@@ -232,6 +270,14 @@ function assess({ ceremony, clipOverHttp, final, podium, lines, hudDuring }) {
 	}
 	if (roll && !(roll.maxRate >= 1)) {
 		failures.push("the footage never reached full speed");
+	}
+	// The card holds the footage still: the lead-in is a budget and spending it
+	// behind an opaque card spends it on nobody.
+	if (intro && intro.maxRate !== 0) {
+		failures.push(`the footage ran behind the title card (${intro.maxRate})`);
+	}
+	if (intro && !(intro.ms > 2000)) {
+		failures.push(`the title card only stood for ${Math.round(intro.ms)}ms`);
 	}
 
 	// A clean run is not a good run: everything above holds for a replay of an
@@ -376,6 +422,10 @@ async function main() {
 				},
 				clip: clipOverHttp,
 				movements: ceremony.phases,
+				card: {
+					curtainPeak: Number(ceremony.maxCurtain.toFixed(2)),
+					opened: ceremony.curtainOpened,
+				},
 				camera: {
 					zoom: [
 						Number(ceremony.minZoom.toFixed(2)),

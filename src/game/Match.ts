@@ -1009,6 +1009,9 @@ export class Match {
 				rate: shot?.rate ?? 0,
 				zoom: this.stage.zoom,
 				letterbox: shot?.letterbox ?? 0,
+				/** How much of the arena the title card is covering, 0..1. */
+				curtain: shot?.curtain ?? 0,
+				intro: shot?.intro ?? 0,
 				clip: clip && {
 					roomId: clip.roomId,
 					durationMs: clip.durationMs,

@@ -256,6 +256,16 @@ export interface PotgSnapshot {
 	/** The camera's push-in. 1 everywhere except inside a replay. */
 	zoom: number;
 	letterbox: number;
+	/**
+	 * How much of the arena the title card is covering, 0..1.
+	 *
+	 * The only way to tell a title *card* from a caption: it has to reach 1 —
+	 * nothing else on screen — and then come back to 0. A card that faded in over
+	 * a visible replay satisfies every other metric in this snapshot.
+	 */
+	curtain: number;
+	/** Progress through the title card, 0..1. */
+	intro: number;
 	clip: {
 		roomId: string;
 		durationMs: number;

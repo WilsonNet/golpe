@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { POTG_PREROLL_MS, PotgDirector, type PotgShot } from "./Director.js";
+import { POTG_CARD_MS } from "../../ui/potgStyles.js";
+import {
+	POTG_INTRO_MS,
+	POTG_PREROLL_MS,
+	POTG_WIPE_MS,
+	PotgDirector,
+	type PotgShot,
+} from "./Director.js";
 import { POTG_CLIP_VERSION, type PotgClip } from "./types.js";
 
 /**
@@ -49,8 +56,51 @@ describe("PotgDirector", () => {
 		const phases = [...new Set(shots.map((s) => s.phase))].filter(
 			(p) => p !== "done",
 		);
-		expect(phases).toEqual(["establish", "push", "whip", "roll", "outro"]);
+		expect(phases).toEqual([
+			"intro",
+			"establish",
+			"push",
+			"whip",
+			"roll",
+			"outro",
+		]);
 		expect(director.done).toBe(true);
+	});
+
+	it("hides the arena behind the title card, then opens it", () => {
+		const director = new PotgDirector(clip(), still);
+		const shots = run(director);
+		const intro = shots.filter((s) => s.phase === "intro");
+		// Fully covered for most of the intro. This is the difference between a
+		// title card and a caption: something has to own the screen before it can
+		// hand it over, and the first version faded a title in over a replay that
+		// was already playing.
+		expect(intro.filter((s) => s.curtain > 0.99).length).toBeGreaterThan(
+			intro.length / 2,
+		);
+		expect(intro[intro.length - 1]?.curtain ?? 1).toBeLessThan(0.2);
+		// And nothing is covered once the ceremony is actually showing anything.
+		expect(
+			shots.filter((s) => s.phase !== "intro").every((s) => s.curtain === 0),
+		).toBe(true);
+	});
+
+	it("holds the footage still while the card is up", () => {
+		// The lead-in is a 2.5s budget; spending any of it behind an opaque card
+		// is spending it on nobody.
+		const director = new PotgDirector(clip(), still);
+		const shots = run(director);
+		const intro = shots.filter((s) => s.phase === "intro");
+		expect(intro.every((s) => s.rate === 0)).toBe(true);
+		expect(intro.every((s) => s.clipMs === 0)).toBe(true);
+	});
+
+	it("gives the card time to finish arriving before the curtain opens", () => {
+		// The stylesheet animates the wordmark on fixed CSS keyframes because the
+		// intro is the one movement with a fixed length. A card still in flight
+		// when the reveal starts is the one way this looks broken without anything
+		// throwing, so the budget is asserted rather than eyeballed.
+		expect(POTG_CARD_MS).toBeLessThan(POTG_INTRO_MS - POTG_WIPE_MS);
 	});
 
 	it("pushes in: the establish is wide and the push is tight", () => {
@@ -163,9 +213,10 @@ describe("PotgDirector", () => {
 
 	it("spends a known amount of wall clock before the play", () => {
 		// The pre-roll's length is a budget: `MATCH_OVER_LINGER_MS` has to cover the
-		// whole ceremony plus a podium, so a movement that quietly doubled would
-		// push the next match's first seconds under a replay of the last one.
-		expect(POTG_PREROLL_MS).toBeGreaterThan(2000);
-		expect(POTG_PREROLL_MS).toBeLessThan(5000);
+		// title card, the camera work, the longest clip the server will cut, the
+		// outro *and* a podium. A movement that quietly doubled would push the next
+		// match's first seconds under a replay of the last one.
+		expect(POTG_PREROLL_MS).toBeGreaterThan(POTG_INTRO_MS);
+		expect(POTG_PREROLL_MS).toBeLessThan(6500);
 	});
 });

@@ -8,20 +8,26 @@
  * Overwatch's version works because the camera *tells you who to look at* before
  * anything happens, which is what the pre-roll here is for.
  *
- * Five movements:
+ * Six movements:
  *
- * 1. **Establish** — wide and slightly off the protagonist, drifting toward
- *    them, footage crawling. The title card is over this. It is the only moment
- *    in the sequence where the whole arena is legible.
- * 2. **Push** — a hard push in to a tight framing, the name card sliding under
+ * 1. **Intro** — the arena is **hidden**, and a full-screen title card slams the
+ *    wordmark in over a flare. This is the part that does the hyping, and it is
+ *    the part the first version did not have: a title fading in *over* a visible
+ *    replay reads as a caption, not as an event. Overwatch's whole ceremony
+ *    turns on a card that owns the screen first and then gets out of the way,
+ *    and the getting out of the way is a wipe, not a fade.
+ * 2. **Establish** — the wipe reveals the arena, wide and slightly off the
+ *    protagonist, drifting toward them, footage crawling. The only moment in the
+ *    sequence where the whole level is legible.
+ * 3. **Push** — a hard push in to a tight framing, the name card sliding under
  *    it. This is the sentence "it was *this* one".
- * 3. **Whip** — a fast pan that overshoots them and swings back, easing out of
- *    the tight framing. It costs 700ms and buys the thing a straight cut cannot:
+ * 4. **Whip** — a fast pan that overshoots them and swings back, easing out of
+ *    the tight framing. It costs 650ms and buys the thing a straight cut cannot:
  *    the feeling that a camera operator is following a person.
- * 4. **Roll** — the play itself, at speed, camera leading the fighter's
+ * 5. **Roll** — the play itself, at speed, camera leading the fighter's
  *    movement, dropping into slow motion and punching the zoom on every scoring
  *    beat the server recorded.
- * 5. **Outro** — the last frame held, pulled back out, cards returned.
+ * 6. **Outro** — the last frame held, pulled back out, cards returned.
  *
  * **This file is pure.** It owns no Pixi object, reads no clock and draws
  * nothing: it is fed a delta and a way to ask where the protagonist was at a
@@ -34,6 +40,7 @@
 import type { PotgClip } from "./types";
 
 export type PotgPhase =
+	| "intro"
 	| "establish"
 	| "push"
 	| "whip"
@@ -52,8 +59,26 @@ export interface PotgShot {
 	zoom: number;
 	/** How far the letterbox bars are extended, 0..1. */
 	letterbox: number;
-	/** Opacity of the big "PLAY OF THE GAME" title, 0..1. */
+	/**
+	 * How much of the arena the title card is covering, 0..1.
+	 *
+	 * 1 for almost all of the intro, then wiped to 0. This is the number that
+	 * makes the card an *event* rather than a caption: while it is 1 there is
+	 * nothing else on screen, so the reveal has something to reveal.
+	 */
+	curtain: number;
+	/** Opacity of the intro card as a whole, 0..1. */
 	title: number;
+	/**
+	 * Progress through the intro, 0..1.
+	 *
+	 * The card's internal animation is CSS keyframes rather than driven from
+	 * here — legitimate because the intro is the one movement with a *fixed*
+	 * duration, exactly like the ultimate's 1100ms cutscene. This is what the
+	 * overlay hands the stylesheet so the two cannot drift, and what the probe
+	 * reads to prove the card ran.
+	 */
+	intro: number;
 	/** Opacity of the protagonist's name card, 0..1. */
 	card: number;
 	/** Impact shake to request this frame, in pixels. Zero most frames. */
@@ -68,12 +93,25 @@ export interface PotgShot {
 // The movements
 // ---------------------------------------------------------------------------
 
-const ESTABLISH_MS = 1200;
-const PUSH_MS = 1000;
-const WHIP_MS = 700;
+/**
+ * The title card, in full. Exported because the stylesheet times the wordmark's
+ * entrance against it and the probe asserts the card actually stood.
+ *
+ * Long enough for four words to arrive one at a time and for a name to land
+ * under them; short enough that nobody reaches for the skip button. Overwatch
+ * spends five seconds here on a hero animation this game does not have, so this
+ * is the same beat without the thing that filled it.
+ */
+export const POTG_INTRO_MS = 2800;
+/** How long the card takes to wipe off the arena at the end of the intro. */
+export const POTG_WIPE_MS = 450;
+
+const ESTABLISH_MS = 900;
+const PUSH_MS = 900;
+const WHIP_MS = 650;
 const OUTRO_MS = 1800;
 /** Everything before the play itself. Named because the probe asserts on it. */
-export const POTG_PREROLL_MS = ESTABLISH_MS + PUSH_MS + WHIP_MS;
+export const POTG_PREROLL_MS = POTG_INTRO_MS + ESTABLISH_MS + PUSH_MS + WHIP_MS;
 
 /** Wide enough that a fighter reads as a figure in a place rather than a portrait. */
 const ESTABLISH_ZOOM = 0.82;
@@ -160,7 +198,7 @@ export class PotgDirector {
 	private clipMs = 0;
 	/** ms of wall clock spent in the current movement. */
 	private phaseMs = 0;
-	private phase: PotgPhase = "establish";
+	private phase: PotgPhase = "intro";
 	/** Where the camera actually is, as opposed to where it is being asked to go. */
 	private camX = 0;
 	private camY = 0;
@@ -229,7 +267,10 @@ export class PotgDirector {
 			focusY: this.camY,
 			zoom: target.zoom,
 			letterbox: this.letterbox(),
+			curtain: this.curtain(),
 			title: this.titleAlpha(),
+			intro:
+				this.phase === "intro" ? clamp(this.phaseMs / POTG_INTRO_MS, 0, 1) : 0,
 			card: this.cardAlpha(),
 			shake,
 			rate,
@@ -246,6 +287,9 @@ export class PotgDirector {
 
 	private advancePhase() {
 		switch (this.phase) {
+			case "intro":
+				if (this.phaseMs >= POTG_INTRO_MS) this.enter("establish");
+				return;
 			case "establish":
 				if (this.phaseMs >= ESTABLISH_MS) this.enter("push");
 				return;
@@ -276,6 +320,10 @@ export class PotgDirector {
 
 	/** How fast the footage should run right now. */
 	private rateNow(): number {
+		// The card owns the screen; there is nothing to see, so nothing runs. Held
+		// rather than crawling because the 2.5s lead-in is a budget — spending any
+		// of it behind an opaque card is spending it on nobody.
+		if (this.phase === "intro") return 0;
 		if (this.phase === "outro" || this.phase === "done") return 0;
 		if (this.phase !== "roll") return PREROLL_RATE;
 
@@ -315,6 +363,16 @@ export class PotgDirector {
 	private targetFor(subject: Subject): { x: number; y: number; zoom: number } {
 		const t = clamp(this.phaseMs / this.phaseLength(), 0, 1);
 		switch (this.phase) {
+			case "intro":
+				// Parked exactly where the establish will start from, so the wipe
+				// reveals a composed frame rather than a camera arriving into one.
+				// Nothing is visible during this, which is precisely why it must
+				// already be right when something is.
+				return {
+					x: subject.x + ESTABLISH_OFFSET_X,
+					y: subject.y + ESTABLISH_OFFSET_Y,
+					zoom: ESTABLISH_ZOOM,
+				};
 			case "establish":
 				return {
 					x: subject.x + ESTABLISH_OFFSET_X * (1 - easeOut(t)),
@@ -361,6 +419,8 @@ export class PotgDirector {
 
 	private phaseLength(): number {
 		switch (this.phase) {
+			case "intro":
+				return POTG_INTRO_MS;
 			case "establish":
 				return ESTABLISH_MS;
 			case "push":
@@ -392,19 +452,33 @@ export class PotgDirector {
 	}
 
 	/**
-	 * "PLAY OF THE GAME": up over the establish, and **gone by half the push**.
+	 * How much of the arena the title card is hiding.
 	 *
-	 * Faster than the push it rides on, so the title has left before the name card
-	 * arrives. Crossfading the two put a headline through the middle of the title
-	 * for a third of a second, which reads as two overlays fighting rather than as
-	 * one handing over to the other.
+	 * Solid for the whole intro but its last `POTG_WIPE_MS`, then off. **The
+	 * curtain is the entire difference between a title card and a caption**: the
+	 * first version faded a title in over a visible replay and it read as a
+	 * subtitle on footage that was already playing. Something has to own the
+	 * screen before it can hand it over.
+	 */
+	private curtain(): number {
+		if (this.phase !== "intro") return 0;
+		const from = POTG_INTRO_MS - POTG_WIPE_MS;
+		return 1 - easeInOut((this.phaseMs - from) / POTG_WIPE_MS);
+	}
+
+	/**
+	 * The intro card's own opacity.
+	 *
+	 * It leaves slightly *ahead* of the curtain — the words are gone by the time
+	 * the arena is fully revealed, so the reveal is of the arena and not of a
+	 * headline sitting on top of it.
 	 */
 	private titleAlpha(): number {
-		if (this.phase === "establish") return easeOut(this.phaseMs / BARS_MS);
-		if (this.phase === "push") {
-			return 1 - easeOut(this.phaseMs / (PUSH_MS * TITLE_OUT_FRACTION));
-		}
-		return 0;
+		if (this.phase !== "intro") return 0;
+		const from = POTG_INTRO_MS - POTG_WIPE_MS;
+		return (
+			1 - easeOut((this.phaseMs - from) / (POTG_WIPE_MS * TITLE_OUT_FRACTION))
+		);
 	}
 
 	/** The name card: after the title has gone, held through the whip, back for the outro. */

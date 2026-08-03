@@ -371,10 +371,15 @@ datagram; **the footage is `GET /potg/<roomId>` over the game server's HTTP
 port**, because a clip is hundreds of kilobytes. The client replays it as a
 projector — recorded `PackedState` re-pointed onto the live entities, drawn by
 the ordinary animation, nameplate, shadow and sword-effect systems — under a
-**five-movement camera edit**: establish wide, push in to 1.8x, a whip pan that
-overshoots and swings back, the roll with slow motion and a zoom punch on each
-beat, then an outro holding the last frame. `MATCH_OVER_LINGER_MS` is **28s**
-because the ceremony and the podium share it. Measured with
+**six-movement camera edit**: a 2.8s **title card that closes a curtain over the
+arena** (wordmark, medal, flare, staggered word slam, then a wipe), establish
+wide, push in to 1.8x, a whip pan that overshoots and swings back, the roll with
+slow motion and a zoom punch on each beat, then an outro holding the last frame.
+**The curtain is the whole difference between a title card and a caption** — the
+first version faded words in over a playing replay and read as a subtitle.
+The wordmark is four generated PNGs, because its condensed uppercase face exists
+on no platform by default. `MATCH_OVER_LINGER_MS` is **30s** because the
+ceremony and the podium share it. Measured with
 `scripts/potg-probe.mjs` — no other probe can see any of it, because they all
 stop reading at the frame it begins. See
 [specs/play-of-the-game.md](specs/play-of-the-game.md).

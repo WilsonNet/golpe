@@ -50,10 +50,10 @@ export const POTG_TAIL_MS = 2200;
  *
  * A cap, not a target. Without it a fighter who keeps scoring every four
  * seconds accumulates an unbounded play and an unwatchably long clip; with it,
- * the run is cut at nine seconds and whatever came after starts a new play
+ * the run is cut at eight seconds and whatever came after starts a new play
  * that has to win on its own merit.
  */
-export const POTG_MAX_PLAY_MS = 9000;
+export const POTG_MAX_PLAY_MS = 8000;
 
 /** Longest clip the server will cut, whatever the play's span. */
 export const POTG_MAX_CLIP_MS = POTG_LEAD_MS + POTG_MAX_PLAY_MS + POTG_TAIL_MS;

@@ -142,7 +142,16 @@ measurement. Never mix in `px` for layout (hairlines at 1-2px are fine).
    `--potg-progress` on the root through a ref: one style recalculation on one
    element, no reconciliation, and one timeline the overlay cannot fall out of
    step with. This is the exception that proves gotcha 5, not a licence to
-   re-render at 60Hz.
+   re-render at 60Hz. The *one* sub-section that is still CSS keyframes is the
+   title card, because the intro has a fixed length like the ultimate's 1100ms
+   cutscene — and its animation budget is asserted against that length in a
+   test, so the two cannot drift.
+8. **An absolutely positioned child of a grid or flex container is placed at its
+   static position.** The ceremony's flare landed in its grid *cell* instead of
+   the middle of the card, and its light sweep sized itself to the gap between
+   two words and drew a grey block over "OF". Give such elements explicit
+   `inset`, and `margin: auto` rather than a centring transform if they also
+   animate one.
 7. **An overlay that takes the whole frame must take the HUD down with it.**
    `usePotgActive()` gates both `FightHud` and `MatchOver`: a live HP bar over
    footage from a minute ago is a second fight the player cannot distinguish from

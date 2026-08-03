@@ -337,7 +337,8 @@ It plays a short AI-vs-AI match to a winner, then watches `__potgState()` at
 | Was a play announced, with a headline and a protagonist? | `announced` |
 | Did the server keep footage, and is it fetchable? | `GET /potg/<roomId>`, from node |
 | Is the clip real — frames, cast, beats, a lead-in? | the fetched JSON |
-| Did all five movements run, in order? | `phase`, sampled |
+| Did the card *cover* the arena, then open? | `curtain` — peak and return |
+| Did all six movements run, in order? | `phase`, sampled |
 | Was the establish wide, did the push push, did the whip *swing*? | `track` |
 | Did the footage slow at a beat, and reach full speed otherwise? | `track[].minRate` / `maxRate` |
 | Did the shake fire once per beat rather than once per frame? | `track[].shakes` vs the clip's beat count |
@@ -345,7 +346,13 @@ It plays a short AI-vs-AI match to a winner, then watches `__potgState()` at
 | Did the HUD and the podium stay down, and the overlay come up? | the DOM, while `active` |
 | Did the podium then arrive? | `.vd-veil` |
 
-Two details are load-bearing.
+Three details are load-bearing.
+
+**`curtain` is the only thing that can tell a title card from a caption.** A
+title faded in over a playing replay — which is what the first version did —
+satisfies every other assertion in the list. The probe requires it to reach 1
+(nothing else on screen) and then come back to 0 (the footage is actually
+visible).
 
 **`track` summarises each movement as a range, not a final sample.** A whip pan
 *ends* back on its subject, so its last position says nothing about whether it

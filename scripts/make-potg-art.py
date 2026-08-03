@@ -2,13 +2,25 @@
 """
 Generate the Play of the Game splash art.
 
-Two files, and they exist for the same reason `make-roll-art.py` exists: the
-game ships generated art rather than hand-drawn art, so a piece of the interface
-can be *derived* from the palette it has to sit in instead of being a PNG
-somebody colour-picked once and nobody dares re-tint.
+They exist for the same reason `make-roll-art.py` exists: the game ships
+generated art rather than hand-drawn art, so a piece of the interface can be
+*derived* from the palette it has to sit in instead of being a PNG somebody
+colour-picked once and nobody dares re-tint.
 
-  public/assets/potg-burst.png    a sunburst of gold rays, on transparency
-  public/assets/potg-emblem.png   a laurel-and-blade medal, the ceremony's mark
+  public/assets/potg-burst.png       a sunburst of gold rays, on transparency
+  public/assets/potg-emblem.png      a laurel-and-blade medal, the ceremony's mark
+  public/assets/potg-word-*.png      the wordmark, one file per word
+
+**The wordmark is art rather than live text, and that is the point.** Overwatch
+sets this card in Big Noodle Too — a condensed, uppercase, uniform-stroke
+grotesque — and the whole character of the splash is that typeface. There is no
+condensed display face that is present on Windows, macOS and Linux alike, so a
+CSS font stack would have looked right on one machine and like Arial Bold on the
+next; shipping a webfont means shipping a licence and a network request for four
+words. Rendering the four words here, from whichever narrow grotesque the build
+machine has, bakes the gradient and the outline in too — neither of which CSS
+does well on text — and leaves the overlay free to animate each word as its own
+block, which is what the entrance actually needs.
 
 Both are drawn at 4x and downsampled, which is the whole of the anti-aliasing
 strategy: the shapes are radial and hard-edged, and PIL has no vector renderer,
@@ -26,7 +38,7 @@ length and blurs their edges, which is what makes it read as a flare.
 import math
 import os
 
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 OUT_DIR = os.path.join(os.path.dirname(__file__), "..", "public", "assets")
 
@@ -37,6 +49,26 @@ GOLD_DEEP = (214, 156, 46)
 INK = (24, 20, 12)
 
 SS = 4  # supersample factor
+
+# Bright top, gold body, deep bottom — the vertical gradient every heavy game
+# wordmark has, and the reason this is baked art rather than a CSS colour.
+WORD_TOP = (255, 246, 214)
+WORD_MID = GOLD
+WORD_BOTTOM = (196, 138, 38)
+WORD_OUTLINE = (18, 14, 8)
+
+# The wordmark's face, in order of preference. All are condensed or narrow
+# grotesques; the first one present wins, and the last is a plain bold so the
+# script still produces *something* on a machine with none of the others.
+WORD_FONTS = (
+    "/usr/share/fonts/gsfonts/NimbusSansNarrow-Bold.otf",
+    "/usr/share/fonts/TTF/DejaVuSansCondensed-Bold.ttf",
+    "/usr/share/fonts/liberation/LiberationSansNarrow-Bold.ttf",
+    "/usr/share/fonts/liberation/LiberationSans-Bold.ttf",
+    "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
+)
+
+WORDS = ("PLAY", "OF", "THE", "GAME")
 
 
 def burst(size=640, rays=24):
@@ -144,9 +176,71 @@ def emblem(size=256):
     return img.resize((size, size), Image.LANCZOS)
 
 
+def word_font(size):
+    """The first narrow grotesque this machine actually has."""
+    for path in WORD_FONTS:
+        if os.path.exists(path):
+            return ImageFont.truetype(path, size), path
+    return ImageFont.load_default(), "(default)"
+
+
+def gradient(width, height):
+    """A vertical bright-to-deep gold ramp, the height of one word."""
+    ramp = Image.new("RGB", (1, height))
+    px = ramp.load()
+    for y in range(height):
+        t = y / max(1, height - 1)
+        # Two segments, so the highlight sits in the top third rather than
+        # halfway down — a linear ramp reads as a flat gold slab.
+        if t < 0.38:
+            u = t / 0.38
+            a, b = WORD_TOP, WORD_MID
+        else:
+            u = (t - 0.38) / 0.62
+            a, b = WORD_MID, WORD_BOTTOM
+        px[0, y] = tuple(int(a[i] + (b[i] - a[i]) * u) for i in range(3))
+    return ramp.resize((width, height), Image.NEAREST)
+
+
+def wordmark(word, size=150, squeeze=0.93, outline=7):
+    """
+    One word of the splash, as a tight-cropped RGBA image.
+
+    Drawn at 4x and squeezed horizontally afterwards. The squeeze is what turns
+    a merely narrow face into a *display* one: Big Noodle's silhouette is taller
+    than it is wide by a long way, and no font on a stock Linux box goes that
+    far on its own.
+    """
+    font, _ = word_font(size * SS)
+    probe = Image.new("L", (1, 1))
+    box = ImageDraw.Draw(probe).textbbox((0, 0), word, font=font)
+    pad = outline * SS + 8 * SS
+    w = box[2] - box[0] + pad * 2
+    h = box[3] - box[1] + pad * 2
+
+    # The glyph shapes as a mask, drawn once and reused for both the fill and
+    # the outline — dilating the same mask is what keeps the outline exactly
+    # concentric, which a second stroked draw does not guarantee.
+    mask = Image.new("L", (w, h), 0)
+    ImageDraw.Draw(mask).text((pad - box[0], pad - box[1]), word, font=font, fill=255)
+
+    ring = mask.filter(ImageFilter.MaxFilter(outline * 2 * SS - 1))
+    out = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    out.paste(Image.new("RGBA", (w, h), (*WORD_OUTLINE, 255)), (0, 0), ring)
+    out.paste(gradient(w, h).convert("RGBA"), (0, 0), mask)
+
+    out = out.resize(
+        (max(1, int(w * squeeze / SS)), max(1, h // SS)), Image.LANCZOS
+    )
+    return out.crop(out.getbbox() or (0, 0, out.width, out.height))
+
+
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
-    for name, image in (("potg-burst.png", burst()), ("potg-emblem.png", emblem())):
+    _, face = word_font(10)
+    print(f"wordmark face: {face}")
+    words = [(f"potg-word-{w.lower()}.png", wordmark(w)) for w in WORDS]
+    for name, image in [("potg-burst.png", burst()), ("potg-emblem.png", emblem())] + words:
         path = os.path.abspath(os.path.join(OUT_DIR, name))
         image.save(path)
         print(f"wrote {path} ({image.size[0]}x{image.size[1]})")

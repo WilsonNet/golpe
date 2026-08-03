@@ -79,6 +79,7 @@ export function PlayOfTheGame() {
 			const root = rootRef.current;
 			if (!root) return;
 			root.style.setProperty("--potg-bars", shot.letterbox.toFixed(3));
+			root.style.setProperty("--potg-curtain", shot.curtain.toFixed(3));
 			root.style.setProperty("--potg-title", shot.title.toFixed(3));
 			root.style.setProperty("--potg-card", shot.card.toFixed(3));
 			root.style.setProperty("--potg-progress", shot.progress.toFixed(4));
@@ -107,18 +108,43 @@ export function PlayOfTheGame() {
 			<style>{POTG_CSS}</style>
 
 			<div className="vp-vignette" />
+			{/* Curtain *and* letterbox, in one pair of elements: closed over the
+			    whole screen for the title card, then opened into the bars the rest
+			    of the ceremony is framed by. See `potgStyles.ts`. */}
 			<div className="vp-bar top" />
 			<div className="vp-bar bottom" />
 
-			{/* The establishing title. The burst is generated art
-			    (`scripts/make-potg-art.py`) rather than a conic gradient, because a
-			    gradient's rays stay hard-edged to the rim and read as a warning
-			    label instead of as light. */}
-			<div className="vp-title">
+			{/* The title card. Everything in here is generated art or CSS: the
+			    wordmark is four PNGs from `scripts/make-potg-art.py` because its
+			    condensed uppercase face exists on no platform by default, and the
+			    burst is a PNG rather than a conic gradient because a gradient's rays
+			    stay hard-edged to the rim and read as a warning label. */}
+			<div className="vp-splash">
+				<div className="vp-streaks" />
 				<div className="vp-burst" />
+				<div className="vp-flash" />
 				<div className="vp-emblem" role="img" aria-label="Play of the game" />
-				<div className="vp-title-line">PLAY OF THE GAME</div>
-				<div className="vp-title-rule" />
+				<div className="vp-words" role="img" aria-label="Play of the game">
+					<img className="vp-word w1" src="assets/potg-word-play.png" alt="" />
+					<img
+						className="vp-word w2 small"
+						src="assets/potg-word-of.png"
+						alt=""
+					/>
+					<img
+						className="vp-word w3 small"
+						src="assets/potg-word-the.png"
+						alt=""
+					/>
+					<img className="vp-word w4" src="assets/potg-word-game.png" alt="" />
+				</div>
+				<div className="vp-sweep" />
+				<div className="vp-byline">
+					<span className="name">{announce.protagonistName}</span>
+					<i className="dot" />
+					<span className="deed">{announce.headline}</span>
+				</div>
+				<div className="vp-rule" />
 			</div>
 
 			{/* Through the roll itself, when the title is gone: the one thing that

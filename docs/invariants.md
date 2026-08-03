@@ -521,6 +521,28 @@ underneath it.
   arrive in the same breath, and `MATCH_OVER_LINGER_MS` had to go from 15s to 28s
   to hold both — leaving it would have started a new match underneath a replay of
   the last one.
+- **A title card must own the screen before it can hand it over.** The first
+  version faded a title in over an already-playing replay and it read as a
+  subtitle on footage, not as an event. The `curtain` reaching 1 — nothing else
+  on screen — is the difference, and the probe asserts it: a caption satisfies
+  every other metric in the snapshot.
+- **The letterbox bars and the curtain are one pair of elements.** Two would
+  have been two things to keep in step, and the reveal falls out for free: the
+  halves open from meeting in the middle to being the 8% bars the rest of the
+  ceremony is framed by. Their gold inner edges and glows are scaled by the
+  curtain, or two lit edges meeting in the middle draw a rule straight through
+  the wordmark.
+- **The card's entrance is CSS keyframes, and only the card's.** Everything else
+  is driven by the director because it runs against footage at a variable speed;
+  the intro is the one movement with a fixed length, exactly like the ultimate's
+  1100ms cutscene. `Director.test.ts` asserts the card's animation budget fits
+  inside the intro with the wipe still to come — a card still in flight when the
+  curtain opens is the one way this looks broken without anything throwing.
+- **An absolutely positioned child of a grid or flex container takes its
+  *static* position.** The flare was placed at its grid cell rather than the
+  middle of the card, and the light sweep sized itself to the gap between two
+  words and rendered as a grey block over "OF". `inset` on both, and `margin:
+  auto` rather than a centring transform for anything that also animates one.
 - **A tie between plays is kept by the earlier one.** Any other rule makes the
   winner depend on the order plays happen to close in, and two identical matches
   would produce two different cinematics.
