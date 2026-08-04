@@ -208,19 +208,44 @@ export const MOVES: Record<MeleeMove, MoveDef> = {
 		knockdown: false,
 	},
 	/**
-	 * The payoff for a charge or a parry. Biggest damage, biggest stun, biggest
-	 * knockback — and 190ms of startup plus 420ms of recovery, neither of which
-	 * can be cancelled. Whiffing it is meant to be a disaster.
+	 * The payoff for a 2.5s charge or a guard break. The swing comes down on the
+	 * floor a little in front of the fighter, and what matters about it is what
+	 * happens *when it reaches the floor*: the blast that follows is front and
+	 * back of the slam point, and it stuns through a guard — which is the whole
+	 * "back massive" technique.
+	 *
+	 * Unlike the old unblockable heavy, **the swing itself can be read and
+	 * blocked.** A defender standing in the swing path stops the blade before it
+	 * touches the floor, and every block of a sword attack is a guard break — so
+	 * a front massive thrown into a turtle is a gift, and the answers to a turtle
+	 * are the blast behind you and the plunge bomb above you.
 	 */
 	massive: {
-		startupMs: 190,
-		activeMs: 110,
-		recoveryMs: 420,
+		/**
+		 * Short wind-up because the charge already *was* the wind-up: the sword
+		 * is raised for the whole hold, so the swing needs no time to get there.
+		 */
+		startupMs: 90,
+		/** The blade comes down; the floor contact lands at the end of this. */
+		activeMs: 130,
+		/**
+		 * Pulling the sword out of the floor. Longer than the old recovery,
+		 * because a move whose blast reaches 100px past the fighter cannot also
+		 * leave them free.
+		 */
+		recoveryMs: 460,
 		damage: 24,
-		reachPx: 56,
-		boxTopOffset: -8,
-		boxHeight: 56,
-		blockable: false,
+		/** The swing's hitbox reaches the slam point and no further. */
+		reachPx: 40,
+		/** The swing cuts from mid-body down to the feet, where the floor is. */
+		boxTopOffset: 20,
+		boxHeight: 28,
+		/**
+		 * Blockable, and that is the point: a turtle can stop the swing by being
+		 * *in* its path — and pays nothing, because blocking the swing is the
+		 * same guard break as blocking a slash. See `MASSIVE_SLAM_OFFSET_PX`.
+		 */
+		blockable: true,
 		cancellable: false,
 		piercesIframes: false,
 		hitstunMs: 650,
@@ -299,8 +324,35 @@ export const KNOCKDOWN_MS = 520;
  */
 const KNOCKDOWN_SLAM_VY = 520;
 
-/** Hold the attack button this long to arm a Massive Strike. */
-export const MASSIVE_CHARGE_MS = 420;
+/**
+ * Hold the attack button this long to arm a Massive Strike.
+ *
+ * 2.5s — long enough that arming in somebody's face is a read they can punish
+ * (a stun, a guard break, a stance switch all spend it), short enough that the
+ * armed delivery phase — walk it in, hop it into a bomb — is the majority of
+ * the commitment rather than a distant reward. The original 4s made the
+ * charge itself the whole move, and the fighter spent most of the gesture
+ * standing still.
+ */
+export const MASSIVE_CHARGE_MS = 2500;
+/**
+ * Hold past this and the charge roots your walk.
+ *
+ * The root cannot begin on the press itself: a butterfly tap is a press held
+ * ~55ms, and a chain link ~75ms, and neither must lose its mobility — the
+ * butterfly is the *mobile* pressure technique. This threshold sits past every
+ * cancel a slash offers, so only a hold that has outlived the slash's own
+ * decisions commits to the charge.
+ */
+export const CHARGE_LOCK_MS = 250;
+/**
+ * How long a guard-break-granted Massive stays armed before it fades.
+ *
+ * The reward for reading a swing is real but perishable: 4s to spend it,
+ * because it must be spent with intent — a free Massive that hung around
+ * forever would replace the sword game with a waiting game.
+ */
+export const PARRY_MASSIVE_LIFETIME_MS = 4000;
 /**
  * Delay before a guard becomes effective. **Zero, on purpose.**
  *
@@ -313,17 +365,12 @@ export const MASSIVE_CHARGE_MS = 420;
  * Anything between 1 and 16ms would also have been a fiction, just a quieter
  * one: the simulation steps at 60Hz, so a sub-tick delay rounds away to nothing
  * while still reading like a real cost. Blocking is risky because it covers one
- * side, slows you down, and does nothing against a Massive or an uppercut — not
- * because the button is sticky.
+ * side, slows you down, and every sword hit it stops turns the exchange around
+ * completely — not because the button is sticky.
  */
 export const BLOCK_STARTUP_MS = 0;
-/**
- * Absorbing a blockable attack this early into a *fresh* block guard-breaks the
- * attacker. The window belongs to the press: holding block never re-arms it.
- */
-export const PARRY_WINDOW_MS = 140;
-/** What a parried attacker eats. Long enough for the free Massive to land. */
-export const GUARD_BREAK_STUN_MS = 420;
+/** What a guard-broken attacker eats. Long enough for the free Massive to land. */
+export const GUARD_BREAK_STUN_MS = 1000;
 /** Extra stun on top of the move's own, for landing on someone's unfaced side. */
 export const BACKSTAB_BONUS_STUN_MS = 500;
 /**
@@ -337,6 +384,80 @@ export const BACKSTAB_BONUS_STUN_MS = 500;
 export const MELEE_IFRAME_MS = 180;
 /** Shared shove when an attack is absorbed. Nobody wins, both get space. */
 const BLOCK_PUSHBACK = 90;
+
+// ---------------------------------------------------------------------------
+// The massive's floor blast
+// ---------------------------------------------------------------------------
+
+/**
+ * How far in front of the body's centre the sword tip hits the floor.
+ *
+ * A little in front, not at the feet — the whole geometry of the move depends
+ * on it. The swing's hitbox reaches exactly this far, so a defender *in* the
+ * swing path can read and block it; anything past the slam point is out of the
+ * swing and into the blast. And the blast radiates front **and back** of this
+ * point, which is what makes a fighter who turned away from a turtle a threat:
+ * the turtle behind them is outside the swing but inside the blast.
+ */
+export const MASSIVE_SLAM_OFFSET_PX = 56;
+/**
+ * The blast's radius around the slam point, front and back equally.
+ *
+ * 100px either side: from the slam point the front reach ends ~156px past the
+ * body's centre, and the back reach ~44px past it — far enough that a blocking
+ * fighter standing on the attacker's back is caught, which is the back-massive.
+ */
+export const MASSIVE_BLAST_RADIUS_PX = 100;
+export const MASSIVE_BLAST_DAMAGE = 24;
+/**
+ * The blast's stun goes **through a guard** — that is the entire point of the
+ * back massive, and of the massive generally: the answer to a turtle is not to
+ * out-swing them but to make the floor explode where they stand.
+ */
+export const MASSIVE_BLAST_STUN_MS = 650;
+/** Horizontal shove away from the slam point, so the fight separates. */
+export const MASSIVE_BLAST_KNOCKBACK_PX_S = 240;
+
+// ---------------------------------------------------------------------------
+// The plunge bomb (an airborne massive)
+// ---------------------------------------------------------------------------
+
+/**
+ * The dive's speed. Faster than `MAX_FALL_SPEED` (950) — the bomb is not
+ * falling, it is *pressing* — and fast enough that the whole dive reads as one
+ * deliberate line rather than a fall you could second-guess.
+ */
+export const PLUNGE_SPEED = 1500;
+/** How fast a dive sheds its horizontal velocity: a bomb falls straight down. */
+export const PLUNGE_DECEL = 3000;
+/**
+ * Fall heights beyond this buy nothing. The arena's high ledges are ~300px
+ * above the floor, so a cap well past that keeps the formulas honest without
+ * letting a corner of the map turn into a nuke. The per-value maxima below
+ * are the value of exactly this fall: 450 + 500·0.5 = 700, and so on, so the
+ * cap is *the* big bomb rather than an unreachable tail.
+ */
+const PLUNGE_MAX_FALL_PX = 500;
+const PLUNGE_DAMAGE = 24;
+
+export const PLUNGE_BLAST_BASE_RADIUS_PX = 70;
+const PLUNGE_BLAST_RADIUS_PER_PX = 0.12;
+export const PLUNGE_BLAST_MAX_RADIUS_PX = 130;
+/** Stun grows with the bomb; a 500px fall stuns for the full 700ms. */
+export const PLUNGE_STUN_BASE_MS = 450;
+const PLUNGE_STUN_PER_PX_MS = 0.5;
+export const PLUNGE_STUN_MAX_MS = 700;
+/** Knockup (upward launch) grows with the bomb, from a hop toward a full jump. */
+export const PLUNGE_KNOCKUP_BASE = -250;
+const PLUNGE_KNOCKUP_PER_PX = -0.9;
+export const PLUNGE_KNOCKUP_MAX = -700;
+/**
+ * The bomber's own punishment: the sword is stuck in the ground, and the bigger
+ * the bomb the longer it takes to pull out. Only a melee hit ends it early.
+ */
+export const PLUNGE_STUCK_BASE_MS = 400;
+const PLUNGE_STUCK_PER_PX_MS = 0.8;
+export const PLUNGE_STUCK_MAX_MS = 800;
 /**
  * How far past the defender's centre an attacker must be for a backstab.
  *
@@ -372,8 +493,40 @@ export interface MeleeState {
 	blockTimer: number;
 	/** ms the attack button has been down, for the Massive charge. */
 	chargeTimer: number;
-	/** A Massive Strike is armed, from a full charge or a parry. */
+	/**
+	 * A Massive Strike is armed, from a full charge or a guard break.
+	 *
+	 * What fires it depends on *which* armed it: a guard break's Massive fires on
+	 * the next attack press and fades after `PARRY_MASSIVE_LIFETIME_MS`; a full
+	 * charge's fires on the release, and holds as long as the button does.
+	 */
 	massiveReady: boolean;
+	/** ms left of a guard-break-granted Massive. Zero means it was a charge. */
+	parryMassiveTimer: number;
+	/**
+	 * Mid-plunge-bomb dive. The fighter is rooted, drops at `PLUNGE_SPEED`, and
+	 * the dive ends at floor contact — which plants them in the ground and
+	 * explodes the bomb. Kept separate from `meleeAction` because a plunge has
+	 * no hitbox and no phase table: it is a physics state, not a swing.
+	 */
+	plunging: boolean;
+	/**
+	 * ms stuck with the sword in the ground after a bomb lands. Rooted, helpless,
+	 * and only a melee hit ends it early. See `PLUNGE_STUCK_*`.
+	 */
+	plungeStuckTimer: number;
+	/**
+	 * Y where the plunge began. The bomb's blast is a function of the fall
+	 * distance, and both sides must compute the *same* fall distance from the
+	 * *same* replayable state — so the origin travels on the wire.
+	 */
+	plungeOriginY: number;
+	/**
+	 * The current stun came from a guard break. Stun itself is just a timer, and
+	 * the renderer has to tell "reeling from a hit" from "raised his sword
+	 * helplessly" — that distinction is what makes a guard break readable.
+	 */
+	guardBroken: boolean;
 	/**
 	 * How far down the ground chain this fighter is: 0 for none, 1-3 for the link
 	 * that is running or was last thrown. An index into `COMBO_CHAIN`, plus one.
@@ -405,9 +558,14 @@ export interface MeleeState {
  * `grounded` is optional because it is *physics* state that `tickPlayer` owns —
  * `PlayerPosition` satisfies this for free, and a bare `MeleeState` still ticks.
  * A fighter with no floor under it simply cannot chain, which is the rule.
+ *
+ * `y` is optional for the same reason, and only the plunge reads it: the bomb's
+ * strength is derived from where the dive began, so the origin has to be
+ * captured at the instant the release is judged.
  */
 export interface MeleeTickState extends MeleeState {
 	grounded?: boolean;
+	y?: number;
 }
 
 /** What `resolveMelee` needs of a fighter: melee state plus a body. */
@@ -462,6 +620,11 @@ export function createMeleeState(facing: number): MeleeState {
 		blockTimer: 0,
 		chargeTimer: 0,
 		massiveReady: false,
+		parryMassiveTimer: 0,
+		plunging: false,
+		plungeStuckTimer: 0,
+		plungeOriginY: 0,
+		guardBroken: false,
 		comboStep: 0,
 		comboTimer: 0,
 		stunTimer: 0,
@@ -486,6 +649,11 @@ export function copyMeleeState<T extends MeleeState>(
 	target.blockTimer = source.blockTimer;
 	target.chargeTimer = source.chargeTimer;
 	target.massiveReady = source.massiveReady;
+	target.parryMassiveTimer = source.parryMassiveTimer;
+	target.plunging = source.plunging;
+	target.plungeStuckTimer = source.plungeStuckTimer;
+	target.plungeOriginY = source.plungeOriginY;
+	target.guardBroken = source.guardBroken;
 	target.comboStep = source.comboStep;
 	target.comboTimer = source.comboTimer;
 	target.stunTimer = source.stunTimer;
@@ -533,6 +701,83 @@ export function isKnockedDown(s: MeleeState): boolean {
 	return s.knockdownTimer > 0;
 }
 
+/**
+ * Has this fighter committed to the Massive charge *accumulation*?
+ *
+ * The root that stops walking is not the charge's first frame — that would kill
+ * the butterfly, whose taps live well under `CHARGE_LOCK_MS`. It is the hold
+ * that outlived the slash it opened with: a fighter who is still holding past
+ * the slash's own cancel options is charging, and charging plants you.
+ *
+ * The root ends the moment the charge is **armed** (`massiveReady`). A charged
+ * fighter carries the weapon, not the cast: walking, dashing and jumping all
+ * return, because delivering the massive — walking it into range, hopping to
+ * turn it into a bomb — is the strategy the 2.5s commitment is paid for.
+ */
+export function isCharging(s: MeleeState): boolean {
+	return (
+		s.stance === "sword" && !s.massiveReady && s.chargeTimer >= CHARGE_LOCK_MS
+	);
+}
+
+// ---------------------------------------------------------------------------
+// The massive's blast geometry
+//
+// These are pure and shared because both sides must agree on where the sword
+// hits the floor and on what a fall of a given height is worth. The client
+// predicts the slam point for its own swing and the landing of its own bomb;
+// the server applies the damage against the same numbers. See specs/melee.md.
+// ---------------------------------------------------------------------------
+
+/** Where the sword tip hits the floor: a little in front of the body. */
+export function massiveSlamPoint(s: { x: number; y: number; facing: number }): {
+	x: number;
+	y: number;
+} {
+	return {
+		x: s.x + PLAYER_WIDTH / 2 + s.facing * MASSIVE_SLAM_OFFSET_PX,
+		y: s.y + PLAYER_HEIGHT,
+	};
+}
+
+/** A fall distance, clamped so corner-of-the-map dives cannot nuke. */
+export function bombFallHeight(originY: number, landY: number): number {
+	// Y grows downward, so a landing below the origin is landY - originY > 0.
+	return Math.min(PLUNGE_MAX_FALL_PX, Math.max(0, landY - originY));
+}
+
+/** Everything a fall of `fallHeight` is worth: the bomb's whole stat card. */
+export interface BombBlast {
+	radiusPx: number;
+	stunMs: number;
+	knockupVy: number;
+	stuckMs: number;
+	damage: number;
+}
+
+export function bombBlastFor(fallHeight: number): BombBlast {
+	const h = Math.min(PLUNGE_MAX_FALL_PX, Math.max(0, fallHeight));
+	return {
+		radiusPx: Math.min(
+			PLUNGE_BLAST_MAX_RADIUS_PX,
+			PLUNGE_BLAST_BASE_RADIUS_PX + h * PLUNGE_BLAST_RADIUS_PER_PX,
+		),
+		stunMs: Math.min(
+			PLUNGE_STUN_MAX_MS,
+			PLUNGE_STUN_BASE_MS + h * PLUNGE_STUN_PER_PX_MS,
+		),
+		knockupVy: Math.max(
+			PLUNGE_KNOCKUP_MAX,
+			PLUNGE_KNOCKUP_BASE + h * PLUNGE_KNOCKUP_PER_PX,
+		),
+		stuckMs: Math.min(
+			PLUNGE_STUCK_MAX_MS,
+			PLUNGE_STUCK_BASE_MS + h * PLUNGE_STUCK_PER_PX_MS,
+		),
+		damage: PLUNGE_DAMAGE,
+	};
+}
+
 /** Forget the chain entirely — the next attack press opens a fresh one. */
 function resetCombo(s: MeleeState) {
 	s.comboStep = 0;
@@ -562,7 +807,11 @@ function startMove(s: MeleeState, move: MeleeMove) {
 	// An attack replaces a guard. Holding block and tapping attack is the
 	// butterfly, so this must not be an error case.
 	s.blocking = false;
-	if (move === "massive") s.massiveReady = false;
+	if (move === "massive") {
+		s.massiveReady = false;
+		s.parryMassiveTimer = 0;
+		s.chargeTimer = 0;
+	}
 	// Anything that is not a link breaks the chain. An uppercut in the middle of a
 	// combo is a different decision, not the second hit of this one.
 	if (isComboSlash(move)) {
@@ -571,6 +820,23 @@ function startMove(s: MeleeState, move: MeleeMove) {
 	} else {
 		resetCombo(s);
 	}
+}
+
+/**
+ * Start the plunge bomb: a charged massive released in the air.
+ *
+ * The dive itself is physics — `tickPlayer` pins the fall and plants the
+ * fighter at floor contact. All this does is capture the decision and the
+ * origin the blast's strength is derived from, and spend the charge.
+ */
+function startPlunge(s: MeleeTickState) {
+	s.plunging = true;
+	s.plungeOriginY = s.y ?? 0;
+	s.massiveReady = false;
+	s.parryMassiveTimer = 0;
+	s.chargeTimer = 0;
+	s.blocking = false;
+	resetCombo(s);
 }
 
 /**
@@ -604,7 +870,8 @@ function decay(ms: number, dtMs: number): number {
  * Advance one fighter's melee state by `dt` seconds. Mutates `s`.
  *
  * Ordering is deliberate and load-bearing:
- *   timers → stun gate → stance → block → move start → move advance → edges.
+ *   timers → stun gate → plunge gate → stuck gate → stance → block → move
+ *   start → move advance → edges.
  *
  * Block is processed before the attack so that a held block does not swallow an
  * attack press: pressing attack while blocking starts the swing and drops the
@@ -622,6 +889,10 @@ export function tickMelee(
 	s.knockdownTimer = decay(s.knockdownTimer, dtMs);
 	s.iframeTimer = decay(s.iframeTimer, dtMs);
 	s.comboTimer = decay(s.comboTimer, dtMs);
+	// A stun that has fully drained was the guard break's, and the helpless pose
+	// must not outlive it. Re-hit mid-incapacitation keeps the pose — the fighter
+	// is still incapacitated, it does not matter by whom.
+	if (s.stunTimer <= 0) s.guardBroken = false;
 	// The grace ran out with nothing thrown into it, so the chain is over. Only
 	// checked between moves: a running link carries the chain in `meleeAction`.
 	if (s.meleeAction === "none" && s.comboTimer <= 0) s.comboStep = 0;
@@ -638,12 +909,43 @@ export function tickMelee(
 		s.blockTimer = 0;
 		s.chargeTimer = 0;
 		s.massiveReady = false;
+		s.parryMassiveTimer = 0;
+		// A hit mid-dive ends the dive and drops the stuck: an interrupted bomb is
+		// an animation punishment, which is exactly what the stuck says it needs.
+		s.plunging = false;
+		s.plungeStuckTimer = 0;
 		// Latch the buttons as released so the first input after stun reads as a
 		// fresh press. Otherwise a player who held attack through the stun would
 		// fire the instant it ended, with no decision made.
 		s.attackHeld = false;
 		s.blockHeld = false;
 		s.uppercutHeld = false;
+		return;
+	}
+
+	// ---- plunge ----
+	//
+	// The dive discards intent entirely: the bomb is committed the moment the
+	// release was judged airborne. It ends in `tickPlayer`, at floor contact —
+	// the same shared code that plants the fighter in the ground.
+	if (s.plunging) {
+		s.attackHeld = input.attack;
+		s.blockHeld = input.block;
+		s.uppercutHeld = input.uppercut;
+		return;
+	}
+
+	// ---- stuck ----
+	//
+	// Helpless with the sword in the ground: rooted, no input, and only a melee
+	// hit (applied in `applyMeleeResult`) ends it early. The timer itself is the
+	// only way out that a stuck fighter controls, and it is exactly the
+	// "animation punishment for a massive bomber" the move was designed around.
+	if (s.plungeStuckTimer > 0) {
+		s.plungeStuckTimer = decay(s.plungeStuckTimer, dtMs);
+		s.attackHeld = input.attack;
+		s.blockHeld = input.block;
+		s.uppercutHeld = input.uppercut;
 		return;
 	}
 
@@ -660,20 +962,27 @@ export function tickMelee(
 			// cancel — the only one that keeps the combo alive.
 			resetCombo(s);
 		}
+		// And a stance switch kills the charge in both directions. The charge is a
+		// commitment that has to survive dash, jump and block to be worth anything —
+		// those are its delivery tools — but "don't switch weapons" is where it
+		// ends.
+		s.chargeTimer = 0;
+		s.massiveReady = false;
+		s.parryMassiveTimer = 0;
 		s.stance = wantSword ? "sword" : "gun";
 		if (!wantSword) {
 			s.blocking = false;
 			s.blockTimer = 0;
-			s.chargeTimer = 0;
 		}
 	}
 	const sword = s.stance === "sword";
 
 	// ---- block ----
 	if (sword && input.block) {
-		// Only a release resets the timer. Holding block, or interrupting your own
-		// block with a slash, must not re-arm the parry window — otherwise
-		// butterflying with block held would hand out a free parry every cycle.
+		// The parry window is gone: a guard stops the first slash *and* every
+		// later one, and each one it stops is a guard break. What still belongs to
+		// the press is the cancel — a block press ends a cancellable slash, and
+		// holding block through your own swing simply has no swing to cancel.
 		s.blockTimer += dtMs;
 		if (!s.blockHeld && isCancellable(s)) {
 			endMove(s);
@@ -689,6 +998,10 @@ export function tickMelee(
 		// own slash used to leave the guard up for the whole swing, which made the
 		// butterfly not merely safe but strictly free. Cancelling into the block
 		// still works — the cancel ends the move first, and *then* this is true.
+		//
+		// A charging fighter may hold the guard up too: the charge is not a swing,
+		// and being able to cover while the charge fills is one of the delivery
+		// tools that makes a 2.5s commitment survivable.
 		s.blocking = s.meleeAction === "none" && s.blockTimer >= BLOCK_STARTUP_MS;
 	} else {
 		s.blocking = false;
@@ -701,6 +1014,12 @@ export function tickMelee(
 		if (s.chargeTimer >= MASSIVE_CHARGE_MS) s.massiveReady = true;
 	} else {
 		s.chargeTimer = 0;
+	}
+
+	// ---- a guard-break Massive fades ----
+	if (s.parryMassiveTimer > 0) {
+		s.parryMassiveTimer = decay(s.parryMassiveTimer, dtMs);
+		if (s.parryMassiveTimer <= 0) s.massiveReady = false;
 	}
 
 	// ---- start a move ----
@@ -718,10 +1037,19 @@ export function tickMelee(
 
 		if (neutral && uppercutPress) {
 			startMove(s, "uppercut");
-		} else if (neutral && s.massiveReady && (attackPress || attackRelease)) {
-			// Two ways in: a parry arms it and the next press fires it; a full charge
-			// arms it and letting go fires it.
-			startMove(s, "massive");
+		} else if (neutral && s.massiveReady) {
+			// Two kinds, two triggers. A guard break arms it and the *press* fires
+			// it — the player was not holding the button when the guard broke, so a
+			// click is the natural gesture. A full charge arms it and the *release*
+			// fires it — the player is holding, and letting go is the gesture.
+			// And if the fighter is airborne when it fires, the swing is refused
+			// and the massive becomes the plunge bomb instead.
+			const firesOnPress = s.parryMassiveTimer > 0;
+			if ((firesOnPress ? attackPress : attackRelease) && s.grounded) {
+				startMove(s, "massive");
+			} else if (firesOnPress ? attackPress : attackRelease) {
+				startPlunge(s);
+			}
 		} else if (attackPress && (neutral || chaining)) {
 			// `comboStep` is one-based, so it is already the index of the *next* link.
 			startMove(s, (chaining && COMBO_CHAIN[s.comboStep]) || "slash");
@@ -771,7 +1099,15 @@ export function meleeHitbox(s: MeleeBody): Rect | null {
 	};
 }
 
-export type MeleeOutcome = "hit" | "backstab" | "blocked" | "parried";
+/**
+ * What happened to one swing — or one blast.
+ *
+ * `blast` and `bomb` are not swing outcomes: nothing can block or parry a floor
+ * blast, so the server emits them as events of their own. They share the type
+ * so the wire format and the effect renderer have one vocabulary for "a sword
+ * just hurt somebody".
+ */
+export type MeleeOutcome = "hit" | "backstab" | "parried" | "blast" | "bomb";
 
 export interface MeleeResult {
 	move: MeleeMove;
@@ -876,11 +1212,11 @@ export function resolveMelee(
 	const y = box.y + box.h / 2;
 
 	if (defender.blocking && def.blockable && !behind) {
-		// Early enough into a fresh block, absorbing the hit turns the exchange
-		// around completely; late, it merely survives it.
-		const outcome: MeleeOutcome =
-			defender.blockTimer <= PARRY_WINDOW_MS ? "parried" : "blocked";
-		return { move, outcome, damage: 0, x, y, dir };
+		// Every guard that stops a sword attack breaks it. There is no
+		// "absorbed without reward" tier any more — a turtle wins any exchange
+		// it reads, and the answers to a turtle are the things a guard cannot
+		// stop: the uppercut, the blast behind the swing, the bomb overhead.
+		return { move, outcome: "parried", damage: 0, x, y, dir };
 	}
 
 	return {
@@ -909,17 +1245,12 @@ export function applyMeleeResult(
 	attacker.hitLatch = true;
 
 	switch (result.outcome) {
-		case "blocked": {
-			// Nobody wins; both get space.
-			attacker.vx -= result.dir * BLOCK_PUSHBACK;
-			defender.vx += result.dir * BLOCK_PUSHBACK;
-			return 0;
-		}
-
 		case "parried": {
-			// The guard break: the attacker is thrown off balance and the defender
-			// gets an instant Massive, which is what makes reading a swing pay.
+			// The guard break: the attacker is thrown off balance for a full
+			// second — drawn raising their sword helplessly — and the defender
+			// gets a Massive, which is what makes reading a swing pay.
 			attacker.stunTimer = GUARD_BREAK_STUN_MS;
+			attacker.guardBroken = true;
 			attacker.meleeAction = "none";
 			attacker.meleeTimer = 0;
 			// A guard break ends the chain too. Reading one link of a combo is
@@ -931,7 +1262,14 @@ export function applyMeleeResult(
 			// cannot exist.
 			attacker.blocking = false;
 			attacker.vx -= result.dir * BLOCK_PUSHBACK;
+			// The whole reward: a full Massive, fired on the next attack press and
+			// gone after `PARRY_MASSIVE_LIFETIME_MS`. The defender's stun from the
+			// break (this same result's other half, one fighter over) will clear
+			// the attacker's charge on the very next tick — the stun gate resets
+			// `chargeTimer`, so the guard break also spends whatever the attacker
+			// was holding.
 			defender.massiveReady = true;
+			defender.parryMassiveTimer = PARRY_MASSIVE_LIFETIME_MS;
 			return 0;
 		}
 
@@ -963,6 +1301,9 @@ export function applyMeleeResult(
 			defender.blocking = false;
 			defender.comboStep = 0;
 			defender.comboTimer = 0;
+			// Any melee hit breaks a stuck bomber free — the one thing that can.
+			// The hit's own stun and knockback then play out normally on top.
+			defender.plungeStuckTimer = 0;
 			return def.damage;
 		}
 	}

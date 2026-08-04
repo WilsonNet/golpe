@@ -44,7 +44,8 @@ The Overwatch model: charge is a currency you are paid for participating.
 | Source | Rate |
 |---|---|
 | Passive trickle | **0.35 charge/s** while alive |
-| Damage dealt to another fighter | **0.2 charge per point** |
+| Damage dealt by a bullet | **0.2 charge per point** |
+| Damage dealt by a sword | **0.4 charge per point** — the sword pays double |
 | A kill | **3 charge** |
 
 - The meter is **0..100**. It is **server-owned** — the client displays it and

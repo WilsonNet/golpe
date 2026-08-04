@@ -325,16 +325,18 @@ Sword combat splits cleanly along the line prediction can safely follow.
 - **The state machine is predicted.** Startup, active, recovery, charge and block
   all live in `PlayerPosition` and are advanced by `tickPlayer`, so a swing draws
   on the frame the button is pressed and replays deterministically.
-- **The outcome is not.** Whether a swing connected, was blocked, was parried or
-  landed from behind depends on *both* fighters, and only the server sees both
-  authoritatively. Damage, stun, launch and knockback are applied server-side.
+- **The outcome is not.** Whether a swing connected, was parried (guard-broken),
+  landed from behind, or simply blew up the floor under everyone depends on
+  *both* fighters — or on the whole room, for a blast — and only the server sees
+  all of it authoritatively. Damage, stun, launch and knockback are applied
+  server-side.
 - They meet in the replayed state: stun and launch are ordinary fields, so the
   client rewinds into a stunned state and replays its inputs, which the
   simulation discards on both sides. Nothing special is needed to make a stunned
   prediction converge — that is the payoff for putting stun in the simulation
   rather than beside it.
 - **Impact effects are events, not state.** The server appends a melee event
-  (hit, blocked, parried, guard break, backstab, launch) to the snapshot; the
+  (hit, parry/guard break, backstab, blast, bomb) to the snapshot; the
   client fires particles from it. Events are one-shot, so a client that misses a
   datagram loses a spark, not a life.
 - **Never freeze frames on impact.** Hitstop is the standard way to sell a heavy

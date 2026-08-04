@@ -39,6 +39,10 @@ export const CLIPS = {
 	"right-idle": { frames: [5], fps: 1, sheet: "dude" },
 	disabled: { frames: [], fps: 1, sheet: "dude" },
 	downed: { frames: [], fps: 1, sheet: "dude" },
+	helpless: { frames: [], fps: 1, sheet: "dude" },
+	slam: { frames: [], fps: 1, sheet: "dude" },
+	plunge: { frames: [], fps: 1, sheet: "dude" },
+	stuck: { frames: [], fps: 1, sheet: "dude" },
 	"roll-right": { frames: [0, 1, 2, 3, 4, 5, 6, 7], fps: 25, sheet: "roll" },
 	"roll-left": {
 		frames: [8, 9, 10, 11, 12, 13, 14, 15],
@@ -87,10 +91,44 @@ export function animationSystem(queries: Queries, dtMs: number) {
 		// velocity-driven clips it kept playing the walk cycle while sliding
 		// backwards on a knockback, which is why the sword read as landing on
 		// nobody through an entire playtest.
+		//
+		// Above even the hit poses sit the two bomb states: the dive and the
+		// plant after it. They are commitments, not reactions — nothing else may
+		// interrupt them — so they draw over everything.
+		if (body.plunging) {
+			playClip(e.anim, "plunge");
+			const plungeTex = tex(TEX.plunge);
+			if (e.sprite.texture !== plungeTex) e.sprite.texture = plungeTex;
+			continue;
+		}
+		if (body.plungeStuckTimer > 0) {
+			playClip(e.anim, "stuck");
+			const stuckTex = tex(TEX.stuck);
+			if (e.sprite.texture !== stuckTex) e.sprite.texture = stuckTex;
+			continue;
+		}
+
+		// Mid-massive: the fighter is committed to the slam for its whole 680ms
+		// — rooted, so there is no walk cycle to show — and the lean is what
+		// sells the blade coming down. The blade itself is drawn by `MeleeFx`;
+		// this is the body that is doing the smashing.
+		if (body.meleeAction === "massive") {
+			playClip(e.anim, "slam");
+			const slamTex = tex(TEX.slam);
+			if (e.sprite.texture !== slamTex) e.sprite.texture = slamTex;
+			continue;
+		}
+
 		const downed = body.knockdownTimer > 0;
 		if (downed || body.stunTimer > 0) {
-			playClip(e.anim, downed ? "downed" : "disabled");
-			const hitTexture = tex(downed ? TEX.downed : TEX.disabled);
+			// A guard break is drawn as its own helplessness — the sword raised
+			// and useless — so the reward for a block is visible from across the
+			// arena, not just to the two fighters doing it.
+			const broken = body.guardBroken;
+			playClip(e.anim, downed ? "downed" : broken ? "helpless" : "disabled");
+			const hitTexture = tex(
+				downed ? TEX.downed : broken ? TEX.helpless : TEX.disabled,
+			);
 			if (e.sprite.texture !== hitTexture) e.sprite.texture = hitTexture;
 			continue;
 		}

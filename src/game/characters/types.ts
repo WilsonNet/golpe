@@ -78,9 +78,15 @@ export interface AIInput {
 	enemyPhase: MeleePhase;
 	enemyBlocking: boolean;
 	enemyStunned: boolean;
+	/** The enemy is mid-dive: a bomb is coming down somewhere nearby. */
+	enemyPlunging: boolean;
+	/** The enemy is planted with the sword in the ground: open season. */
+	enemyStuck: boolean;
 	/** Own melee state, so the brain does not fight its own animations. */
 	selfAction: MeleeAction;
 	selfStunned: boolean;
+	selfPlunging: boolean;
+	selfStuck: boolean;
 	selfMassiveReady: boolean;
 	/** Who this fighter is, for stable team ordering. */
 	selfId: string;

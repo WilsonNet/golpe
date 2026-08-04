@@ -231,8 +231,9 @@ part of what they must prove.
 ## Controls
 
 **WASD/Space** move/jump (**jump again in the air** = double jump) ·
-**double-tap A/D** dash (sword) or tumble (gun) · **LMB** slash (hold 420ms
-then release = Massive Strike) · **Shift** block · **F** uppercut · **Q/E**
+**double-tap A/D** dash (sword) or tumble (gun) · **LMB** slash (hold 2.5s
+then release = Massive Strike — a floor slam, or the plunge bomb if airborne) ·
+**Shift** block · **F** uppercut · **Q/E**
 sword/gun stance · **P** toggle AI vs AI · **hold Tab** scoreboard · **Esc**
 menu. Sword is the default stance.
 
@@ -288,6 +289,22 @@ floor**, the first two links cancel into a block and the finisher does not, **an
 a cancel always drops the chain** — so the butterfly is an endless opener loop and
 walking the chain is a separate decision. It ends in neutral by construction.
 Every landed sword hit disables its target and is drawn that way. See [specs/melee.md](specs/melee.md).
+
+**The guard is strong, and the Massive is a 2.5-second commitment.** Every block
+that stops a sword attack guard-breaks the attacker — a full second of the
+helpless pose — and grants the defender a free Massive (fires on click, cyan,
+4s to spend). The charge roots your walk while it fills (after 250ms) but keeps
+dash and double-jump even then — and once it completes, walking returns: the
+armed massive is carried, not endured, and delivery is the strategy. It dies to
+a release before 2.5s, a hit, a stance switch or an ult. Released on the ground it
+slams 56px in front and blasts 100px front *and back* of the slam point (the
+**back massive**: turn away from a turtle and the blast stuns through their
+guard); released in the air it becomes the **plunge bomb** — a 1500 px/s dive
+that blasts bigger with the fall, stuns and knocks up through guards, and
+plants the bomber in the ground afterwards (stuck, freed only by a melee hit).
+The swing itself is blockable: a front massive into a read guard is a gift, and
+the uppercut is the third answer to a turtle. Sword damage pays double ultimate
+charge.
 
 **An airborne dash is a flat line** — no gravity, same Y throughout — and the
 **air jump refills only on landing**. Both change reachability, which is a rule

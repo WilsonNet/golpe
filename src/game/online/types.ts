@@ -72,6 +72,12 @@ export interface MeleeEventMsg {
 	x: number;
 	y: number;
 	dir: number;
+	/**
+	 * The blast's reach, px. Only blast and bomb events carry it: the client
+	 * draws the area of effect ring to exactly this radius, so the move's
+	 * reach is visible even when it hits nobody.
+	 */
+	radiusPx?: number;
 }
 
 /**

@@ -280,7 +280,7 @@ game, and the gun answers a range problem.
 | Input | Sword | Gun |
 |---|---|---|
 | **Left click** (tap) | Slash | Fire |
-| **Left click** (hold ~420ms, then release) | **Massive Strike** | Fire |
+| **Left click** (hold ~2500ms, then release) | **Massive Strike** — a floor slam, or the plunge bomb if airborne | Fire |
 | **Shift** (hold) | **Block** | — |
 | **F** | **Uppercut** | — |
 
@@ -289,15 +289,20 @@ The three things worth knowing before your first match:
 - **Cancel your slash into a block.** Only the slash can be cancelled, and doing
   it the instant the swing lands cuts 330ms down to ~160ms while leaving you
   guarding. That is the *butterfly*, and it is the correct way to apply pressure.
-- **Blocking early beats blocking late.** The first 140ms of a *fresh* block is a
-  parry window: absorb a swing inside it and the attacker is guard-broken and you
-  get a free Massive Strike. Holding block never re-arms it.
+- **Blocking is strong — every guard that stops a swing breaks you.** A slash, a
+  chain link, even the massive's own swing: land it on a raised guard and *you*
+  spend a second helpless while the defender collects a free Massive Strike.
+  Only the unblockables open a turtle: the uppercut, the blast behind the
+  swing, and the plunge bomb from above.
 - **A guard only covers the side you face.** The answers to a turtle are the
-  uppercut (unblockable, launches them) and simply getting behind them — a
-  backstab ignores the guard entirely.
+  uppercut (unblockable, launches them), the *back massive* (turn away, slam,
+  and the blast stuns through the guard), the plunge bomb, and simply getting
+  behind them — a backstab ignores the guard entirely.
 
-Heavy moves are a commitment: the Massive Strike and the uppercut cannot be
-cancelled and root you where you stand, so whiffing one loses the exchange.
+Heavy moves are a commitment: the Massive Strike roots your walk while charging,
+and neither the Massive nor the uppercut can be cancelled, so whiffing one — or
+throwing it into a read guard — loses the exchange. A bomb plants you in the
+ground afterwards; only a sword hit pulls you out early.
 
 Full frame data and the reasoning behind every number is in
 [`specs/melee.md`](../specs/melee.md).

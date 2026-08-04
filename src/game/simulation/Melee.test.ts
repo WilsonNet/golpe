@@ -6,31 +6,46 @@ import {
 	BLOCK_STARTUP_MS,
 	blocksBullet,
 	blocksUltimate,
+	bombBlastFor,
+	CHARGE_LOCK_MS,
 	COMBO_CHAIN,
 	COMBO_LINK_MS,
 	createMeleeState,
 	GUARD_BREAK_STUN_MS,
 	isBehind,
 	isCancellable,
+	isCharging,
 	isCommitted,
 	KNOCKDOWN_MS,
 	MASSIVE_CHARGE_MS,
+	MASSIVE_SLAM_OFFSET_PX,
 	MELEE_IFRAME_MS,
 	type MeleeIntent,
 	type MeleeMove,
 	type MeleeResult,
 	type MeleeState,
 	MOVES,
+	massiveSlamPoint,
 	meleeHitbox,
 	meleePhase,
 	moveDuration,
-	PARRY_WINDOW_MS,
+	PARRY_MASSIVE_LIFETIME_MS,
+	PLUNGE_BLAST_BASE_RADIUS_PX,
+	PLUNGE_BLAST_MAX_RADIUS_PX,
+	PLUNGE_KNOCKUP_BASE,
+	PLUNGE_KNOCKUP_MAX,
+	PLUNGE_SPEED,
+	PLUNGE_STUCK_BASE_MS,
+	PLUNGE_STUCK_MAX_MS,
+	PLUNGE_STUN_BASE_MS,
+	PLUNGE_STUN_MAX_MS,
 	resolveMelee,
 	tickMelee,
 } from "./Melee.js";
 import {
 	BULLET_SPEED,
 	createPlayerState,
+	DASH_SPEED,
 	JUMP_VELOCITY,
 	NEUTRAL_INTENT,
 	type PlayerIntent,
@@ -121,8 +136,13 @@ describe("frame data", () => {
 		"ends %s within one tick of its declared duration",
 		(move) => {
 			const key = move === "uppercut" ? "uppercut" : "attack";
-			// Massive needs arming first; give it the flag directly.
-			const start = fighter(move === "massive" ? { massiveReady: true } : {});
+			// Massive needs arming first; a guard-break Massive (fires on the
+			// press) is the way to start it without a charge.
+			const start = fighter(
+				move === "massive"
+					? { massiveReady: true, parryMassiveTimer: 100, grounded: true }
+					: {},
+			);
 			const s = melee(start, { [key]: true });
 			expect(s.meleeAction).toBe(move);
 
@@ -167,27 +187,44 @@ describe("frame data", () => {
 
 describe("attack inputs", () => {
 	it("needs a press edge, so holding attack does not chain slashes", () => {
-		// One press, held for well over a full slash: exactly one slash happens.
+		// One press, held for well over a full slash but far short of the 4s
+		// charge: exactly one slash happens.
 		let s = melee(fighter(), { attack: true }, 40);
 		expect(s.meleeAction).toBe("none");
+		expect(s.massiveReady).toBe(false);
 
-		// ...and it does not restart while the button stays down, because the
-		// charge has by now armed a Massive, which needs a release.
+		// ...and it does not restart while the button stays down, because no
+		// release means no new press edge.
 		s = melee(s, { attack: true }, 5);
 		expect(s.meleeAction).toBe("none");
 	});
 
 	it("arms a Massive Strike after a full charge and fires it on release", () => {
 		const charged = tickUntil(
-			fighter(),
+			fighter({ grounded: true }),
 			{ attack: true },
 			(x) => x.massiveReady,
+			6000,
 		);
 		expect(charged.elapsedMs).toBeGreaterThanOrEqual(MASSIVE_CHARGE_MS - DT_MS);
 
 		const released = melee(charged.state, { attack: false });
 		expect(released.meleeAction).toBe("massive");
 		expect(released.massiveReady).toBe(false);
+	});
+
+	it("fires the charged Massive only on the release, never on the press", () => {
+		const charged = tickUntil(
+			fighter({ grounded: true }),
+			{ attack: true },
+			(x) => x.massiveReady,
+			6000,
+		);
+		// The press edge was the opener slash, long spent; a further hold with
+		// no release starts nothing.
+		const stillHeld = melee(charged.state, { attack: true });
+		expect(stillHeld.meleeAction).toBe("none");
+		expect(stillHeld.massiveReady).toBe(true);
 	});
 
 	it("does not arm a Massive Strike from a tap", () => {
@@ -200,6 +237,152 @@ describe("attack inputs", () => {
 	it("fires an uppercut on its own key", () => {
 		const s = melee(fighter(), { uppercut: true });
 		expect(s.meleeAction).toBe("uppercut");
+	});
+});
+
+describe("the charge", () => {
+	it("roots the walk only after the lock-in, so taps stay mobile", () => {
+		expect(CHARGE_LOCK_MS).toBeLessThan(MASSIVE_CHARGE_MS);
+		// A butterfly-length tap: still below the lock, not charging.
+		let s = fighter({ grounded: true });
+		s = melee(s, { attack: true }, 3);
+		expect(s.meleeTimer).toBeGreaterThan(0);
+		expect(isCharging(s)).toBe(false);
+	});
+
+	it("unlocks walking once the charge is armed", () => {
+		// Accumulation roots the walk. The intent keeps attack held — a tick
+		// without it would drop the charge, which is the rule, not a test bug.
+		let s = fighter({ grounded: true });
+		s = melee(s, { attack: true }, 100);
+		expect(isCharging(s)).toBe(true);
+		const rooted = tickPlayer(s, intent({ right: true, attack: true }), DT);
+		expect(rooted.x).toBe(100);
+
+		// ...but an armed charge is a weapon you carry, not a cast you endure:
+		// walking is how the massive gets delivered into range.
+		const charged = tickUntil(s, { attack: true }, (x) => x.massiveReady, 6000);
+		expect(isCharging(charged.state)).toBe(false);
+		const walking = tickPlayer(
+			charged.state,
+			intent({ right: true, attack: true }),
+			DT,
+		);
+		expect(walking.x).toBeGreaterThan(100);
+	});
+
+	it("keeps dash and jump as charge delivery tools", () => {
+		let s = fighter({ grounded: true });
+		s = melee(s, { attack: true }, 100);
+		expect(isCharging(s)).toBe(true);
+
+		// Dash while charging: the burst is how the charge closes distance.
+		const dashed = tickPlayer(s, intent({ dash: 1, attack: true }), DT);
+		expect(dashed.vx).toBe(DASH_SPEED);
+
+		// Jump while charging: the hop is how the bomb is made. The jump is
+		// applied before gravity in the same tick, so the assertion is the
+		// launch, not its post-gravity remainder.
+		const jumped = tickPlayer(s, intent({ up: true, attack: true }), DT);
+		expect(jumped.vy).toBeLessThan(0);
+		expect(jumped.grounded).toBe(false);
+	});
+
+	it("dashes once armed too — the charge is carried, not endured", () => {
+		let s = fighter({ grounded: true });
+		s = melee(s, { attack: true }, 100);
+		const charged = tickUntil(s, { attack: true }, (x) => x.massiveReady, 6000);
+		const dashed = tickPlayer(
+			charged.state,
+			intent({ dash: 1, attack: true }),
+			DT,
+		);
+		expect(dashed.vx).toBe(DASH_SPEED);
+	});
+
+	it("delivers the armed massive: walk, dash, walk — the whole gesture", () => {
+		// The training probe's delivery row, reproduced in the pure sim: charge
+		// to full, then walk, dash and walk again while holding, then release.
+		// The dash is a one-shot on its beat's first tick, like the dummy emits
+		// it.
+		const beats = [
+			{ ms: 150, face: 1 },
+			{ ms: 2450, hold: { attack: true }, face: 1 },
+			{ ms: 300, hold: { attack: true, moveRight: true }, face: 1 },
+			{ ms: 200, hold: { attack: true }, dash: 1, face: 1 },
+			{ ms: 300, hold: { attack: true, moveRight: true }, face: 1 },
+			{ ms: 60, face: 1 },
+			{ ms: 700, face: 1 },
+		];
+		let s = createPlayerState(300, 480, -1);
+		let beatIdx = 0;
+		let beatElapsed = 0;
+		let beatFresh = true;
+		let maxX = s.x;
+		let massiveFired = false;
+		for (let tick = 0; tick < 700; tick++) {
+			const beat = beats[beatIdx % beats.length];
+			if (!beat) break;
+			s = tickPlayer(
+				s,
+				intent({
+					attack: beat.hold?.attack ?? false,
+					right: beat.hold?.moveRight ?? false,
+					dash: beat.dash && beatFresh ? beat.dash : 0,
+					face: beat.face ?? 0,
+				}),
+				DT,
+			);
+			maxX = Math.max(maxX, s.x);
+			if (s.meleeAction === "massive") massiveFired = true;
+			beatElapsed += DT_MS;
+			beatFresh = false;
+			if (beatElapsed >= beat.ms) {
+				beatElapsed = 0;
+				beatFresh = true;
+				beatIdx = (beatIdx + 1) % beats.length;
+			}
+		}
+		// The delivery: the walks (~132px) plus the dash. The lane from 300 to
+		// the pillar at 496 gives it room.
+		expect(maxX - 300).toBeGreaterThan(150);
+		expect(massiveFired).toBe(true);
+	});
+
+	it("loses everything when released early", () => {
+		let s = fighter({ grounded: true });
+		s = melee(s, { attack: true }, 100);
+		expect(s.chargeTimer).toBeGreaterThan(0);
+		s = melee(s, { attack: false });
+		expect(s.chargeTimer).toBe(0);
+		expect(s.massiveReady).toBe(false);
+		expect(s.meleeAction).toBe("none");
+	});
+
+	it("is cancelled by a stance switch", () => {
+		let s = fighter({ grounded: true });
+		s = melee(s, { attack: true }, 100);
+		expect(s.chargeTimer).toBeGreaterThan(0);
+		s = melee(s, { swordStance: false });
+		expect(s.chargeTimer).toBe(0);
+	});
+
+	it("is spent by a stun", () => {
+		let s = fighter({ grounded: true });
+		s = melee(s, { attack: true }, 100);
+		expect(s.chargeTimer).toBeGreaterThan(0);
+		s = melee({ ...s, stunTimer: 100 }, {});
+		expect(s.chargeTimer).toBe(0);
+		expect(s.massiveReady).toBe(false);
+	});
+
+	it("can be held with the guard up — block is a delivery tool", () => {
+		// Charging and blocking at once is the move's cover: the charge is not a
+		// swing, so the guard stays up for as long as both buttons are held.
+		let s = fighter({ grounded: true });
+		s = melee(s, { attack: true, block: true }, 100);
+		expect(s.blocking).toBe(true);
+		expect(s.chargeTimer).toBeGreaterThan(0);
 	});
 });
 
@@ -459,7 +642,7 @@ describe("the ground chain", () => {
 		for (const move of COMBO_CHAIN) {
 			expect(MOVES[move].blockable).toBe(true);
 			const { attacker, defender } = duel({ move, defenderBlockMs: 400 });
-			expect(resolveMelee(attacker, defender)?.outcome).toBe("blocked");
+			expect(resolveMelee(attacker, defender)?.outcome).toBe("parried");
 		}
 	});
 });
@@ -493,23 +676,40 @@ describe("blocking", () => {
 		expect(melee(held, { block: false }).blocking).toBe(false);
 	});
 
-	it("absorbs a slash from the front for zero damage", () => {
+	it("turns every stopped swing into a guard break", () => {
 		const { attacker, defender } = duel({ defenderBlockMs: 400 });
 		const result = resolveMelee(attacker, defender);
-		expect(result?.outcome).toBe("blocked");
+		expect(result?.outcome).toBe("parried");
 		expect(applyMeleeResult(attacker, defender, connects(result))).toBe(0);
 		expect(defender.stunTimer).toBe(0);
+		// The attacker is the one paying: a full second of helplessness.
+		expect(attacker.stunTimer).toBe(GUARD_BREAK_STUN_MS);
 	});
 
-	it("cannot stop a Massive Strike or an uppercut", () => {
-		for (const move of ["massive", "uppercut"] as const) {
-			const { attacker, defender } = duel({ defenderBlockMs: 400, move });
-			const result = resolveMelee(attacker, defender);
-			expect(result?.outcome).toBe("hit");
-			expect(applyMeleeResult(attacker, defender, connects(result))).toBe(
-				MOVES[move].damage,
-			);
-		}
+	it("stops the massive's swing too — the swing is blockable", () => {
+		// The massive is blockable *at the swing*: a defender standing in the
+		// blade's path stops it before it reaches the floor. That is what makes
+		// the back-massive a technique rather than the only option.
+		expect(MOVES.massive.blockable).toBe(true);
+		const { attacker, defender } = duel({
+			move: "massive",
+			defenderBlockMs: 400,
+		});
+		const result = resolveMelee(attacker, defender);
+		expect(result?.outcome).toBe("parried");
+		expect(applyMeleeResult(attacker, defender, connects(result))).toBe(0);
+	});
+
+	it("cannot stop an uppercut", () => {
+		const { attacker, defender } = duel({
+			defenderBlockMs: 400,
+			move: "uppercut",
+		});
+		const result = resolveMelee(attacker, defender);
+		expect(result?.outcome).toBe("hit");
+		expect(applyMeleeResult(attacker, defender, connects(result))).toBe(
+			MOVES.uppercut.damage,
+		);
 	});
 
 	it("cannot be held up through your own swing", () => {
@@ -523,7 +723,10 @@ describe("blocking", () => {
 	});
 
 	it("cannot begin during a heavy move", () => {
-		let s = melee(fighter({ massiveReady: true }), { attack: true });
+		let s = melee(
+			fighter({ massiveReady: true, parryMassiveTimer: 100, grounded: true }),
+			{ attack: true },
+		);
 		expect(s.meleeAction).toBe("massive");
 		s = melee(s, { block: true }, 10);
 		expect(s.blocking).toBe(false);
@@ -531,46 +734,52 @@ describe("blocking", () => {
 	});
 });
 
-describe("parrying", () => {
-	it("guard-breaks the attacker and arms a free Massive Strike", () => {
-		const { attacker, defender } = duel({
-			defenderBlockMs: PARRY_WINDOW_MS / 2,
-		});
+describe("guard breaks", () => {
+	it("arms a full Massive and marks the attacker helpless", () => {
+		const { attacker, defender } = duel({ defenderBlockMs: 400 });
 		const result = resolveMelee(attacker, defender);
 		expect(result?.outcome).toBe("parried");
 
 		expect(applyMeleeResult(attacker, defender, connects(result))).toBe(0);
 		expect(attacker.stunTimer).toBe(GUARD_BREAK_STUN_MS);
+		expect(attacker.guardBroken).toBe(true);
 		expect(attacker.meleeAction).toBe("none");
 		// Stunned and blocking is a state the rules say cannot exist.
 		expect(attacker.blocking).toBe(false);
+		// The reward: a full massive, armed for a 4s window.
 		expect(defender.massiveReady).toBe(true);
+		expect(defender.parryMassiveTimer).toBe(PARRY_MASSIVE_LIFETIME_MS);
 	});
 
-	it("is only a plain block once the window has passed", () => {
-		const { attacker, defender } = duel({
-			defenderBlockMs: PARRY_WINDOW_MS + 100,
+	it("grants a Massive that fires on the press, not the release", () => {
+		// The defender was not holding attack when the guard broke, so the
+		// natural gesture is a click. A charge-massive needs a release; this
+		// one must not wait for one.
+		let s = fighter({
+			massiveReady: true,
+			parryMassiveTimer: 1000,
+			grounded: true,
 		});
-		expect(resolveMelee(attacker, defender)?.outcome).toBe("blocked");
+		expect(s.meleeAction).toBe("none");
+		s = melee(s, { attack: true });
+		expect(s.meleeAction).toBe("massive");
 	});
 
-	it("does not re-arm while the button stays held", () => {
-		// Hold block far past the window, interrupting it with a slash of our own
-		// on the way. The window must not come back: otherwise butterflying with
-		// block held would grant a free parry every cycle.
-		let s = melee(fighter(), { block: true }, 20);
-		s = melee(s, { block: true, attack: true });
-		s = melee(s, { block: true }, 20);
-		expect(s.blockTimer).toBeGreaterThan(PARRY_WINDOW_MS);
-		expect(s.blocking).toBe(true);
+	it("lets the granted Massive fade after its lifetime", () => {
+		const held = tickUntil(
+			fighter({ massiveReady: true, parryMassiveTimer: 1000 }),
+			{},
+			(x) => !x.massiveReady,
+			PARRY_MASSIVE_LIFETIME_MS + 500,
+		);
+		expect(held.state.massiveReady).toBe(false);
+		expect(held.state.parryMassiveTimer).toBe(0);
 	});
 
-	it("re-arms after the button is released and pressed again", () => {
-		let s = melee(fighter(), { block: true }, 20);
-		expect(s.blockTimer).toBeGreaterThan(PARRY_WINDOW_MS);
-		s = melee(s, { block: false });
-		s = melee(s, { block: true });
-		expect(s.blockTimer).toBeLessThan(PARRY_WINDOW_MS);
+	it("clears the helpless pose once the stun drains", () => {
+		const s = fighter({ stunTimer: GUARD_BREAK_STUN_MS, guardBroken: true });
+		const recovered = tickUntil(s, {}, (x) => x.stunTimer <= 0);
+		expect(recovered.state.guardBroken).toBe(false);
 	});
 });
 
@@ -644,7 +853,7 @@ describe("cancels", () => {
 	it("will not cancel a heavy move, which is what makes it punishable", () => {
 		for (const start of [
 			{
-				flags: { massiveReady: true },
+				flags: { massiveReady: true, parryMassiveTimer: 100, grounded: true },
 				key: "attack" as const,
 				move: "massive",
 			},
@@ -782,6 +991,7 @@ describe("commitment", () => {
 		let s = createPlayerState(100, 100);
 		s.grounded = true;
 		s.massiveReady = true;
+		s.parryMassiveTimer = 100;
 		s = tickPlayer(s, intent({ attack: true }), DT);
 		expect(s.meleeAction).toBe("massive");
 
@@ -812,6 +1022,130 @@ describe("commitment", () => {
 			return s.x;
 		};
 		expect(walk(true)).toBeLessThan(walk(false));
+	});
+});
+
+describe("the plunge bomb", () => {
+	/** A fighter in the air with a full charge, ready to release it. */
+	function bomber(y = 300): PlayerPosition {
+		return bomberAt(100, y);
+	}
+
+	/** The same, somewhere specific on the ground plane. */
+	function bomberAt(x: number, y: number): PlayerPosition {
+		return fighter({
+			x,
+			y,
+			grounded: false,
+			massiveReady: true,
+			chargeTimer: MASSIVE_CHARGE_MS,
+		});
+	}
+
+	/** Hold the button for a tick so the release edge has something to fire. */
+	function release(b: PlayerPosition): PlayerPosition {
+		return melee(melee(b, { attack: true }), { attack: false });
+	}
+
+	it("refuses the swing and dives instead of an airborne massive", () => {
+		const released = release(bomber());
+		expect(released.meleeAction).toBe("none");
+		expect(released.plunging).toBe(true);
+		expect(released.massiveReady).toBe(false);
+		expect(released.plungeOriginY).toBe(300);
+	});
+
+	it("drops faster than a fall can ever go", () => {
+		expect(PLUNGE_SPEED).toBeGreaterThan(950); // MAX_FALL_SPEED
+		let s = release(bomber());
+		expect(s.plunging).toBe(true);
+		// tickPlayer's gravity block pins the dive; the plunge is not a fall.
+		s = tickPlayer(s, intent({}), DT);
+		expect(s.vy).toBe(PLUNGE_SPEED);
+	});
+
+	it("is a commitment: nothing can be pressed mid-dive", () => {
+		let s = release(bomber());
+		s = melee(s, { attack: true, block: true, uppercut: true }, 10);
+		expect(s.plunging).toBe(true);
+		expect(s.meleeAction).toBe("none");
+		expect(s.blocking).toBe(false);
+	});
+
+	it("plants the fighter and arms the stuck timer at floor contact", () => {
+		// Diving at x=240: a clear lane down — the ground is the first solid
+		// surface, at GROUND.y = 568, so a fighter that dives from y=320 falls
+		// exactly 200px before standing on it.
+		const fall = 200;
+		let s = release(bomberAt(240, 320));
+		expect(s.plunging).toBe(true);
+		let landed = false;
+		for (let i = 0; i < 120 && !landed; i++) {
+			s = tickPlayer(s, intent({}), DT);
+			landed = !s.plunging;
+		}
+		expect(landed).toBe(true);
+		expect(s.grounded).toBe(true);
+		expect(s.y).toBe(568 - 48);
+		expect(s.plungeStuckTimer).toBeCloseTo(bombBlastFor(fall).stuckMs, 6);
+	});
+
+	it("breaks the stuck on a melee hit — the one cancel it has", () => {
+		const { attacker, defender } = duel({});
+		defender.plungeStuckTimer = 800;
+		applyMeleeResult(
+			attacker,
+			defender,
+			connects(resolveMelee(attacker, defender)),
+		);
+		expect(defender.plungeStuckTimer).toBe(0);
+		// And the slash's own stun plays out on top.
+		expect(defender.stunTimer).toBe(MOVES.slash.hitstunMs);
+	});
+
+	it("spends the stuck while rooted, then returns control", () => {
+		let s = fighter({ grounded: true, plungeStuckTimer: 200 });
+		s = tickPlayer(s, intent({ right: true }), DT);
+		expect(s.x).toBe(100); // rooted
+		expect(s.vx).toBe(0);
+		const recovered = tickUntil(s, {}, (x) => x.plungeStuckTimer <= 0);
+		expect(recovered.state.plungeStuckTimer).toBe(0);
+	});
+});
+
+describe("the massive's blast geometry", () => {
+	it("slams a little in front of the fighter, on both facings", () => {
+		const right = massiveSlamPoint({ x: 100, y: 200, facing: 1 });
+		expect(right.x).toBe(100 + 16 + MASSIVE_SLAM_OFFSET_PX);
+		expect(right.y).toBe(248);
+		const left = massiveSlamPoint({ x: 100, y: 200, facing: -1 });
+		expect(left.x).toBe(100 + 16 - MASSIVE_SLAM_OFFSET_PX);
+	});
+
+	it("measures a bomb by its fall, clamped to the arena's reach", () => {
+		expect(bombBlastFor(250).radiusPx).toBeGreaterThan(
+			PLUNGE_BLAST_BASE_RADIUS_PX,
+		);
+		expect(bombBlastFor(250).stunMs).toBeGreaterThan(PLUNGE_STUN_BASE_MS);
+		expect(bombBlastFor(250).knockupVy).toBeLessThan(PLUNGE_KNOCKUP_BASE);
+		expect(bombBlastFor(250).stuckMs).toBeGreaterThan(PLUNGE_STUCK_BASE_MS);
+
+		// The caps: a corner-of-the-map dive is not a nuke.
+		expect(bombBlastFor(100000).radiusPx).toBe(PLUNGE_BLAST_MAX_RADIUS_PX);
+		expect(bombBlastFor(100000).stunMs).toBe(PLUNGE_STUN_MAX_MS);
+		expect(bombBlastFor(100000).knockupVy).toBe(PLUNGE_KNOCKUP_MAX);
+		expect(bombBlastFor(100000).stuckMs).toBe(PLUNGE_STUCK_MAX_MS);
+		expect(bombBlastFor(100000).radiusPx).toBeLessThanOrEqual(
+			PLUNGE_BLAST_MAX_RADIUS_PX,
+		);
+
+		// Zero fall (a scrape along the floor) is still a bomb, just a small one.
+		expect(bombBlastFor(0).radiusPx).toBe(PLUNGE_BLAST_BASE_RADIUS_PX);
+		expect(bombBlastFor(-50).radiusPx).toBe(PLUNGE_BLAST_BASE_RADIUS_PX);
+		// The fall is capped before it is priced: 10,000px is 500px, not 10,000.
+		expect(bombBlastFor(100000).stuckMs).toBeLessThanOrEqual(
+			PLUNGE_STUCK_MAX_MS,
+		);
 	});
 });
 

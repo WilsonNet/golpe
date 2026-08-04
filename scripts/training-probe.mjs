@@ -195,8 +195,10 @@ const UPPERCUT = {
 	holdMs: 60,
 	aimAngle: AIM_RIGHT,
 };
-/** Charge past MASSIVE_CHARGE_MS (420ms), then let go — the release is what fires. */
-const MASSIVE = { intent: { attack: true }, holdMs: 470, aimAngle: AIM_RIGHT };
+/**
+ * Charge past MASSIVE_CHARGE_MS (2500ms), then let go — the release is what fires.
+ */
+const MASSIVE = { intent: { attack: true }, holdMs: 2550, aimAngle: AIM_RIGHT };
 /** A move's full duration, so the next step is not swallowed by its recovery. */
 const REST = 500;
 
@@ -301,9 +303,9 @@ const BATTERY = [
 		},
 	},
 	{
-		name: "block stops a slash from the front",
+		name: "a block guard-breaks a slash",
 		scenario: {
-			name: "block stops a slash",
+			name: "block breaks a slash",
 			config: { behaviour: "blockAll", facing: "foe" },
 			steps: [SLASH],
 			settleMs: 700,
@@ -314,9 +316,11 @@ const BATTERY = [
 			c.never("hit");
 			c.never("backstab");
 			c.damage(0);
+			// Every guard that stops a sword attack breaks it — there is no
+			// rewardless "blocked" tier any more.
 			const e = playerEvents(report)[0];
-			if (e && e.outcome !== "blocked" && e.outcome !== "parried") {
-				c.fails.push(`outcome ${e.outcome}, expected blocked or parried`);
+			if (e && e.outcome !== "parried") {
+				c.fails.push(`outcome ${e.outcome}, expected parried`);
 			}
 			c.atLeast("dummy blocks raised", report.dummy.blocks, 1);
 			return c.fails;
@@ -373,20 +377,113 @@ const BATTERY = [
 		},
 	},
 	{
-		name: "Massive Strike beats a block",
+		/**
+		 * The back-massive, end to end: a 2.5s charge *away* from a turtling
+		 * opponent, then a release that slams the floor in front of the player.
+		 * The turtle is behind the player — outside the swing, inside the
+		 * blast's back reach — and the blast stuns straight through the guard.
+		 *
+		 * The opener slash goes with the aim: facing away means the press that
+		 * starts the charge does not hand the turtle a free guard break.
+		 */
+		name: "a back massive blasts through a block",
 		scenario: {
-			name: "massive beats a block",
-			config: { behaviour: "blockAll", facing: "foe" },
-			steps: [MASSIVE],
-			settleMs: 1200,
+			name: "back massive",
+			config: {
+				behaviour: "blockAll",
+				facing: "foe",
+				spawn: { player: { x: 400, y: 480 }, dummy: { x: 440, y: 480 } },
+			},
+			steps: [{ ...MASSIVE, aimAngle: Math.PI }],
+			settleMs: 1500,
 		},
 		verify(report) {
 			const c = checks(report);
 			c.swung("massive");
-			// Holding attack starts a slash *and* charges, so the leading slash is
-			// expected — it is what the button does. Only the Massive is asserted on.
-			c.outcome("hit", "massive");
-			c.eq("massives armed", report.melee?.massives ?? 0, 1);
+			const blast = playerEvents(report).find((e) => e.outcome === "blast");
+			if (!blast) c.fails.push("no blast was judged");
+			// The swing itself reached nobody — only the blast hit, for its 24.
+			c.damage(DAMAGE.massive);
+			return c.fails;
+		},
+	},
+	{
+		/**
+		 * The plunge bomb, end to end — the dummy performs it, the player is the
+		 * turtle it ignores.
+		 *
+		 * The dummy's script holds attack *continuously* across two beats: beat
+		 * playback has no release frame between beats, which is the one thing the
+		 * player-side step model cannot express — every step ends in a release,
+		 * and the release fires the massive, so a player cannot charge, jump and
+		 * release inside one step. So the bomb is driven where the tooling can
+		 * say it: charge facing away (the opener slash must not hit the blocking
+		 * player — a guard break would spend the charge), turn and jump, release
+		 * mid-air. The dive lands beside the player and the blast ignores the
+		 * guard: full damage, stun and knockup through a raised block.
+		 */
+		name: "a plunge bomb ignores a block and knocks up",
+		async run(page) {
+			const running = page.evaluate((s) => window.__training.run(s), {
+				name: "plunge bomb",
+				config: {
+					behaviour: "script",
+					script: {
+						loop: true,
+						beats: [
+							// Turn away from the player first — facing is locked
+							// through a swing, so the turn has to happen while
+							// nothing is running, or the opener slash follows the
+							// spawn-facing and hits the blocking player's guard,
+							// which guard-breaks the charge away.
+							{ ms: 150, face: 1 },
+							// Charge, facing away from the player on the left.
+							{ ms: 2450, hold: { attack: true }, face: 1 },
+							// Turn toward the player and jump, still holding.
+							{
+								ms: 300,
+								hold: { attack: true, jump: true },
+								face: -1,
+							},
+							// Release mid-air: the dive begins.
+							{ ms: 60 },
+							// The dive, the stuck, and the next cycle's gap.
+							{ ms: 700 },
+						],
+					},
+				},
+				// The guard has to outlast the first bomb's detonation (~3s in
+				// with the 2.5s charge) but end before the dummy's second
+				// cycle — the cycle is ~3.5s, so a hold much past 5s admits a
+				// second bomb and the damage total stops being one bomb.
+				steps: [{ intent: { block: true }, holdMs: 5000, aimAngle: 0 }],
+				settleMs: 1200,
+			});
+
+			// The bomb detonates ~3s into the cycle, so the poll has to outlast
+			// the charge. The player is the victim this time.
+			let minVy = Number.POSITIVE_INFINITY;
+			for (let i = 0; i < 400; i++) {
+				const vy = await page.evaluate(
+					() => window.__gameState?.().playerPhys?.vy ?? 0,
+				);
+				minVy = Math.min(minVy, vy);
+				await page.waitForTimeout(20);
+			}
+
+			return { report: await running, extra: minVy };
+		},
+		verify(report, minVy) {
+			const c = checks(report);
+			const bomb = dummyEvents(report).find((e) => e.outcome === "bomb");
+			if (!bomb) c.fails.push("no bomb blast was judged");
+			// The bomb ignores the guard: the full 24 through a raised block.
+			c.eq("damage taken through the guard", report.player.damageTaken, 24);
+			if (!(minVy < 0)) {
+				c.fails.push(
+					`player never rose (lowest vy ${minVy}), expected a knockup`,
+				);
+			}
 			return c.fails;
 		},
 	},
@@ -739,11 +836,121 @@ const BATTERY = [
 	},
 	{
 		/**
+		 * The delivery rule: an armed massive is a weapon you carry. The dummy
+		 * charges to full, then walks, dashes and walks again — all while still
+		 * holding the button — and only then releases to fire the massive.
+		 *
+		 * This cannot be driven on the player's side: every step ends in a
+		 * release, and the release fires the massive, so a player cannot express
+		 * "charge, keep holding, walk". The dummy's beat scripts hold
+		 * continuously, which is exactly the gesture. A stale server running
+		 * the old root-everything rule fails this row loudly: the walk and dash
+		 * never happen, and the massive fires from where the charge started.
+		 */
+		name: "an armed massive walks and dashes",
+		async run(page) {
+			const running = page.evaluate((s) => window.__training.run(s), {
+				name: "armed massive delivery",
+				config: {
+					behaviour: "script",
+					// The dummy starts at 330 and delivers right, away from the
+					// player at 240. The lane between the ground pillars (280-304
+					// and 496-520) gives the delivery ~165px of clear ground; the
+					// default spawns put the right pillar 44px from the dummy,
+					// which stopped the delivery dead at the wall.
+					spawn: { player: { x: 240, y: 480 }, dummy: { x: 330, y: 480 } },
+					script: {
+						loop: true,
+						beats: [
+							// Turn away from the player first — the spawn-facing
+							// is toward them, and facing locks through a swing, so
+							// the turn has to happen before the opener slash.
+							{ ms: 150, face: 1 },
+							// Charge, facing away (the opener slash misses).
+							{ ms: 2450, hold: { attack: true }, face: 1 },
+							// The charge completes ~50ms into this beat: walk.
+							{
+								ms: 300,
+								hold: { attack: true, moveRight: true },
+								face: 1,
+							},
+							// Dash while armed — the burst closes distance. The
+							// dash is a beat-level one-shot, not a held button.
+							{ ms: 200, hold: { attack: true }, dash: 1, face: 1 },
+							// Walk some more.
+							{
+								ms: 300,
+								hold: { attack: true, moveRight: true },
+								face: 1,
+							},
+							// Release: the massive fires from where the delivery
+							// brought it — and whiffs, because the player is far
+							// behind it. The eruption must still happen. Every
+							// beat keeps the facing, or the dummy turns back to
+							// "foe" the moment a beat forgets it — including this
+							// one and the gap after.
+							{ ms: 60, face: 1 },
+							{ ms: 700, face: 1 },
+						],
+					},
+				},
+				// The player just guards for the whole cycle — holding the run
+				// open past the charge and the delivery, without getting in the
+				// way (the dummy faces away, so the guard never breaks its
+				// charge).
+				steps: [{ intent: { block: true }, holdMs: 6500, aimAngle: 0 }],
+				settleMs: 800,
+			});
+
+			const startX = await page.evaluate(
+				() => window.__gameState?.().enemyPhys?.x ?? 0,
+			);
+			const report_ = await running;
+			return { report: report_, extra: { startX } };
+		},
+		verify(report, { startX }) {
+			const c = checks(report);
+			c.atLeast("massives fired", report.dummy.moves.massive, 1);
+			// The delivery, read from the server's own blast: the slam point is
+			// 72px in front of the body, so the fighter fired from
+			// `blast.x - 72`. The client's remote *view* of a scripted dummy
+			// lags its prediction, so it cannot be trusted for this — the blast
+			// position is the server's word.
+			const blast = dummyEvents(report).find(
+				(e) => e.outcome === "blast" && !e.victimId,
+			);
+			if (!blast) {
+				c.fails.push("no whiffed blast was judged");
+			} else {
+				const firedFrom = blast.x - 72;
+				// The armed walk always moves the fighter at least this far even
+				// when the run's timing lands the release early — and a fighter
+				// still rooted by a stale charge moves nothing at all. The full
+				// walk-dash-walk gesture is asserted deterministically in
+				// `Melee.test.ts`; this row guards the regression that made the
+				// armed fighter unable to move at all.
+				c.atLeast("delivery distance px", firedFrom - startX, 30);
+			}
+			// The whiffed massive still erupts: the blast event had no victim.
+			c.atLeast(
+				"whiffed blast erupted",
+				dummyEvents(report).filter((e) => e.outcome === "blast" && !e.victimId)
+					.length,
+				1,
+			);
+			return c.fails;
+		},
+	},
+	{
+		/**
 		 * The aim phase is the commitment: killed while holding the button, the
-		 * whole meter is gone and the killer gets the DENY. The dummy uppercuts
-		 * the player to death — the vertical launch drops them back in range,
-		 * where a slash's horizontal shove kept pushing them out of reach —
-		 * while the player holds R and does nothing else.
+		 * whole meter is gone and the killer gets the DENY.
+		 *
+		 * The killer is the dummy's own black hole: a scripted cast lands the
+		 * grenade on the wall-pinned player, the hole opens on them, and its
+		 * 7-per-250ms holds them down through ~3.8s to death — the only weapon
+		 * fast enough to kill inside a 9s button hold, now that a sword hit
+		 * charges for 2.5 seconds. The player holds R and does nothing else.
 		 */
 		name: "killed while holding loses the ultimate",
 		async run(page) {
@@ -751,19 +958,21 @@ const BATTERY = [
 				window.__training.run({
 					name: "deny-kill",
 					config: {
-						behaviour: "massive",
-						facing: "foe",
-						// Player against the left wall, dummy close enough to hit a
-						// wall-pinned player: the first Massive's knockback pins
-						// the victim at x=0, and the dummy at x=70 keeps them
-						// inside the Massive's 56px reach even then — at x=90 the
-						// pinned gap (58px) was a whisker past it and every hit
-						// after the first whiffed.
+						behaviour: "script",
+						script: {
+							loop: true,
+							beats: [
+								// Aim at the player and cast on the release.
+								{ ms: 400, hold: { ultimate: true }, aimAngle: Math.PI },
+								// Recharge, then cast again if the first missed.
+								{ ms: 5000 },
+							],
+						},
+						// Pin the player so the grenade cannot miss its landing.
 						spawn: {
 							player: { x: 40, y: 480 },
 							dummy: { x: 70, y: 480 },
 						},
-						timing: { periodMs: 800 },
 						// The player has to actually die — the default dummy stays
 						// invincible, which is fine, but the player must not.
 						playerInvincible: false,

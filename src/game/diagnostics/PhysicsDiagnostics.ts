@@ -35,7 +35,7 @@ import {
 function zeroOutcomesByMove(): Record<MeleeMove, Record<MeleeOutcome, number>> {
 	const out = {} as Record<MeleeMove, Record<MeleeOutcome, number>>;
 	for (const move of MELEE_MOVES) {
-		out[move] = { hit: 0, backstab: 0, blocked: 0, parried: 0 };
+		out[move] = { hit: 0, backstab: 0, parried: 0, blast: 0, bomb: 0 };
 	}
 	return out;
 }
@@ -258,6 +258,7 @@ interface MeleeTrack {
 	wasBlocking: boolean;
 	wasStunned: boolean;
 	wasMassiveReady: boolean;
+	wasPlunging: boolean;
 	/** ms since a slash was cancelled short, for butterfly chaining. */
 	sinceCancelMs: number;
 	chainLength: number;
@@ -277,6 +278,7 @@ function newMeleeTrack(): MeleeTrack {
 		wasBlocking: false,
 		wasStunned: false,
 		wasMassiveReady: false,
+		wasPlunging: false,
 		sinceCancelMs: Number.POSITIVE_INFINITY,
 		chainLength: 0,
 		wasKnockedDown: false,
@@ -350,8 +352,9 @@ export class PhysicsDiagnostics {
 	private outcomeCounts: Record<MeleeOutcome, number> = {
 		hit: 0,
 		backstab: 0,
-		blocked: 0,
 		parried: 0,
+		blast: 0,
+		bomb: 0,
 	};
 	private outcomeByMove: Record<MeleeMove, Record<MeleeOutcome, number>> =
 		zeroOutcomesByMove();
@@ -368,6 +371,8 @@ export class PhysicsDiagnostics {
 	private longestChain = 0;
 	private stunsTaken = 0;
 	private massivesArmed = 0;
+	/** Bomb dives begun. The airborne half of the massive, counted on the edge. */
+	private plunges = 0;
 	/** Rule violations. Every one of these must end the run at zero. */
 	private illegalActions = 0;
 	/** Links thrown with no floor underfoot. Must be zero: the chain is grounded. */
@@ -487,7 +492,7 @@ export class PhysicsDiagnostics {
 
 		this.meleeTracks.clear();
 		this.moveCounts = zeroMoveCounts();
-		this.outcomeCounts = { hit: 0, backstab: 0, blocked: 0, parried: 0 };
+		this.outcomeCounts = { hit: 0, backstab: 0, parried: 0, blast: 0, bomb: 0 };
 		this.outcomeByMove = zeroOutcomesByMove();
 		this.meleeViolations = [];
 		this.meleeReplacements = [];
@@ -501,6 +506,7 @@ export class PhysicsDiagnostics {
 		this.longestChain = 0;
 		this.stunsTaken = 0;
 		this.massivesArmed = 0;
+		this.plunges = 0;
 		this.illegalActions = 0;
 		this.airborneChainLinks = 0;
 		this.blockedUnblockables = 0;
@@ -598,16 +604,13 @@ export class PhysicsDiagnostics {
 	recordMeleeEvent(move: MeleeMove, outcome: MeleeOutcome) {
 		if (!this.active) return;
 		this.outcomeCounts[outcome]++;
-		// Also keyed by move. A flat "0 blocked" is ambiguous — it reads the same
+		// Also keyed by move. A flat "0 parried" is ambiguous — it reads the same
 		// whether guards are failing or whether everything that connected was
 		// unblockable by design, and those need opposite fixes.
 		this.outcomeByMove[move][outcome]++;
 		// A block that stopped an unblockable move would mean the frame data table
 		// and the resolver disagree about what blocking covers.
-		if (
-			!MOVES[move].blockable &&
-			(outcome === "blocked" || outcome === "parried")
-		) {
+		if (!MOVES[move].blockable && outcome === "parried") {
 			this.blockedUnblockables++;
 		}
 	}
@@ -1030,12 +1033,14 @@ export class PhysicsDiagnostics {
 			this.blocksByFighter[who] = (this.blocksByFighter[who] ?? 0) + 1;
 		}
 		if (s.massiveReady && !t.wasMassiveReady) this.massivesArmed++;
+		if (s.plunging && !t.wasPlunging) this.plunges++;
 
 		t.lastAction = s.meleeAction;
 		t.lastTimer = s.meleeTimer;
 		t.wasBlocking = s.blocking;
 		t.wasStunned = stunned;
 		t.wasMassiveReady = s.massiveReady;
+		t.wasPlunging = s.plunging;
 		// Ground contact, for judging whether the next link was thrown airborne.
 		// Latched after the checks above so "a full sample airborne before the
 		// link" reads the same edge `canChain` reasons about.
@@ -1067,9 +1072,11 @@ export class PhysicsDiagnostics {
 			massives: this.moveCounts.massive,
 			blocks: this.blocksRaised,
 			massivesArmed: this.massivesArmed,
+			plunges: this.plunges,
 			hits: this.outcomeCounts.hit,
 			backstabs: this.outcomeCounts.backstab,
-			blockedHits: this.outcomeCounts.blocked,
+			blasts: this.outcomeCounts.blast,
+			bombs: this.outcomeCounts.bomb,
 			parries: this.outcomeCounts.parried,
 			stuns: this.stunsTaken,
 			/** Cancels, and how many of them chained into a butterfly. */

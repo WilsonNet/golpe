@@ -59,6 +59,17 @@ export const ULT_PASSIVE_PER_SEC = 0.35;
  */
 export const ULT_CHARGE_PER_DAMAGE = 0.2;
 
+/**
+ * Sword hits pay this much more per point than gun shots do.
+ *
+ * The sword is the riskier, closer weapon and it is this game's heart, so a
+ * fighter who lives in the melee arms their ultimate first. The multiplier
+ * lives beside the base rate so the two cannot drift apart — and the base rate
+ * stays the rate *bullets* pay, which is what makes "melee pays double" a
+ * comparison the spec can actually state.
+ */
+export const ULT_CHARGE_MELEE_MULTIPLIER = 2;
+
 /** A finishing blow is worth a little more than the damage that did it. */
 export const ULT_CHARGE_PER_KILL = 3;
 

@@ -36,8 +36,17 @@ the real bugs surfaced:
 
 - **Violations** (`illegalActions`, `blockedUnblockables`, `frameDataViolations`,
   `stuckActionFrames`, `meleeDesyncFrames`) must all be **0**.
-- **Counters** (`slashes`, `massives`, `uppercuts`, `blocks`, `parries`,
-  `backstabs`, `butterflyChains`) must all be **> 0** across a few runs.
+- **Counters** (`slashes`, `massives`, `plunges`, `uppercuts`, `blocks`,
+  `parries`, `backstabs`, `blasts`, `bombs`, `butterflyChains`) must all be
+  **> 0** across a few runs.
+
+`parries` is the guard-break counter: every guard that stops a sword attack is
+a `parried` outcome — there is no rewardless "blocked" tier left — so a run
+with guards meeting swings must show parries, and `parries: 0` beside a healthy
+`blocks` means swings are not reaching the guards. A charge is a 2.5s commitment,
+so `massives` (ground slams) legitimately run at 0 in single duels while
+`plunges`/`bombs` (the airborne half) fire — the back-massive and bomb rows in
+`training-probe.mjs` cover the ground slam deterministically.
 
 Both of the worst sword bugs presented as a zero in the second half while the
 first half read perfectly clean: reactive blocking was *impossible* online
@@ -439,7 +448,7 @@ npx vitest run src/game/simulation/Physics.test.ts
 | `bulletSummary.maxStepRatio` | Worst step vs expected; 1.0 is ideal, healthy is ~1.2 |
 | `bulletSummary.avgStepCv` | Step-length evenness; 0 is perfect, healthy is ~0.05 |
 | `meleeSummary.illegalActions` | Somebody acted while stunned; must be 0 |
-| `meleeSummary.blockedUnblockables` | A guard stopped a Massive or uppercut; must be 0 |
+| `meleeSummary.blockedUnblockables` | A guard stopped the uppercut; must be 0 — the massive's *swing* is blockable by design now |
 | `meleeSummary.frameDataViolations` | A move ignored its own `MOVES` table; `violations[]` names which |
 | `meleeSummary.meleeDesyncFrames` | The client drew a swing the server never ran; must be 0 |
 | `meleeSummary` counters all > 0 | The mechanics actually fired. A clean run with zeroes here proves nothing |

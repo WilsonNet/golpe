@@ -101,6 +101,11 @@ const STAY_BIAS = 0.3;
 /** Reaction time worsens by this per point of missing skill, plus this jitter. */
 const REACTION_SKILL_STEP_MS = 40;
 const REACTION_JITTER_MS = 100;
+/**
+ * Close enough that an enemy's dive is landing on you: the bomb's max blast
+ * (130px) plus a margin for the judgement.
+ */
+const BOMB_DANGER_PX = 170;
 /** A chase that has been stuck for this long flips into anti-stuck steering. */
 const STUCK_ESCALATE_MS = 1200;
 /** Chance rolls for the jump/strafe/counter reflexes, hurt vs hale where they differ. */
@@ -328,6 +333,21 @@ export class EnemyBrain {
 			output.aimAngle = this.ultimate.aimOverride;
 		} else {
 			output.aimAngle = this.aimAt(input);
+		}
+
+		// ---- the bomb ----
+		//
+		// A fighter mid-dive is a bomb with a fuse, and its one counter is
+		// distance — a guard cannot stop it, and there is no trading with it.
+		// While the enemy is coming down, every plan the state machine made is
+		// shelved: run. Dash, even — the dive is short, and one dash is the
+		// whole escape. Last on purpose, after the team module, so the bomb
+		// beats even a cover order.
+		if (input.enemyPlunging && input.distanceToPlayer < BOMB_DANGER_PX) {
+			output.moveLeft = input.playerX > input.selfX;
+			output.moveRight = input.playerX <= input.selfX;
+			output.dash = input.playerX >= input.selfX ? -1 : 1;
+			output.attack = false;
 		}
 
 		// ---- the jump ----

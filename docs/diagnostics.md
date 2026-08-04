@@ -410,9 +410,9 @@ Emitted as `__DIAGNOSTIC_RESULT__{...}__END__` on one console line.
 | `meleeSummary` violations | `illegalActions`, `blockedUnblockables`, `frameDataViolations`, `stuckActionFrames`, `meleeDesyncFrames` — **all must be 0** |
 | `meleeSummary.meleeReplacements` | sword states the server replaced, with the reconciler's verdict on each: `stun`, `iframe`, `massive-armed` and `respawn` are facts only the server holds; **`unexplained` is the one that is a bug** |
 | `meleeSummary.violations[].replacedThisFrame` | what the server did on the frame a violation fired. `null` means the state machine really did break its own table |
-| `meleeSummary` counters | `slashes`, `massives`, `uppercuts`, `blocks`, `parries`, `backstabs`, `butterflyChains` — **must be > 0**, or the run proves nothing |
-| `meleeSummary.blockedHits` vs `parries` | a guard that beat the 140ms parry window is `blocked`; earlier is `parried`. **Reactive guarding produces `blockedHits: 0` legitimately** — `blocked` is the turtle's signature |
-| `meleeSummary.outcomeByMove` | outcomes per move; a flat `blocked: 0` cannot distinguish "guards failing" from "everything that landed was unblockable" |
+| `meleeSummary` counters | `slashes`, `massives`, `plunges`, `uppercuts`, `blocks`, `parries`, `backstabs`, `butterflyChains`, `blasts`, `bombs` — **must be > 0**, or the run proves nothing |
+| `meleeSummary.parries` | the guard-break counter. Every guard that stops a sword attack is a `parried` outcome now — there is no rewardless "blocked" tier — so `parries: 0` beside a healthy `blocks` says guards are going up but swings are not reaching them |
+| `meleeSummary.outcomeByMove` | outcomes per move; a flat `parried: 0` cannot distinguish "guards failing" from "everything that landed was unblockable" |
 | `meleeSummary.violations[]` | which fighter broke which frame-data contract, and by how much |
 | `arenaSummary.xSpanPct` / `ySpanPct` | how much of the arena the fight touched. A duel confined to a narrow band tests almost nothing |
 | `arenaSummary.surfacesUsed` | distinct platforms stood on, out of `surfacesAvailable`. 1 of 9 means the ledges are untested |

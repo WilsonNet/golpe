@@ -12,7 +12,7 @@
  * anything else.
  */
 
-import { isComboSlash } from "../simulation/Melee.js";
+import { isComboSlash, MASSIVE_CHARGE_MS } from "../simulation/Melee.js";
 import type { AIInput, AIOutput, TeamRole } from "./types.js";
 
 /** Draw the sword inside this range; holster it beyond `SWORD_DISENGAGE_PX`. */
@@ -106,8 +106,16 @@ const UPPERCUT_BEATS: MeleeBeat[] = [{ ms: 60, uppercut: true }, { ms: 120 }];
 /**
  * Charge, then let go. The release is what fires the Massive Strike, and it has
  * to be long enough to register as a release before the next press.
+ *
+ * The charge now takes `MASSIVE_CHARGE_MS` and plants the fighter — and while
+ * planted, the guard is free: holding block alongside the charge is the one
+ * delivery tool that needs no movement, and it is strictly better than
+ * standing rooted with the sword down.
  */
-const CHARGE_BEATS: MeleeBeat[] = [{ ms: 470, attack: true }, { ms: 90 }];
+const CHARGE_BEATS: MeleeBeat[] = [
+	{ ms: MASSIVE_CHARGE_MS + 60, attack: true, block: true },
+	{ ms: 90 },
+];
 
 /** Fire an already-armed Massive: one clean press. */
 const RELEASE_MASSIVE: MeleeBeat[] = [{ ms: 60, attack: true }, { ms: 80 }];
@@ -203,8 +211,9 @@ export class MeleeBrain {
 
 		// Stunned: nothing to decide. The simulation discards the input anyway, but
 		// dropping the rhythm here means the fighter does not resume a half-played
-		// butterfly the instant it recovers.
-		if (input.selfStunned) {
+		// butterfly the instant it recovers. The same goes for the plunge and the
+		// stuck — the bomb is committed, and the planted fighter has no buttons.
+		if (input.selfStunned || input.selfPlunging || input.selfStuck) {
 			this.beats = null;
 			output.attack = false;
 			return;
@@ -273,16 +282,27 @@ export class MeleeBrain {
 			return LONE_SLASH;
 		}
 
-		// A swing is coming. Blocking it early enough guard-breaks them; blocking
-		// late at least survives it.
-		//
-		// This outranks releasing an armed Massive on purpose. A Massive needs
-		// 190ms of startup against a slash that connects in 75, so answering a
-		// swing with one loses the exchange *and* the charge.
+		// A bomber planted with their sword in the ground is the one opponent who
+		// is helpless by definition: no guard, no escape, and only a sword hit
+		// ends it. This is the biggest punish in the game.
+		if (input.enemyStuck && distance < STRIKE_RANGE_PX) {
+			return COMBO;
+		}
+
+		// A swing is coming. Blocking it guard-breaks them — every guard does, now
+		// — and the attacker spends a full second raised helpless while the
+		// defender collects a Massive. This outranks releasing an armed Massive on
+		// purpose: a Massive needs its wind-up against a slash that connects in 75,
+		// so answering a swing with one loses the exchange *and* the charge.
 		const incoming =
 			// Any link of the chain, not just its opener: reading only the first
 			// swing would leave a bot standing still through the two that follow it.
-			isComboSlash(input.enemyAction) &&
+			(isComboSlash(input.enemyAction) ||
+				// And the massive's own swing: it is blockable now, and the guard
+				// break that stops it is the same one that stops a slash — so a
+				// turtle can read the wind-up and turn the heaviest move in the
+				// game into their own free Massive.
+				input.enemyAction === "massive") &&
 			(input.enemyPhase === "startup" || input.enemyPhase === "active") &&
 			distance < STRIKE_RANGE_PX + GUARD_READ_GRACE_PX;
 		// A hurt fighter answers a read by covering up rather than by timing a
@@ -324,6 +344,13 @@ export class MeleeBrain {
 
 		// A charge that is already paid for. Spend it when there is no swing to
 		// answer and the target is in reach.
+		//
+		// Airborne first: releasing in the air is the plunge bomb, the one massive
+		// a guard cannot stop — and the bot is in the air all the time, so this is
+		// also the branch that keeps the bomb actually happening in measured play.
+		if (input.selfMassiveReady && !input.touchingDown) {
+			return RELEASE_MASSIVE;
+		}
 		if (
 			input.selfMassiveReady &&
 			distance < STRIKE_RANGE_PX + MASSIVE_SPEND_GRACE_PX

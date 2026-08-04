@@ -49,11 +49,21 @@ export type DummyBehaviour =
  * Buttons held for a whole beat. Anything omitted is *released*, which is the
  * point: the simulation does its own press-edge detection, so a rhythm is
  * defined as much by its gaps as by its presses.
+ *
+ * `ultimate` is held like any other button — the cast fires on the release,
+ * exactly as a player's does — so the dummy is a complete input source rather
+ * than a sword-only one.
  */
 type DummyHold = Partial<
 	Pick<
 		AIOutput,
-		"moveLeft" | "moveRight" | "jump" | "attack" | "block" | "uppercut"
+		| "moveLeft"
+		| "moveRight"
+		| "jump"
+		| "attack"
+		| "block"
+		| "uppercut"
+		| "ultimate"
 	>
 >;
 

@@ -28,6 +28,14 @@ export const TEX = {
 	spark: "fx_spark",
 	shard: "fx_shard",
 	ring: "fx_ring",
+	/**
+	 * The massive's blast column: a vertical eruption rising out of the floor.
+	 * The move's one silhouette — a flame torn upward, not a wave — see
+	 * `createEruptionTexture`.
+	 */
+	eruption: "fx_eruption",
+	/** A lumpy rock, thrown by the massive's blast. See `createChunkTexture`. */
+	chunk: "fx_chunk",
 	arc: "fx_arc",
 	blade: "fx_blade",
 	guard: "fx_guard",
@@ -35,6 +43,14 @@ export const TEX = {
 	disabled: "dude_disabled",
 	/** Flat on the floor, after the chain's finisher. */
 	downed: "dude_downed",
+	/** Guard-broken: a full second with the sword raised helplessly. */
+	helpless: "dude_helpless",
+	/** Mid-slam: the massive's swing, leaning into the planted blade. */
+	slam: "dude_slam",
+	/** The plunge bomb's dive: sword first, straight down. */
+	plunge: "dude_plunge",
+	/** Planted after a bomb: the sword is in the ground and the fighter is stuck. */
+	stuck: "dude_stuck",
 	/** The black hole's own art — see `createUltimateTextures`. */
 	singularity: "fx_singularity",
 	horizon: "fx_horizon",
@@ -160,6 +176,26 @@ export function createFxTextures(renderer: Renderer): void {
 		new Graphics().circle(48, 48, 44).stroke({ width: 5, color: 0xffffff }),
 	);
 
+	// The massive's blast: a vertical eruption, deliberately not a wave.
+	//
+	// A radial wave — ring or star — reads as "shockwave", the same vocabulary
+	// as the parry and the backstab. The massive is the move that takes four
+	// seconds to earn, and its boom goes the one direction nothing else does:
+	// up. The texture is a flame torn out of the floor — a wide vent at the
+	// base that flares into a jagged crown at the top — anchored at its base
+	// so it can grow upward out of the ground instead of expanding sideways.
+	bake(renderer, TEX.eruption, createEruptionTexture());
+
+	// The massive's debris: a lumpy rock, chunkier than the thin shard used by
+	// every other impact. The blast throws rocks, not sparks.
+	bake(
+		renderer,
+		TEX.chunk,
+		new Graphics()
+			.poly([8, 0, 15, 4, 16, 11, 10, 16, 2, 13, 0, 6])
+			.fill(0xffffff),
+	);
+
 	// A crescent: the swing trail. Drawn facing +x so it can simply be rotated.
 	const arc = new Graphics();
 	arc.arc(48, 48, 46, -1.0, 1.0, false);
@@ -197,6 +233,31 @@ export function createFxTextures(renderer: Renderer): void {
 
 	createHitTextures(renderer);
 	createUltimateTextures(renderer);
+}
+
+/**
+ * The massive's blast: a flame torn upward out of the ground.
+ *
+ * A 64x96 column — a wide vent at the bottom that billows outward and then
+ * flares into a jagged crown at the top, like a geyser or a torch flame
+ * stretched tall. It is anchored at its base so the caller can grow it
+ * *upward* out of the floor (scale.y from small to tall) rather than
+ * expanding it sideways: the massive's boom goes down-to-up, and nothing
+ * else in the game does.
+ */
+function createEruptionTexture(): Container {
+	return new Graphics()
+		.poly([
+			// The vent: bottom-left to bottom-right.
+			20, 96, 44, 96,
+			// Up the right side, billowing outward.
+			48, 62, 52, 42, 46, 30, 40, 36,
+			// The jagged crown across the top.
+			38, 12, 30, 24, 26, 6, 20, 22, 14, 10, 12, 28, 16, 36,
+			// Down the left side, mirroring the billow.
+			12, 62,
+		])
+		.fill(0xffffff);
 }
 
 /**
@@ -374,4 +435,87 @@ function createHitTextures(renderer: Renderer): void {
 	down.addChild(dust);
 
 	bake(renderer, TEX.downed, down);
+
+	// ---- helpless: the guard-break pose ----
+	//
+	// A guard that stopped a swing is a full second of "raise the sword and
+	// stand there". It must read differently from a stagger — this is not
+	// reeling from a hit, it is the sword itself being useless — so the body
+	// rocks *back* and up, arms toward the sky, washed pale.
+	const helpless = new Container();
+	helpless.addChild(canvas());
+
+	const raised = new Sprite(source);
+	raised.anchor.set(0.5, 1);
+	raised.position.set(PLAYER_WIDTH / 2, PLAYER_HEIGHT);
+	raised.rotation = 0.18;
+	raised.tint = 0xfff2d8;
+	helpless.addChild(raised);
+
+	// The sword it cannot use, drawn as a pale line up beside the head.
+	const helplessBlade = new Graphics();
+	helplessBlade
+		.moveTo(PLAYER_WIDTH / 2 + 3, 8)
+		.lineTo(PLAYER_WIDTH / 2 + 3, 42);
+	helplessBlade.stroke({ width: 2, color: 0xffffff, alpha: 0.7 });
+	helpless.addChild(helplessBlade);
+
+	bake(renderer, TEX.helpless, helpless);
+
+	// ---- slam: the massive's swing ----
+	//
+	// The fighter leaning into the blade as it comes down: the swing is only
+	// 220ms, so the body reads as committed — leaning forward, weight down —
+	// rather than as a standing figure waving a sword. The blade itself is
+	// drawn by `MeleeFx`; this is the body that commits to it.
+	const slam = new Container();
+	slam.addChild(canvas());
+
+	const smashing = new Sprite(source);
+	smashing.anchor.set(0.5, 1);
+	smashing.position.set(PLAYER_WIDTH / 2, PLAYER_HEIGHT);
+	smashing.rotation = 0.5;
+	smashing.tint = 0xfff6e0;
+	slam.addChild(smashing);
+
+	bake(renderer, TEX.slam, slam);
+
+	// ---- plunge: the dive pose ----
+	//
+	// The bomb is a body going down faster than it can fall, sword first. The
+	// strip's face-on frame, canted forward and down, reads as a dive against
+	// the vertical streaks of speed — the blade itself is drawn by `MeleeFx`.
+	const plunge = new Container();
+	plunge.addChild(canvas());
+
+	const diving = new Sprite(source);
+	diving.anchor.set(0.5, 1);
+	diving.position.set(PLAYER_WIDTH / 2, PLAYER_HEIGHT);
+	diving.rotation = 0.42;
+	diving.tint = 0xffffff;
+	plunge.addChild(diving);
+
+	bake(renderer, TEX.plunge, plunge);
+
+	// ---- stuck: planted after a bomb ----
+	//
+	// The price of a bomb: bent over the sword stuck in the ground, going
+	// nowhere, for a duration the blast itself decided. The crater it stands in
+	// is part of the pose.
+	const stuck = new Container();
+	stuck.addChild(canvas());
+
+	const planted = new Sprite(source);
+	planted.anchor.set(0.5, 1);
+	planted.position.set(PLAYER_WIDTH / 2, PLAYER_HEIGHT);
+	planted.rotation = 0.62;
+	planted.tint = 0xe8e4da;
+	stuck.addChild(planted);
+
+	const crater = new Graphics();
+	crater.ellipse(PLAYER_WIDTH / 2, PLAYER_HEIGHT - 1, 19, 5);
+	crater.fill({ color: 0xffffff, alpha: 0.45 });
+	stuck.addChild(crater);
+
+	bake(renderer, TEX.stuck, stuck);
 }

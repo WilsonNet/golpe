@@ -46,8 +46,12 @@ function perception(overrides: Partial<AIInput> = {}): AIInput {
 		enemyPhase: "none",
 		enemyBlocking: false,
 		enemyStunned: false,
+		enemyPlunging: false,
+		enemyStuck: false,
 		selfAction: "none",
 		selfStunned: false,
+		selfPlunging: false,
+		selfStuck: false,
 		selfMassiveReady: false,
 		selfId: "dummy",
 		selfAirJumps: 1,
@@ -195,14 +199,21 @@ describe("TrainingDummy: scripted rhythms", () => {
 			behaviour: "massive",
 			timing: { periodMs: 1200 },
 		});
-		const outputs = run(dummy, 600);
+		// The charge is 4s now, so the hold must be watched across a full one.
+		const outputs = run(dummy, MASSIVE_CHARGE_MS + 500);
 		const heldMs = outputs.filter((o) => o.attack).length * DT_MS;
 		expect(heldMs).toBeGreaterThan(MASSIVE_CHARGE_MS);
-		expect(outputs.at(-1)?.attack).toBe(false);
+		// A release actually happened — the button went from held to released at
+		// least once, which is the edge that fires the Massive.
+		const releases = outputs.reduce(
+			(n, o, i) => n + (i > 0 && outputs[i - 1]?.attack && !o.attack ? 1 : 0),
+			0,
+		);
+		expect(releases).toBeGreaterThanOrEqual(1);
 
 		const { moves } = simulate(
 			new TrainingDummy({ behaviour: "massive", timing: { periodMs: 1200 } }),
-			3000,
+			10000,
 		);
 		expect(moves).toContain("massive");
 		expect(moves.filter((m) => m === "massive").length).toBeGreaterThanOrEqual(

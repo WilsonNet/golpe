@@ -105,10 +105,13 @@ interface MeleeSummaryView {
 	knockdowns: number;
 	uppercuts: number;
 	massives: number;
+	/** Bomb dives begun — the airborne half of the massive. */
+	plunges: number;
 	blocks: number;
 	hits: number;
 	backstabs: number;
-	blockedHits: number;
+	blasts: number;
+	bombs: number;
 	parries: number;
 	illegalActions: number;
 	airborneChainLinks: number;

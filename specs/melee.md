@@ -14,11 +14,14 @@ commits you to a long recovery, and a fighter who reads it gets a free punish.
 The loop the mechanics are meant to produce:
 
 ```
-  butterfly pressure  ──blocked──▶  opponent parries  ──▶  you are guard-broken
-         │                                                        │
-    opponent blocks                                          free Massive
-         │                                                        │
-      uppercut (unblockable, launches)  ◀────── punished if whiffed
+  butterfly pressure  ──blocked──▶  you are guard-broken: 1s helpless
+         │                                        │
+    opponent blocks                        they collect a free Massive
+         │                                        │
+  the answers to a turtle:            ◀── a read guard breaks the swing
+  uppercut (unblockable, short reach)
+  back massive (blast behind you, stuns through the guard)
+  plunge bomb (from the air, unstoppable — and it plants you)
 ```
 
 Every mechanic below exists to close one arrow of that diagram. A mechanic that
@@ -57,7 +60,7 @@ A fighter holds either a **sword** or a **gun**, never both.
 | Input | Sword stance | Gun stance |
 |---|---|---|
 | **LMB** tap | Slash — and, on the ground, the next link of the chain | Fire |
-| **LMB** hold ≥ 420ms, then release | **Massive Strike** | Fire (charge ignored) |
+| **LMB** hold ≥ 2500ms, then release | **Massive Strike** (a floor slam — or the plunge bomb, airborne) | Fire (charge ignored) |
 | **Shift** hold | **Block** | — |
 | **F** | **Uppercut** | — |
 
@@ -85,7 +88,7 @@ table in `src/game/simulation/Melee.ts` and nowhere else.
 | **Slash 2** (link 2) | 75ms | 85ms | 170ms | 330ms | 7 | 44px | **yes** | **yes** |
 | **Slash 3** (finisher) | 85ms | 100ms | 420ms | 605ms | 11 | 48px | **yes** | **no** |
 | **Uppercut** | 110ms | 100ms | 340ms | 550ms | 11 | 34px | **no** | **no** |
-| **Massive Strike** | 190ms | 110ms | 420ms | 720ms | 24 | 56px | **no** | **no** |
+| **Massive Strike** (slam) | 90ms | 130ms | 460ms | 680ms | 24 | 40px | **yes** | **no** |
 
 On hit:
 
@@ -96,6 +99,10 @@ On hit:
 | Slash 3 | 520ms | — | 300 px/s | **yes** |
 | Uppercut | 260ms | **−620 px/s** | 90 px/s | — |
 | Massive Strike | 650ms | — | 420 px/s | — |
+
+The Massive Strike's *blast* is not in this table, because it is not a swing:
+it is an area event judged by the server when the swing reaches the floor. See
+*The Massive Strike* and *The plunge bomb* below.
 
 **Why these hold:**
 
@@ -126,10 +133,18 @@ On hit:
   low enough that it is not an instant ring-out from every platform. It is
   derived from the jump, so **changing `JUMP_VELOCITY` or `GRAVITY` changes what
   a launch means** — see [movement.md](movement.md).
-- **Massive recovery (420ms) is longer than a whiffed uppercut's entire
+- **Massive recovery (460ms) is longer than a whiffed uppercut's entire
   duration.** Missing a Massive is meant to lose you the exchange outright.
 - **Massive damage (24) is a bit over three slashes** but takes more than twice
   as long and cannot be cancelled or protected. The trade is deliberate.
+- **The swing's startup is short (90ms) because the charge already was the
+  wind-up**: the sword is raised for the whole 2.5s hold, so the swing itself only
+  has to come down.
+- **The swing is blockable, and that is the point.** The old Massive ignored the
+  guard; the new one loses to it — a defender standing in the blade's path stops
+  it before it reaches the floor, and every block of a sword attack is a guard
+  break. A front massive thrown into a turtle is a gift; the answers to a turtle
+  are the blast behind you and the bomb overhead. See *The Massive Strike*.
 - **The whole chain deals 25** — a shade more than a Massive, for three separate
   hits that each have to connect, on the ground, off an opener that respects
   invulnerability like anything else. The finisher's own 11 is the "little bonus"
@@ -230,8 +245,11 @@ wind-up across a 20Hz network already spends most of the available time waiting
 for the snapshot; charging another 30ms on top was the difference between a hard
 read and an impossible one. A sub-tick delay would have been worse still —
 honest-looking in the constants and rounded away to nothing at 60Hz. **Blocking
-is risky because it covers one side, slows you to 55% walk speed, and does
-nothing against a Massive or an uppercut — not because the button is sticky.**
+is risky because it covers one side, slows you to 55% walk speed, and turns
+every sword hit it stops into a guard break that commits both fighters — not
+because the button is sticky.** (And it stops the Massive's *swing*; what it
+cannot stop is the blast behind the swing and the bomb overhead — see *The
+Massive Strike*.)
 
 There is no forgiveness window either. Coyote time and jump buffering exist
 because a jump has one correct moment and missing it feels like the game ignored
@@ -255,35 +273,44 @@ after.
   [ultimate.md](ultimate.md).
 - **Front only.** A block covers the side the fighter faces. An attack landing
   from behind is not blocked at all — see *Backstab* below.
-- **Blockable attacks are fully absorbed**: zero damage, a small shared
-  pushback, and no stun.
-- **Massive Strike and uppercut ignore blocking entirely.** This is the point of
-  both moves: a turtling opponent must be opened up, not out-slashed.
+- **Every sword attack a guard stops is a guard break.** There is no
+  "absorbed without reward" tier any more: a slash, a chain link, even the
+  Massive's swing — if it lands on a raised guard, the *attacker* is
+  incapacitated for a full second (`GUARD_BREAK_STUN_MS`), drawn raising their
+  sword helplessly, and the defender is granted a full Massive Strike.
+- **The uppercut ignores blocking entirely.** It is unblockable, and it is one
+  of the two designed answers to a turtle — the other two are the blast behind
+  the swing (the *back massive*) and the plunge bomb overhead.
 - Blocking is impossible while stunned, and cannot begin during a heavy move's
   recovery.
 
-### Parry — the reward for blocking early
+### The guard break — every block rewards the defender
 
-The first **140ms** of a block is a **parry window**.
+A guard that stops a sword attack **guard-breaks the attacker**:
 
-A blockable attack absorbed inside that window **guard-breaks the attacker**:
+- the attacker is stunned for **1000ms** and their move ends immediately,
+  drawn with the sword raised uselessly (`guardBroken` — the helpless pose);
+- the defender is granted an **instant Massive Strike** (`massiveReady`), which
+  fires on the next attack *press* — the defender was not holding the button —
+  and fades after **4 seconds** if unspent.
 
-- the attacker is stunned for **420ms** and their move ends immediately,
-- the defender is granted an **instant Massive Strike** (`massiveReady`), with no
-  charge time.
+This is GunZ's rule that a successful block charges a counter-attack, made
+strong: *defense is stronger than attack on a read.* The butterfly — slash,
+cancel, guard — is now a genuine commitment against somebody holding block:
+every press into their guard hands them a free Massive. What keeps blocking
+from being the only option is that the guard only covers one side, and the
+unblockables exist precisely to open a turtle: the uppercut at close range, the
+blast behind the swing, and the bomb from above.
 
-This is GunZ's rule that a successful block charges a counter-attack, and it is
-what stops the butterfly being unconditionally safe. Blocking *late* still
-absorbs the hit but grants nothing, so mashing block is not the same as reading
-the swing.
+A guard that stops a **bullet** or an **ultimate** is a plain absorb — no
+guard break, no reward. The break is the sword's answer to the sword.
 
-**The window belongs to the press, not to the block.** Holding block down does not
-re-arm it, and neither does interrupting your own block with a slash — the timer
-only resets when the button is released. A fighter who simply holds block gets
-one parry attempt and then a plain, rewardless guard for as long as they crouch
-behind it. Without that rule, holding block while butterflying would hand out a
-free parry every cycle, and the safest option in the game would also be the most
-rewarding one.
+**The granted Massive is one of the few things a client cannot predict**, and
+it is doubly awkward because throwing it *consumes* the arming. Only the server
+knows a guard break landed, so the client predicts a plain slash on press and
+the replay lands on a Massive with `massiveReady` already spent — which reads
+as the state machine diverging unless the reconciler recognises both spellings
+of the event. See [netcode.md](netcode.md).
 
 ### Backstab — the reward for getting behind
 
@@ -334,23 +361,120 @@ the worst case at a slash's startup plus active frames, measured at 154ms.
 
 A Massive Strike is armed (`massiveReady`) two ways:
 
-1. **Charging** — hold LMB for **420ms**. The blade lights up. Releasing fires
+1. **Charging** — hold LMB for **2500ms**. The sword is held up overhead for
+   the whole hold, with energy motes streaming in — more of them the longer the
+   hold, so the threat accumulates exactly as the charge does. Releasing fires
    it.
-2. **Parrying** — a successful parry arms it instantly, for free.
+2. **A guard break** — blocking a sword attack arms it instantly, fires on the
+   next *press* rather than a release, and fades after **4 seconds** if unspent.
 
-An armed Massive fires on the next attack press, replacing the slash. It is
-unblockable, deals 24, stuns for 650ms and throws the target 420 px/s away.
+### The charge
 
-**A parry-granted Massive is one of the few things a client cannot predict**, and
-it is doubly awkward because throwing it *consumes* the arming. Only the server
-knows a parry landed, so the client predicts a plain slash on release and the
-replay lands on a Massive with `massiveReady` already spent — which reads as the
-state machine diverging unless the reconciler recognises both spellings of the
-event. See [netcode.md](netcode.md).
+**Charging is a commitment that ends in a delivery.** While holding attack:
 
-It is also the single most punishable action in the game: **190ms of startup you
-cannot cancel, and 420ms of recovery you cannot cancel.** Charging in an
-opponent's face is a gift.
+- **you cannot walk while the charge is filling** — the accumulation roots your
+  feet (after `CHARGE_LOCK_MS`, so a butterfly tap or a chain link never loses
+  its mobility) — but **dash and double-jump work even then**: the burst is how
+  the charge closes distance, and the hop is how the bomb is made.
+- **once the charge completes, everything returns.** An armed fighter walks the
+  massive into range, dashes, jumps, blocks — the charge is a weapon being
+  carried, not a cast being endured, and *delivering* it (walk it in, hop it
+  into a bomb, guard up while approaching) is the strategy the 2.5s commitment is
+  paid for.
+
+The charge is lost by anything that is not a delivery: releasing early, being
+hit, switching weapons, or casting an ultimate. It is not lost by blocking,
+dashing or jumping — those are the tools it exists to keep.
+
+### The slam
+
+Releasing a charged massive **on the ground** slams the sword down into the
+floor **a little in front of the fighter** (`MASSIVE_SLAM_OFFSET_PX` — 56px
+from the body's centre, so the swing's own hitbox covers the blade's path and
+nothing more).
+
+Two things happen on the way down:
+
+1. **The swing is a normal, blockable hit.** A defender standing in the blade's
+   path stops it before it reaches the floor — and because every block of a
+   sword attack is a guard break, a front massive thrown into a turtle is a
+   gift: they block it, you eat a second of helplessness, they collect your
+   massive. This is deliberate. The old unblockable Massive made a turtle
+   helpless against it; the new one makes a *read* the counterplay, which is
+   what keeps the slam from being the only option.
+2. **If the blade reaches the floor, the floor explodes.** The blast is judged
+   by the server the tick the swing's active window closes, **front and back
+   of the slam point** (`MASSIVE_BLAST_RADIUS_PX` = 100px either way), dealing
+   24 and stunning for 650ms — and the stun **goes straight through a guard**.
+   The blast is not a swing; nothing can block or parry it. **It erupts even
+   when it hits nobody** — the area of effect *is* the move, and a whiffed
+   massive has to read as the floor exploding just the same, so the server
+   sends the blast event once per slam whatever it caught (the drawn ring
+   reaches exactly the blast's radius).
+
+   **The blast has its own visual vocabulary, shared with nothing.** The
+   parry, the backstab and the uppercut all draw the clean ring; the massive
+   gets the one silhouette nothing else uses: a jagged crown of torn ground
+   (`fx_shockwave` — an uneven spike rim, never a circle) that snaps out to
+   the blast's exact radius, white-hot first and the move's amber riding
+   behind; a mushroom of rocks torn straight up and thrown sideways at the
+   top; and lumpy debris (`fx_chunk`) arcing back down over the whole radius.
+   It is the only boom in the game that throws rocks, which is the point: a
+   four-second commitment earns the loudest, most distinctive effect on the
+   floor.
+
+### The back massive
+
+Because the blast radiates **behind** the slam point too, a fighter who turns
+their back on a turtling opponent — aiming away, so the swing goes the other
+way — plants the sword in front of themselves and the blast reaches backward
+past their own body to the turtle, whose guard cannot stop it. The turtle is
+outside the swing's path (nothing to block) and inside the blast's back reach
+(caught anyway). It is the designed answer to a guard that the uppercut
+cannot reach.
+
+The slam is also the most punishable action in the game after the charge itself:
+**90ms of startup you cannot cancel, and 460ms of recovery you cannot cancel.**
+Whiffing it, or throwing it into a read guard, is meant to lose you the
+exchange outright.
+
+## The plunge bomb
+
+Releasing a charged massive **in the air** refuses the swing and becomes the
+**plunge bomb**: the fighter dives vertically at `PLUNGE_SPEED` (1500 px/s —
+faster than a fall can ever get, *Ike's Aether-dive fast*), sword pointed
+straight down, shedding all horizontal drift. Nothing can be pressed mid-dive;
+the bomb is committed from the release to the floor.
+
+### The blast is a measure of the fall
+
+At floor contact the fighter slams the sword into the ground and the bomb
+detonates. The fall height — release Y to landing Y, capped at
+`PLUNGE_MAX_FALL_PX` — prices the whole event:
+
+| Stat | Formula (H = fall in px) | At H=200 | At H=500 |
+|---|---|---|---|
+| Blast radius | 70 + 0.12·H (cap 130) | 94px | 130px |
+| Stun | 450 + 0.5·H (cap 700) | 550ms | 700ms |
+| Knockup | −250 − 0.9·H (cap −700) | −430 | −700 |
+| Stuck (the bomber) | 400 + 0.8·H (cap 800) | 560ms | 800ms |
+
+The bomb **cannot be blocked**. Its stun and its knockup hit through a guard
+like the ground blast's do; the only way to avoid it is to be outside the
+blast radius when it lands. It is the strongest tactic in the game, and the
+arena's high ledges are what give it teeth — the higher you start, the more of
+it there is.
+
+### The stuck — the bomber's price
+
+The bigger the bomb, the longer the bomber is **planted with their sword in
+the ground** (`plungeStuckTimer`): rooted, helpless, and unable even to guard.
+A planted bomber is open season — the punisher's window is literally drawn as
+a fighter bent over a stuck blade.
+
+**The only thing that ends the stuck early is a melee hit.** A sword slash (or
+another blast) is an animation punishment that tears the bomber free — with the
+hit's own stun and knockback playing out on top. Bullets do not break it.
 
 ## The uppercut
 
@@ -386,7 +510,10 @@ jump → dash → slash → block → slash → block → …
 
 Each cycle costs about **160ms** instead of 330ms, moves you forward, and leaves
 you blocking between swings. It is the correct default way to approach and to
-apply pressure — and it loses cleanly to a parry.
+apply pressure — and it loses cleanly to a guard, because every press into a
+raised guard is a guard break. The butterfly is a *read-dependent* pressure
+tool now: it demands the opponent not be holding the button, which is exactly
+the risk that makes it a technique rather than a policy.
 
 **It repeats link 1 forever, in the air and on the ground alike**, because the
 block cancel resets the chain. The combo is the *other* option: to walk it you
@@ -434,11 +561,11 @@ fire illegally**:
 |---|---|
 | `illegalActions` | **0** — nobody acts while stunned, nobody is down without being stunned |
 | `airborneChainLinks` | **0** — the chain is a ground technique |
-| `blockedUnblockables` | **0** — a block never stops a Massive or uppercut |
+| `blockedUnblockables` | **0** — a block never stops an uppercut |
 | `frameDataViolations` | **0** — every phase lasts what the table says |
 | `stuckActionFrames` | **0** — no move outlives its own duration |
 | `meleeDesyncFrames` | **0** — predicted move matches the authoritative one |
-| `slashes`, `massives`, `uppercuts`, `blocks`, `parries`, `backstabs`, `stuns`, `butterflyChains` | **> 0** across a few runs |
+| `slashes`, `massives`, `plunges`, `uppercuts`, `blocks`, `parries`, `backstabs`, `stuns`, `butterflyChains`, `blasts`, `bombs` | **> 0** across a few runs |
 | `comboLinks`, `combosFinished`, `knockdowns` | **> 0** across a few runs |
 
 The second row matters as much as the first. Every must-be-zero metric is
@@ -448,18 +575,16 @@ worst bugs found while building this — reactive blocking being impossible, and
 the backstab firing on overlapping bodies — showed up as a **zero in the second
 row while the first row was perfectly clean**.
 
-**`blockedHits: 0` alongside `parries > 0` is the expected signature of reactive
-guarding, not a defect.** A guard held longer than the 140ms parry window when
-the hit lands is a `blocked`; anything earlier is a `parried`. Since
-`BLOCK_STARTUP_MS` is 0 and the AI raises its guard on reading a swing, virtually
-every guard it wins lands inside the window. `blocked` is what a *turtle* who has
-been holding the button produces — so a run of all `parried` says the guards are
-reactive, and a run of all `blocked` would say nobody is reading anything.
+**`parries` is the guard-break counter now.** Every guard that stops a sword
+attack is a parry — there is no rewardless "blocked" tier left — so a run where
+guards meet swings must show parries, and `parries: 0` beside a healthy
+`blocks` says the guards are going up but the swings are not reaching them (or
+everything that connects is a backstab, which ignores the guard by design).
 
-`outcomeByMove` breaks the outcomes down per move, because a flat `blocked: 0` is
-ambiguous: it reads identically whether guards are failing or whether everything
-that connected happened to be unblockable by design, and those need opposite
-fixes.
+`outcomeByMove` breaks the outcomes down per move, because a flat `parried: 0`
+is ambiguous: it reads identically whether guards are failing or whether
+everything that connected happened to be unblockable by design, and those need
+opposite fixes.
 
 **`comboLinks: 0` beside a healthy `slashes` is the signature of a chain nobody
 can reach** — a link window too tight to hit, or a ground check that is never
@@ -467,9 +592,9 @@ true. It is also exactly what the metric was added to catch, since every
 must-be-zero row stays clean in a build where the combo simply never happens.
 
 Healthy ranges for one 8s AI-vs-AI match, as a sanity check rather than a
-threshold: 10-20 slashes, 2-8 massives, 1-8 uppercuts, 9-15 blocks, 3-9 hits,
-0-5 backstabs, 2-12 butterfly chains. **Backstabs outnumbering clean hits is a
-defect**, not a fight going well.
+threshold: 10-20 slashes, 1-4 massives, 0-2 plunges, 1-8 uppercuts, 9-15 blocks,
+3-9 parries, 0-2 blasts, 0-2 bombs, 0-5 backstabs, 2-12 butterfly chains.
+**Backstabs outnumbering clean hits is a defect**, not a fight going well.
 
 ```bash
 node scripts/diagnose.mjs --mode=online --runs=3

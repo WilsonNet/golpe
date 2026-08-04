@@ -450,8 +450,9 @@ export class TrainingRoom {
 		const outcomes: Record<MeleeOutcome, number> = {
 			hit: 0,
 			backstab: 0,
-			blocked: 0,
 			parried: 0,
+			blast: 0,
+			bomb: 0,
 		};
 		let parriedByDummy = 0;
 		for (const e of this.events) {

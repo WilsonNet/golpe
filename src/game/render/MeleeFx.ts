@@ -11,14 +11,15 @@
 
 import { type Container, Sprite } from "pixi.js";
 import {
+	MASSIVE_BLAST_RADIUS_PX,
 	MASSIVE_CHARGE_MS,
 	type MeleeMove,
 	type MeleeOutcome,
 	MOVES,
 	meleePhase,
-	PARRY_WINDOW_MS,
 	PLAYER_HEIGHT,
 	PLAYER_WIDTH,
+	PLUNGE_BLAST_BASE_RADIUS_PX,
 	type PlayerPosition,
 } from "../simulation/Physics";
 import type { TeamId } from "../simulation/Teams";
@@ -46,9 +47,15 @@ const COLOR = {
 	slash3: 0xffc46b,
 	uppercut: 0x8ff0ff,
 	massive: 0xffb238,
+	/**
+	 * A massive granted by a guard break is drawn a different colour, because it
+	 * came from a different place: it is not a charge you committed to, it is a
+	 * read you were rewarded for. Cool cyan — the guard's own family, one step
+	 * bluer — so a room can tell "charged" from "earned" at a glance.
+	 */
+	parryMassive: 0x6ce0ff,
 	charge: 0xffd166,
-	block: 0x62d0ff,
-	parry: 0xffe066,
+	block: 0xffe066,
 	backstab: 0xc471ff,
 	stun: 0xffe066,
 } as const satisfies Record<MeleeMove | string, number>;
@@ -94,6 +101,15 @@ interface SwingArc {
 	depth: number;
 	/** Where on the body the swing is anchored, relative to its centre. */
 	lift: number;
+	/**
+	 * How far the hand travels *forward* over the swing, in px. Zero for the
+	 * cuts, whose hand barely moves; the slam uses it to chase the blade down
+	 * to its planting point, because a hand that stayed at chest height while
+	 * the sword "slammed" reads as a rotation, not a smash.
+	 */
+	handReach?: number;
+	/** How far the hand drops over the swing, in px. See `handReach`. */
+	handDrop?: number;
 }
 
 const SWING = {
@@ -105,7 +121,22 @@ const SWING = {
 	slash3: { from: -1.62, to: 1.57, depth: 0.45, lift: -12 },
 	/** Upward, so the arc runs the other way and the depth stays flat. */
 	uppercut: { from: 1.5, to: -1.5, depth: 0, lift: 0 },
-	massive: { from: -0.95, to: 0.95, depth: 0.35, lift: -6 },
+	/**
+	 * The slam: from raised overhead — the pose the whole charge has been
+	 * holding — straight down to the floor in front of the fighter. The arc
+	 * ends at 1.35 rad: down and *forward*, cos(1.35) > 0, so the blade's tip
+	 * lands in front of the fighter at the slam point rather than behind the
+	 * hand. The hand follows the blade — reaching 30px forward and dropping
+	 * 12px — so the whole swing reads as a body committing to a smash.
+	 */
+	massive: {
+		from: -2.55,
+		to: 1.35,
+		depth: 0.3,
+		lift: -6,
+		handReach: 30,
+		handDrop: 12,
+	},
 } as const satisfies Record<MeleeMove, SwingArc>;
 
 /**
@@ -120,6 +151,8 @@ export interface ImpactEvent {
 	x: number;
 	y: number;
 	dir: number;
+	/** The blast's reach in px — blast and bomb events only. */
+	radiusPx?: number;
 }
 
 /**
@@ -140,6 +173,19 @@ interface Ring {
 	ageMs: number;
 	lifeMs: number;
 	toScale: number;
+	/**
+	 * Vertical-only scale target: the massive's eruption column grows *up*
+	 * out of the floor instead of expanding sideways.
+	 */
+	vScale?: number;
+	/** Total upward drift over the life, px — the plume lifts off the ground. */
+	risePx?: number;
+	/**
+	 * Fraction of the life held at full alpha before the fade, 0..1. The
+	 * eruption's column burns at full brightness for its first third and only
+	 * then dies — a sustained flame, not a flash.
+	 */
+	hold?: number;
 }
 
 /** Per-fighter persistent sprites, created on first sight. */
@@ -161,6 +207,8 @@ interface FighterFx {
 	wasRolling: boolean;
 	/** Cadence for the ultimate charge aura's motes. */
 	ultEmitMs: number;
+	/** Whether the massive was armed last frame, to notice the charge completing. */
+	wasArmed: boolean;
 	/** Wall-clock age of the current ultimate hold, for the glow's breathing. */
 	ultGlowMs: number;
 	/** The last whole breath the aura has completed, for its pulse ring. */
@@ -241,6 +289,7 @@ export class MeleeFx {
 			tumbleEmitMs: 0,
 			wasRolling: false,
 			ultEmitMs: 0,
+			wasArmed: false,
 			ultGlowMs: 0,
 			ultPulseFloor: -1,
 			glow: mk(TEX.halo, false),
@@ -294,6 +343,7 @@ export class MeleeFx {
 		const dir = s.facing >= 0 ? 1 : -1;
 
 		this.drawSwing(f, s, cx, cy, dir);
+		this.drawPostureBlade(f, s, cx, cy, dir);
 		this.drawGuard(f, s, cx, cy, dir);
 		this.drawDashWind(f, s, cx, cy, dtMs);
 		this.drawTumbleDust(f, s, cx, cy, dtMs);
@@ -323,7 +373,9 @@ export class MeleeFx {
 		}
 
 		const def = MOVES[s.meleeAction];
-		const arc = SWING[s.meleeAction];
+		// Widened from the `as const` literal union so the slam's optional hand
+		// path fields exist on every move (as undefined for the cuts).
+		const arc: SwingArc = SWING[s.meleeAction];
 		const phase = meleePhase(s);
 		// 0 at the start of the wind-up, 1 as the active window closes: the swing
 		// reads as one continuous motion rather than snapping between phases.
@@ -340,8 +392,14 @@ export class MeleeFx {
 
 		f.blade.visible = true;
 		// The hand moves with the blade: a cut coming toward the camera reaches
-		// further out of the body than one going away from it.
-		f.blade.position.set(cx + dir * (10 + 7 * z), cy + arc.lift);
+		// further out of the body than one going away from it. The slam's hand
+		// also travels forward and down over the swing — chasing the blade to
+		// its planting point, because a hand pinned at chest height would make
+		// the smash read as a rotation.
+		f.blade.position.set(
+			cx + dir * (10 + 7 * z + (arc.handReach ?? 0) * eased),
+			cy + arc.lift + (arc.handDrop ?? 0) * eased,
+		);
 		f.blade.rotation = dir > 0 ? angle : Math.PI - angle;
 		// Length and thickness both grow as it nears, which is what sells a flat
 		// sprite as travelling through the screen rather than across it.
@@ -365,19 +423,84 @@ export class MeleeFx {
 			Math.max(0, (s.meleeTimer - def.startupMs) / def.activeMs),
 		);
 		f.arc.visible = true;
+		// The slam's trail is drawn where the blade lands — at the floor, ahead
+		// of the body — so the sweep reads as groundward rather than as another
+		// horizontal cut.
+		const slamTrail = s.meleeAction === "massive";
 		f.arc.position.set(
-			cx + dir * def.reachPx * 0.55,
-			cy + def.boxTopOffset * 0.5 + arc.lift * 0.5,
+			cx + dir * def.reachPx * (slamTrail ? 0.75 : 0.55),
+			slamTrail
+				? cy + PLAYER_HEIGHT * 0.45
+				: cy + def.boxTopOffset * 0.5 + arc.lift * 0.5,
 		);
 		f.arc.rotation = dir > 0 ? angle : Math.PI - angle;
 		// The trail takes the same perspective as the blade that drew it, or the two
 		// come apart at exactly the moment the swing is most visible.
-		f.arc.scale.set((def.reachPx / 46) * (0.8 + 0.3 * activeT) * near);
+		f.arc.scale.set(
+			(def.reachPx / 46) * (0.8 + 0.3 * activeT) * near * (slamTrail ? 1.5 : 1),
+		);
 		f.arc.alpha = (1 - activeT * 0.75) * (0.75 + 0.25 * (z + 1) * 0.5);
 		// The trail keeps most of its move colour — white first link, amber
 		// finisher, cyan uppercut — because that colour is frame data you can see.
 		// The team pulls it, it does not replace it.
 		f.arc.tint = teamTint(COLOR[s.meleeAction], f.team, TINT.subtle);
+	}
+
+	/**
+	 * The blade when there is no swing to draw but the sword is telling a story.
+	 *
+	 * Three poses, each the whole read of its state:
+	 * - **Charging**: raised overhead, held for the entire charge — the pose the
+	 *   swing is going to come down from. A charge you cannot see is a charge
+	 *   you cannot counter, and this is the counter's tell.
+	 * - **Plunging**: pointing straight down, the bomb's fuse. The fighter is a
+	 *   falling blade, and the room has to be able to see exactly that.
+	 * - **Stuck**: planted in the floor at the fighter's feet, the price of a
+	 *   bomb — visible so the punish window reads as a window.
+	 */
+	private drawPostureBlade(
+		f: FighterFx,
+		s: PlayerPosition,
+		cx: number,
+		cy: number,
+		dir: number,
+	) {
+		// A running move owns the blade — `drawSwing` drew it.
+		if (s.meleeAction !== "none") return;
+
+		const bladeDown = (rotation: number) => {
+			f.blade.visible = true;
+			f.blade.rotation = rotation;
+			f.blade.scale.set(1, 1);
+			f.blade.skew.x = 0;
+			// Plain steel: the pose is the message, not a colour.
+			f.blade.tint = teamTint(depthTint(0.4), f.team, TINT.subtle);
+		};
+
+		if (s.plunging) {
+			// Sword first, down. The blade points at where the bomb will land.
+			f.blade.position.set(cx + dir * 4, cy + 12);
+			bladeDown(Math.PI / 2);
+			return;
+		}
+
+		if (s.plungeStuckTimer > 0) {
+			// Planted in the floor, off the front foot.
+			f.blade.position.set(cx + dir * 14, cy + PLAYER_HEIGHT / 2 - 2);
+			bladeDown(dir > 0 ? 1.35 : Math.PI - 1.35);
+			return;
+		}
+
+		if (s.chargeTimer > 0) {
+			// Raised overhead: the whole charge — filling or armed — telegraphs
+			// the slam to come. The armed fighter carries the raised sword like a
+			// weapon, and the room reads "charged" from across the arena.
+			f.blade.position.set(cx + dir * 4, cy - 26);
+			bladeDown(dir > 0 ? -2.45 : Math.PI + 2.45);
+			return;
+		}
+
+		f.blade.visible = false;
 	}
 
 	private drawGuard(
@@ -391,21 +514,15 @@ export class MeleeFx {
 			f.guard.visible = false;
 			return;
 		}
-		// The parry window is the only thing a defender can time, so it is the one
-		// thing the guard has to communicate: bright and large while it is open,
-		// dim and small once it has passed.
-		const parrying = s.blockTimer <= PARRY_WINDOW_MS;
+		// Every guard that stops a sword attack breaks it, so the guard is
+		// always the dangerous gold — there is no washed-out "mere block" tier
+		// to fade into. The gold is the promise: touch this and the exchange
+		// turns around.
 		f.guard.visible = true;
 		f.guard.position.set(cx + dir * 20, cy);
-		f.guard.scale.set(dir > 0 ? 1 : -1, parrying ? 1.15 : 1);
-		// Same rule as the swing trail: the parry window is the one thing a
-		// defender can time, so its gold stays gold and only leans toward the side.
-		f.guard.tint = teamTint(
-			parrying ? COLOR.parry : COLOR.block,
-			f.team,
-			TINT.subtle,
-		);
-		f.guard.alpha = parrying ? 1 : 0.45;
+		f.guard.scale.set(dir > 0 ? 1 : -1, 1.15);
+		f.guard.tint = teamTint(COLOR.block, f.team, TINT.subtle);
+		f.guard.alpha = 1;
 	}
 
 	/**
@@ -671,16 +788,50 @@ export class MeleeFx {
 	}
 
 	private drawCharge(f: FighterFx, s: PlayerPosition, cx: number, cy: number) {
-		if (s.chargeTimer <= 0 && !s.massiveReady) return;
+		if (s.chargeTimer <= 0 && !s.massiveReady) {
+			f.wasArmed = false;
+			return;
+		}
 
 		if (s.massiveReady) {
-			// Armed: a steady bright pulse, so the threat is obvious to both players.
+			// The instant the charge completes: a small burst — the room's cue
+			// that the weapon is now armed and the fighter is carrying it. One
+			// shot per arming, not a pulse: the steady glow below is the armed
+			// state, this is the *transition* into it.
+			if (!f.wasArmed) {
+				f.wasArmed = true;
+				const armed = teamTint(
+					s.parryMassiveTimer > 0 ? COLOR.parryMassive : COLOR.massive,
+					f.team,
+					TINT.medium,
+				);
+				this.particles.burst({
+					texture: TEX.spark,
+					count: 8,
+					x: cx,
+					y: cy,
+					tint: armed,
+					speed: [40, 140],
+					lifeMs: 420,
+					scale: [1, 0],
+				});
+				this.ring(cx, cy, armed, 0.9, 320);
+			}
+			// Armed: a steady bright pulse, in the colour of the kind that armed
+			// it — amber for a charge, the cool guard cyan for a guard break.
+			// The threat has to read to both players, and *whose reward it was*
+			// is part of what it is.
+			const armed = teamTint(
+				s.parryMassiveTimer > 0 ? COLOR.parryMassive : COLOR.massive,
+				f.team,
+				TINT.medium,
+			);
 			this.particles.burst({
 				texture: TEX.spark,
 				count: 3,
 				x: cx,
 				y: cy,
-				tint: teamTint(COLOR.massive, f.team, TINT.medium),
+				tint: armed,
 				speed: [10, 60],
 				lifeMs: 420,
 				scale: [0.8, 0],
@@ -688,20 +839,26 @@ export class MeleeFx {
 			return;
 		}
 
-		// Charging: motes drawn inward, tighter as the charge fills.
+		// Charging: motes stream inward, and the stream *grows* with the charge.
+		// More of them, arriving from tighter around the fighter, so the danger
+		// accumulates exactly as the hold does — but this is not an ultimate, so
+		// it stays a handful of motes rather than a column of flame.
 		const t = Math.min(1, s.chargeTimer / MASSIVE_CHARGE_MS);
-		const radius = 46 - 30 * t;
-		const a = Math.random() * Math.PI * 2;
-		this.particles.burst({
-			texture: TEX.spark,
-			count: 1,
-			x: cx + Math.cos(a) * radius,
-			y: cy + Math.sin(a) * radius,
-			tint: teamTint(COLOR.charge, f.team, TINT.strong),
-			speed: [5, 25],
-			lifeMs: 380,
-			scale: [0.7, 0],
-		});
+		const radius = 48 - 34 * t;
+		const count = 1 + Math.floor(t * 3);
+		for (let i = 0; i < count; i++) {
+			const a = Math.random() * Math.PI * 2;
+			this.particles.burst({
+				texture: TEX.spark,
+				count: 1,
+				x: cx + Math.cos(a) * radius,
+				y: cy + Math.sin(a) * radius,
+				tint: teamTint(COLOR.charge, f.team, TINT.strong),
+				speed: [5, 25 + 30 * t],
+				lifeMs: 380,
+				scale: [0.7, 0],
+			});
+		}
 	}
 
 	private drawStun(f: FighterFx, s: PlayerPosition, cx: number, top: number) {
@@ -794,17 +951,32 @@ export class MeleeFx {
 			});
 
 		switch (outcome) {
-			case "blocked":
-				sparks(10, COLOR.block);
-				this.ring(x, y, teamTint(COLOR.block, team, TINT.medium), 0.5, 220);
-				this.stage.startShake(70, 2);
+			case "blast":
+				this.blastEruption(
+					x,
+					y,
+					team,
+					event.radiusPx ?? MASSIVE_BLAST_RADIUS_PX,
+					false,
+				);
+				break;
+
+			case "bomb":
+				this.blastEruption(
+					x,
+					y,
+					team,
+					event.radiusPx ?? PLUNGE_BLAST_BASE_RADIUS_PX,
+					true,
+				);
 				break;
 
 			case "parried":
-				// The biggest read in the game deserves the biggest tell.
-				sparks(22, COLOR.parry);
-				shards(14, COLOR.parry);
-				this.ring(x, y, teamTint(COLOR.parry, team, TINT.medium), 1.3, 420);
+				// The biggest read in the game deserves the biggest tell: a guard
+				// just turned a swing into a free Massive.
+				sparks(22, COLOR.block);
+				shards(14, COLOR.block);
+				this.ring(x, y, teamTint(COLOR.block, team, TINT.medium), 1.3, 420);
 				this.stage.startShake(180, 7);
 				break;
 
@@ -853,6 +1025,175 @@ export class MeleeFx {
 		});
 	}
 
+	/**
+	 * The massive's area of effect — its own vocabulary, shared with nothing.
+	 *
+	 * One boom per blast, victim or no victim — the area *is* the move, so a
+	 * whiffed massive still has to read as the floor exploding. And it goes
+	 * **up**: every other impact in the game radiates sideways (rings, arcs,
+	 * sparks), so the four-second move gets the one direction nothing else
+	 * uses. Three layers, all of them down-to-up:
+	 *
+	 * 1. **The column** — a flame torn out of the floor (`TEX.eruption`,
+	 *    anchored at its base) that grows upward out of the ground: white-hot
+	 *    at the instant of impact, then the move's amber riding behind it.
+	 * 2. **The cap** — rocks thrown sideways from the top of the column, the
+	 *    mushroom's overhang, made of the chunk texture nothing else throws.
+	 * 3. **The debris** — rocks torn straight up, peeling off the column and
+	 *    arcing back down across the blast's radius, plus painted dust at the
+	 *    base so the crater reads as dirt.
+	 *
+	 * The bomb is the same blast, bigger: a taller column, a wider cap, and a
+	 * white core where the blade came down.
+	 */
+	private blastEruption(
+		x: number,
+		y: number,
+		team: TeamId | null,
+		radiusPx: number,
+		bomb: boolean,
+	) {
+		const tint = teamTint(COLOR.massive, team, TINT.medium);
+		const height = bomb ? 165 : 110;
+		const capY = y - height * 0.85;
+
+		// 1. The column: the detonation's white core, then the amber eruption
+		// growing out of the floor behind it. The sprite is anchored at its
+		// base, so the vent stays planted while the flame rises. The amber is
+		// painted rather than additive — over the bright sky only paint keeps
+		// its colour, exactly as the ultimate's aura learned. The hold keeps
+		// it burning at full brightness instead of fading the moment it is up.
+		this.eruptionColumn(x, y, 0xffffff, height * 0.45, 220, 16, true, 0.25);
+		this.eruptionColumn(
+			x,
+			y,
+			tint,
+			height,
+			bomb ? 720 : 640,
+			bomb ? 55 : 38,
+			false,
+			0.4,
+		);
+
+		// 2. The cap: rocks thrown sideways from the top of the column, the
+		// mushroom's overhang. Two bursts — one each way — because the
+		// particle cone is one-sided, and a one-way cap reads as the wind, not
+		// an explosion. Their reach is derived from the blast's radius, so the
+		// drawn area and the judged area are one number.
+		for (const dir of [1, -1]) {
+			this.particles.burst({
+				texture: TEX.chunk,
+				count: bomb ? 8 : 5,
+				x,
+				y: capY,
+				tint,
+				// Nearly horizontal, barely up: the overhang, not another
+				// geyser.
+				angle:
+					dir > 0
+						? [-Math.PI * 0.16, Math.PI * 0.16]
+						: [Math.PI - Math.PI * 0.16, Math.PI + Math.PI * 0.16],
+				speed: [radiusPx * 1.3, radiusPx * 2.4],
+				lifeMs: 580,
+				scale: [1.1, 0.4],
+				gravity: 500,
+				spin: true,
+				blend: false,
+			});
+		}
+
+		// 3. The debris: rocks torn straight up out of the ground, peeling off
+		// the column and arcing back down — the eruption's own rain.
+		this.particles.burst({
+			texture: TEX.chunk,
+			count: bomb ? 24 : 15,
+			x,
+			y,
+			tint,
+			speed: bomb ? [260, 560] : [180, 440],
+			angle: [-Math.PI * 0.82, -Math.PI * 0.18],
+			lifeMs: bomb ? 700 : 560,
+			scale: [1.2, 0.2],
+			gravity: 720,
+			spin: true,
+		});
+
+		if (bomb) {
+			// The blade's own crater: a white core column where it came down.
+			this.eruptionColumn(
+				x,
+				y,
+				teamTint(0xffffff, team, TINT.subtle),
+				48,
+				300,
+				0,
+				true,
+				0.3,
+			);
+		}
+
+		// Painted dust at the base — chunky, like the rocks — so the eruption
+		// ends in a crater rather than hanging as light in the air. Wider than
+		// the column: this is the impact's footprint on the floor.
+		this.particles.burst({
+			texture: TEX.chunk,
+			count: bomb ? 12 : 8,
+			x,
+			y: y - 2,
+			tint: teamTint(TUMBLE_DUST_COLOR, team, TINT.medium),
+			speed: [40, 150],
+			angle: [-Math.PI * 0.72, -Math.PI * 0.28],
+			lifeMs: 520,
+			scale: [0.9, 0],
+			alpha: [0.5, 0],
+			blend: false,
+		});
+
+		this.stage.startShake(bomb ? 320 : 220, bomb ? 12 : 8);
+	}
+
+	/**
+	 * One eruption column, growing upward out of the floor.
+	 *
+	 * The texture is anchored at its base, so as its Y scale grows the vent
+	 * stays planted at the impact point and the flame rises out of the
+	 * ground — the one direction no other impact in the game moves. `risePx`
+	 * adds a slow upward drift over the life, so the plume visibly detaches
+	 * from the crater as it fades instead of shrinking in place.
+	 *
+	 * `additive` is the flash's mode; the main column is painted, because
+	 * over the bright sky additive amber washes out to white (the same lesson
+	 * the ultimate's aura learned the hard way). `hold` is the fraction of the
+	 * life burned at full brightness before the fade — a sustained flame.
+	 */
+	private eruptionColumn(
+		x: number,
+		y: number,
+		tint: number,
+		heightPx: number,
+		lifeMs: number,
+		risePx = 0,
+		additive = false,
+		hold = 0,
+	) {
+		const sprite = new Sprite(tex(TEX.eruption));
+		sprite.anchor.set(0.5, 1);
+		sprite.position.set(x, y);
+		sprite.tint = tint;
+		sprite.blendMode = additive ? "add" : "normal";
+		sprite.scale.set(0.2, 0.08);
+		this.layer.addChild(sprite);
+		this.rings.push({
+			sprite,
+			ageMs: 0,
+			lifeMs,
+			toScale: 1.35,
+			vScale: heightPx / 96,
+			risePx,
+			hold,
+		});
+	}
+
 	private ring(
 		x: number,
 		y: number,
@@ -887,8 +1228,16 @@ export class MeleeFx {
 			const t = Math.min(1, r.ageMs / r.lifeMs);
 			// Ease out, so the ring snaps outward and then settles.
 			const eased = 1 - (1 - t) ** 3;
-			r.sprite.scale.set(r.toScale * (0.2 + 0.8 * eased));
-			r.sprite.alpha = 1 - t;
+			// The eruption column grows on Y only: the base stays planted in
+			// the floor while the top rises — down-to-up, not sideways.
+			r.sprite.scale.set(
+				r.toScale * (0.2 + 0.8 * eased),
+				(r.vScale ?? r.toScale) * (0.2 + 0.8 * eased),
+			);
+			// Full brightness through the hold, then the fade.
+			const hold = r.hold ?? 0;
+			r.sprite.alpha = t < hold ? 1 : Math.max(0, (1 - t) / (1 - hold));
+			if (r.risePx) r.sprite.y -= (r.risePx / r.lifeMs) * dtMs;
 
 			if (t >= 1) {
 				r.sprite.destroy();
@@ -912,6 +1261,7 @@ export class MeleeFx {
 			f.tumbleEmitMs = 0;
 			f.wasRolling = false;
 			f.ultEmitMs = 0;
+			f.wasArmed = false;
 			f.ultGlowMs = 0;
 			f.ultPulseFloor = -1;
 			f.body?.scale.set(1);

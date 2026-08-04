@@ -144,6 +144,9 @@ const NUMBER_FIELDS = [
 	"freezeTimer",
 	"tumbleTimer",
 	"tumbleActiveTimer",
+	"parryMassiveTimer",
+	"plungeOriginY",
+	"plungeStuckTimer",
 ] as const;
 
 const ENUM_FIELDS = ["wallTouch", "stance", "meleeAction"] as const;
@@ -159,6 +162,8 @@ const FLAG_FIELDS = [
 	"attackHeld",
 	"blockHeld",
 	"uppercutHeld",
+	"plunging",
+	"guardBroken",
 ] as const;
 
 type NumberField = (typeof NUMBER_FIELDS)[number];

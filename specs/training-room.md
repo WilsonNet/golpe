@@ -91,7 +91,7 @@ interface DummyScript { beats: DummyBeat[]; loop?: boolean }  // loop defaults t
 ```
 
 The correspondence with time *is* the format: a 55ms `attack` beat is a press, a
-470ms one charges and releases a Massive Strike. The simulation edge-detects its
+2550ms one charges and releases a Massive Strike. The simulation edge-detects its
 own buttons, so **the gaps carry as much meaning as the presses** — a beat list
 that holds `attack` forever produces exactly one swing.
 
@@ -99,8 +99,8 @@ Three rhythms have numbers that are not free:
 
 - **A jump beat must hold ~240ms and then release ~60ms.** Jump height is
   analogue and edge-triggered; scattered single-frame presses can only hop.
-- **A Massive beat must hold past `MASSIVE_CHARGE_MS` (420ms)** and then
-  release, because the release is what fires it. The default holds 470ms.
+- **A Massive beat must hold past `MASSIVE_CHARGE_MS` (2500ms)** and then
+  release, because the release is what fires it. The default holds 2550ms.
 - **The butterfly's block must land at `SLASH_CANCELLED_MS` (160ms).** Earlier
   than the end of startup and the cancel is illegal; during the active frames it
   throws the hit away. Worse, an ignored block press leaves the guard *held*, and
@@ -165,7 +165,7 @@ ready(timeoutMs?): Promise<boolean>     // resolves once a dummy is seated
 ```
 
 `input()` is what makes this agentic. Playwright can press a key, but it cannot
-express *"hold attack for exactly 420ms and release on this frame"* — which is
+express *"hold attack for exactly 2550ms and release on this frame"* — which is
 the whole of the Massive Strike, and half of the frame data. It is routed
 through `Input`'s override layer, which sits **above** the keyboard rather than
 beside it, so what an agent tests is what a player gets.
@@ -181,6 +181,16 @@ Two ordering rules it enforces, both learned the hard way:
 - **Release between holds.** Moves start from neutral only. Two holds back to
   back read as one continuous press, and a step fired during the previous move's
   recovery is simply swallowed. Chain moves with a step's `restMs`.
+- **A held button cannot survive a step boundary — so a gesture that must
+  release mid-air belongs on the dummy.** Every step ends in a release, and the
+  release fires the massive: charge → jump → release in the air cannot be
+  expressed as player steps, because the step boundary between the charge and
+  the jump spends the charge on the ground. The dummy's beat scripts transition
+  with **no release frame between beats**, so a continuous hold lives there:
+  the plunge-bomb row is a dummy script with `attack` held across two beats.
+  And the dummy's `facing` comes from `applyFacing` (default "foe"), never from
+  a beat's `aimAngle` — plus facing is locked through a swing — so a beat that
+  must face away from the player has to turn (a `face` beat) *before* the press.
 
 A scenario is a whole test in one call: config, then `reset()`, then the steps,
 then a settle. The reset comes **after** the config because spawn positions are
@@ -215,9 +225,11 @@ node scripts/diagnose.mjs --mode=online --runs=3   # still the canonical run
 ```
 
 Every row's expectation is derivable from [melee.md](melee.md): a slash on an
-idle dummy deals 7; a block stops it; an uppercut beats the block for 11 and
-launches; a Massive beats it for 24; a guard facing away is backstabbed, and one
-facing away at less than a body width is *not*.
+idle dummy deals 7; a block guard-breaks it for zero and arms the dummy a
+Massive; an uppercut beats the block for 11 and launches; a back massive's
+blast deals 24 through the guard; a plunge bomb deals 24 through the guard and
+knocks up; a guard facing away is backstabbed, and one facing away at less than
+a body width is *not*.
 
 **Determinism is the load-bearing row.** If the same script produces different
 events on two runs, the training room cannot be used to verify anything — that

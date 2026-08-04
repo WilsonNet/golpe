@@ -260,6 +260,7 @@ export class TrainingDummy {
 		out.attack = beat.hold?.attack ?? false;
 		out.block = beat.hold?.block ?? false;
 		out.uppercut = beat.hold?.uppercut ?? false;
+		out.ultimate = beat.hold?.ultimate ?? false;
 		if (beat.swordStance !== undefined) out.swordStance = beat.swordStance;
 		if (beat.aimAngle !== undefined) out.aimAngle = beat.aimAngle;
 		if (beat.face) out.face = beat.face;

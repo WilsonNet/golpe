@@ -203,6 +203,32 @@ stops the butterfly being the only option.
   sprite for it read as nothing happening for a whole LAN playtest. The disabled
   and knocked-down poses are generated from the character strip at boot, so they
   cannot drift from the art they are standing in for.
+- **Every guard that stops a sword attack is a guard break.** There is no
+  rewardless "blocked" tier — a slash, a chain link or the massive's own swing
+  on a raised guard incapacitates the *attacker* for a full second and arms the
+  defender a Massive. That is what makes the unblockables (uppercut, the blast
+  behind the swing, the bomb overhead) the designed answers to a turtle.
+- **The massive's swing is blockable; the blast is not.** The swing's hitbox
+  reaches exactly to the slam point (`MASSIVE_SLAM_OFFSET_PX` in front), so a
+  defender *in* the path can read it; the blast that follows front and back of
+  the slam point stuns through a guard. Geometry is the whole move: move the
+  slam point and both the block window and the back-massive's reach move with
+  it.
+- **The charge is a hold state with delivery tools, not a lock.** `CHARGE_LOCK_MS`
+  roots only the walk, and only after the slash's own cancel options have passed
+  — a butterfly tap must never root. Block, dash and double jump survive the
+  hold; a release before 2.5s, a hit, a stance switch and an ult cast all spend it.
+- **A bomb's blast is derived from replayable state; only the damage is
+  server-side.** `plungeOriginY` rides the wire, so both sides compute the same
+  fall height, the same stuck duration, and the same blast placement —
+  prediction plants the bomber and the server prices the blast against the same
+  numbers. The stuck itself is a simulation timer that any melee hit clears;
+  bullets cannot.
+- **A plunge is a flag, not a move.** It has no hitbox and no phase table — it is
+  a physics state (pinned `vy` at `PLUNGE_SPEED`, no gravity) that ends at floor
+  contact. Making it a `meleeAction` would have broken the frame-data invariants
+  (no move may outlive its declared duration) for a fall whose duration is
+  dynamic.
 - **AI reactions must be able to interrupt.** `EnemyBrain` plays melee as scripted
   rhythms of presses and releases, because inputs are edge-triggered and holding a
   button does nothing. A rhythm that ran to completion left the bot deaf for up to
@@ -397,7 +423,7 @@ Verified: `teleportFrames` 0, `frozenFrames` 0, `maxPathDeviationPx` 0,
   read as an uncancellable move ending 500ms early, and reported correct netcode as
   a frame data violation. `DiagnosticSample.enemyState` is the snapshot's state;
   `DiagnosticSample.enemy` is the drawn position. The split is load-bearing.
-- **A server-granted Massive is consumed by throwing it.** A parry the client had
+- **A server-granted Massive is consumed by throwing it.** A guard break the client had
   not been told about arms a Massive server-side; the client predicts a plain slash
   on release, the replay lands on a Massive, and `massiveReady` is *already spent*.
   A reason check that only looks for the flag being newly set finds nothing and

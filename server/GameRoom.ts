@@ -78,6 +78,8 @@ import {
 	type BulletState,
 	blocksBullet,
 	blocksUltimate,
+	bombBlastFor,
+	bombFallHeight,
 	bulletHitsPlatform,
 	bulletHitsPlayer,
 	canFire,
@@ -93,9 +95,15 @@ import {
 	isKnockedDown,
 	isStunned,
 	launchGrenade,
+	MASSIVE_BLAST_DAMAGE,
+	MASSIVE_BLAST_KNOCKBACK_PX_S,
+	MASSIVE_BLAST_RADIUS_PX,
+	MASSIVE_BLAST_STUN_MS,
 	MAX_HP,
+	MELEE_IFRAME_MS,
 	MOVES,
 	MS_PER_SECOND,
+	massiveSlamPoint,
 	meleePhase,
 	PLAYER_HEIGHT,
 	PLAYER_WIDTH,
@@ -110,6 +118,7 @@ import {
 	tickBullet,
 	tickGrenade,
 	tickPlayer,
+	ULT_CHARGE_MELEE_MULTIPLIER,
 	ULT_CHARGE_PER_DAMAGE,
 	ULT_CHARGE_PER_KILL,
 	ULT_CINEMATIC_MS,
@@ -122,6 +131,26 @@ import { TrainingDummy } from "./TrainingDummy.js";
 /** Per-fighter counters. Only the server sees a bullet connect, or a hit land through invincibility. */
 function newStats(): Omit<TrainingFighterStats, "hp"> {
 	return { bulletsFired: 0, bulletHits: 0, damageDealt: 0, damageTaken: 0 };
+}
+
+/** The bomb's small horizontal shove off the crater, alongside the knockup. */
+const BOMB_KNOCKBACK_VX = 120;
+
+/**
+ * One massive blast, awaiting its tick's end.
+ *
+ * `knockupVy` is zero for the ground slam and negative (up) for a bomb: the
+ * blast's whole shape — radius, stun, knockup, damage — is decided here so the
+ * resolver applies one stat card per event, not a rule per victim.
+ */
+interface PendingBlast {
+	bomberId: string;
+	x: number;
+	y: number;
+	radiusPx: number;
+	damage: number;
+	stunMs: number;
+	knockupVy: number;
 }
 
 interface ConnectedPlayer {
@@ -333,6 +362,14 @@ export class GameRoom {
 	private nextBulletId = 0;
 	/** Melee impacts accumulated since the last broadcast, for client effects. */
 	private meleeEvents: MeleeEventMsg[] = [];
+	/**
+	 * Massive blasts (ground slam and bomb) waiting for the tick's end.
+	 *
+	 * Collected while the fighters tick — that is when the swing is seen to
+	 * reach the floor and the dive is seen to land — and resolved in one pass
+	 * once every fighter is current, because each blast judges the whole room.
+	 */
+	private pendingBlasts: PendingBlast[] = [];
 	/** Ultimate denies since the last broadcast, for the client's "DENY" splash. */
 	private denies: DenyEventMsg[] = [];
 	private channelIds: string[] = [];
@@ -1066,8 +1103,12 @@ export class GameRoom {
 			enemyPhase: meleePhase(foe.state),
 			enemyBlocking: foe.state.blocking,
 			enemyStunned: foe.state.stunTimer > 0,
+			enemyPlunging: foe.state.plunging,
+			enemyStuck: foe.state.plungeStuckTimer > 0,
 			selfAction: bot.state.meleeAction,
 			selfStunned: bot.state.stunTimer > 0,
+			selfPlunging: bot.state.plunging,
+			selfStuck: bot.state.plungeStuckTimer > 0,
 			selfMassiveReady: bot.state.massiveReady,
 			selfId: bot.id,
 			selfAirJumps: bot.state.airJumps,
@@ -1169,6 +1210,8 @@ export class GameRoom {
 		victim.state.blocking = false;
 		victim.state.meleeAction = "none";
 		victim.state.meleeTimer = 0;
+		victim.state.plunging = false;
+		victim.state.plungeStuckTimer = 0;
 
 		const killer =
 			victim.lastHurtBy && victim.lastHurtBy !== victim.id
@@ -1219,7 +1262,10 @@ export class GameRoom {
 			}
 			if (
 				killer.state.meleeAction === "slash3" ||
-				killer.state.meleeAction === "massive"
+				killer.state.meleeAction === "massive" ||
+				// A bomb kill: the killer is planted in the ground the blast just
+				// made — the finisher of the sword game's heaviest move.
+				killer.state.plungeStuckTimer > 0
 			) {
 				this.potg.note(t, "finisherKill", actor, target);
 			}
@@ -1245,12 +1291,13 @@ export class GameRoom {
 		);
 	}
 
-	/** Damage one fighter, crediting `sourceId`, and score the kill if it lands. */
+	/** What dealt the damage, for the charge economy: the sword pays double. */
 	private damage(
 		victim: ConnectedPlayer,
 		amount: number,
 		sourceId: string,
 		paysCharge = true,
+		source: "melee" | "bullet" | "singularity" = "bullet",
 	) {
 		if (!victim.alive || amount <= 0) return;
 		// Scores are frozen once the podium is decided; the fight is allowed to
@@ -1278,11 +1325,19 @@ export class GameRoom {
 			from.stats.damageDealt += amount;
 			// The Overwatch economy, in one line: charge is what you are paid for
 			// participating. Paid here rather than in each weapon's code path so a
-			// sword hit and a bullet are worth the same per point — and so a
-			// weapon added later cannot forget to pay. The one weapon that does
-			// not pay passes `paysCharge: false` and this line skips it.
+			// sword hit and a bullet agree per point — and a weapon added later
+			// cannot forget to pay. The one weapon that does not pay passes
+			// `paysCharge: false` and this line skips it.
 			if (paysCharge) {
-				from.ult = addCharge(from.ult, amount * ULT_CHARGE_PER_DAMAGE);
+				// The sword pays double per point: it is the closer, riskier weapon
+				// and this game's heart, so a melee fighter arms their ultimate
+				// first. The multiplier is the whole of "slashes charge more than
+				// shots", and it lives in the simulation beside the base rate.
+				const rate =
+					source === "melee"
+						? ULT_CHARGE_PER_DAMAGE * ULT_CHARGE_MELEE_MULTIPLIER
+						: ULT_CHARGE_PER_DAMAGE;
+				from.ult = addCharge(from.ult, amount * rate);
 				// The reel's own economy rides the same gate: the ultimate is the
 				// one weapon that feeds nothing — not the meter, not the highlight.
 				// Banked in bursts so the tracker hears about a health bar's worth
@@ -1762,6 +1817,15 @@ export class GameRoom {
 			}
 
 			player.simulatedIntent = input;
+			// What the fighter was doing before this tick, for the blast judge:
+			// whether a massive's swing crossed the end of its active window and
+			// whether a dive was in the air. Both are transitions only this side
+			// of `tickPlayer` can see.
+			const prev = {
+				action: player.state.meleeAction,
+				timer: player.state.meleeTimer,
+				plunging: player.state.plunging,
+			};
 			// The hole this fighter is in, if any — already filtered for friendly
 			// fire, so the caster is handed null and walks through their own field.
 			player.state = tickPlayer(
@@ -1771,6 +1835,7 @@ export class GameRoom {
 				this.world,
 				fieldFor(this.singularity, player.id, player.team),
 			);
+			this.noteBlasts(player, prev);
 
 			// A release edge, not a press edge: `ultimate` is held button state on
 			// the wire like every other button, but the hold is the *aim phase* — the
@@ -1814,6 +1879,7 @@ export class GameRoom {
 			this.cinematicGraceMs - dt * MS_PER_SECOND,
 		);
 
+		this.resolveBlasts();
 		this.resolveMeleeHits();
 		this.tickBullets(dt);
 		this.tickUltimate(dt);
@@ -1877,6 +1943,137 @@ export class GameRoom {
 	}
 
 	/**
+	 * Notice the two ways a massive reaches the floor, during the fighter's own
+	 * tick.
+	 *
+	 * The ground slam happens the tick the swing's active window closes — the
+	 * blade's travel is over, so the blade has arrived. The bomb happens the
+	 * tick a dive's floor contact lands it. Both are transitions the shared
+	 * `tickPlayer` produces identically on every client; only the *damage* is
+	 * this side's business.
+	 */
+	private noteBlasts(
+		player: ConnectedPlayer,
+		prev: {
+			action: PlayerPosition["meleeAction"];
+			timer: number;
+			plunging: boolean;
+		},
+	) {
+		const s = player.state;
+		if (!player.alive) return;
+
+		// The ground slam. If a guard intercepted the swing, the guard break
+		// already ended the move on the tick it was judged, so a move reaching
+		// this boundary is proof the sword was not stopped.
+		const activeEnd = MOVES.massive.startupMs + MOVES.massive.activeMs;
+		if (
+			prev.action === "massive" &&
+			prev.timer < activeEnd &&
+			s.meleeAction === "massive" &&
+			s.meleeTimer >= activeEnd
+		) {
+			const point = massiveSlamPoint(s);
+			this.pendingBlasts.push({
+				bomberId: player.id,
+				x: point.x,
+				y: point.y,
+				radiusPx: MASSIVE_BLAST_RADIUS_PX,
+				damage: MASSIVE_BLAST_DAMAGE,
+				stunMs: MASSIVE_BLAST_STUN_MS,
+				knockupVy: 0,
+			});
+		}
+
+		// The bomb. `tickPlayer` planted the fighter the same tick it landed, so
+		// "was diving, now grounded" is exactly the landing — and the fall
+		// height, and therefore the whole blast, is derived from state both
+		// sides already agreed on.
+		if (prev.plunging && !s.plunging && s.grounded) {
+			const blast = bombBlastFor(bombFallHeight(s.plungeOriginY, s.y));
+			this.pendingBlasts.push({
+				bomberId: player.id,
+				x: s.x + PLAYER_WIDTH / 2,
+				y: s.y + PLAYER_HEIGHT / 2,
+				radiusPx: blast.radiusPx,
+				damage: blast.damage,
+				stunMs: blast.stunMs,
+				knockupVy: blast.knockupVy,
+			});
+		}
+	}
+
+	/**
+	 * Apply every massive blast collected this tick, to everyone it reaches.
+	 *
+	 * A blast is the one sword hit with no swing to dodge: it ignores a guard
+	 * entirely — that is the entire point of the back-massive and the bomb —
+	 * and the stun goes through it the same way. It breaks a stuck bomber free
+	 * like any melee hit, and it never, ever touches the fighter who made it.
+	 */
+	private resolveBlasts() {
+		for (const blast of this.pendingBlasts) {
+			const bomber = this.players.get(blast.bomberId);
+			if (!bomber) continue;
+
+			// One boom per blast, whoever it catches — or nobody. The area of
+			// effect *is* the move: a whiffed massive still has to erupt, so the
+			// event is pushed once per blast with the first victim's id (or
+			// none) and the blast's own radius, and the damage loop only adds
+			// the hurt.
+			let firstVictim = "";
+			for (const victim of this.players.values()) {
+				if (victim === bomber || !victim.alive) continue;
+				if (!hostile(bomber.team, victim.team)) continue;
+				const cx = victim.state.x + PLAYER_WIDTH / 2;
+				const cy = victim.state.y + PLAYER_HEIGHT / 2;
+				if (Math.hypot(cx - blast.x, cy - blast.y) > blast.radiusPx) {
+					continue;
+				}
+
+				if (!firstVictim) firstVictim = victim.id;
+
+				const v = victim.state;
+				v.stunTimer = Math.max(v.stunTimer, blast.stunMs);
+				v.iframeTimer = MELEE_IFRAME_MS;
+				if (blast.knockupVy !== 0) {
+					// The bomb's launch: upward, plus a small shove off the crater.
+					v.vy = blast.knockupVy;
+					v.grounded = false;
+					v.vx += (Math.sign(cx - blast.x) || 1) * BOMB_KNOCKBACK_VX;
+				} else {
+					// The ground slam shoves away from the slam point, so the fight
+					// separates instead of standing in the crater.
+					v.vx += (Math.sign(cx - blast.x) || 1) * MASSIVE_BLAST_KNOCKBACK_PX_S;
+				}
+				// A blast interrupts what the victim was doing, like any sword hit,
+				// and breaks a stuck bomber free — it is an animation punishment.
+				v.plungeStuckTimer = 0;
+				v.meleeAction = "none";
+				v.meleeTimer = 0;
+				v.hitLatch = false;
+				v.blocking = false;
+				v.comboStep = 0;
+				v.comboTimer = 0;
+
+				this.damage(victim, blast.damage, bomber.id, true, "melee");
+			}
+
+			this.meleeEvents.push({
+				attackerId: bomber.id,
+				victimId: firstVictim,
+				move: "massive",
+				outcome: blast.knockupVy !== 0 ? "bomb" : "blast",
+				x: blast.x,
+				y: blast.y,
+				dir: bomber.state.facing,
+				radiusPx: blast.radiusPx,
+			});
+		}
+		this.pendingBlasts.length = 0;
+	}
+
+	/**
 	 * Judge every live melee hitbox against every other fighter.
 	 *
 	 * This is the half of sword combat a client never gets to decide. Whether a
@@ -1906,16 +2103,16 @@ export class GameRoom {
 				const result = resolveMelee(attacker.state, defender.state);
 				if (!result) continue;
 
-				// A guard that turned a swing away is damage the defender *didn't
-				// take*. Banked for the reel before `applyMeleeResult` mutates
+				// A guard that turned a swing away is damage the defender *didn't*
+				// take. Banked for the reel before `applyMeleeResult` mutates
 				// anything, because the move's table is the only record of what
 				// the hit would have been worth.
-				if (result.outcome === "blocked" || result.outcome === "parried") {
+				if (result.outcome === "parried") {
 					this.absorbPotg(defender, MOVES[result.move].damage, attacker);
 				}
 
 				const damage = applyMeleeResult(attacker.state, defender.state, result);
-				this.damage(defender, damage, attacker.id);
+				this.damage(defender, damage, attacker.id, true, "melee");
 
 				this.meleeEvents.push({
 					attackerId: attacker.id,
@@ -2046,6 +2243,11 @@ export class GameRoom {
 		// Spent at the release, before the freeze. A caster who disconnects mid
 		// cinematic must not come back still armed.
 		player.ult = 0;
+		// Casting is one of the two things that cancel a charge — "don't switch
+		// weapons or ult" — the other being a stance switch, both in `tickMelee`.
+		player.state.chargeTimer = 0;
+		player.state.massiveReady = false;
+		player.state.parryMassiveTimer = 0;
 		this.cinematic = { casterId: player.id, msLeft: ULT_CINEMATIC_MS };
 		this.pendingThrow = {
 			ownerId: player.id,

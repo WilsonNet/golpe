@@ -23,13 +23,18 @@ import {
 	type WallSide,
 } from "./Collision.js";
 import {
+	bombBlastFor,
+	bombFallHeight,
 	copyMeleeState,
 	createMeleeState,
+	isCharging,
 	isCommitted,
 	isStunned,
 	type MeleeIntent,
 	type MeleeState,
 	meleePhase as meleePhaseOf,
+	PLUNGE_DECEL,
+	PLUNGE_SPEED,
 	tickMelee,
 } from "./Melee.js";
 import {
@@ -72,16 +77,24 @@ export {
 	blocksBullet,
 	blocksUltimate,
 	bodyRect,
+	bombBlastFor,
+	bombFallHeight,
 	COMBO_CHAIN,
 	isComboSlash,
 	isKnockedDown,
 	isStunned,
+	MASSIVE_BLAST_DAMAGE,
+	MASSIVE_BLAST_KNOCKBACK_PX_S,
+	MASSIVE_BLAST_RADIUS_PX,
+	MASSIVE_BLAST_STUN_MS,
 	MASSIVE_CHARGE_MS,
+	MELEE_IFRAME_MS,
 	MELEE_MOVES,
 	MOVES,
+	massiveSlamPoint,
 	meleePhase,
 	moveDuration,
-	PARRY_WINDOW_MS,
+	PLUNGE_BLAST_BASE_RADIUS_PX,
 	resolveMelee,
 	SLASH_CANCELLED_MS,
 	zeroMoveCounts,
@@ -111,6 +124,7 @@ export {
 	SINGULARITY_TICK_DAMAGE,
 	singularityGrip,
 	tickGrenade,
+	ULT_CHARGE_MELEE_MULTIPLIER,
 	ULT_CHARGE_PER_DAMAGE,
 	ULT_CHARGE_PER_KILL,
 	ULT_CINEMATIC_MS,
@@ -502,8 +516,14 @@ export function tickPlayer(
 	// A stunned fighter still falls and still collides; it just does not steer.
 	const stunned = isStunned(s);
 	// Heavy moves root you where you stand. This is the "animation punishment":
-	// a whiffed Massive or uppercut cannot be walked or jumped out of.
-	const rooted = stunned || isCommitted(s);
+	// a whiffed Massive or uppercut cannot be walked or jumped out of. A plunging
+	// fighter and a stuck one are rooted the same way — the bomb is a commitment
+	// from release to extraction.
+	const rooted =
+		stunned || isCommitted(s) || s.plunging || s.plungeStuckTimer > 0;
+	// The charge roots the *walk* and nothing else. Dash, jump and block are the
+	// delivery tools a 4s commitment has to keep — see `isCharging`.
+	const charging = isCharging(s);
 
 	s.wallJumpTimer = decay(s.wallJumpTimer, dt);
 	s.dashTimer = decay(s.dashTimer, dt);
@@ -532,7 +552,8 @@ export function tickPlayer(
 	}
 
 	// ---- horizontal intent ----
-	const dir = rooted ? 0 : (input.right ? 1 : 0) - (input.left ? 1 : 0);
+	const dir =
+		rooted || charging ? 0 : (input.right ? 1 : 0) - (input.left ? 1 : 0);
 
 	// Facing follows aim, falling back to the walk direction when nothing is
 	// aimed. Steering it separately from movement is what lets a fighter back
@@ -664,6 +685,15 @@ export function tickPlayer(
 	// it.
 	if (grip === "held") {
 		// Nothing. The pull below owns both axes.
+	} else if (s.plunging) {
+		// The plunge bomb: no gravity, no steering — a vertical dive at a fixed
+		// speed, faster than a fall can ever get. The fighter sheds horizontal
+		// drift hard, because the move is a line from wherever the release
+		// happened down to the floor, and the bomb's strength is measured on
+		// exactly that line. It ends at floor contact, below.
+		s.vy = PLUNGE_SPEED;
+		s.vx = approach(s.vx, 0, PLUNGE_DECEL * dt);
+		s.jumping = false;
 	} else if (s.dashActiveTimer > 0 && !s.grounded) {
 		s.vy = 0;
 	} else {
@@ -711,6 +741,19 @@ export function tickPlayer(
 	const contacts = moveAndCollide(box, s.vx * dt, s.vy * dt, world);
 	s.x = box.x;
 	s.y = box.y - (PLAYER_HEIGHT - rollHeight);
+
+	// The bomb's landing: floor contact ends the dive and plants the fighter.
+	//
+	// This is where the whole move is bought and sold on both sides of the
+	// network at once. The fall height is measured from the replayable origin,
+	// so the stuck time is deterministic — a client predicts its own landing
+	// exactly. The blast itself is damage, and damage is the server's alone; the
+	// server reads the same `plungeOriginY` off the state to place it.
+	if (s.plunging && contacts.grounded) {
+		const blast = bombBlastFor(bombFallHeight(s.plungeOriginY, s.y));
+		s.plungeStuckTimer = blast.stuckMs;
+		s.plunging = false;
+	}
 
 	// A burst into a wall is over. Letting the timer run out would leave the
 	// fighter hovering against the wall with nothing left pushing it.
