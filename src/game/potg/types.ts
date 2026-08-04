@@ -41,7 +41,18 @@ export type HighlightKind =
 	/** The frag that wiped a side, in team deathmatch. */
 	| "wipeKill"
 	/** An ultimate taken away: killed mid-hold, or the grenade guarded. */
-	| "deny";
+	| "deny"
+	/**
+	 * A burst of damage dealt — about one health bar's worth, see
+	 * `POTG_DAMAGE_BURST`. Cheap on purpose: it colours a play, and a fighter
+	 * who was merely present should never out-score one who closed a kill.
+	 */
+	| "damageDealt"
+	/**
+	 * A burst of damage the sword guard turned away. The cheapest weight in the
+	 * game, because blocking well is *true* but reads as nothing on a screen.
+	 */
+	| "damageAbsorbed";
 
 /**
  * One scoring moment, as the server saw it.
@@ -60,6 +71,29 @@ export interface HighlightEvent {
 	/** Names, captured at the time: a fighter can leave before the match ends. */
 	actorName: string;
 	victimName: string;
+	/**
+	 * Damage points behind a `damageDealt`/`damageAbsorbed` event — the burst
+	 * size, roughly `POTG_DAMAGE_BURST`. What the card's stat line is built
+	 * from; the score uses the kind's weight, never this number.
+	 */
+	amount?: number;
+}
+
+/**
+ * What a play did, summed into the four lines the title card shows.
+ *
+ * `damage` and `absorbed` are raw points of damage, not scores — a play's
+ * *worth* is `score`, and these exist so the ceremony can say "1,240 damage"
+ * rather than a number only the server could explain.
+ */
+export interface PlayStats {
+	kills: number;
+	/** Damage dealt, in points. */
+	damage: number;
+	/** Ultimates taken away, both kinds. */
+	denies: number;
+	/** Damage the sword guard turned away, in points. */
+	absorbed: number;
 }
 
 /** A run of one fighter's scoring moments, and what it was worth. */
@@ -71,6 +105,8 @@ export interface PotgPlay {
 	score: number;
 	/** Frags in the run — what the headline is mostly made of. */
 	kills: number;
+	/** The stat line the card is built from. */
+	stats: PlayStats;
 	events: HighlightEvent[];
 	/** Match-clock ms of the first and last scoring moment. */
 	startMs: number;
@@ -120,7 +156,7 @@ export interface PotgFrame {
 }
 
 /** The clip format's version, bumped whenever a frame's shape changes. */
-export const POTG_CLIP_VERSION = 1;
+export const POTG_CLIP_VERSION = 2;
 
 export interface PotgClip {
 	version: number;
@@ -142,6 +178,8 @@ export interface PotgClip {
 	beats: { t: number; kind: HighlightKind; victimName: string }[];
 	score: number;
 	kills: number;
+	/** The stat line the title card shows. */
+	stats: PlayStats;
 	cast: PotgCastMember[];
 	frames: PotgFrame[];
 	/** The arena's width in 800px screens, so a replay builds the right world. */
@@ -197,6 +235,8 @@ export interface PotgAnnounce {
 	subtitle: string;
 	score: number;
 	kills: number;
+	/** The stat line the title card shows. */
+	stats: PlayStats;
 	/** False when the play was scored but no footage survived to go with it. */
 	hasClip: boolean;
 }

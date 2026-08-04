@@ -49,6 +49,7 @@ import { inputSettings } from "./input/Scheme";
 import { parseLaunchParams } from "./online/launch";
 import { OnlineSession } from "./online/OnlineSession";
 import { requestedRoomId, showRoomInUrl } from "./online/room";
+import type { MatchOverMsg } from "./online/types";
 import { readStoredName, storeName } from "./playerName";
 import { fetchPotgClip } from "./potg/clipSource";
 import { POTG_BAR_FRACTION, type PotgShot } from "./potg/Director";
@@ -77,7 +78,11 @@ import {
 	PLAYER_WIDTH,
 	type World,
 } from "./simulation/Arena";
-import { timeLeftMs } from "./simulation/Deathmatch";
+import {
+	timeLeftMs,
+	VICTORY_BREATHING_MS,
+	VICTORY_HOLD_MS,
+} from "./simulation/Deathmatch";
 import {
 	applyMeleeResult,
 	BULLET_DAMAGE,
@@ -655,6 +660,13 @@ export class Match {
 					this.potgAnnounce = null;
 					if (this.potgReplay) this.endPlayOfTheGame();
 					else EventBus.emit("potg-end", null);
+					// The victory window with it: a card (or a ceremony waiting for its
+					// turn) must not survive the match it announced.
+					this.victoryMsg = null;
+					this.victoryShowAt = null;
+					this.victoryDoneAt = null;
+					this.victoryWindowOver = false;
+					this.pendingPotg = null;
 				},
 				onMeleeEvent: (event) => {
 					// The victim comes from the event now. Deriving it from
@@ -751,8 +763,21 @@ export class Match {
 						`[MATCH] over by ${msg.reason}, winner ${msg.winnerId ?? "nobody"}`,
 					);
 					EventBus.emit("match-over", msg);
+					// The victory card's payload, filled in when it arrives — the
+					// announcement beats `match-over` onto the wire, so the window is
+					// scheduled here and the card is drawn from the freshest standings.
+					this.victoryMsg = msg;
+					this.scheduleVictoryWindow();
 				},
-				onPotg: (msg) => this.beginPlayOfTheGame(msg),
+				onPotg: (msg) => {
+					// Parked until the victory window has closed: the ceremony must not
+					// cut the card (or the breathing) short. If the window is already
+					// over — a client that joined after the match ended — it begins
+					// immediately, exactly as it always did.
+					this.pendingPotg = msg;
+					this.scheduleVictoryWindow();
+					if (this.victoryWindowOver) this.beginPendingPotg();
+				},
 				onSeated: (roomId, screens, mode) => {
 					// The room decides the mode as it decides the id and the size. A
 					// client that joined a team room by link learns it here.
@@ -1108,6 +1133,8 @@ export class Match {
 		const dtSec = Math.min(dtMs / MS_PER_SECOND, MAX_FRAME_DT_S);
 		this.elapsed += dtMs;
 
+		this.stepVictoryWindow();
+
 		// Before anything reads an aim or an intent. The gamepad has no events, so
 		// this is where a pad button becomes a held code, and where the handover
 		// between the Contra aim and the fine stick advances by one frame.
@@ -1411,6 +1438,22 @@ export class Match {
 	private potgReplay: PotgReplay | undefined;
 	/** What the server announced, kept for the overlay and the probe. */
 	private potgAnnounce: PotgAnnounce | null = null;
+	/**
+	 * The victory card's timing, driven off `elapsed` rather than timers so the
+	 * ceremony stays in step with the loop that draws it.
+	 *
+	 * The match ends, the arena is left alone for `VICTORY_BREATHING_MS`, the
+	 * victory card slams in for `VICTORY_HOLD_MS`, and only then may the Play of
+	 * the Game begin — the cut from the last frag straight to a full-screen
+	 * ceremony was the abruptness the breathing exists to fix. The announce
+	 * travels in the same breath as `match-over`, so it is parked in
+	 * `pendingPotg` until the window has closed.
+	 */
+	private victoryMsg: MatchOverMsg | null = null;
+	private victoryShowAt: number | null = null;
+	private victoryDoneAt: number | null = null;
+	private victoryWindowOver = false;
+	private pendingPotg: PotgAnnounce | null = null;
 	/** The sample drawn this frame, so the camera and the ultimate FX agree on it. */
 	private potgSample: ReplaySample | null = null;
 	/**
@@ -1435,6 +1478,56 @@ export class Match {
 	 * silently degraded into a static shot would still pass every other probe.
 	 */
 	private readonly potgTrack: PotgTrackEntry[] = [];
+
+	/**
+	 * Open the victory window: breathing room first, then the card, then the
+	 * ceremony. Idempotent — the first caller (whichever of `match-over` and
+	 * the announcement lands first) sets the schedule, and the other fills in
+	 * the payload.
+	 */
+	private scheduleVictoryWindow() {
+		if (this.victoryShowAt !== null || this.victoryWindowOver) return;
+		const now = this.elapsed;
+		this.victoryShowAt = now + VICTORY_BREATHING_MS;
+		this.victoryDoneAt = now + VICTORY_BREATHING_MS + VICTORY_HOLD_MS;
+	}
+
+	/**
+	 * Advance the victory window on the game loop's own clock.
+	 *
+	 * Driven off `elapsed` rather than `setTimeout` for the same reason the
+	 * director is driven off a delta: the ceremony is a sequence of moments,
+	 * and the loop that draws them should be the one that decides when they
+	 * happen. A tab that stalls the loop stalls the card with it, which is
+	 * exactly what a timer-based version would not do.
+	 */
+	private stepVictoryWindow() {
+		if (this.victoryShowAt !== null && this.elapsed >= this.victoryShowAt) {
+			this.victoryShowAt = null;
+			EventBus.emit("victory-show", {
+				over: this.victoryMsg,
+				myId: this.online?.manager.myId ?? "",
+				myTeam: this.local.fighter.team,
+			});
+		}
+		if (this.victoryDoneAt !== null && this.elapsed >= this.victoryDoneAt) {
+			this.victoryDoneAt = null;
+			this.victoryWindowOver = true;
+			// The card takes itself down and — in the same frame, so React sees
+			// one transition — the ceremony begins. If no announcement ever came,
+			// the podium takes the screen instead.
+			EventBus.emit("victory-done", null);
+			this.beginPendingPotg();
+		}
+	}
+
+	/** Start the ceremony if an announcement is waiting for the window to close. */
+	private beginPendingPotg() {
+		if (!this.pendingPotg) return;
+		const msg = this.pendingPotg;
+		this.pendingPotg = null;
+		this.beginPlayOfTheGame(msg);
+	}
 
 	/**
 	 * The server picked a play. Put the card up, then go and get the footage.

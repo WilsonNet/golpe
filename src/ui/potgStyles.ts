@@ -32,23 +32,32 @@ const BARS = `${POTG_BAR_FRACTION * 100}%`;
 // ---------------------------------------------------------------------------
 // The title card's entrance, in milliseconds from the start of the intro
 // ---------------------------------------------------------------------------
+//
+// The intro is 4.5s and the card is built to fill it: the slam and the words
+// inside the first second, the sweep and the byline through the second, the
+// stat line in the third, and the fourth holds everything still while the
+// burst spins behind it. Overwatch's card does the same trick with a hero
+// animation this game does not have; the hold is what the stillness replaces.
 
 /** The black holds for a beat before anything happens. Anticipation is cheap. */
 const FLASH_AT = 140;
 const FLASH_MS = 260;
 /** The medal punches in on the flash. */
 const EMBLEM_AT = 150;
-const EMBLEM_MS = 520;
+const EMBLEM_MS = 620;
 /** The first word lands just after the flash, and the rest follow. */
-const WORD_AT = 260;
-const WORD_STAGGER = 130;
-const WORD_MS = 420;
+const WORD_AT = 280;
+const WORD_STAGGER = 170;
+const WORD_MS = 460;
 /** A bar of light crosses the finished wordmark. */
 const SWEEP_AT = WORD_AT + WORD_STAGGER * 3 + WORD_MS;
-const SWEEP_MS = 900;
+const SWEEP_MS = 1100;
 /** The byline arrives last: who it was, and what they did. */
 const BYLINE_AT = SWEEP_AT - 220;
-const BYLINE_MS = 520;
+const BYLINE_MS = 560;
+/** The stat line — kills, damage, denies, absorbed — lands after the name. */
+const STATS_AT = 1500;
+const STATS_MS = 560;
 
 /**
  * When the card has finished moving.
@@ -61,6 +70,7 @@ const BYLINE_MS = 520;
 export const POTG_CARD_MS = Math.max(
 	SWEEP_AT + SWEEP_MS,
 	BYLINE_AT + BYLINE_MS,
+	STATS_AT + STATS_MS,
 );
 
 export const POTG_CSS = `
@@ -314,10 +324,47 @@ export const POTG_CSS = `
 	animation: vp-rule-in ${BYLINE_MS}ms cubic-bezier(0.16, 1, 0.3, 1) ${BYLINE_AT}ms both;
 }
 
+/* The receipt: what the play actually was, under the name of it. "3 KILLS ·
+   1,240 DMG · 2 DENIES · 310 BLOCKED" — small, gold-separated, and late, so
+   the headline owns the first half of the card and the numbers arrive after
+   the name has landed. The order is the argument: frags first, then the two
+   damage rows, with absorbed last because it is the one that reads worst. */
+.vp-stats {
+	position: relative;
+	margin-top: 1.4cqh;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 1.6cqw;
+	font-size: clamp(10px, 1.8cqh, 16px);
+	font-weight: 700;
+	letter-spacing: 0.2em;
+	text-indent: 0.2em;
+	text-transform: uppercase;
+	white-space: nowrap;
+	color: rgba(246, 239, 224, 0.92);
+	text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+	animation: vp-stats-in ${STATS_MS}ms cubic-bezier(0.16, 1, 0.3, 1) ${STATS_AT}ms both;
+}
+.vp-stats .num {
+	color: var(--potg-accent);
+	font-variant-numeric: tabular-nums;
+}
+.vp-stats .sep {
+	width: 4px;
+	height: 4px;
+	border-radius: 50%;
+	background: var(--potg-accent);
+	opacity: 0.55;
+}
+
 /* ---- the name card ----
    The in-replay lower third. Slides in under the push and returns for the
    outro, bottom-left rather than centred: the middle of the frame is the
-   fighter it is naming. */
+   fighter it is naming. It carries a *plate* — a gradient backing with a gold
+   left edge — because the roll is exactly when the frame fills up: a black
+   hole, a sword arc and a headline all claiming the same pixels is a headline
+   that lost. A broadcast lower-third stays legible over anything. */
 .vp-card {
 	position: absolute;
 	left: 4%;
@@ -326,6 +373,15 @@ export const POTG_CSS = `
 	opacity: var(--potg-card);
 	transform: translateY(calc((1 - var(--potg-card)) * 22px));
 	will-change: opacity, transform;
+	background: linear-gradient(
+		90deg,
+		rgba(8, 8, 14, 0.88) 0%,
+		rgba(8, 8, 14, 0.6) 52%,
+		rgba(8, 8, 14, 0) 100%
+	);
+	border-left: 3px solid var(--potg-accent);
+	border-radius: 0 4px 4px 0;
+	padding: 10px 18px 12px 16px;
 	text-shadow: 0 2px 10px rgba(0, 0, 0, 0.9);
 }
 
@@ -361,6 +417,101 @@ export const POTG_CSS = `
 	font-size: clamp(11px, 1.7cqw, 15px);
 	letter-spacing: 0.05em;
 	color: rgba(246, 239, 224, 0.78);
+}
+
+/* ---- the victory card ----
+   The beat between the match and the reel: one word, the name it belongs to,
+   and nothing else. Rendered *under* the Play of the Game overlay (z-index 44
+   to its 45), because the curtain's closing is the transition away from it —
+   the card is covered, not dismissed, which is what keeps the handoff from
+   reading as two cards fighting. The arena ghosts through a dark veil behind
+   it, so the ceremony never breaks the thread of "we were just in there". */
+.vv-root {
+	position: absolute;
+	inset: 0;
+	z-index: 44;
+	overflow: hidden;
+	pointer-events: none;
+	container-type: size;
+	display: grid;
+	place-content: center;
+	justify-items: center;
+	font-family: "Segoe UI", system-ui, sans-serif;
+	color: #f6efe0;
+}
+
+.vv-veil {
+	position: absolute;
+	inset: 0;
+	background: radial-gradient(
+		ellipse at 50% 46%,
+		rgba(6, 6, 12, 0.92) 0%,
+		rgba(6, 6, 12, 0.72) 55%,
+		rgba(6, 6, 12, 0.52) 100%
+	);
+	animation: vv-fade-in 520ms ease-out both;
+}
+
+.vv-word {
+	position: relative;
+	height: clamp(44px, 15cqh, 128px);
+	width: auto;
+	filter: drop-shadow(0 8px 26px rgba(0, 0, 0, 0.9));
+	animation: vv-slam 660ms cubic-bezier(0.17, 1.5, 0.4, 1) both;
+}
+
+.vv-line {
+	position: relative;
+	margin-top: 2.4cqh;
+	font-size: clamp(13px, 2.8cqh, 26px);
+	font-weight: 800;
+	letter-spacing: 0.3em;
+	text-indent: 0.3em;
+	text-transform: uppercase;
+	white-space: nowrap;
+	color: #ffffff;
+	text-shadow: 0 2px 12px rgba(0, 0, 0, 0.9);
+	animation: vv-line-in 520ms cubic-bezier(0.16, 1, 0.3, 1) 340ms both;
+}
+
+.vv-sub {
+	position: relative;
+	margin-top: 1.4cqh;
+	font-size: clamp(10px, 1.8cqh, 15px);
+	letter-spacing: 0.16em;
+	text-indent: 0.16em;
+	text-transform: uppercase;
+	white-space: nowrap;
+	/* The card's gold, not the grey a tooltip would use: the context line is
+	   part of the verdict, and it should look like it. */
+	color: rgba(255, 209, 102, 0.82);
+	text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9);
+	animation: vv-line-in 520ms ease-out 560ms both;
+}
+
+@keyframes vv-fade-in {
+	from { opacity: 0; }
+}
+@keyframes vv-slam {
+	0% {
+		opacity: 0;
+		transform: scale(1.65);
+		filter: blur(16px) drop-shadow(0 8px 26px rgba(0, 0, 0, 0.9));
+	}
+	60% { opacity: 1; }
+	74% {
+		transform: scale(0.955);
+		filter: blur(0) drop-shadow(0 8px 26px rgba(0, 0, 0, 0.9));
+	}
+	100% { transform: none; }
+}
+@keyframes vv-line-in {
+	from {
+		opacity: 0;
+		transform: translateY(14px);
+		letter-spacing: 0.72em;
+		text-indent: 0.72em;
+	}
 }
 
 /* ---- the corner tag ----
@@ -463,11 +614,15 @@ export const POTG_CSS = `
 @keyframes vp-rule-in {
 	from { opacity: 0; transform: scaleX(0.1); }
 }
+@keyframes vp-stats-in {
+	from { opacity: 0; transform: translateY(10px); letter-spacing: 0.55em; }
+}
 
 @media (prefers-reduced-motion: reduce) {
 	.vp-burst, .vp-streaks, .vp-sweep { animation: none; }
-	.vp-splash, .vp-emblem, .vp-word, .vp-byline, .vp-rule, .vp-flash {
+	.vp-splash, .vp-emblem, .vp-word, .vp-byline, .vp-rule, .vp-flash, .vp-stats {
 		animation-duration: 1ms;
 	}
+	.vv-veil, .vv-word, .vv-line, .vv-sub { animation-duration: 1ms; }
 }
 `;

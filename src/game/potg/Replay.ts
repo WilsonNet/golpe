@@ -156,9 +156,9 @@ export class PotgReplay {
 			(c) => c.id === this.clip.protagonist.id,
 		);
 		const entry = a.p.find((p) => p.c === index);
-		if (!entry) return { x: 0, y: 0, vx: 0 };
+		if (!entry) return { x: 0, y: 0, vx: 0, facing: 1 };
 		const state = unpackState(entry.s);
-		return { x: state.x, y: state.y, vx: state.vx };
+		return { x: state.x, y: state.y, vx: state.vx, facing: state.facing };
 	}
 
 	/**

@@ -518,9 +518,17 @@ underneath it.
   to frame; a getter reading the raw container position would report a cinematic
   push-in as several hundred pixels of camera jitter.
 - **The podium is deferred, not cancelled.** `match-over` and the announcement
-  arrive in the same breath, and `MATCH_OVER_LINGER_MS` had to go from 15s to 28s
-  to hold both — leaving it would have started a new match underneath a replay of
-  the last one.
+  arrive in the same breath, and `MATCH_OVER_LINGER_MS` has grown with the
+  ending — 15s → 28s → 44s — to hold the breathing, the victory card, the reel
+  and the podium; leaving it would have started a new match underneath a replay
+  of the last one. The announcement waits in line behind the card: the client
+  parks it until the victory window closes, so the reel can never cut the
+  verdict short.
+- **The breathing is what makes the verdict a verdict.** The first version cut
+  from the winning blow straight to a full-screen card, and it read as an
+  interruption of the fight. The arena holds for `VICTORY_BREATHING_MS` before
+  the victory card lands, paced by the client's game loop — a timer would keep
+  ticking inside a tab that has stalled the loop that draws it.
 - **A title card must own the screen before it can hand it over.** The first
   version faded a title in over an already-playing replay and it read as a
   subtitle on footage, not as an event. The `curtain` reaching 1 — nothing else

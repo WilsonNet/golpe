@@ -119,13 +119,16 @@ export class PotgRecorder {
 	 *
 	 * A frag is one `kill` plus a modifier event per thing that was notable about
 	 * it, all at the same `t` — see `HIGHLIGHT_WEIGHTS`. The caller decides what
-	 * was notable, because only the caller can see the state that made it so.
+	 * was notable, because only the caller can see the state that made it so. A
+	 * `damageDealt`/`damageAbsorbed` event carries its burst size in `amount`,
+	 * which is what the card's stat line is built from.
 	 */
 	note(
 		t: number,
 		kind: HighlightKind,
 		actor: { id: string; name: string },
 		victim: { id: string; name: string } = { id: "", name: "" },
+		amount?: number,
 	) {
 		const event: HighlightEvent = {
 			t,
@@ -134,6 +137,7 @@ export class PotgRecorder {
 			actorName: actor.name,
 			victimId: victim.id,
 			victimName: victim.name,
+			...(amount !== undefined ? { amount } : {}),
 		};
 		this.tracker.note(event);
 	}
@@ -212,6 +216,7 @@ export class PotgRecorder {
 			subtitle,
 			score: play.score,
 			kills: play.kills,
+			stats: { ...play.stats },
 			hasClip: this.published !== null,
 		};
 	}
@@ -276,6 +281,7 @@ export class PotgRecorder {
 			beats: dedupeBeats(play.events, base),
 			score: play.score,
 			kills: play.kills,
+			stats: { ...play.stats },
 			// A snapshot of the cast as it stands, so a fighter who leaves before the
 			// match ends is still named in the replay they are in.
 			cast: this.cast.map((c) => ({ ...c })),

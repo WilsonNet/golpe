@@ -17,17 +17,31 @@ import { POTG_CLIP_VERSION, type PotgClip } from "./types.js";
  * way: the whole camera edit is exercised without a renderer, a canvas or a
  * recording.
  */
-function clip(durationMs = 8000, beats: number[] = [4000, 5200]): PotgClip {
+/** A beat as `{t, kind}` or just a `t` (a plain kill), whichever the test wants. */
+type BeatArg =
+	| number
+	| { t: number; kind: PotgClip["beats"][number]["kind"]; victimName: string };
+
+function clip(durationMs = 8000, beats: BeatArg[] = [4000, 5200]): PotgClip {
+	const normalised = beats.map((b): PotgClip["beats"][number] =>
+		typeof b === "number"
+			? { t: b, kind: "kill", victimName: "Foe" }
+			: { t: b.t, kind: b.kind, victimName: b.victimName },
+	);
 	return {
 		version: POTG_CLIP_VERSION,
 		roomId: "r",
 		hz: 20,
 		durationMs,
-		actionAtMs: 2500,
+		// The server cuts 4000ms of lead-in before the first scoring moment; the
+		// clip factory mirrors that so the pre-roll's budget is measured against
+		// the real one.
+		actionAtMs: 4000,
 		protagonist: { id: "a", name: "A", team: null, bot: false },
-		beats: beats.map((t) => ({ t, kind: "kill" as const, victimName: "Foe" })),
+		beats: normalised,
 		score: 100,
 		kills: 1,
+		stats: { kills: 1, damage: 0, denies: 0, absorbed: 0 },
 		cast: [{ id: "a", name: "A", team: null, bot: false }],
 		frames: [],
 		screens: 1,
@@ -45,7 +59,7 @@ function run(director: PotgDirector, maxMs = 90_000): PotgShot[] {
 	return shots;
 }
 
-const still = () => ({ x: 400, y: 300, vx: 0 });
+const still = () => ({ x: 400, y: 300, vx: 0, facing: 1 });
 
 describe("PotgDirector", () => {
 	it("runs the movements in order and finishes", () => {
@@ -59,6 +73,7 @@ describe("PotgDirector", () => {
 		expect(phases).toEqual([
 			"intro",
 			"establish",
+			"orbit",
 			"push",
 			"whip",
 			"roll",
@@ -131,6 +146,50 @@ describe("PotgDirector", () => {
 		);
 	});
 
+	it("orbits the fighter: one arc in both axes", () => {
+		// The orbit is the pre-roll's hero shot — a crane that swings in an arc
+		// around the subject. It has to actually move, in *both* axes: a circle
+		// flattened to a straight line is not a circle, and on a one-screen
+		// arena the lateral half of it would clamp away entirely, which is
+		// exactly why the vertical leg is there.
+		const director = new PotgDirector(clip(), still);
+		const shots = run(director).filter((s) => s.phase === "orbit");
+		const xs = shots.map((s) => s.focusX - 400);
+		const ys = shots.map((s) => s.focusY - 300);
+		expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(60);
+		expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(120);
+		// And the lateral swing is a hill, not a ramp: furthest from the subject
+		// at the middle of the arc, back beside them at both ends — the camera
+		// passes *around* them, not past them.
+		const mid = xs[Math.floor(xs.length / 2)] ?? 0;
+		expect(mid).toBeGreaterThan(Math.max(xs[0] ?? 0, xs[xs.length - 1] ?? 0));
+	});
+
+	it("frames the establish ahead of the fighter's facing", () => {
+		// Rule of thirds, applied to "whose play is this": a fighter looking
+		// right is framed on the left, looking across the shot. The intro parks
+		// on the same framing, so the wipe reveals the composition it will hold.
+		const right = new PotgDirector(clip(), still);
+		const rightFirst = run(right).find((s) => s.phase === "establish");
+		const left = new PotgDirector(clip(), () => ({
+			x: 400,
+			y: 300,
+			vx: 0,
+			facing: -1,
+		}));
+		const leftFirst = run(left).find((s) => s.phase === "establish");
+		expect((rightFirst?.focusX ?? 0) - 400).toBeGreaterThan(100);
+		expect((leftFirst?.focusX ?? 0) - 400).toBeLessThan(-100);
+	});
+
+	it("gives the roll looking-room when the fighter stands still", () => {
+		// A dead-centre subject is a fighter on a poster, not a fighter about to
+		// act. Standing still, the camera sits slightly toward the facing.
+		const director = new PotgDirector(clip(), still);
+		const shots = run(director).filter((s) => s.phase === "roll");
+		expect((shots[0]?.focusX ?? 0) - 400).toBeGreaterThan(10);
+	});
+
 	it("keeps the pre-roll's footage crawling, then runs it at speed", () => {
 		const director = new PotgDirector(clip(), still);
 		const shots = run(director);
@@ -198,10 +257,53 @@ describe("PotgDirector", () => {
 			x: 400,
 			y: 300,
 			vx: 400,
+			facing: 1,
 		}));
 		const shots = run(moving).filter((s) => s.phase === "roll");
 		const last = shots[shots.length - 1];
 		expect((last?.focusX ?? 0) - 400).toBeGreaterThan(20);
+	});
+
+	it("coils before a beat so the punch has something to contrast with", () => {
+		// Anticipation: the zoom eases *out* over the footage just before a
+		// beat, and the punch then lands as a contrast instead of a twitch. A
+		// roll that jumped straight into the punch would satisfy every other
+		// check and read as a nervous camera.
+		const c = clip(8000, [4000]);
+		const director = new PotgDirector(c, still);
+		const shots = run(director).filter((s) => s.phase === "roll");
+		const coiling = shots.filter(
+			(s) => s.clipMs < 4000 && 4000 - s.clipMs < 320,
+		);
+		expect(coiling.length).toBeGreaterThan(0);
+		expect(Math.min(...coiling.map((s) => s.zoom))).toBeLessThan(1.1);
+	});
+
+	it("punches harder on a beat that mattered more", () => {
+		// A deny ends a fighter's ultimate; a plain frag is Tuesday. The punch
+		// scales with the beat's kind, so the reel's emphasis matches what the
+		// server thought was unusual.
+		const deny = new PotgDirector(
+			clip(8000, [{ t: 4000, kind: "deny", victimName: "Foe" }]),
+			still,
+		);
+		const denyMax = Math.max(
+			...run(deny)
+				.filter(
+					(s) => s.phase === "roll" && s.clipMs >= 4000 && s.clipMs < 4200,
+				)
+				.map((s) => s.zoom),
+		);
+		const plain = new PotgDirector(clip(8000, [4000]), still);
+		const plainMax = Math.max(
+			...run(plain)
+				.filter(
+					(s) => s.phase === "roll" && s.clipMs >= 4000 && s.clipMs < 4200,
+				)
+				.map((s) => s.zoom),
+		);
+		expect(denyMax).toBeGreaterThan(1.5);
+		expect(plainMax).toBeLessThan(denyMax);
 	});
 
 	it("ends immediately when skipped", () => {
@@ -212,11 +314,13 @@ describe("PotgDirector", () => {
 	});
 
 	it("spends a known amount of wall clock before the play", () => {
-		// The pre-roll's length is a budget: `MATCH_OVER_LINGER_MS` has to cover the
-		// title card, the camera work, the longest clip the server will cut, the
-		// outro *and* a podium. A movement that quietly doubled would push the next
-		// match's first seconds under a replay of the last one.
-		expect(POTG_PREROLL_MS).toBeGreaterThan(POTG_INTRO_MS);
-		expect(POTG_PREROLL_MS).toBeLessThan(6500);
+		// The pre-roll's length is a budget: `MATCH_OVER_LINGER_MS` has to cover
+		// the title card, the camera work, the longest clip the server will cut,
+		// the outro *and* a podium. The build-up is ten seconds by design —
+		// Overwatch's own ceremony runs seventeen — and a movement that quietly
+		// doubled would push the next match's first seconds under a replay of the
+		// last one.
+		expect(POTG_PREROLL_MS).toBeGreaterThan(9000);
+		expect(POTG_PREROLL_MS).toBeLessThan(10500);
 	});
 });

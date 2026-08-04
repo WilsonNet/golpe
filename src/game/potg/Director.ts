@@ -8,26 +8,35 @@
  * Overwatch's version works because the camera *tells you who to look at* before
  * anything happens, which is what the pre-roll here is for.
  *
- * Six movements:
+ * Seven movements, and the first two are the ones Overwatch's own ceremony is
+ * built on — a title card that owns the screen, then camera work that keeps
+ * narrowing the frame until it has no choice but to be about one fighter:
  *
  * 1. **Intro** — the arena is **hidden**, and a full-screen title card slams the
  *    wordmark in over a flare. This is the part that does the hyping, and it is
  *    the part the first version did not have: a title fading in *over* a visible
- *    replay reads as a caption, not as an event. Overwatch's whole ceremony
- *    turns on a card that owns the screen first and then gets out of the way,
- *    and the getting out of the way is a wipe, not a fade.
+ *    replay reads as a caption, not as an event. Overwatch spends five seconds
+ *    on its hero card; this version of the same beat is the same length.
  * 2. **Establish** — the wipe reveals the arena, wide and slightly off the
  *    protagonist, drifting toward them, footage crawling. The only moment in the
  *    sequence where the whole level is legible.
- * 3. **Push** — a hard push in to a tight framing, the name card sliding under
+ * 3. **Orbit** — the camera cranes up and swings in an arc around the fighter:
+ *    a hero shot. In film language this is the shot that says "this one is
+ *    special" without a word — the camera operator circling the subject is the
+ *    oldest way in the book to lift them out of their surroundings. The orbit
+ *    also plays with the one axis the arena has to spare: a lateral swing is
+ *    flat on a single-screen level, so the arc climbs and descends as it turns.
+ * 4. **Push** — a hard push in to a tight framing, the name card sliding under
  *    it. This is the sentence "it was *this* one".
- * 4. **Whip** — a fast pan that overshoots them and swings back, easing out of
- *    the tight framing. It costs 650ms and buys the thing a straight cut cannot:
+ * 5. **Whip** — a fast pan that overshoots them and swings back, easing out of
+ *    the tight framing. It costs 800ms and buys the thing a straight cut cannot:
  *    the feeling that a camera operator is following a person.
- * 5. **Roll** — the play itself, at speed, camera leading the fighter's
+ * 6. **Roll** — the play itself, at speed, camera leading the fighter's
  *    movement, dropping into slow motion and punching the zoom on every scoring
- *    beat the server recorded.
- * 6. **Outro** — the last frame held, pulled back out, cards returned.
+ *    beat the server recorded. It *coils* just before a beat — a slow pull-back
+ *    that makes the punch land harder, the same anticipation a batter gets from
+ *    winding up — and heavier beats punch harder than light ones.
+ * 7. **Outro** — the last frame held, pulled back out, cards returned.
  *
  * **This file is pure.** It owns no Pixi object, reads no clock and draws
  * nothing: it is fed a delta and a way to ask where the protagonist was at a
@@ -42,6 +51,7 @@ import type { PotgClip } from "./types";
 export type PotgPhase =
 	| "intro"
 	| "establish"
+	| "orbit"
 	| "push"
 	| "whip"
 	| "roll"
@@ -97,24 +107,42 @@ export interface PotgShot {
  * The title card, in full. Exported because the stylesheet times the wordmark's
  * entrance against it and the probe asserts the card actually stood.
  *
- * Long enough for four words to arrive one at a time and for a name to land
- * under them; short enough that nobody reaches for the skip button. Overwatch
- * spends five seconds here on a hero animation this game does not have, so this
- * is the same beat without the thing that filled it.
+ * Overwatch's own ceremony spends five seconds on the hero card before a frame
+ * of gameplay shows; this is that beat, long enough for four words, a byline
+ * and a stat line to arrive one at a time and to *hold* — the stillness after
+ * the slam is what lets the reveal land as an event. It grew from 2.8s because
+ * the buildup is the ceremony: ten seconds of camera work after this would
+ * play badly against a card that was already gone.
  */
-export const POTG_INTRO_MS = 2800;
+export const POTG_INTRO_MS = 4500;
 /** How long the card takes to wipe off the arena at the end of the intro. */
-export const POTG_WIPE_MS = 450;
+export const POTG_WIPE_MS = 550;
 
-const ESTABLISH_MS = 900;
-const PUSH_MS = 900;
-const WHIP_MS = 650;
-const OUTRO_MS = 1800;
-/** Everything before the play itself. Named because the probe asserts on it. */
-export const POTG_PREROLL_MS = POTG_INTRO_MS + ESTABLISH_MS + PUSH_MS + WHIP_MS;
+const ESTABLISH_MS = 1500;
+/** The camera's arc around the fighter: a hero shot, and the new pre-roll's heart. */
+const ORBIT_MS = 1500;
+const PUSH_MS = 1400;
+const WHIP_MS = 800;
+const OUTRO_MS = 2200;
+/**
+ * Everything before the play itself. Named because the probe asserts on it.
+ *
+ * 4.5s card + 5.2s of camera work — ten seconds of buildup, close enough to
+ * Overwatch's own that the difference is the footage, not the appetite.
+ */
+export const POTG_PREROLL_MS =
+	POTG_INTRO_MS + ESTABLISH_MS + ORBIT_MS + PUSH_MS + WHIP_MS;
 
 /** Wide enough that a fighter reads as a figure in a place rather than a portrait. */
-const ESTABLISH_ZOOM = 0.82;
+const ESTABLISH_ZOOM = 0.8;
+/**
+ * The orbit's framing: looser than the fight, so the push that follows it has
+ * room to be a *move*. The orbit sells itself with the crane, not the zoom —
+ * on a one-screen arena the lateral half of its arc clamps away, and the zoom
+ * staying modest is what keeps the establish → orbit → push ladder from being
+ * three nearly identical distances.
+ */
+const ORBIT_ZOOM = 1.15;
 /** The tight framing the push arrives at. Deliberately closer than anything else. */
 const PUSH_ZOOM = 1.8;
 /** What the roll settles at: close enough to follow, wide enough to see a sword. */
@@ -128,6 +156,23 @@ const ESTABLISH_OFFSET_Y = -70;
 /** How far the whip pan overshoots before swinging back. */
 const WHIP_OVERSHOOT_PX = 150;
 
+/**
+ * The orbit's arc, as a circle around the subject.
+ *
+ * `ORBIT_R` is the radius; `ORBIT_SWEEP` the angle of arc swung through (130°,
+ * deliberately less than a full circle — the camera stays on the fighter's
+ * side of the arena, and the 180° rule says a camera that crosses the action
+ * axis mid-shot disorients rather than glorifies). `ORBIT_Y_FACTOR` squashes
+ * the vertical leg of the arc, because a camera that rose a full circle would
+ * leave the ground the fight is about to happen on; `ORBIT_Y_BIAS` tips the
+ * arc so it starts above the fighter and descends through the swing, the crane
+ * move's classic shape.
+ */
+const ORBIT_R = 170;
+const ORBIT_Y_FACTOR = 0.6;
+const ORBIT_Y_BIAS = -40;
+const ORBIT_SWEEP = (130 * Math.PI) / 180;
+
 /** Footage speed while the camera is doing its own work, before the play. */
 const PREROLL_RATE = 0.35;
 /** Footage speed at a scoring beat. */
@@ -139,10 +184,38 @@ const BEAT_PUNCH_ZOOM = 0.28;
 const BEAT_PUNCH_MS = 520;
 /** Shake at the instant of a beat, in pixels. */
 const BEAT_SHAKE_PX = 9;
+/**
+ * How much each kind of beat is allowed to punch.
+ *
+ * A deny ends a fighter's ultimate and a wipe ends a round; a plain frag is
+ * Tuesday. The punch is scaled by the *first* event at the beat's instant —
+ * the one that made it unusual — so the reel's emphasis matches what the
+ * server thought mattered.
+ */
+const PUNCH_SCALE: Readonly<Record<string, number>> = {
+	deny: 1.4,
+	wipeKill: 1.3,
+	ultimateKill: 1.2,
+	finisherKill: 1.15,
+};
+const PUNCH_SCALE_DEFAULT = 1;
+
+/**
+ * The coil: a slow pull-back over the footage-ms just before a beat.
+ *
+ * The punch is a zoom-in; a zoom that comes out of nowhere reads as a twitch.
+ * Winding the zoom *out* in the 320ms before the beat makes the punch a
+ * contrast instead of an event, which is what makes it land — the anticipation
+ * is the same reason a swing telegraphs.
+ */
+const COIL_MS = 320;
+const COIL_ZOOM = 0.09;
 
 /** How far ahead of a moving fighter the roll camera looks, per px/s of velocity. */
 const LEAD_PER_VELOCITY = 0.22;
 const LEAD_MAX_PX = 110;
+/** Looking-room when the fighter is standing still: a small bias toward their facing. */
+const STILL_LEAD_PX = 22;
 
 /** Letterbox bars slide in over this, and back out over the same at the end. */
 const BARS_MS = 400;
@@ -191,6 +264,8 @@ export interface Subject {
 	x: number;
 	y: number;
 	vx: number;
+	/** Which way they face, 1 or -1 — the roll's looking-room when they stand still. */
+	facing: number;
 }
 
 export class PotgDirector {
@@ -207,6 +282,8 @@ export class PotgDirector {
 	private firedBeats = 0;
 	/** ms since the last beat's punch, for its decay. */
 	private punchMs = Number.POSITIVE_INFINITY;
+	/** The punch's peak zoom this beat, scaled by what the beat was. */
+	private punchPeak = BEAT_PUNCH_ZOOM;
 	private elapsedMs = 0;
 
 	constructor(
@@ -291,7 +368,10 @@ export class PotgDirector {
 				if (this.phaseMs >= POTG_INTRO_MS) this.enter("establish");
 				return;
 			case "establish":
-				if (this.phaseMs >= ESTABLISH_MS) this.enter("push");
+				if (this.phaseMs >= ESTABLISH_MS) this.enter("orbit");
+				return;
+			case "orbit":
+				if (this.phaseMs >= ORBIT_MS) this.enter("push");
 				return;
 			case "push":
 				if (this.phaseMs >= PUSH_MS) this.enter("whip");
@@ -343,7 +423,8 @@ export class PotgDirector {
 	 *
 	 * Counted rather than time-windowed: slow motion means a beat can be inside
 	 * the window for a dozen frames, and a shake re-triggered on each of them
-	 * would be a rattle instead of an impact.
+	 * would be a rattle instead of an impact. The punch's *size* is remembered
+	 * from the beat's kind, so a deny punches harder than a plain frag.
 	 */
 	private consumeBeatShake(): number {
 		let shake = 0;
@@ -352,8 +433,12 @@ export class PotgDirector {
 			(this.clip.beats[this.firedBeats]?.t ?? Number.POSITIVE_INFINITY) <=
 				this.clipMs
 		) {
+			const beat = this.clip.beats[this.firedBeats];
 			this.firedBeats++;
 			this.punchMs = 0;
+			this.punchPeak =
+				BEAT_PUNCH_ZOOM *
+				(PUNCH_SCALE[beat?.kind ?? ""] ?? PUNCH_SCALE_DEFAULT);
 			shake = BEAT_SHAKE_PX;
 		}
 		return shake;
@@ -369,21 +454,43 @@ export class PotgDirector {
 				// Nothing is visible during this, which is precisely why it must
 				// already be right when something is.
 				return {
-					x: subject.x + ESTABLISH_OFFSET_X,
+					x: subject.x + ESTABLISH_OFFSET_X * this.facingDir(subject),
 					y: subject.y + ESTABLISH_OFFSET_Y,
 					zoom: ESTABLISH_ZOOM,
 				};
 			case "establish":
+				// Drifting from the parking spot onto the fighter, and the drift is
+				// *facing-aware*: a fighter looking right is framed on the left
+				// third, looking across the shot — the rule-of-thirds version of
+				// "whose play is this" that the whole pre-roll is reaching for.
 				return {
-					x: subject.x + ESTABLISH_OFFSET_X * (1 - easeOut(t)),
+					x:
+						subject.x +
+						ESTABLISH_OFFSET_X * (1 - easeOut(t)) * this.facingDir(subject),
 					y: subject.y + ESTABLISH_OFFSET_Y * (1 - easeOut(t)),
 					zoom: lerp(ESTABLISH_ZOOM, ESTABLISH_ZOOM + 0.06, easeOut(t)),
 				};
+			case "orbit": {
+				// The hero shot: an arc around the fighter, from high on one side
+				// through eye level in front of them to high on the other, with the
+				// zoom breathing up a touch as it closes. One sweep, no reversals:
+				// the camera is always moving the same way around the subject,
+				// which is what reads as *circling* rather than wobbling.
+				const theta = lerp(-ORBIT_SWEEP / 2, ORBIT_SWEEP / 2, easeInOut(t));
+				return {
+					x: subject.x + ORBIT_R * Math.cos(theta),
+					y:
+						subject.y +
+						ORBIT_R * Math.sin(theta) * ORBIT_Y_FACTOR +
+						ORBIT_Y_BIAS,
+					zoom: lerp(ORBIT_ZOOM - 0.05, ORBIT_ZOOM + 0.05, easeInOut(t)),
+				};
+			}
 			case "push":
 				return {
 					x: subject.x,
 					y: subject.y,
-					zoom: lerp(ESTABLISH_ZOOM + 0.06, PUSH_ZOOM, easeInOut(t)),
+					zoom: lerp(ORBIT_ZOOM + 0.05, PUSH_ZOOM, easeInOut(t)),
 				};
 			case "whip": {
 				// One overshoot and back: a half sine, so the camera is exactly on the
@@ -397,14 +504,36 @@ export class PotgDirector {
 				};
 			}
 			case "roll": {
+				// Lead room: ahead of a moving fighter, and a little toward their
+				// facing when they stand still — the camera never dead-centres a
+				// subject, because a dead-centre subject is a fighter on a poster,
+				// not a fighter about to act.
+				const moving = Math.abs(subject.vx) > 1;
 				const lead = clamp(
 					subject.vx * LEAD_PER_VELOCITY,
 					-LEAD_MAX_PX,
 					LEAD_MAX_PX,
 				);
+				const still = moving ? 0 : subject.facing * STILL_LEAD_PX;
+				// The coil: in the last `COIL_MS` of footage before an upcoming
+				// beat, the zoom eases *out*, so the punch has something to contrast
+				// with. It only coils toward the next un-fired beat; a spent beat is
+				// spent.
+				const nextBeat = this.clip.beats[this.firedBeats];
+				let coil = 0;
+				if (nextBeat) {
+					const until = nextBeat.t - this.clipMs;
+					if (until >= 0 && until < COIL_MS) {
+						coil = -(1 - until / COIL_MS) * COIL_ZOOM;
+					}
+				}
 				const punch =
-					BEAT_PUNCH_ZOOM * (1 - clamp(this.punchMs / BEAT_PUNCH_MS, 0, 1));
-				return { x: subject.x + lead, y: subject.y, zoom: ROLL_ZOOM + punch };
+					this.punchPeak * (1 - clamp(this.punchMs / BEAT_PUNCH_MS, 0, 1));
+				return {
+					x: subject.x + lead + still,
+					y: subject.y,
+					zoom: ROLL_ZOOM + punch + coil,
+				};
 			}
 			case "outro":
 				return {
@@ -417,12 +546,24 @@ export class PotgDirector {
 		}
 	}
 
+	/**
+	 * The side the establish parks on: ahead of the fighter's facing, so the
+	 * shot is "looking across the frame at them" whichever way they face.
+	 * Zero-facing (no direction pressed) parks dead centre, which is exactly as
+	 * neutral as the subject is.
+	 */
+	private facingDir(subject: Subject): number {
+		return subject.facing >= 0 ? 1 : -1;
+	}
+
 	private phaseLength(): number {
 		switch (this.phase) {
 			case "intro":
 				return POTG_INTRO_MS;
 			case "establish":
 				return ESTABLISH_MS;
+			case "orbit":
+				return ORBIT_MS;
 			case "push":
 				return PUSH_MS;
 			case "whip":

@@ -361,28 +361,37 @@ their own hole**, and that exclusion is one predicate. The pull is an argument t
 creator-only charge floor — the practice-room flag. See
 [specs/ultimate.md](specs/ultimate.md).
 
-**A match ends with Play of the Game, and only then the podium.** The server
-films itself: a 19.5s ring buffer of the snapshots it already broadcast, plus a
-running score of every fighter's **plays** — a run of one fighter's kills, denies
-and round wipes with no gap over 5s, escalating +45% per frag so a double kill
-beats two unrelated ones. The best play's clip is cut **the moment the run
+**A match ends with a four-beat ceremony, and only then the podium.** First a
+few seconds of breathing — the arena holds the last moment and nothing is said.
+Then a **victory card** (VICTORY struck in gold, DEFEAT in silver, the same
+generated wordmark face), then **Play of the Game**, then the podium. The
+server films itself: a **17s ring buffer** of the snapshots it already
+broadcast, plus a running score of every fighter's **plays** — a run of one
+fighter's kills, denies, round wipes, **damage bursts and blocked damage** with
+no gap over 5s, escalating +45% per frag so a double kill beats two unrelated
+ones. **The ultimate pays nobody** — its damage never fires a burst event, the
+same gate the meter uses. The best play's clip is cut **the moment the run
 closes**, while the footage still exists. The announcement is a reliable
 datagram; **the footage is `GET /potg/<roomId>` over the game server's HTTP
 port**, because a clip is hundreds of kilobytes. The client replays it as a
 projector — recorded `PackedState` re-pointed onto the live entities, drawn by
 the ordinary animation, nameplate, shadow and sword-effect systems — under a
-**six-movement camera edit**: a 2.8s **title card that closes a curtain over the
-arena** (wordmark, medal, flare, staggered word slam, then a wipe), establish
-wide, push in to 1.8x, a whip pan that overshoots and swings back, the roll with
-slow motion and a zoom punch on each beat, then an outro holding the last frame.
-**The curtain is the whole difference between a title card and a caption** — the
-first version faded words in over a playing replay and read as a subtitle.
-The wordmark is four generated PNGs, because its condensed uppercase face exists
-on no platform by default. `MATCH_OVER_LINGER_MS` is **30s** because the
-ceremony and the podium share it. Measured with
-`scripts/potg-probe.mjs` — no other probe can see any of it, because they all
-stop reading at the frame it begins. See
-[specs/play-of-the-game.md](specs/play-of-the-game.md).
+**seven-movement camera edit**: a 4.5s **title card that closes a curtain over
+the arena and the victory card with it** (wordmark, medal, flare, staggered
+word slam, the byline, a **stat line** — "3 KILLS · 1,240 DMG · 2 DENIES ·
+310 BLOCKED" — then a wipe), establish wide on the rule-of-thirds line, an
+**orbit** that cranes in an arc around the fighter, push in to 1.8x, a whip pan
+that overshoots and swings back, the roll with slow motion, a zoom punch on
+each beat (scaled by what the beat was — a deny punches hardest) and a **coil**
+that winds the zoom out in the 320ms before it, then an outro holding the last
+frame. **The curtain is the whole difference between a title card and a
+caption** — the first version faded words in over a playing replay and read as
+a subtitle. The wordmark and the verdict words are generated PNGs, because
+their condensed uppercase face exists on no platform by default.
+`MATCH_OVER_LINGER_MS` is **44s** because the breathing, the card, the ceremony
+and the podium share it. Measured with `scripts/potg-probe.mjs` — no other
+probe can see any of it, because they all stop reading at the frame it begins.
+See [specs/play-of-the-game.md](specs/play-of-the-game.md).
 
 **Bots are opt-in.** A room has none unless asked: `?bots=N` seats N to fight,
 `?fill=N` keeps the room at N fighters with bots as ballast, and neither means

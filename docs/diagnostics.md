@@ -337,9 +337,10 @@ It plays a short AI-vs-AI match to a winner, then watches `__potgState()` at
 | Was a play announced, with a headline and a protagonist? | `announced` |
 | Did the server keep footage, and is it fetchable? | `GET /potg/<roomId>`, from node |
 | Is the clip real — frames, cast, beats, a lead-in? | the fetched JSON |
+| Did the victory card appear *after* the breathing, and leave before the reel? | the DOM, timed from `phase === "over"` |
 | Did the card *cover* the arena, then open? | `curtain` — peak and return |
-| Did all six movements run, in order? | `phase`, sampled |
-| Was the establish wide, did the push push, did the whip *swing*? | `track` |
+| Did all seven movements run, in order? | `phase`, sampled |
+| Was the establish wide, did the orbit swing, did the push push, did the whip *swing*? | `track` |
 | Did the footage slow at a beat, and reach full speed otherwise? | `track[].minRate` / `maxRate` |
 | Did the shake fire once per beat rather than once per frame? | `track[].shakes` vs the clip's beat count |
 | Did the replay draw anybody? | `drawn` |

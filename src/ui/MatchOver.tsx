@@ -16,7 +16,7 @@ import { rankScores } from "../game/simulation/Deathmatch";
 import { TEAM_NAMES } from "../game/simulation/Teams";
 import { teamCss } from "../game/teamPalette";
 import { HUD_CSS } from "./hudStyles";
-import { usePotgActive } from "./PlayOfTheGame";
+import { useEndgameCeremony } from "./PlayOfTheGame";
 import { ScoreTable } from "./Scoreboard";
 import { formatClock, useMatch, useMatchOver } from "./useMatch";
 
@@ -63,7 +63,7 @@ export function MatchOver() {
 	// podium would be up over the replay of how it was won, which makes both of
 	// them pointless. The podium is not cancelled, only deferred: `useMatchOver`
 	// is still holding the result when the ceremony ends.
-	const ceremony = usePotgActive();
+	const ceremony = useEndgameCeremony();
 	if (!over || ceremony) return null;
 
 	// Ranked here as well as on the server. Same function, so the answer is the

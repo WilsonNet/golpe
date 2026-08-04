@@ -16,7 +16,12 @@
  */
 
 import type { TeamId } from "../simulation/Teams.js";
-import type { HighlightEvent, HighlightKind, PotgPlay } from "./types.js";
+import type {
+	HighlightEvent,
+	HighlightKind,
+	PlayStats,
+	PotgPlay,
+} from "./types.js";
 
 // ---------------------------------------------------------------------------
 // The shape of a play
@@ -39,8 +44,13 @@ export const POTG_LINK_MS = 5000;
  * establish where the protagonist is and who they are about to fight. It is
  * also why a play never opens on its own kill — a kill you did not see coming
  * reads as a cut, not as a highlight.
+ *
+ * Longer than it used to be, for the same reason the intro grew: the pre-roll
+ * now spends ten seconds doing camera work before the roll, and at the
+ * pre-roll's crawl rate that eats nearly two seconds of footage before the
+ * play has even started.
  */
-export const POTG_LEAD_MS = 2500;
+export const POTG_LEAD_MS = 4000;
 
 /** How much footage runs *after* the last one, so the play lands rather than stops. */
 export const POTG_TAIL_MS = 2200;
@@ -86,6 +96,14 @@ export const POTG_BUFFER_MS = POTG_LEAD_MS + POTG_MAX_PLAY_MS + POTG_LINK_MS;
  * These are additive, not exclusive: an airborne finisher that wiped a side and
  * left the killer on 12 HP is worth all four, which is exactly the moment a
  * highlight reel should be fighting to show.
+ *
+ * **The two damage rows are burst-priced, not point-priced.** An event fires
+ * once per `POTG_DAMAGE_BURST` points, so the table reads "a burst is worth
+ * 20" — a fifth of a kill for a whole health bar of pressure. That is
+ * deliberately stingy: the reel is a highlight, and damage dealt reads far
+ * worse on screen than it felt in the chair. **Absorbed is the cheapest of
+ * all** — blocking a hit is *true* but looks like nothing, so it may colour a
+ * play that was already won and must almost never win one that was not.
  */
 export const HIGHLIGHT_WEIGHTS: Record<HighlightKind, number> = {
 	kill: 100,
@@ -95,7 +113,19 @@ export const HIGHLIGHT_WEIGHTS: Record<HighlightKind, number> = {
 	clutchKill: 60,
 	wipeKill: 90,
 	deny: 140,
+	damageDealt: 20,
+	damageAbsorbed: 10,
 };
+
+/**
+ * Damage points between two `damageDealt` events — roughly one full health
+ * bar. Emitted by the server wherever damage is paid, so the tracker sees a
+ * steady fighter as a trickle of cheap events rather than a flood of them.
+ */
+export const POTG_DAMAGE_BURST = 100;
+
+/** The same for a guard: a burst of blocked damage is one health bar's worth. */
+export const POTG_ABSORB_BURST = 100;
 
 /** Kinds that are a frag in their own right, rather than a modifier on one. */
 const KILL_KINDS: ReadonlySet<HighlightKind> = new Set<HighlightKind>(["kill"]);
@@ -140,6 +170,42 @@ export function killsIn(events: readonly HighlightEvent[]): number {
 }
 
 // ---------------------------------------------------------------------------
+// The stat line
+// ---------------------------------------------------------------------------
+
+/** A play with nothing yet in any of its stat buckets. */
+function emptyStats(): PlayStats {
+	return { kills: 0, damage: 0, denies: 0, absorbed: 0 };
+}
+
+/**
+ * Fold one event into a play's stat line.
+ *
+ * The score is the *judgement*; these are the *receipt*. Damage rows carry
+ * their burst size in `amount`; the kinds that are counts just count. `kills`
+ * mirrors `PotgPlay.kills` rather than re-deriving it, so the card's numbers
+ * can never disagree with the headline they sit under.
+ */
+function addStats(play: PotgPlay, event: HighlightEvent): void {
+	switch (event.kind) {
+		case "kill":
+			play.stats.kills++;
+			return;
+		case "deny":
+			play.stats.denies++;
+			return;
+		case "damageDealt":
+			play.stats.damage += event.amount ?? POTG_DAMAGE_BURST;
+			return;
+		case "damageAbsorbed":
+			play.stats.absorbed += event.amount ?? POTG_ABSORB_BURST;
+			return;
+		default:
+			return;
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Naming it
 // ---------------------------------------------------------------------------
 
@@ -158,9 +224,10 @@ const MULTIKILL_MAX = "RAMPAGE";
  * A multikill names itself and outranks everything, because that is what the
  * player will be describing afterwards. A single frag falls through to whatever
  * was *unusual* about it — the hole, the deny, the finisher, the fact that it
- * happened in mid-air — and only a completely ordinary kill gets the ordinary
- * name. A play with a headline nobody would say out loud is a play that should
- * have lost to a different one.
+ * happened in mid-air — and a play that won on pressure alone is named for the
+ * pressure. Only a completely ordinary kill gets the ordinary name. A play
+ * with a headline nobody would say out loud is a play that should have lost to
+ * a different one.
  */
 export function describePlay(play: PotgPlay): {
 	headline: string;
@@ -204,6 +271,17 @@ export function describePlay(play: PotgPlay): {
 	}
 	if (kinds.has("airKill")) {
 		return { headline: "OUT OF THE AIR", subtitle: "Never touched the floor." };
+	}
+	// A play that won without a frag worth shouting about is named for what it
+	// did win with. Absorbed reads worst of anything on screen, so it is checked
+	// last of the two, and only when it actually beat the damage dealt — a
+	// fighter who blocked four hundred points *and* dished them out gets the
+	// more flattering name, because the damage is what the camera can show.
+	if (play.stats.absorbed >= 400 && play.stats.absorbed > play.stats.damage) {
+		return { headline: "THE WALL", subtitle: "Took it all, gave nothing." };
+	}
+	if (play.stats.damage >= 400) {
+		return { headline: "BARRAGE", subtitle: "Poured it on." };
 	}
 	return {
 		headline: "PLAY OF THE GAME",
@@ -255,21 +333,25 @@ export class PlayTracker {
 				current.actorName = event.actorName || current.actorName;
 				current.score = scorePlay(current.events);
 				current.kills = killsIn(current.events);
+				addStats(current, event);
 				return;
 			}
 			this.closeOne(event.actorId);
 		}
 
-		this.open.set(event.actorId, {
+		const play: PotgPlay = {
 			actorId: event.actorId,
 			actorName: event.actorName,
 			team: this.teamOf(event.actorId),
 			score: scorePlay([event]),
 			kills: killsIn([event]),
+			stats: emptyStats(),
 			events: [event],
 			startMs: event.t,
 			endMs: event.t,
-		});
+		};
+		addStats(play, event);
+		this.open.set(event.actorId, play);
 	}
 
 	/**

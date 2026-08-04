@@ -5,6 +5,8 @@ import {
 	HIGHLIGHT_WEIGHTS,
 	killsIn,
 	PlayTracker,
+	POTG_ABSORB_BURST,
+	POTG_DAMAGE_BURST,
 	POTG_LINK_MS,
 	POTG_MAX_PLAY_MS,
 	scorePlay,
@@ -16,6 +18,7 @@ function event(
 	kind: HighlightKind,
 	actorId = "a",
 	victimName = "Foe",
+	amount?: number,
 ): HighlightEvent {
 	return {
 		t,
@@ -24,6 +27,7 @@ function event(
 		actorName: actorId.toUpperCase(),
 		victimId: "v",
 		victimName,
+		...(amount !== undefined ? { amount } : {}),
 	};
 }
 
@@ -78,6 +82,30 @@ describe("scorePlay", () => {
 
 	it("prices a deny above an ordinary frag", () => {
 		expect(HIGHLIGHT_WEIGHTS.deny).toBeGreaterThan(HIGHLIGHT_WEIGHTS.kill);
+	});
+
+	it("prices damage below frags, and absorbed below damage", () => {
+		// A whole health bar of pressure is a fifth of a kill; a health bar of
+		// blocked damage is half of that. The reel is a highlight, and neither
+		// row looks like one — so neither may ever out-score a frag, let alone
+		// a deny.
+		expect(HIGHLIGHT_WEIGHTS.damageDealt).toBeLessThan(
+			HIGHLIGHT_WEIGHTS.kill / 4,
+		);
+		expect(HIGHLIGHT_WEIGHTS.damageAbsorbed).toBeLessThan(
+			HIGHLIGHT_WEIGHTS.damageDealt,
+		);
+	});
+
+	it("never lets accumulated pressure beat a multikill", () => {
+		// Eight bursts of damage — the cap of what a play's span can hold — is
+		// a scoring pressure no ordinary play can sustain, and it still loses
+		// to one double kill.
+		const pressure = scorePlay(
+			Array.from({ length: 8 }, (_, i) => event(i * 500, "damageDealt")),
+		);
+		const double = scorePlay([event(0, "kill"), event(800, "kill")]);
+		expect(pressure).toBeLessThan(double);
 	});
 });
 
@@ -143,6 +171,35 @@ describe("PlayTracker", () => {
 		tracker.flush();
 		expect(plays[0]?.score).toBeGreaterThan(HIGHLIGHT_WEIGHTS.kill);
 	});
+
+	it("folds events into the play's stat line", () => {
+		const { plays, tracker } = collect();
+		tracker.note(event(0, "kill"));
+		tracker.note(event(300, "damageDealt", "a", "Foe", 110));
+		tracker.note(event(600, "damageAbsorbed", "a", "Rival", 90));
+		tracker.note(event(900, "deny"));
+		tracker.note(event(1200, "kill"));
+		tracker.flush();
+		const play = plays[0];
+		expect(play?.stats).toEqual({
+			kills: 2,
+			damage: 110,
+			denies: 1,
+			absorbed: 90,
+		});
+		// The score is judgement, the stats are the receipt: the two may not
+		// disagree about the frags that produced the headline.
+		expect(play?.stats.kills).toBe(play?.kills);
+	});
+
+	it("defaults a burst event's amount to a full burst", () => {
+		const { plays, tracker } = collect();
+		tracker.note(event(0, "damageDealt"));
+		tracker.note(event(200, "damageAbsorbed"));
+		tracker.flush();
+		expect(plays[0]?.stats.damage).toBe(POTG_DAMAGE_BURST);
+		expect(plays[0]?.stats.absorbed).toBe(POTG_ABSORB_BURST);
+	});
 });
 
 describe("beats", () => {
@@ -152,6 +209,7 @@ describe("beats", () => {
 		team: null,
 		score,
 		kills: 1,
+		stats: { kills: 1, damage: 0, denies: 0, absorbed: 0 },
 		events: [],
 		startMs: 0,
 		endMs: 0,
@@ -177,16 +235,27 @@ describe("describePlay", () => {
 		kills: number,
 		kinds: HighlightKind[],
 		victims: string[] = [],
-	): PotgPlay => ({
-		actorId: "a",
-		actorName: "A",
-		team: null,
-		score: 0,
-		kills,
-		events: kinds.map((k, i) => event(i, k, "a", victims[i] ?? "Foe")),
-		startMs: 0,
-		endMs: 0,
-	});
+		extra: Partial<PotgPlay["stats"]> = {},
+	): PotgPlay => {
+		const events = kinds.map((k, i) => event(i, k, "a", victims[i] ?? "Foe"));
+		return {
+			actorId: "a",
+			actorName: "A",
+			team: null,
+			score: 0,
+			kills,
+			stats: {
+				kills,
+				damage: 0,
+				denies: kinds.filter((k) => k === "deny").length,
+				absorbed: 0,
+				...extra,
+			},
+			events,
+			startMs: 0,
+			endMs: 0,
+		};
+	};
 
 	it("names a multikill by its size", () => {
 		expect(describePlay(play(2, ["kill", "kill"])).headline).toBe(
@@ -215,6 +284,28 @@ describe("describePlay", () => {
 			"OUT OF THE AIR",
 		);
 		expect(describePlay(play(0, ["deny"])).headline).toBe("DENIED");
+	});
+
+	it("names a win that had no frag worth shouting about", () => {
+		// Four bursts of damage with nothing else in the play: a BARRAGE is the
+		// honest name for the fight the camera is about to show.
+		expect(describePlay(play(0, [], [], { damage: 400 })).headline).toBe(
+			"BARRAGE",
+		);
+		// And a wall of blocked damage beats even that — the rarest way to win a
+		// play, and the one that reads worst, so it gets the rarest name.
+		expect(describePlay(play(0, [], [], { absorbed: 420 })).headline).toBe(
+			"THE WALL",
+		);
+		// The bigger of the two gets the name: a fighter who dished out more than
+		// they blocked is a barrage, and one who blocked more than they dished is
+		// the wall.
+		expect(
+			describePlay(play(0, [], [], { damage: 700, absorbed: 500 })).headline,
+		).toBe("BARRAGE");
+		expect(
+			describePlay(play(0, [], [], { damage: 500, absorbed: 700 })).headline,
+		).toBe("THE WALL");
 	});
 
 	it("always says something", () => {

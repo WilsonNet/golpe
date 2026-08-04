@@ -18,10 +18,10 @@
  * end the ceremony, over the same event bus everything else uses.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { EventBus } from "../game/EventBus";
 import type { PotgShot } from "../game/potg/Director";
-import type { PotgAnnounce } from "../game/potg/types";
+import type { PlayStats, PotgAnnounce } from "../game/potg/types";
 import { teamCss } from "../game/teamPalette";
 import { POTG_CSS } from "./potgStyles";
 
@@ -30,10 +30,29 @@ import { POTG_CSS } from "./potgStyles";
  *
  * Reached when the server scored a play but no footage survived to go with it —
  * a play in the opening seconds of a match has almost no lead-in to cut from.
- * Long enough to read the name and the headline, and no longer: there is
- * nothing else on screen.
+ * Long enough for the whole card — words, byline, stat line — to arrive and
+ * hold, and no longer: there is nothing else on screen.
  */
-const CARD_ONLY_MS = 4200;
+const CARD_ONLY_MS = 5000;
+
+/**
+ * The stat line: "3 KILLS · 1,240 DMG · 2 DENIES · 310 BLOCKED".
+ *
+ * Only the buckets with anything in them are shown, so a double kill reads
+ * "2 KILLS · 640 DMG" and not as a wall of zeroes. Order is fixed and matches
+ * the stylesheet's argument: frags first, then the damage rows, absorbed last.
+ */
+function statParts(stats: PlayStats): string[] {
+	const parts: string[] = [];
+	if (stats.kills > 0)
+		parts.push(`${stats.kills} KILL${stats.kills === 1 ? "" : "S"}`);
+	if (stats.damage > 0) parts.push(`${stats.damage.toLocaleString()} DMG`);
+	if (stats.denies > 0)
+		parts.push(`${stats.denies} DENY${stats.denies === 1 ? "" : "S"}`);
+	if (stats.absorbed > 0)
+		parts.push(`${stats.absorbed.toLocaleString()} BLOCKED`);
+	return parts;
+}
 
 export function PlayOfTheGame() {
 	const [announce, setAnnounce] = useState<PotgAnnounce | null>(null);
@@ -98,6 +117,17 @@ export function PlayOfTheGame() {
 
 	if (!announce) return null;
 
+	// Defensive against a stale server: the stats row is cosmetic, and a card
+	// that crashes because the wire lagged behind the build is a card that lost
+	// the ceremony for no reason.
+	const stats: PlayStats = announce.stats ?? {
+		kills: announce.kills,
+		damage: 0,
+		denies: 0,
+		absorbed: 0,
+	};
+	const statLine = statParts(stats);
+
 	const accent = announce.team === null ? undefined : teamCss(announce.team);
 	const style = accent
 		? ({ "--potg-accent": accent } as React.CSSProperties)
@@ -145,6 +175,18 @@ export function PlayOfTheGame() {
 					<span className="deed">{announce.headline}</span>
 				</div>
 				<div className="vp-rule" />
+				{/* The receipt, under the name of it. The stats travel in the
+				    announcement, so a ceremony with no footage still gets them. */}
+				{statLine.length > 0 ? (
+					<div className="vp-stats" role="note">
+						{statLine.map((part, i) => (
+							<Fragment key={part}>
+								{i > 0 ? <i className="sep" /> : null}
+								<span>{part}</span>
+							</Fragment>
+						))}
+					</div>
+				) : null}
 			</div>
 
 			{/* Through the roll itself, when the title is gone: the one thing that
@@ -174,18 +216,28 @@ export function PlayOfTheGame() {
 }
 
 /**
- * True while the ceremony owns the screen.
+ * True while the endgame ceremony owns the screen.
  *
- * The fight HUD and the podium both hide behind this. The podium especially:
- * `match-over` and the Play of the Game announcement arrive in the same breath,
- * and without this the winner screen would be up over the replay of how they
- * won — which is the one arrangement that makes both of them pointless.
+ * That is more than the Play of the Game: the victory card is a ceremony too,
+ * and the podium must wait for both. The match ends with a beat of breathing,
+ * then the victory card, then the reel — and the fight HUD and the podium hide
+ * from the first beat to the last, or the winner screen would be up over the
+ * card (and the card over the HUD) the moment the match ended. `potg-end`
+ * releases everything; a match with no play releases at `victory-done`, which
+ * is when the card takes itself down and the podium takes its turn.
  */
-export function usePotgActive(): boolean {
+export function useEndgameCeremony(): boolean {
 	const [active, setActive] = useState(false);
 	useEffect(() => {
 		const on = EventBus.on("potg-begin", (() => setActive(true)) as never);
 		const off = EventBus.on("potg-end", (() => setActive(false)) as never);
+		// The ceremony starts at the whistle, not at the reel: from the first
+		// frame of the breathing, the HUD's numbers are a match that is already
+		// over and the podium is five beats early.
+		const over = EventBus.on("match-over", (() => setActive(true)) as never);
+		// A match with no play hands the screen back when the card leaves.
+		const cardDone = EventBus.on("victory-done", (() =>
+			setActive(false)) as never);
 		// A new match takes it down whatever else happened — the same belt-and-
 		// braces the podium has, and for the same reason: an overlay that outlives
 		// its match sits over a live fight forever.
@@ -193,6 +245,8 @@ export function usePotgActive(): boolean {
 		return () => {
 			on();
 			off();
+			over();
+			cardDone();
 			reset();
 		};
 	}, []);

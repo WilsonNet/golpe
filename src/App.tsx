@@ -15,6 +15,7 @@ import { Scoreboard } from "./ui/Scoreboard";
 import { TouchControls } from "./ui/TouchControls";
 import { TrainingPanel } from "./ui/TrainingPanel";
 import { UltimateCinematic } from "./ui/UltimateCinematic";
+import { VictoryCard } from "./ui/VictoryCard";
 
 /**
  * Both spellings of the flag, matched exactly as `Match` matches them.
@@ -87,7 +88,10 @@ function App() {
 				<FightHud training={training} />
 				{/* Inside the canvas box, like the HUD: the ceremony's letterbox frames
 				    the *arena*, not the browser window, and a 4:3 game in a wide window
-				    would otherwise get bars across the whole page. */}
+				    would otherwise get bars across the whole page. The victory card
+				    sits under the Play of the Game overlay — the curtain closing is its
+				    exit — so the two share the box and the z-order. */}
+				<VictoryCard />
 				<PlayOfTheGame />
 			</GameCanvas>
 			{/* Directly after the canvas, because it is part of the *page* rather

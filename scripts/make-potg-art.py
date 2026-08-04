@@ -70,6 +70,33 @@ WORD_FONTS = (
 
 WORDS = ("PLAY", "OF", "THE", "GAME")
 
+# The verdict card's words. Same face, different metals: victory struck in the
+# gold, defeat in a cold silver — a losing player should read the tone of the
+# verdict from the colour before a word is legible — and a draw in a dimmed,
+# spent gold, because nobody won and the card should not pretend otherwise.
+PALETTES = {
+    "victory": {
+        "top": WORD_TOP,
+        "mid": WORD_MID,
+        "bottom": WORD_BOTTOM,
+        "outline": WORD_OUTLINE,
+    },
+    "defeat": {
+        "top": (240, 246, 255),
+        "mid": (198, 210, 224),
+        "bottom": (136, 150, 168),
+        "outline": (10, 14, 22),
+    },
+    "draw": {
+        "top": (246, 236, 200),
+        "mid": (212, 192, 138),
+        "bottom": (162, 142, 92),
+        "outline": (18, 14, 8),
+    },
+}
+
+VERDICT_WORDS = ("VICTORY", "DEFEAT", "DRAW")
+
 
 def burst(size=640, rays=24):
     """A radial flare: `rays` tapered gold wedges, fading out toward the rim."""
@@ -184,8 +211,13 @@ def word_font(size):
     return ImageFont.load_default(), "(default)"
 
 
-def gradient(width, height):
-    """A vertical bright-to-deep gold ramp, the height of one word."""
+def gradient(width, height, palette=None):
+    """A vertical bright-to-deep ramp, the height of one word.
+
+    `palette` lets a verdict word be struck in a different metal — see
+    `PALETTES`; the default is the gold the wordmark is struck in.
+    """
+    pal = palette or {"top": WORD_TOP, "mid": WORD_MID, "bottom": WORD_BOTTOM}
     ramp = Image.new("RGB", (1, height))
     px = ramp.load()
     for y in range(height):
@@ -194,15 +226,15 @@ def gradient(width, height):
         # halfway down — a linear ramp reads as a flat gold slab.
         if t < 0.38:
             u = t / 0.38
-            a, b = WORD_TOP, WORD_MID
+            a, b = pal["top"], pal["mid"]
         else:
             u = (t - 0.38) / 0.62
-            a, b = WORD_MID, WORD_BOTTOM
+            a, b = pal["mid"], pal["bottom"]
         px[0, y] = tuple(int(a[i] + (b[i] - a[i]) * u) for i in range(3))
     return ramp.resize((width, height), Image.NEAREST)
 
 
-def wordmark(word, size=150, squeeze=0.93, outline=7):
+def wordmark(word, size=150, squeeze=0.93, outline=7, palette=None):
     """
     One word of the splash, as a tight-cropped RGBA image.
 
@@ -210,7 +242,17 @@ def wordmark(word, size=150, squeeze=0.93, outline=7):
     a merely narrow face into a *display* one: Big Noodle's silhouette is taller
     than it is wide by a long way, and no font on a stock Linux box goes that
     far on its own.
+
+    `palette` strikes the word in a different metal. The verdict card's VICTORY
+    is gold and its DEFEAT is a cold silver — same face, same recipe, so the
+    two cards are recognisably the same family of moment.
     """
+    pal = palette or {
+        "top": WORD_TOP,
+        "mid": WORD_MID,
+        "bottom": WORD_BOTTOM,
+        "outline": WORD_OUTLINE,
+    }
     font, _ = word_font(size * SS)
     probe = Image.new("L", (1, 1))
     box = ImageDraw.Draw(probe).textbbox((0, 0), word, font=font)
@@ -226,8 +268,8 @@ def wordmark(word, size=150, squeeze=0.93, outline=7):
 
     ring = mask.filter(ImageFilter.MaxFilter(outline * 2 * SS - 1))
     out = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    out.paste(Image.new("RGBA", (w, h), (*WORD_OUTLINE, 255)), (0, 0), ring)
-    out.paste(gradient(w, h).convert("RGBA"), (0, 0), mask)
+    out.paste(Image.new("RGBA", (w, h), (*pal["outline"], 255)), (0, 0), ring)
+    out.paste(gradient(w, h, pal).convert("RGBA"), (0, 0), mask)
 
     out = out.resize(
         (max(1, int(w * squeeze / SS)), max(1, h // SS)), Image.LANCZOS
@@ -240,6 +282,12 @@ def main():
     _, face = word_font(10)
     print(f"wordmark face: {face}")
     words = [(f"potg-word-{w.lower()}.png", wordmark(w)) for w in WORDS]
+    # The verdict words share the face; only the metal changes. Same crop, so
+    # the victory card and the wordmark are visibly the same family.
+    words += [
+        (f"potg-word-{w.lower()}.png", wordmark(w, palette=PALETTES[w.lower()]))
+        for w in VERDICT_WORDS
+    ]
     for name, image in [("potg-burst.png", burst()), ("potg-emblem.png", emblem())] + words:
         path = os.path.abspath(os.path.join(OUT_DIR, name))
         image.save(path)

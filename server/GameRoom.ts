@@ -23,6 +23,10 @@ import {
 	type TeamStatus,
 } from "../src/game/online/types.js";
 import { packIntent, packState } from "../src/game/online/wire.js";
+import {
+	POTG_ABSORB_BURST,
+	POTG_DAMAGE_BURST,
+} from "../src/game/potg/scoring.js";
 import type { PotgClip } from "../src/game/potg/types.js";
 import {
 	buildWorld,
@@ -90,6 +94,7 @@ import {
 	isStunned,
 	launchGrenade,
 	MAX_HP,
+	MOVES,
 	MS_PER_SECOND,
 	meleePhase,
 	PLAYER_HEIGHT,
@@ -217,6 +222,15 @@ interface ConnectedPlayer {
 	/** The aim angle of the most recent input that held the ultimate button. */
 	ultAimAngle: number;
 	stats: ReturnType<typeof newStats>;
+	/**
+	 * Damage-points banked since the last Play-of-the-Game burst event.
+	 *
+	 * The reel is fed bursts, not hits: a steady fighter trickles out one
+	 * `damageDealt` per `POTG_DAMAGE_BURST` points rather than flooding the
+	 * tracker with an event per bullet. Kept off the fighter's `stats` because
+	 * those are the scoreboard's numbers, and the reel's are not.
+	 */
+	potgBurst: { damage: number; absorbed: number };
 }
 
 const START_Y = 480;
@@ -607,6 +621,7 @@ export class GameRoom {
 			ultHeld: false,
 			ultAimAngle: 0,
 			stats: newStats(),
+			potgBurst: { damage: 0, absorbed: 0 },
 		};
 	}
 
@@ -1268,6 +1283,21 @@ export class GameRoom {
 			// not pay passes `paysCharge: false` and this line skips it.
 			if (paysCharge) {
 				from.ult = addCharge(from.ult, amount * ULT_CHARGE_PER_DAMAGE);
+				// The reel's own economy rides the same gate: the ultimate is the
+				// one weapon that feeds nothing — not the meter, not the highlight.
+				// Banked in bursts so the tracker hears about a health bar's worth
+				// of pressure at a time, never every bullet.
+				from.potgBurst.damage += amount;
+				if (from.potgBurst.damage >= POTG_DAMAGE_BURST) {
+					this.potg.note(
+						this.potgClockMs,
+						"damageDealt",
+						{ id: from.id, name: from.name },
+						{ id: victim.id, name: victim.name },
+						from.potgBurst.damage,
+					);
+					from.potgBurst.damage = 0;
+				}
 			}
 		}
 
@@ -1314,7 +1344,39 @@ export class GameRoom {
 		// where it is there so a probe or a practising player gets more than one
 		// throw per run.
 		player.ult = Math.max(player.ult, this.startUltCharge);
+		// The reel's burst buckets, though, are a life's worth of pressure: a
+		// play is a run of moments, and the moment ended at death.
+		player.potgBurst = { damage: 0, absorbed: 0 };
 		this.broadcast("respawn", { id: player.id, t: Date.now() });
+	}
+
+	/**
+	 * Bank damage the sword guard turned away, and hand the reel a burst of
+	 * `damageAbsorbed` once a health bar's worth has piled up.
+	 *
+	 * The defender is the *actor* of the event — it is their play — and the
+	 * attacker whose hit was stopped rides in the victim slot, so the card can
+	 * say whose blows were turned. Deliberately the cheapest thing the reel
+	 * scores: blocking well is true but reads as nothing on a screen, so it may
+	 * colour a play that was already won and must almost never win one that was
+	 * not.
+	 */
+	private absorbPotg(
+		defender: ConnectedPlayer,
+		amount: number,
+		attacker: { id: string; name: string } | null,
+	) {
+		if (amount <= 0) return;
+		defender.potgBurst.absorbed += amount;
+		if (defender.potgBurst.absorbed < POTG_ABSORB_BURST) return;
+		this.potg.note(
+			this.potgClockMs,
+			"damageAbsorbed",
+			{ id: defender.id, name: defender.name },
+			{ id: attacker?.id ?? "", name: attacker?.name ?? "" },
+			defender.potgBurst.absorbed,
+		);
+		defender.potgBurst.absorbed = 0;
 	}
 
 	private tickMatchClock(dt: number) {
@@ -1844,6 +1906,14 @@ export class GameRoom {
 				const result = resolveMelee(attacker.state, defender.state);
 				if (!result) continue;
 
+				// A guard that turned a swing away is damage the defender *didn't
+				// take*. Banked for the reel before `applyMeleeResult` mutates
+				// anything, because the move's table is the only record of what
+				// the hit would have been worth.
+				if (result.outcome === "blocked" || result.outcome === "parried") {
+					this.absorbPotg(defender, MOVES[result.move].damage, attacker);
+				}
+
 				const damage = applyMeleeResult(attacker.state, defender.state, result);
 				this.damage(defender, damage, attacker.id);
 
@@ -1889,6 +1959,7 @@ export class GameRoom {
 				// consumed either way — it hit something — but an absorbed one deals
 				// nothing and is not counted as a hit against the shooter.
 				if (blocksBullet(player.state, b.vx)) {
+					this.absorbPotg(player, BULLET_DAMAGE, shooter ?? null);
 					consumed = true;
 					break;
 				}
@@ -2203,6 +2274,7 @@ export class GameRoom {
 			p.pendingInput = null;
 			p.tickInput = null;
 			p.simulatedIntent = null;
+			p.potgBurst = { damage: 0, absorbed: 0 };
 			if (p.brain) p.brain = new EnemyBrain(botConfig(), this.world);
 		});
 		this.bullets = [];

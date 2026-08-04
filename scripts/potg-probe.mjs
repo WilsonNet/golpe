@@ -53,7 +53,15 @@ const MATCH_TIMEOUT_MS = (TIME_LIMIT_SEC + 60) * 1000;
 const CEREMONY_TIMEOUT_MS = 45000;
 
 /** The movements, in the order the director must run them. */
-const MOVEMENTS = ["intro", "establish", "push", "whip", "roll", "outro"];
+const MOVEMENTS = [
+	"intro",
+	"establish",
+	"orbit",
+	"push",
+	"whip",
+	"roll",
+	"outro",
+];
 
 function sinkConsole(page, lines = []) {
 	page.on("console", (msg) => lines.push(msg.text()));
@@ -140,7 +148,15 @@ async function watchCeremony(page) {
 	};
 }
 
-function assess({ ceremony, clipOverHttp, final, podium, lines, hudDuring }) {
+function assess({
+	ceremony,
+	clipOverHttp,
+	final,
+	podium,
+	lines,
+	hudDuring,
+	victory,
+}) {
 	const failures = [];
 	const notes = [];
 	const {
@@ -230,6 +246,7 @@ function assess({ ceremony, clipOverHttp, final, podium, lines, hudDuring }) {
 	const byPhase = new Map(track.map((t) => [t.phase, t]));
 	const intro = byPhase.get("intro");
 	const establish = byPhase.get("establish");
+	const orbit = byPhase.get("orbit");
 	const push = byPhase.get("push");
 	const whip = byPhase.get("whip");
 	const roll = byPhase.get("roll");
@@ -245,6 +262,11 @@ function assess({ ceremony, clipOverHttp, final, podium, lines, hudDuring }) {
 	if (push && establish && !(push.maxZoom > establish.maxZoom * 1.5)) {
 		failures.push(
 			`the push did not push in (${establish.maxZoom.toFixed(2)} -> ${push.maxZoom.toFixed(2)})`,
+		);
+	}
+	if (orbit && !(orbit.travel > 60)) {
+		failures.push(
+			`the orbit did not swing around the fighter (${(orbit.travel ?? 0).toFixed(1)}px)`,
 		);
 	}
 	if (whip && !(whip.travel > 20)) {
@@ -276,8 +298,32 @@ function assess({ ceremony, clipOverHttp, final, podium, lines, hudDuring }) {
 	if (intro && intro.maxRate !== 0) {
 		failures.push(`the footage ran behind the title card (${intro.maxRate})`);
 	}
-	if (intro && !(intro.ms > 2000)) {
+	if (intro && !(intro.ms > 3500)) {
 		failures.push(`the title card only stood for ${Math.round(intro.ms)}ms`);
+	}
+	if (intro && !(intro.ms < 6000)) {
+		failures.push(
+			`the title card overstayed its budget (${Math.round(intro.ms)}ms)`,
+		);
+	}
+
+	// The stat line: the play is scored on frags, but the card now says what
+	// else it was — damage dealt, denies, damage absorbed. A play with a
+	// headline but no receipt is a headline with nothing behind it.
+	const announcedStats = best?.announced?.stats;
+	if (!announcedStats || typeof announcedStats !== "object") {
+		failures.push("the announcement carried no stat line");
+	} else {
+		for (const key of ["kills", "damage", "denies", "absorbed"]) {
+			if (typeof announcedStats[key] !== "number") {
+				failures.push(`the stat line has no ${key}`);
+			}
+		}
+		if (announcedStats.kills !== announced.kills) {
+			failures.push(
+				`the stat line's kills (${announcedStats.kills}) disagree with the announcement (${announced.kills})`,
+			);
+		}
 	}
 
 	// A clean run is not a good run: everything above holds for a replay of an
@@ -292,6 +338,26 @@ function assess({ ceremony, clipOverHttp, final, podium, lines, hudDuring }) {
 	}
 	if (!hudDuring.overlay) {
 		failures.push("the ceremony's overlay never rendered");
+	}
+	if (!hudDuring.stats) {
+		failures.push("the title card's stat line never rendered");
+	}
+
+	// The victory card comes *before* the reel, and not immediately: the match
+	// ends, the arena breathes for a few seconds, then the verdict lands. A cut
+	// straight from the last frag to a full-screen card is the abruptness the
+	// breathing exists to fix.
+	if (!victory.seen) {
+		failures.push("the victory card never appeared");
+	} else {
+		if (victory.atMs < 1000) {
+			failures.push(
+				`the victory card cut in ${Math.round(victory.atMs)}ms after the match ended — no breathing room`,
+			);
+		}
+		if (victory.duringReplay) {
+			failures.push("the victory card was still up during the replay");
+		}
 	}
 
 	if (!podium) failures.push("the podium never arrived after the ceremony");
@@ -345,24 +411,36 @@ async function main() {
 
 	// Watch the ceremony, and sample the DOM while it is up: the podium waiting
 	// its turn is a real requirement and is invisible to `__potgState`.
-	const hudDuring = { podium: false, hud: false, overlay: false };
+	const hudDuring = { podium: false, hud: false, overlay: false, stats: false };
+	const victory = { seen: false, atMs: 0, duringReplay: false };
 	const watcher = watchCeremony(page);
 	const domWatcher = (async () => {
-		const deadline = Date.now() + CEREMONY_TIMEOUT_MS;
+		const t0 = Date.now();
+		const deadline = t0 + CEREMONY_TIMEOUT_MS;
 		while (Date.now() < deadline) {
 			const seen = await page
 				.evaluate(() => ({
 					active: window.__potgState?.().active ?? false,
+					victory: !!document.querySelector(".vv-root"),
 					overlay: !!document.querySelector(".vp-root"),
+					stats: !!document.querySelector(".vp-stats"),
 					podium: !!document.querySelector(".vd-veil"),
 					hud: !!document.querySelector(".vdh-hud"),
 				}))
 				.catch(() => null);
 			if (!seen) break;
+			if (seen.victory && !victory.seen) {
+				victory.seen = true;
+				victory.atMs = Date.now() - t0;
+			}
 			if (seen.active) {
 				hudDuring.overlay ||= seen.overlay;
+				hudDuring.stats ||= seen.stats;
 				hudDuring.podium ||= seen.podium;
 				hudDuring.hud ||= seen.hud;
+				// The victory card is *under* the curtain: it must be gone the
+				// moment the replay owns the screen.
+				victory.duringReplay ||= seen.victory;
 			}
 			if (hudDuring.overlay && !seen.active) break;
 			await page.waitForTimeout(80);
@@ -383,6 +461,7 @@ async function main() {
 		durationMs: clip.durationMs ?? 0,
 		actionAtMs: clip.actionAtMs ?? 0,
 		protagonist: clip.protagonist?.name ?? "",
+		stats: clip.stats ?? null,
 	};
 
 	// And the podium, which had to wait for its turn.
@@ -401,6 +480,7 @@ async function main() {
 		podium,
 		lines,
 		hudDuring,
+		victory,
 	});
 
 	console.log("\n===== PLAY OF THE GAME =====");
@@ -418,6 +498,7 @@ async function main() {
 					subtitle: verdict.announced.subtitle,
 					score: verdict.announced.score,
 					kills: verdict.announced.kills,
+					stats: verdict.announced.stats,
 					hasClip: verdict.announced.hasClip,
 				},
 				clip: clipOverHttp,
@@ -443,6 +524,11 @@ async function main() {
 					shakes: t.shakes,
 				})),
 				overlay: hudDuring,
+				victory: {
+					seen: victory.seen,
+					afterMatchEndMs: Math.round(victory.atMs),
+					duringReplay: victory.duringReplay,
+				},
 				pageErrors: verdict.errors,
 			},
 			null,

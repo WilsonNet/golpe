@@ -28,16 +28,36 @@ export const RESPAWN_DELAY_MS = 2000;
 /**
  * How long the end of a match lasts before the next one starts.
  *
- * **Thirty seconds, and it is not all podium.** The ceremony is two things now:
- * Play of the Game runs first — a title card, a pre-roll of camera work, the
- * footage itself and a card at the end, up to about twenty-one seconds for the
- * longest clip the server will cut — and only then does the podium go up. It
- * was fifteen seconds when the podium was the whole of it, and leaving it there
- * would have meant a new match starting underneath a replay of the last one.
+ * **Forty-four seconds, and it is not all podium.** The end of a match is a
+ * four-beat ceremony now, and every beat gets its time: a few seconds of the
+ * arena holding the last moment, a victory card, Play of the Game — a title
+ * card, ten seconds of pre-roll camera work, the footage itself and a card at
+ * the end, up to about twenty-seven seconds — and only then the podium. It
+ * was fifteen seconds when the podium was the whole of it, and leaving it
+ * there would have meant a new match starting underneath a replay of the last
+ * one.
  *
- * See specs/play-of-the-game.md for where the twenty-one seconds goes.
+ * See specs/play-of-the-game.md for where the time goes.
  */
-export const MATCH_OVER_LINGER_MS = 30000;
+export const MATCH_OVER_LINGER_MS = 44000;
+
+/**
+ * How long the arena is left alone after the last frag, before the victory
+ * card lands.
+ *
+ * This is the *breathing*: the fight is over, the winner is standing, and for
+ * three seconds the game does not say anything about it. A cut straight from
+ * the winning blow to a full-screen card reads as an interruption; the silence
+ * is what makes the card an answer instead of a shout. Pacing is
+ * presentation, which is why these two live beside the linger budget rather
+ * than in a component: the ceremony's parts have to fit the whole, and a
+ * card that quietly doubled would push the next match's first seconds under
+ * a replay of the last one.
+ */
+export const VICTORY_BREATHING_MS = 3000;
+
+/** How long the victory card owns the screen, from its slam to the curtain. */
+export const VICTORY_HOLD_MS = 3500;
 
 export type MatchPhase = "live" | "over";
 

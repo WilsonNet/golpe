@@ -28,7 +28,7 @@ import { ULT_MAX_CHARGE } from "../game/simulation/Physics";
 import { TEAM_COUNT, TEAM_NAMES } from "../game/simulation/Teams";
 import { teamCss } from "../game/teamPalette";
 import { FIGHT_HUD_CSS } from "./fightHudStyles";
-import { usePotgActive } from "./PlayOfTheGame";
+import { useEndgameCeremony } from "./PlayOfTheGame";
 import { formatClock, type MatchView, useMatch } from "./useMatch";
 
 /** The live fight state, or null before the first snapshot. */
@@ -287,7 +287,7 @@ export function FightHud({ training = false }: { training?: boolean }) {
 	const hud = useHudState();
 	const match = useMatch();
 	const [message, announce] = useBattleMessage();
-	const ceremony = usePotgActive();
+	const ceremony = useEndgameCeremony();
 
 	// The clock, once the server says what the match is.
 	const teams = match?.status.teams ?? null;
