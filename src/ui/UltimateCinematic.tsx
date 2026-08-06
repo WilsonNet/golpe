@@ -27,6 +27,8 @@ import { ULTIMATE_CSS } from "./ultimateStyles";
 interface CastEvent {
 	casterId: string;
 	casterName: string;
+	/** The caster's hero — the portrait card draws their own sheet. */
+	hero: "lia" | "anands";
 	/** True when this client is the one casting, for the "YOU" marker. */
 	mine: boolean;
 	/** The freeze length the server declared. Drives the timer bar. */
@@ -124,11 +126,11 @@ export function UltimateCinematic() {
 				<div className="vu-frame">
 					<div className="vu-well">
 						<div className="vu-sweep" />
-						{/* The shipped character sheet, face-on frame, six times up with
-						    nearest-neighbour. Real art beats drawn art here because it can
-						    never disagree with the fighter standing on the field. */}
+						{/* The caster's own character sheet, face-on frame, six times up
+						    with nearest-neighbour. Real art beats drawn art here because
+						    it can never disagree with the fighter standing on the field. */}
 						<div
-							className="vu-sprite"
+							className={`vu-sprite vu-sprite-${cast.hero}`}
 							role="img"
 							aria-label={cast.casterName}
 						/>
@@ -141,8 +143,14 @@ export function UltimateCinematic() {
 				</div>
 
 				<div className="vu-ability">
-					<div className="vu-ability-name">Black Hole</div>
-					<div className="vu-ability-sub">Gravity has a winner</div>
+					<div className="vu-ability-name">
+						{cast.hero === "anands" ? "Dragon Thrust" : "Black Hole"}
+					</div>
+					<div className="vu-ability-sub">
+						{cast.hero === "anands"
+							? "Nothing stops a line"
+							: "Gravity has a winner"}
+					</div>
 				</div>
 
 				{/* Empties over exactly the freeze the server declared. The only thing

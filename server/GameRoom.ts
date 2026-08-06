@@ -465,6 +465,12 @@ export class GameRoom {
 		y: number;
 		angle: number;
 	} | null = null;
+	/**
+	 * The dragon waiting on the far side of the cinematic, exactly like the
+	 * throw. The ride is launched when the freeze *ends*: the room is told a
+	 * dragon is coming, and only then does the rider become cargo on the line.
+	 */
+	private pendingDragon: { ownerId: string; angle: number } | null = null;
 	private grenades: GrenadeState[] = [];
 	private singularity: Singularity | null = null;
 	/** ms since the open singularity last dealt damage. */
@@ -2493,6 +2499,7 @@ export class GameRoom {
 
 		this.cinematic = null;
 		this.releasePendingThrow();
+		this.releasePendingDragon();
 		return true;
 	}
 
@@ -2518,12 +2525,14 @@ export class GameRoom {
 		if (!player.alive || this.phase !== "live") return;
 		if (isFrozen(player.state)) return;
 		if (isStunned(player.state) || isKnockedDown(player.state)) return;
-		// The black hole is the one ultimate that cannot overlap itself — one
-		// hole at a time, because two fields would have to argue about which
-		// way a fighter between them is pulled. The dragon is a fast streak,
-		// not a field; two dragons at once is chaos, not a contradiction.
-		if (kitFor(player.hero).ultimate === "black-hole") {
-			if (this.cinematic || this.pendingThrow || this.singularity) return;
+		// One cinematic at a time, and one black hole at a time: two holes
+		// would have to argue about which way a fighter between them is pulled.
+		// The dragon is a fast streak, not a field — a dragon can be cast into
+		// an open hole (the hole is its one counter), so the singularity check
+		// belongs to the black hole only.
+		if (this.cinematic || this.pendingThrow || this.pendingDragon) return;
+		if (kitFor(player.hero).ultimate === "black-hole" && this.singularity) {
+			return;
 		}
 
 		// Spent at the release, before anything happens. A caster who
@@ -2535,36 +2544,34 @@ export class GameRoom {
 		player.state.massiveReady = false;
 		player.state.parryMassiveTimer = 0;
 
+		this.cinematic = { casterId: player.id, msLeft: ULT_CINEMATIC_MS };
+		// The aim angle is the last input that held the button, not the release
+		// input itself: the release frame is the moment the button came up, and
+		// the aim that matters is the one it was held at. They are the same for
+		// a human — the cursor has not moved between two frames — and they
+		// differ only for scripted input, whose release frame may carry no
+		// angle at all.
 		if (kitFor(player.hero).ultimate === "dragon-thrust") {
-			// Anands' ultimate: no cinematic, no throw — the release *is* the
-			// launch. The rider becomes cargo on the dragon's line: velocity
-			// pinned to the release angle, gravity suppressed, and the ride
-			// ends at the first obstacle (or a hostile black hole). The aim
-			// angle is the last held input's, exactly like the grenade's.
-			// Whatever move the rider was making stays frozen for the ride and
-			// dies with it, in `tickPlayer`, on both sides of the wire.
-			const velocity = dragonVelocity(player.ultAimAngle);
-			player.state.dragonVX = velocity.vx;
-			player.state.dragonVY = velocity.vy;
-			player.state.dragonTimer = DRAGON_RIDE_MS;
-			player.state.vx = 0;
-			player.state.vy = 0;
-			this.sweepLatches.delete(player.id);
+			// Anands' ultimate: the same freeze the black hole gets, then the
+			// release *is* the launch. The rider becomes cargo on the dragon's
+			// line: velocity pinned to the release angle, gravity suppressed,
+			// and the ride ends at the first obstacle (or a hostile black
+			// hole). Whatever move the rider was making stays frozen for the
+			// ride and dies with it, in `tickPlayer`, on both sides of the
+			// wire.
+			this.pendingDragon = {
+				ownerId: player.id,
+				angle: player.ultAimAngle,
+			};
 			console.log(`[ULT] ${player.name} casts Dragon Thrust`);
 			return;
 		}
 
-		this.cinematic = { casterId: player.id, msLeft: ULT_CINEMATIC_MS };
 		this.pendingThrow = {
 			ownerId: player.id,
 			ownerTeam: player.team,
 			x: player.state.x + PLAYER_WIDTH / 2,
 			y: player.state.y + PLAYER_HEIGHT / 2,
-			// The last input that held the button, not the release input itself: the
-			// release frame is the moment the button came up, and the aim that
-			// matters is the one it was held at. They are the same for a human — the
-			// cursor has not moved between two frames — and they differ only for
-			// scripted input, whose release frame may carry no angle at all.
 			angle: player.ultAimAngle,
 		};
 		console.log(`[ULT] ${player.name} casts Black Hole`);
@@ -2585,6 +2592,28 @@ export class GameRoom {
 				t.ownerTeam,
 			),
 		);
+	}
+
+	/**
+	 * The freeze is over: launch the dragon the caster paid for.
+	 *
+	 * The caster was frozen for the whole cinematic, so their state is exactly
+	 * where it was at the cast — the ride's launch position is the state's own,
+	 * and the velocity comes from the angle captured at the release.
+	 */
+	private releasePendingDragon() {
+		const d = this.pendingDragon;
+		this.pendingDragon = null;
+		if (!d) return;
+		const rider = this.players.get(d.ownerId);
+		if (!rider) return;
+		const velocity = dragonVelocity(d.angle);
+		rider.state.dragonVX = velocity.vx;
+		rider.state.dragonVY = velocity.vy;
+		rider.state.dragonTimer = DRAGON_RIDE_MS;
+		rider.state.vx = 0;
+		rider.state.vy = 0;
+		this.sweepLatches.delete(rider.id);
 	}
 
 	/** Advance grenades in flight and the open singularity. */
@@ -2800,6 +2829,7 @@ export class GameRoom {
 		this.singularity = null;
 		this.cinematic = null;
 		this.pendingThrow = null;
+		this.pendingDragon = null;
 		this.cinematicGraceMs = 0;
 
 		// Tell clients explicitly. A respawn is a legitimate discontinuity, and

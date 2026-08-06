@@ -379,7 +379,8 @@ green-amber-red always.** Every fighter also casts a **team-tinted shadow** onto
 the surface below them (`render/Shadows.ts`, its own Stage layer), which doubles
 as the game's only altitude cue.
 
-**There is one ultimate: a black hole grenade, on R.** Earned Overwatch-style
+**Every hero has one ultimate, and every cast gets the announcement.** Lia's is
+a black hole grenade, on R. Earned Overwatch-style
 (0.35 charge/s passive, 0.2 per point of damage dealt, 3 a kill — 4x slower
 than before, and **the hole itself pays nobody**: the ultimate is the one
 weapon that cannot feed the ultimate meter). It survives death — except the
@@ -391,7 +392,9 @@ Spent at the **release** of a hold: holding R raises a special aim — the
 grenade's own arc traced to its landing — and releasing casts. The cast
 **freezes the whole room for 1100ms** behind a portrait card — the only legal
 frame freeze in the game, and legal only because
-the *server* declares the tick range and neither side simulates through it. The
+the *server* declares the tick range and neither side simulates through it.
+**Anands' dragon thrust gets the same freeze and card** — every ultimate
+announces itself, and the portrait draws the caster's own sheet. The
 freeze ends, the grenade launches along the angle you released on, and it arcs:
 780 px/s under 860 px/s² gravity, so **707px is as far as it can be thrown** and
 choosing the arc is the skill. Where it lands, a singularity holds for **4400ms** —

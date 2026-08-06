@@ -966,6 +966,13 @@ export class OnlineSession {
 	 */
 	private absorbUltimate(snap: GameSnapshot) {
 		const cine = snap.cinematic ?? null;
+		// A freeze just ended: whatever was waiting on its far side just
+		// launched. The dragon's launch snaps the rider into the ride's first
+		// frames — a legitimate discontinuity, like a respawn, and the jitter
+		// metric must not count the glide that hides it.
+		if (this._cinematic !== null && cine === null) {
+			this.callbacks.onTeleport(6);
+		}
 		this._cinematic = cine;
 		if (cine === null) {
 			this.announcedCast = null;

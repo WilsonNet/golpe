@@ -85,9 +85,11 @@ an obstacle or a hostile black hole.
 
 - **Casting:** hold R to aim — the preview is a **straight beam** along the
   angle (the grenade's arc is Lia's geometry; the dragon flies a line, and the
-  preview must show the actual path) — release to cast. **No cinematic**: the
-  release *is* the launch. The client predicts its own ride exactly like a
-  dash; the server confirms it in the next snapshot.
+  preview must show the actual path) — release to cast. **Every ultimate gets
+  the announcement**: the same 1100ms freeze and portrait card the black hole
+  has, because a cast the room is not told about is a cast the room cannot
+  react to. The freeze ends and the ride launches along the angle recorded at
+  the release.
 - **The ride:** the caster becomes cargo on the dragon's line — `dragonTimer`,
   `dragonVX/Y` in state, velocity pinned, gravity suppressed, intent discarded.
   It flies at **1500 px/s** for up to **900ms**, and it stops at the first

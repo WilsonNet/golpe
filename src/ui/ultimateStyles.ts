@@ -174,6 +174,11 @@ export const ULTIMATE_CSS = `
 		hue-rotate(var(--vu-hue, 0deg));
 	animation: vu-sprite-in 380ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
+/* Anands' own sheet, same layout: her portrait is her, not a hue-shifted
+   stranger. The hue rotation still applies for a *second* Anands. */
+.vu-sprite-anands {
+	background-image: url("assets/anands.png");
+}
 
 /* The floor the figure stands on: an ellipse of light under the feet. It costs
    one element and it is what stops the character reading as a sticker pasted

@@ -97,8 +97,6 @@ import {
 	bodyRect,
 	canFire,
 	createPlayerState,
-	DRAGON_RIDE_MS,
-	dragonVelocity,
 	fieldAffects,
 	fieldFor,
 	hasLineOfSight,
@@ -295,7 +293,6 @@ export class Match {
 	private elapsed = 0;
 	private playerName = "";
 	/** The ultimate button's state last fixed step, for the dragon's release edge. */
-	private ultHeldLast = false;
 	/**
 	 * The room this client asked for, from `?room=` or freshly minted.
 	 *
@@ -798,6 +795,9 @@ export class Match {
 					EventBus.emit("ultimate-cast", {
 						casterId,
 						casterName: this.online?.nameOf(casterId) ?? casterId,
+						// The caster's hero: the portrait card draws the caster's
+						// own sheet, not a hue-shifted stranger.
+						hero: this.online?.heroOf(casterId) ?? this.hero,
 						mine: casterId === this.online?.manager.myId,
 						durationMs: this.online?.cinematic?.totalMs ?? 0,
 					});
@@ -951,36 +951,6 @@ export class Match {
 			this.localBrain = new EnemyBrain(fightConfig(), this.arena, this.hero);
 			console.log("[AI-ONLINE] AI brain created for local player");
 		}
-	}
-
-	/**
-	 * The local fighter's ultimate was released: if they play Anands, start the
-	 * dragon ride on the predicted state, the way the server will.
-	 *
-	 * Pure prediction — the server judges the release and echoes the real ride
-	 * in the next snapshot, and a release that was refused (meter empty, a
-	 * stun the client had not seen yet) reconciles back to standing. The ride
-	 * itself is deterministic shared code, so the prediction and the truth are
-	 * the same line at the same speed.
-	 */
-	private predictDragonCast() {
-		const session = this.online;
-		if (!session?.connected) return;
-		if (kitFor(this.hero).ultimate !== "dragon-thrust") return;
-		if (session.localUlt < ULT_MAX_CHARGE) return;
-		if (this.local.fighter.hp <= 0) return;
-		if (isStunned(this.local.body) || isKnockedDown(this.local.body)) return;
-		const velocity = dragonVelocity(this.aimAngle);
-		const s = session.predicted.state;
-		s.dragonTimer = DRAGON_RIDE_MS;
-		s.dragonVX = velocity.vx;
-		s.dragonVY = velocity.vy;
-		s.vx = 0;
-		s.vy = 0;
-		// The black hole's cast is announced by its cinematic; the dragon has no
-		// cinematic, so the metric and the HUD learn about *this* cast from the
-		// prediction that just made it — the same event, one tick earlier.
-		this.diagnostics.recordUltimateCast();
 	}
 
 	/** A fighter appeared in a snapshot. Give it something to be drawn with. */
@@ -2241,18 +2211,6 @@ export class Match {
 				this.localBrain !== undefined
 					? this.localIntent
 					: Input.withDash(this.localIntent, this.input.consumeDash());
-			// The dragon's cast is predicted locally, exactly like a dash. The
-			// black hole cannot be — its release is followed by a server-declared
-			// freeze, which is what hides the round trip. The dragon has no
-			// freeze: the release *is* the launch, and without this the rider
-			// would stand still until the next snapshot caught up — a visible
-			// snap forward of a few frames on every cast. The release edge, the
-			// meter and the standing conditions are the same ones the server
-			// will judge, and reconciliation corrects any difference.
-			if (this.ultHeldLast && !intent.ultimate) {
-				this.predictDragonCast();
-			}
-			this.ultHeldLast = intent.ultimate;
 			session.fixedStep(intent, this.aimAngle, dt);
 		});
 

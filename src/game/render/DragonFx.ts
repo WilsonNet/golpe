@@ -77,6 +77,10 @@ export class DragonFx {
 	setRider(rider: { x: number; y: number; vx: number; vy: number }) {
 		this.rider = rider;
 		this.alpha = 1;
+		// The node starts at alpha 0 (it fades in and out), so making the
+		// dragon visible means applying the alpha to the node itself — the
+		// first version set the field and left the node transparent forever.
+		this.node.alpha = 1;
 		this.node.visible = true;
 		// The chain starts coiled behind the rider along the launch line, so
 		// the first frames read as a dragon arriving rather than a dragon
@@ -125,8 +129,11 @@ export class DragonFx {
 		const nx = vx / len;
 		const ny = vy / len;
 
-		// The head leads at the rider, angled down the line.
-		this.head.position.set(x, y);
+		// The head leads at the rider, angled down the line — but a full body
+		// ahead, never on top of them: the rider is the head of the dragon, and
+		// a head drawn over the rider's sprite would hide the player the move
+		// belongs to.
+		this.head.position.set(x + nx * 18, y + ny * 6);
 		this.head.rotation = Math.atan2(vy, vx);
 		// A little bob against the direction of travel — the head rides the
 		// current, it does not pull it.

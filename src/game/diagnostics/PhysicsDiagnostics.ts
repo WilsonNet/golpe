@@ -342,6 +342,10 @@ export class PhysicsDiagnostics {
 	private remoteTrackId: string | null = null;
 	/** The frame the local fighter last cast an ultimate, for the cancel excuse. */
 	private lastUltCastFrame = -100;
+	/** Was the room frozen by an ultimate's cinematic last sample? */
+	private wasFrozen = false;
+	/** The frame the last cinematic lifted — its cast's launch follows it. */
+	private lastUnfreezeFrame = -100;
 	private jitter: JitterEvent[] = [];
 	private recon: ReconEvent[] = [];
 	private penetrations: PenetrationEvent[] = [];
@@ -719,6 +723,14 @@ export class PhysicsDiagnostics {
 
 		this.trackMovement(p);
 		this.trackBullets(sample);
+		// A cinematic just lifted: whatever the cast had waiting on the far side
+		// of the freeze just launched, and a sub-snapshot ride can be over
+		// before any sample sees it. The freeze *is* the announcement, so the
+		// tracker remembers it the way it remembers a teleport.
+		if (this.wasFrozen && !sample.frozen) {
+			this.lastUnfreezeFrame = this.frameCount;
+		}
+		this.wasFrozen = sample.frozen ?? false;
 		// Only the local fighter's *predicted* sword state is judged here, so only it
 		// can have had that state replaced by a reconciliation. Every other fighter
 		// is predicted too now, but `sample.enemyState` is deliberately the
@@ -996,6 +1008,11 @@ export class PhysicsDiagnostics {
 			// ride ends, up to 900ms later — so the excuse has to cover the
 			// whole ride, not just the cast frame.
 			(who === "local" && this.frameCount - this.lastUltCastFrame <= 60) ||
+			// A cinematic just lifted: the cast behind it launched, and a
+			// sub-snapshot ride can end any move it cancelled before any sample
+			// saw the ride. The freeze *is* the announcement, so the move-end in
+			// its wake is the cast, not the state machine breaking.
+			this.frameCount - this.lastUnfreezeFrame <= 75 ||
 			replacement?.reason === "server-ended" ||
 			replacement?.reason === "server-started";
 
