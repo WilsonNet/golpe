@@ -17,7 +17,7 @@
  */
 import { chromium } from "playwright";
 
-const BASE_URL = process.env.VENTO_URL ?? "http://localhost:8080";
+const BASE_URL = process.env.VENTO_URL ?? "http://localhost:8084";
 const RESULT_RE = /__DIAGNOSTIC_RESULT__(\{.*?\})__END__/s;
 
 function arg(name, fallback) {

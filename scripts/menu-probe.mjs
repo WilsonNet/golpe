@@ -11,7 +11,7 @@
  */
 import { chromium } from "playwright";
 
-const BASE = process.env.VENTO_URL ?? "http://localhost:8080";
+const BASE = process.env.VENTO_URL ?? "http://localhost:8084";
 
 /** A launch key the menu must never add on its own. */
 function launchKeys(url) {

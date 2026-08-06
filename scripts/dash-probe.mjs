@@ -15,7 +15,7 @@
  */
 import { chromium } from "playwright";
 
-const BASE_URL = process.env.VENTO_URL ?? "http://localhost:8080";
+const BASE_URL = process.env.VENTO_URL ?? "http://localhost:8084";
 const TRIALS = Number(
 	process.argv.find((a) => a.startsWith("--trials="))?.split("=")[1] ?? 30,
 );

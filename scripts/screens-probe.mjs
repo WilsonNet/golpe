@@ -18,7 +18,7 @@
  */
 import { chromium } from "playwright";
 
-const BASE = "http://localhost:8080";
+const BASE = "http://localhost:8084";
 const ROOM = `screenprobe-${Date.now().toString(36)}`;
 const WIDE_URL = `${BASE}/?online=true&ai=true&room=${ROOM}&screen=3`;
 

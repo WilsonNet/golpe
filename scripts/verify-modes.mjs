@@ -6,7 +6,7 @@
  */
 import { chromium } from "playwright";
 
-const BASE = process.env.VENTO_URL ?? "http://localhost:8080";
+const BASE = process.env.VENTO_URL ?? "http://localhost:8084";
 
 /**
  * `needsFight` only where a fighter is AI-driven. Playwright never presses a

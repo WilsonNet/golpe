@@ -26,7 +26,7 @@
 import { randomUUID } from "node:crypto";
 import { chromium } from "playwright";
 
-const BASE_URL = process.env.VENTO_URL ?? "http://localhost:8080";
+const BASE_URL = process.env.VENTO_URL ?? "http://localhost:8084";
 const SERVER_URL = process.env.VENTO_SERVER_URL ?? "http://localhost:9208";
 
 function arg(name, fallback) {

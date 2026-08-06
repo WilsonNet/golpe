@@ -21,7 +21,7 @@ export const ROOM_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
  *
  * `crypto.randomUUID` is unavailable on a plain-HTTP origin — which is exactly
  * how this gets served to a room full of people on a LAN, so reaching for it
- * alone would leave every guest on `http://192.168.x.x:8080` unable to start a
+ * alone would leave every guest on `http://192.168.x.x:8084` unable to start a
  * match. `getRandomValues` has no such restriction.
  */
 function newRoomId(): string {

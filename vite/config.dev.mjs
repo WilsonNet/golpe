@@ -5,7 +5,7 @@ export default defineConfig({
 	base: "./",
 	plugins: [react()],
 	server: {
-		port: 8080,
+		port: 8084,
 		/**
 		 * Bind every interface, not just loopback.
 		 *

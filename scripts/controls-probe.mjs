@@ -17,12 +17,12 @@
  *      survives a reload, and is undone by Reset to defaults.
  *
  *   node scripts/controls-probe.mjs
- *   VENTO_URL=http://localhost:8080 node scripts/controls-probe.mjs
+ *   VENTO_URL=http://localhost:8084 node scripts/controls-probe.mjs
  */
 import { randomUUID } from "node:crypto";
 import { chromium } from "playwright";
 
-const BASE_URL = process.env.VENTO_URL ?? "http://localhost:8080";
+const BASE_URL = process.env.VENTO_URL ?? "http://localhost:8084";
 
 /** A jump has to clear this much to count as one. A full jump peaks at 136px. */
 const JUMP_RISE_PX = 60;

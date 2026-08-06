@@ -21,7 +21,7 @@
  */
 import { chromium } from "playwright";
 
-const BASE_URL = process.env.VENTO_URL ?? "http://localhost:8080";
+const BASE_URL = process.env.VENTO_URL ?? "http://localhost:8084";
 
 /** Frame data from specs/melee.md. Duplicated on purpose — see `expectedDamage`. */
 const DAMAGE = { slash: 7, slash2: 7, slash3: 11, uppercut: 11, massive: 24 };

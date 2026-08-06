@@ -30,7 +30,7 @@ either is reachable from another machine on the network:
 
 | Port | Process | Needed for |
 |---|---|---|
-| 8080 | Vite dev server | everything |
+| 8084 | Vite dev server | everything |
 | 9208 | Geckos.io game server | every mode except `?offline=true` |
 
 The client connects to the game server at `location.hostname:9208`, so whatever
@@ -97,11 +97,11 @@ works. See [specs/menu.md](../specs/menu.md).
 room; one without makes a new one. So one person hosts and everyone else
 follows their link.
 
-1. Start both servers, and make sure port **8080** and port **9208** are both
+1. Start both servers, and make sure port **8084** and port **9208** are both
    reachable from wherever the players are. The client connects to the game server
    at `location.hostname:9208`, so anyone typing your machine's address or hostname
    in the browser gets there — but `localhost` will not work from another machine.
-2. **One person opens** `http://<your-host>:8080/`. The menu greets them: name
+2. **One person opens** `http://<your-host>:8084/`. The menu greets them: name
    themselves, then *Quick match* for an immediate duel or *Host a match* for the
    mode, arena and rules.
 3. **They send their link to everyone else.** The room's link lands in the address
@@ -121,8 +121,8 @@ room — they are named, they play like anyone else, and each one leaves as a hu
 takes its seat:
 
 ```
-http://<host>:8080/?fill=16     # keep the arena at 16 fighters, bots as ballast
-http://<host>:8080/?fill=8      # ...or 8
+http://<host>:8084/?fill=16     # keep the arena at 16 fighters, bots as ballast
+http://<host>:8084/?fill=8      # ...or 8
 ```
 
 Only the host's link decides. Everyone else just follows it.
@@ -155,13 +155,13 @@ for everything except `?offline=true`.
 
 | Mode | URL | Tabs |
 |---|---|---|
-| The menu | `http://localhost:8080/` | 1 |
-| Player vs AI (solo) | `http://localhost:8080/?bots=1` | 1 |
-| AI vs AI | `http://localhost:8080/?ai=true&bots=1` | 1 |
-| Sixteen-fighter deathmatch | `http://localhost:8080/?ai=true&bots=15` | 1 |
+| The menu | `http://localhost:8084/` | 1 |
+| Player vs AI (solo) | `http://localhost:8084/?bots=1` | 1 |
+| AI vs AI | `http://localhost:8084/?ai=true&bots=1` | 1 |
+| Sixteen-fighter deathmatch | `http://localhost:8084/?ai=true&bots=15` | 1 |
 | Player vs Player | the menu's Quick match / Host, then the room link | 2 |
 | AI vs AI, two clients | `?online=true&ai=true&room=x` | 2 |
-| Offline escape hatch | `http://localhost:8080/?offline=true` | 1 |
+| Offline escape hatch | `http://localhost:8084/?offline=true` | 1 |
 
 **The bare URL is the menu now.** `?ai=true` makes *your* fighter AI-driven.
 **`?bots=N` is what puts bots in the room** — without it there are none, so
@@ -171,7 +171,7 @@ Two tabs only share a match if they share a `?room=`.
 ### 1. Player vs AI (solo)
 
 ```
-http://localhost:8080/?bots=1
+http://localhost:8084/?bots=1
 ```
 
 You control your fighter; the other is a **server-hosted bot** running the same
@@ -187,7 +187,7 @@ because a bot closing to melee range eats the measurement.
 ### 2. AI vs AI
 
 ```
-http://localhost:8080/?ai=true&bots=1
+http://localhost:8084/?ai=true&bots=1
 ```
 
 Your fighter is AI-driven and the opponent is a server bot, so you get a full
@@ -201,8 +201,8 @@ sixteen-fighter test.
 ### 3. Player vs Player
 
 ```
-http://localhost:8080/                                  # the host opens the menu
-http://localhost:8080/?room=<the same uuid>             # everyone else follows the link
+http://localhost:8084/                                  # the host opens the menu
+http://localhost:8084/?room=<the same uuid>             # everyone else follows the link
 ```
 
 The host opens the bare URL, picks **Quick match** (a duel with a bot to warm
@@ -227,7 +227,7 @@ respawn at the point furthest from anyone alive; nobody else is interrupted.
 ### 4. AI vs AI across two clients
 
 ```
-http://localhost:8080/?online=true&ai=true&room=duel    # both tabs, same room
+http://localhost:8084/?online=true&ai=true&room=duel    # both tabs, same room
 ```
 
 Two real clients, each with an AI fighter. **This is the canonical mode for the
@@ -238,7 +238,7 @@ exactly the two clients.
 ### 5. Offline escape hatch
 
 ```
-http://localhost:8080/?offline=true&ai=true
+http://localhost:8084/?offline=true&ai=true
 ```
 
 Bypasses the server entirely, for working without one. **Not a supported mode**:

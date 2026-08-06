@@ -1,6 +1,6 @@
 ---
 name: herdr-dev-workspace
-description: "Use when starting, inspecting or stopping this project's dev servers (Vite :8080 and the Geckos game server :9208), or when you need to read a running server's output. Runs them in visible herdr panes instead of detached background processes, and exposes their logs non-interactively. Triggers on: run the dev server, start the game, npm run dev, dev:all, background process, server logs, is the server running, herdr, workspace, pane, tab, terminal multiplexer, port 8080, port 9208."
+description: "Use when starting, inspecting or stopping this project's dev servers (Vite :8084 and the Geckos game server :9208), or when you need to read a running server's output. Runs them in visible herdr panes instead of detached background processes, and exposes their logs non-interactively. Triggers on: run the dev server, start the game, npm run dev, dev:all, background process, server logs, is the server running, herdr, workspace, pane, tab, terminal multiplexer, port 8084, port 9208."
 license: MIT
 ---
 
@@ -48,7 +48,7 @@ because pane ids are machine-local.
 ```
 workspace "vento-aureo"
 └── tab "dev"
-    ├── pane "vite :8080"     npm run dev
+    ├── pane "vite :8084"     npm run dev
     └── pane "geckos :9208"   npm run dev:server
 ```
 
@@ -82,7 +82,7 @@ herdr tab create --workspace w1 --cwd "$PWD" --label dev --no-focus
                                         # -> result.tab.tab_id, result.root_pane.pane_id
 herdr pane split w1:pA --direction down --ratio 0.5 --cwd "$PWD"
                                         # -> result.pane.pane_id
-herdr pane rename w1:pA "vite :8080"
+herdr pane rename w1:pA "vite :8084"
 herdr pane run w1:pA npm run dev  # command is argv, not a shell string
 herdr pane send-keys w1:pA ctrl+c
 herdr pane list                         # -> result.panes[] with agent_status

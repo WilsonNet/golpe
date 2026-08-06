@@ -66,7 +66,7 @@ import { chromium } from "playwright";
 /** `--no-cast`: the control. Scenario A, same room, no button pressed. */
 const CAST = !process.argv.includes("--no-cast");
 
-const BASE = "http://localhost:8080";
+const BASE = "http://localhost:8084";
 const ROOM = `ultprobe-${Date.now().toString(36)}`;
 const GAME_WIDTH = 800;
 const GAME_HEIGHT = 600;

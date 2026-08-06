@@ -400,7 +400,7 @@ const PORT = GAME_SERVER_PORT;
  * before it — so the `/health` handler is registered on a server we create and
  * hand over via `addServer`, and the WebRTC signalling paths are untouched.
  * The `Access-Control-Allow-Origin` header is the whole point: the page is
- * served from :8080, and without it a fetch from there could not read the
+ * served from :8084, and without it a fetch from there could not read the
  * answer. The menu uses this to say "game server online/offline" instead of
  * letting the first match sit on "Connecting..." forever.
  */

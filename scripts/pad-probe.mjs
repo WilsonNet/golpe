@@ -25,12 +25,12 @@
  * the cursor its say again.
  *
  *   node scripts/pad-probe.mjs
- *   VENTO_URL=http://localhost:8080 node scripts/pad-probe.mjs
+ *   VENTO_URL=http://localhost:8084 node scripts/pad-probe.mjs
  */
 import { randomUUID } from "node:crypto";
 import { chromium } from "playwright";
 
-const BASE_URL = process.env.VENTO_URL ?? "http://localhost:8080";
+const BASE_URL = process.env.VENTO_URL ?? "http://localhost:8084";
 
 /** Angle error worth reporting. Well below what a player can see. */
 const ANGLE_TOLERANCE_DEG = 3;

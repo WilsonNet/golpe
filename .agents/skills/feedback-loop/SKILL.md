@@ -413,7 +413,7 @@ preflight and the digest.
 
 ```bash
 npm run dev:server &   # :9208 — REQUIRED for online runs
-npm run dev &          # :8080
+npm run dev &          # :8084
 
 node scripts/diagnose.mjs                          # offline + online, 8s each
 node scripts/diagnose.mjs --mode=offline

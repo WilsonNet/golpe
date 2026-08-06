@@ -742,7 +742,7 @@ the ways a *side* breaks things a free-for-all could not.
   cannot invite anybody.
 - **`crypto.randomUUID` and `navigator.clipboard` both require a secure context**,
   and a LAN game is served over plain HTTP. Reaching for either alone would leave
-  every guest on `http://192.168.x.x:8080` unable to start or share a match.
+  every guest on `http://192.168.x.x:8084` unable to start or share a match.
   `getRandomValues` and `execCommand` are the fallbacks.
 - **Size and rules are fixed when the room is created.** Reading them from every
   arriving client let the last person through the door resize a match already in

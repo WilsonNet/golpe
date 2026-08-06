@@ -23,7 +23,7 @@
  */
 import { chromium } from "playwright";
 
-const BASE_URL = process.env.VENTO_URL ?? "http://localhost:8080";
+const BASE_URL = process.env.VENTO_URL ?? "http://localhost:8084";
 
 /** The logical world the game is authored in. Must match `app.ts`. */
 const GAME_WIDTH = 800;

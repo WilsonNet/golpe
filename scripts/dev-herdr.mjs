@@ -36,9 +36,9 @@ const TAB_LABEL = "dev";
 const SERVICES = [
 	{
 		name: "vite",
-		label: "vite :8080",
+		label: "vite :8084",
 		command: ["npm", "run", "dev"],
-		port: 8080,
+		port: 8084,
 		ready: /Local:\s+http/,
 	},
 	{

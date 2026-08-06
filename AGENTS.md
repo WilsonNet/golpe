@@ -229,7 +229,7 @@ Both `diagnose.mjs` and `deathmatch-probe.mjs` take `--screens=N` to run their
 measurement on a wide arena — the follow camera and the wide-world spawns are
 part of what they must prove.
 
-- Ports: Vite **8080**, Geckos **9208**.
+- Ports: Vite **8084**, Geckos **9208**.
 - **`npm run typecheck` covers two projects.** `tsconfig.json` is client-only;
   `tsconfig.server.json` covers `server/`. Running bare `tsc` checks half the
   game — which is how the server's bots silently lost the ability to evade.

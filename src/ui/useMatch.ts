@@ -118,7 +118,7 @@ export function useRoomId(): string {
  * Copy text to the clipboard, on a plain-HTTP origin too.
  *
  * `navigator.clipboard` requires a secure context, and a LAN game served over
- * `http://192.168.x.x:8080` does not have one — which is exactly the situation
+ * `http://192.168.x.x:8084` does not have one — which is exactly the situation
  * the share link exists for. So: try the modern API, fall back to the deprecated
  * one that still works on insecure origins, and report honestly if neither did so
  * the caller can tell the player to press Ctrl+C themselves.
