@@ -53,22 +53,30 @@ The third slot is a *convention*, not a constraint.
 | Move / aim right | **D** | **Right Arrow** | **Pad Right** |
 | Aim up | **Up Arrow** | — | **Pad Up** |
 | Aim down | **Down Arrow** | — | **Pad Down** |
-| Jump / double jump | **W** | **Space** | **Pad A** |
+| Jump / double jump | **W** | — | **Pad A** |
 | Slash / fire | **Left Click** | — | **Pad X** |
 | Block | **Left Shift** | **Right Shift** | **Pad LT** |
-| Uppercut | **F** | — | **Pad Y** |
+| Uppercut | **Space** | — | **Pad Y** |
+| Item | **F** | — | **Pad RT** |
 | Ultimate | **R** | — | **Pad B** |
 | Sword stance | **Q** | — | **Pad LB** |
 | Gun stance | **E** | — | **Pad RB** |
 | Toggle AI vs AI | **P** | — | — |
 
 **The buttons are the skeleton; the hero decides what they do in the melee
-stance.** Lia's Shift raises a guard and her F is the uppercut. Anands' Shift is
-the **thrust** — the dagger has no block, and the whole of that trade is that
-the block button is a committed lunge — and her F is the shoryuken. The
+stance.** Lia's Shift raises a guard and her Space is the uppercut. Anands'
+Shift is the **thrust** — the dagger has no block, and the whole of that trade is
+that the block button is a committed lunge — and her Space is the shoryuken. The
 simulation is handed the same buttons either way, so a binding never knows or
 cares which hero is using it; the HUD badge names the weapon the hero actually
 carries. See [anands.md](anands.md).
+
+**F is the item, and it is not a sword move.** The item is the third member of
+the kit (Lia's HE grenade, Anands' trap — see [items.md](items.md)), so it works
+in both stances, and the deck draws its button in both. The uppercut moved from
+F to Space to make room: Space is the other thumb, already parked under WASD.
+The use is decided on the press — the aim angle of the press *is* the throw —
+so F is a tap, never a hold, unlike the ultimate's hold-to-release.
 
 **The Esc menu has a Heroes item** beside Controls — changing hero mid-match
 sends the request to the server, which confirms it in the next snapshot. The
@@ -89,8 +97,8 @@ which one is under the hand depends on where the player's movement fingers live.
 The same argument puts block on the left trigger and the stances on the shoulders
 — the right thumb is busy on the face buttons.
 
-**Jump is W *and* Space.** They are one action, so a double jump can be W then
-Space. W keeps the WASD hand shape; Space is what a thumb reaches for unprompted.
+**Jump is W.** W keeps the WASD hand shape; Space moved to the uppercut when the
+item took F, so a double jump is W then W — or whatever a player binds it to.
 
 **The arrow keys are the keyboard's d-pad.** Left and right double up with A/D;
 up and down are the aim axis WASD has no room for.

@@ -78,6 +78,10 @@ export interface TrainingReport {
 	events: MeleeEventMsg[];
 	/** Times an ultimate was denied by the dummy (or by the player). */
 	denies: number;
+	/** HE blasts the server reported. */
+	explosions: number;
+	/** Times a trap caught somebody. */
+	trapped: number;
 	outcomes: Record<MeleeOutcome, number>;
 	bullets: { fired: number; hits: number };
 	/** The melee half of `PhysicsDiagnostics` — not a second implementation. */

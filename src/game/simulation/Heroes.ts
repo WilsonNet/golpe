@@ -15,6 +15,7 @@
  * is the hero's business, so the wire format never changes when a hero does.
  */
 
+import { ITEMS, type ItemDef } from "./Items.js";
 import { MELEE_WEAPONS, type MeleeWeaponDef } from "./Melee.js";
 
 export type HeroId = "lia" | "anands";
@@ -68,6 +69,8 @@ export interface HeroDef {
 	melee: MeleeWeaponDef;
 	ranged: RangedWeaponDef;
 	ultimate: UltimateId;
+	/** The item this hero carries. Not unique — a future hero can share one. */
+	item: ItemDef;
 	/** The sprite sheet this hero is drawn from. See `render/assets.ts`. */
 	sheet: "dude" | "anands";
 }
@@ -81,6 +84,7 @@ export const HEROES: Record<HeroId, HeroDef> = {
 		melee: MELEE_WEAPONS.sword,
 		ranged: RANGED_WEAPONS.gun,
 		ultimate: "black-hole",
+		item: ITEMS["he-grenade"],
 		sheet: "dude",
 	},
 	anands: {
@@ -91,6 +95,7 @@ export const HEROES: Record<HeroId, HeroDef> = {
 		melee: MELEE_WEAPONS.dagger,
 		ranged: RANGED_WEAPONS.machinegun,
 		ultimate: "dragon-thrust",
+		item: ITEMS.trap,
 		sheet: "anands",
 	},
 };
@@ -101,6 +106,7 @@ export interface HeroKit {
 	melee: MeleeWeaponDef;
 	ranged: RangedWeaponDef;
 	ultimate: UltimateId;
+	item: ItemDef;
 }
 
 export function kitFor(hero: HeroId): HeroKit {
@@ -110,6 +116,7 @@ export function kitFor(hero: HeroId): HeroKit {
 		melee: def.melee,
 		ranged: def.ranged,
 		ultimate: def.ultimate,
+		item: def.item,
 	};
 }
 

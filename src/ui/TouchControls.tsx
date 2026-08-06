@@ -61,6 +61,7 @@ const CODES = {
 	sword: "Pad4",
 	gun: "Pad5",
 	ult: "Pad1",
+	item: "Pad7",
 } as const;
 
 const press = (code: string, down: boolean) =>
@@ -345,6 +346,16 @@ export function TouchControls() {
 		if (!ultReadyNow) press(CODES.ult, false);
 	}, [ultReadyNow]);
 
+	// The item button is always drawn, but its label carries the charge count —
+	// server-owned, reaching React the same way the ult's readiness does.
+	const [itemCharges, setItemCharges] = useState(0);
+	useEffect(() => {
+		const off = EventBus.on("item-charge", ((n: number) => {
+			setItemCharges(n);
+		}) as never);
+		return off;
+	}, []);
+
 	// A button that stops being drawn must not leave its code held, or the
 	// fighter would keep blocking (sword-only) while the player watches a deck
 	// with no Block button on it. Released defensively when the stance drops the
@@ -461,6 +472,15 @@ export function TouchControls() {
 							label="Jump"
 							className="vg-btn jump"
 							title="Jump / double jump"
+						/>
+						{/* The item works in both stances — it is the third member of the
+						    kit — so it is drawn regardless. The pip count tells the thumb
+						    how many uses this life has left. */}
+						<PadButton
+							code={CODES.item}
+							label={itemCharges > 0 ? `Item ${itemCharges}` : "Item"}
+							className="vg-btn item"
+							title="Item"
 						/>
 					</div>
 				</div>

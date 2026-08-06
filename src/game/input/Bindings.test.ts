@@ -26,8 +26,12 @@ describe("defaults", () => {
 		expect(DEFAULT_BINDINGS.block).not.toContain("Mouse2");
 	});
 
-	it("jumps on W, on Space and on the pad's bottom face button", () => {
-		expect([...DEFAULT_BINDINGS.jump]).toEqual(["KeyW", "Space", "Pad0"]);
+	it("jumps on W and on the pad's bottom face button; Space is the uppercut", () => {
+		// Space moved from jump's alternate to the uppercut when the item took F —
+		// see specs/controls.md. Jump keeps W and the pad face button.
+		expect([...DEFAULT_BINDINGS.jump]).toEqual(["KeyW", "Pad0"]);
+		expect(DEFAULT_BINDINGS.uppercut).toContain("Space");
+		expect(DEFAULT_BINDINGS.item).toContain("KeyF");
 	});
 
 	it("gives every action a pad binding except the debug toggle", () => {
@@ -61,7 +65,7 @@ describe("defaults", () => {
 describe("KeyBindings", () => {
 	it("resolves a code to the action it performs", () => {
 		const b = new KeyBindings();
-		expect(b.actionFor("Space")).toBe("jump");
+		expect(b.actionFor("Space")).toBe("uppercut");
 		expect(b.actionFor(mouseCode(0))).toBe("attack");
 		expect(b.actionFor("KeyZ")).toBeUndefined();
 	});
@@ -72,7 +76,7 @@ describe("KeyBindings", () => {
 		// unable to jump with no idea why.
 		expect(b.bind("block", 0, "KeyW")).toBe("jump");
 		expect(b.actionFor("KeyW")).toBe("block");
-		expect([...b.codesFor("jump")]).toEqual(["Space", "Pad0"]);
+		expect([...b.codesFor("jump")]).toEqual(["Pad0"]);
 	});
 
 	it("does not report a displacement when the action already had the code", () => {
@@ -89,10 +93,11 @@ describe("KeyBindings", () => {
 		expect([...b.codesFor("left")]).toEqual(["KeyZ"]);
 	});
 
-	it("never keeps more than two bindings for an action", () => {
+	it("never keeps more than three bindings for an action", () => {
 		const b = new KeyBindings();
 		b.bind("jump", 0, "KeyU");
 		b.bind("jump", 1, "KeyI");
+		b.bind("jump", 2, "KeyO");
 		expect(b.codesFor("jump").length).toBe(SLOTS);
 	});
 
@@ -120,7 +125,7 @@ describe("KeyBindings", () => {
 		b.reset();
 		expect(b.isDefault).toBe(true);
 		expect(b.actionFor("KeyW")).toBe("jump");
-		expect(b.actionFor("KeyF")).toBe("uppercut");
+		expect(b.actionFor("KeyF")).toBe("item");
 	});
 
 	it("notifies subscribers so the dialog redraws", () => {
@@ -153,7 +158,7 @@ describe("sanitise", () => {
 	it("drops a default that a saved binding already claimed", () => {
 		const map = sanitise({ block: ["KeyW"] });
 		expect(map.block).toEqual(["KeyW"]);
-		expect(map.jump).toEqual(["Space", "Pad0"]);
+		expect(map.jump).toEqual(["Pad0"]);
 	});
 
 	it("refuses duplicates, reserved codes and junk entries", () => {

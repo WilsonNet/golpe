@@ -42,6 +42,7 @@ export const ACTIONS = [
 	"attack",
 	"block",
 	"uppercut",
+	"item",
 	"ultimate",
 	"sword",
 	"gun",
@@ -60,6 +61,7 @@ export const ACTION_LABELS: Record<Action, string> = {
 	attack: "Slash / fire",
 	block: "Block",
 	uppercut: "Uppercut",
+	item: "Item",
 	ultimate: "Ultimate — Black Hole",
 	sword: "Sword stance",
 	gun: "Gun stance",
@@ -110,7 +112,7 @@ export const DEFAULT_BINDINGS: Readonly<Record<Action, readonly string[]>> = {
 	right: ["KeyD", "ArrowRight", "PadRight"],
 	aimUp: ["ArrowUp", "PadUp"],
 	aimDown: ["ArrowDown", "PadDown"],
-	jump: ["KeyW", "Space", "Pad0"],
+	jump: ["KeyW", "Pad0"],
 	attack: ["Mouse0", "Pad2"],
 	// Both shifts, because which one is under the hand depends on which half of
 	// the keyboard the player's movement fingers live on.
@@ -120,7 +122,14 @@ export const DEFAULT_BINDINGS: Readonly<Record<Action, readonly string[]>> = {
 	// thumb hits deliberately rather than in passing, which is right for a button
 	// that spends sixty seconds of earned charge in one press.
 	ultimate: ["KeyR", "Pad1"],
-	uppercut: ["KeyF", "Pad3"],
+	// The uppercut moved from F to Space when the item took F: Space is the
+	// other thumb, already parked under WASD, and F is now the item's home.
+	uppercut: ["Space", "Pad3"],
+	// F, because the first thing a player's index finger reaches for after the
+	// movement keys is the button the game put at the end of the WASD row. Pad7
+	// is the right trigger — a throw is a press-and-let-go, which is a trigger
+	// gesture.
+	item: ["KeyF", "Pad7"],
 	sword: ["KeyQ", "Pad4"],
 	gun: ["KeyE", "Pad5"],
 	toggleAi: ["KeyP"],

@@ -415,13 +415,62 @@ export const FIGHT_HUD_CSS = `
 	50% { text-shadow: 0 0 1.6cqw rgba(255, 93, 93, 0.85); }
 }
 
+/* ---- the item charges, bottom-right above the ultimate ----
+   Gameplay tier, same register as the ultimate meter: the item is the finite
+   resource next to the earned one, so its pips sit directly above the ult
+   sliver in the same corner. A pip greys out with each use and refills on the
+   next life — reading "how much item do I have left" should cost nothing. */
+.vdh-item {
+	position: absolute;
+	bottom: 5.2cqh;
+	right: 1.4cqw;
+	display: flex;
+	align-items: center;
+	gap: 0.8cqw;
+	width: 28cqw;
+}
+.vdh-item-label {
+	font-size: 1.1cqw;
+	letter-spacing: 0.18em;
+	color: rgba(217, 244, 246, 0.7);
+	white-space: nowrap;
+	text-shadow: 0 0.2cqh 0 rgba(0, 0, 0, 0.7);
+}
+.vdh-item-pips {
+	display: flex;
+	gap: 0.5cqw;
+	flex: 1;
+	min-width: 0;
+}
+.vdh-item-pip {
+	flex: 1;
+	height: 1.1cqh;
+	border: 1px solid rgba(127, 240, 244, 0.4);
+	background: #5a8fd0;
+	transition: background 180ms linear, opacity 180ms linear;
+}
+.vdh-item-pip-empty {
+	background: rgba(10, 20, 32, 0.6);
+	opacity: 0.5;
+}
+.vdh-item-key {
+	font-size: 1.15cqw;
+	color: #7ff0f4;
+	border: 1px solid rgba(127, 240, 244, 0.4);
+	border-radius: 2px;
+	padding: 0.2cqh 0.7cqw;
+	background: rgba(4, 8, 14, 0.55);
+	min-width: 3cqw;
+	text-align: center;
+	text-transform: uppercase;
+}
+
 /* ---- the ultimate meter, bottom-right ----
    Gameplay tier: a thin sliver tucked into the corner, the black hole's own
    violet when armed. Bottom-left belongs to the hint; the arena's ground band
    stays clear between them. The percentage readout carries the readability —
    a thin bar alone cannot answer "how close am I". */
-.vdh-ult {
-	position: absolute;
+.vdh-ult {	position: absolute;
 	bottom: 1.2cqh;
 	right: 1.4cqw;
 	display: flex;

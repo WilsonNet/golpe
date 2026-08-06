@@ -184,6 +184,10 @@ export class TrainingRoom {
 	private readonly events: MeleeEventMsg[] = [];
 	/** Ultimate denies observed since the last reset. */
 	private denies = 0;
+	/** HE blasts observed since the last reset. */
+	private explosions = 0;
+	/** Traps that caught somebody since the last reset. */
+	private trapped = 0;
 	private readonly watcher = new ExchangeWatcher();
 	private readonly echoWaiters: ((state: TrainingStateMsg) => void)[] = [];
 	private elapsedMs = 0;
@@ -225,6 +229,16 @@ export class TrainingRoom {
 	/** An ultimate was denied. Counted, because it is a first-class outcome. */
 	recordDeny() {
 		this.denies++;
+	}
+
+	/** An HE blast went off. Counted, because it is a first-class outcome. */
+	recordExplosion() {
+		this.explosions++;
+	}
+
+	/** A trap caught somebody. Counted, because it is a first-class outcome. */
+	recordTrapped() {
+		this.trapped++;
 	}
 
 	private onTrainingState(state: TrainingStateMsg) {
@@ -324,6 +338,8 @@ export class TrainingRoom {
 		await wait(RESET_SETTLE_MS);
 		this.events.length = 0;
 		this.denies = 0;
+		this.explosions = 0;
+		this.trapped = 0;
 		this.watcher.reset();
 		this.elapsedMs = 0;
 		this.deps.diagnostics.startOpen();
@@ -482,6 +498,8 @@ export class TrainingRoom {
 			},
 			events: this.events.slice(),
 			denies: this.denies,
+			explosions: this.explosions,
+			trapped: this.trapped,
 			outcomes,
 			bullets: {
 				fired: stats.player.bulletsFired,

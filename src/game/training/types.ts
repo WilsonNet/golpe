@@ -52,7 +52,8 @@ export type DummyBehaviour =
  *
  * `ultimate` is held like any other button — the cast fires on the release,
  * exactly as a player's does — so the dummy is a complete input source rather
- * than a sword-only one.
+ * than a sword-only one. `item` is the same: held for a beat, and the server
+ * spends a charge on the press edge, so a one-tick item beat is a use.
  */
 type DummyHold = Partial<
 	Pick<
@@ -64,6 +65,7 @@ type DummyHold = Partial<
 		| "block"
 		| "uppercut"
 		| "ultimate"
+		| "item"
 	>
 >;
 

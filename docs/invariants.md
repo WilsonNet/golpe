@@ -152,6 +152,34 @@ Full rules in [`specs/ultimate.md`](../specs/ultimate.md).
   the server sees, and the simulation never reads it — so it travels beside `hp`
   in the snapshot rather than on the replay path.
 
+## Items
+
+Full rules in [`specs/items.md`](../specs/items.md).
+
+- **Item charges are a per-life resource, server-owned.** A use spends one charge
+  on the press edge — there is no aim phase, unlike the ultimate's hold-release —
+  and the charge count travels in the snapshot beside `ult`. The client never
+  predicts a throw or a placement; it learns of them from the snapshot, exactly
+  like bullets.
+- **The trap's lock is in `PlayerPosition`; the trap's consequences are not.**
+  `trapTimer` is set by the shared `tickPlayer` on both sides — the caller hands
+  it the room's traps already filtered by `trapFor`, so a caught fighter's own
+  client reels and reconciles to ~0px, exactly like the black hole's pull. The
+  trap's destruction, the damage, the burst and the "TRAPPED!" caption are the
+  server's alone.
+- **A trap is single-use.** Nothing can destroy it before it springs, but the
+  server removes it from the world the tick it catches somebody — so a trap in
+  the snapshot is armed, and there is no spent state on the wire. That is what
+  makes the friendly fade readable: your own and your team's traps are drawn at
+  a fraction of opacity, because a trap you never need to worry about should
+  not be doing the worrying for you.
+- **A trap cannot catch its owner or a teammate.** `trapFor` is the same
+  friendly-fire predicate (`hostile`) every weapon asks, so the trap cannot
+  disagree with the sword about who is on your side.
+- **Dying is the price of the next use.** A respawn grants the full kit again and
+  takes the dead fighter's traps off the floor with them — otherwise a player
+  would stack a fresh three on top of the three that just got them killed.
+
 ## Sword combat
 
 Full frame data and rationale in [`specs/melee.md`](../specs/melee.md); the table

@@ -53,6 +53,8 @@ const BTN_DASH_NEG = 1 << 10;
  * table follows below.
  */
 const BTN_ULTIMATE = 1 << 11;
+/** The item button, appended for the same reason. */
+const BTN_ITEM = 1 << 12;
 
 /** One tick of intent as a single integer. */
 export type PackedIntent = number;
@@ -71,6 +73,7 @@ export function packIntent(i: PlayerIntent): PackedIntent {
 	if (i.dash > 0) b |= BTN_DASH_POS;
 	else if (i.dash < 0) b |= BTN_DASH_NEG;
 	if (i.ultimate) b |= BTN_ULTIMATE;
+	if (i.item) b |= BTN_ITEM;
 	return b;
 }
 
@@ -86,6 +89,7 @@ export function unpackIntent(b: PackedIntent): PlayerIntent {
 		face: (b & BTN_FACE_POS) !== 0 ? 1 : (b & BTN_FACE_NEG) !== 0 ? -1 : 0,
 		dash: (b & BTN_DASH_POS) !== 0 ? 1 : (b & BTN_DASH_NEG) !== 0 ? -1 : 0,
 		ultimate: (b & BTN_ULTIMATE) !== 0,
+		item: (b & BTN_ITEM) !== 0,
 	};
 }
 
@@ -156,6 +160,8 @@ const NUMBER_FIELDS = [
 	"dragonTimer",
 	"dragonVX",
 	"dragonVY",
+	// The trap's mobility lock, appended for the same reason.
+	"trapTimer",
 ] as const;
 
 const ENUM_FIELDS = ["wallTouch", "stance", "meleeAction"] as const;

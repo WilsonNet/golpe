@@ -65,6 +65,8 @@ function perception(overrides: Partial<AIInput> = {}): AIInput {
 		allies: [],
 		foes: [],
 		fields: [],
+		traps: [],
+		selfItemCharges: 0,
 		...overrides,
 	};
 }
@@ -81,6 +83,7 @@ function observed(overrides: Partial<ObservedInput> = {}): ObservedInput {
 		face: 0,
 		dash: 0,
 		ultimate: false,
+		item: false,
 		aimAngle: 0,
 		...overrides,
 	};
@@ -100,6 +103,7 @@ function intentFrom(out: AIOutput): PlayerIntent {
 		dash: out.dash,
 		// A brain never presses it — see `GameRoom.scriptedInput`.
 		ultimate: false,
+		item: out.item,
 	};
 }
 

@@ -13,6 +13,7 @@ import {
 	type Standing,
 } from "../simulation/Deathmatch";
 import { type HeroId, kitFor } from "../simulation/Heroes";
+import { type Trap, trapFor } from "../simulation/Items";
 import {
 	fieldFor,
 	isBulletOutOfBounds,
@@ -40,6 +41,7 @@ import {
 } from "./Rollback";
 import type {
 	DenyEventMsg,
+	ExplosionMsg,
 	GameSnapshot,
 	MatchOverMsg,
 	MatchStatus,
@@ -50,7 +52,10 @@ import type {
 	SnapshotBullet,
 	SnapshotCinematic,
 	SnapshotGrenade,
+	SnapshotHeGrenade,
 	SnapshotPlayer,
+	SnapshotTrap,
+	TrappedMsg,
 } from "./types";
 import { GAME_SERVER_PORT } from "./types";
 import { unpackIntent, unpackState } from "./wire";
@@ -79,6 +84,8 @@ interface FighterInfo {
 	alive: boolean;
 	/** Ultimate charge, 0..100. Server-owned; the client only draws it. */
 	ult: number;
+	/** Item charges left this life. Server-owned; the HUD only draws it. */
+	itemCharges: number;
 	/**
 	 * Which side, or `null` in a free-for-all.
 	 *
@@ -101,6 +108,7 @@ function newInfo(): FighterInfo {
 		blocked: 0,
 		alive: true,
 		ult: 0,
+		itemCharges: 0,
 		team: null,
 		hero: "lia",
 	};
@@ -132,6 +140,10 @@ export interface OnlineCallbacks {
 	onMeleeEvent: (event: MeleeEventMsg) => void;
 	/** An ultimate was denied, for the "DENY" splash over the denier. */
 	onDeny: (event: DenyEventMsg) => void;
+	/** An HE grenade went off, for the blast effect. */
+	onExplosion: (event: ExplosionMsg) => void;
+	/** A trap caught somebody, for the "TRAPPED!" caption. */
+	onTrapped: (event: TrappedMsg) => void;
 	/** A fighter appeared in the snapshot for the first time. */
 	onFighterAdded: (id: string) => void;
 	/** A fighter is no longer in the room. */
@@ -243,6 +255,9 @@ export class OnlineSession {
 	private readonly pendingTeleports = new Set<string>();
 
 	private latestSnapshot: GameSnapshot | undefined;
+	/** The room's traps and HE grenades, as the newest snapshot reports them. */
+	private latestTraps: SnapshotTrap[] = [];
+	private latestHeGrenades: SnapshotHeGrenade[] = [];
 	private _matchStatus: MatchStatus | undefined;
 	private _matched = false;
 
@@ -391,6 +406,21 @@ export class OnlineSession {
 		return this.ultOf(this.manager.myId);
 	}
 
+	/** Item charges for one fighter, server-counted. */
+	itemChargesOf(id: string): number {
+		return this.info.get(id)?.itemCharges ?? 0;
+	}
+
+	/** The local fighter's item charges, for the HUD. */
+	get localItemCharges(): number {
+		return this.itemChargesOf(this.manager.myId);
+	}
+
+	/** The room's traps, straight off the newest snapshot. */
+	get traps(): readonly SnapshotTrap[] {
+		return this.latestTraps;
+	}
+
 	/**
 	 * True while the room is frozen for an ultimate cast.
 	 *
@@ -415,6 +445,11 @@ export class OnlineSession {
 	/** Grenades in flight, straight off the newest snapshot. */
 	get grenades(): readonly SnapshotGrenade[] {
 		return this.latestSnapshot?.grenades ?? [];
+	}
+
+	/** HE grenades in flight, straight off the newest snapshot. */
+	get heGrenades(): readonly SnapshotHeGrenade[] {
+		return this.latestHeGrenades;
 	}
 
 	nameOf(id: string): string {
@@ -681,6 +716,7 @@ export class OnlineSession {
 			intent,
 			dt,
 			this.fieldOn(this.manager.myId),
+			this.trapsOn(this.manager.myId),
 		);
 		// Spread the intent rather than listing its fields: `PlayerInput` extends
 		// `PlayerIntent` precisely so a field added to the simulation cannot be
@@ -701,7 +737,7 @@ export class OnlineSession {
 		// the local fighter, and two fighters on two clocks cannot be shown trading
 		// blows honestly.
 		for (const [id, fighter] of this.fighters) {
-			fighter.predict(dt, this.fieldOn(id));
+			fighter.predict(dt, this.fieldOn(id), this.trapsOn(id));
 		}
 	}
 
@@ -717,6 +753,30 @@ export class OnlineSession {
 	}
 
 	/**
+	 * The room's traps as one fighter experiences them.
+	 *
+	 * The same shape as `fieldOn`: the caller filters once, through the shared
+	 * `trapFor`, and hands the result to `tickPlayer` — so the owner's own traps
+	 * and every teammate's are not here to catch them, and the client and the
+	 * server can never disagree about whose trap locks whom. Read from
+	 * `latestTraps` (the newest snapshot's word on the room) so a trap placed or
+	 * cleared after the last reconcile is still applied to the next prediction.
+	 */
+	private trapsOn(id: string): Trap[] {
+		return trapFor(
+			this.latestTraps.map((t) => ({
+				id: t.id,
+				ownerId: t.ownerId,
+				ownerTeam: t.ownerTeam,
+				x: t.x,
+				y: t.y,
+			})),
+			id,
+			this.teamOf(id),
+		);
+	}
+
+	/**
 	 * A monotonic millisecond clock for ballistics that **stops during a
 	 * cinematic freeze**.
 	 *
@@ -727,6 +787,15 @@ export class OnlineSession {
 	 * it lifted. Everything the freeze stops has to stop on the same clock.
 	 */
 	private renderClockMs = 0;
+
+	/**
+	 * The ballistics clock, read by the item renderer so an HE grenade freezes
+	 * with everything else during a cinematic instead of flying through a
+	 * cutscene the server is not simulating.
+	 */
+	get renderClock(): number {
+		return this.renderClockMs;
+	}
 
 	/** Per-frame presentation update: render offsets and bullets. */
 	render(dtSec: number): { x: number; y: number } {
@@ -881,6 +950,7 @@ export class OnlineSession {
 		// argument to every one of those `tickPlayer` calls. Adopting it afterwards
 		// would replay this snapshot's ticks against the *previous* snapshot's hole.
 		this.absorbUltimate(snap);
+		this.absorbItems(snap);
 
 		const mine = snap.players.find((p) => p.id === this.manager.myId);
 		// The local player is reconciled first, because its unacknowledged input
@@ -911,6 +981,15 @@ export class OnlineSession {
 		for (const event of snap.denies ?? []) {
 			this.callbacks.onDeny(event);
 		}
+		// Item events are the same shape again: a blast and a caption, both with
+		// their consequence already in the state. A dropped datagram costs a
+		// spark, never a consequence.
+		for (const event of snap.explosions ?? []) {
+			this.callbacks.onExplosion(event);
+		}
+		for (const event of snap.trapped ?? []) {
+			this.callbacks.onTrapped(event);
+		}
 
 		this._matchStatus = snap.match;
 		this.callbacks.onMatch(snap.match, this.standings());
@@ -934,6 +1013,7 @@ export class OnlineSession {
 		info.blocked = p.blocked;
 		info.alive = p.alive;
 		info.ult = p.ult ?? 0;
+		info.itemCharges = p.itemCharges ?? 0;
 		info.team = p.team ?? null;
 		// The hero is an argument to `tickPlayer` on the replay path, so it is
 		// absorbed with everything else the snapshot says about this fighter.
@@ -1002,6 +1082,21 @@ export class OnlineSession {
 		}
 	}
 
+	/**
+	 * Adopt the room's item world state: the traps and the grenades in flight.
+	 *
+	 * Both are **full state, every snapshot** — the traps are fed into
+	 * `tickPlayer` for every fighter this client predicts, and a lost datagram
+	 * must not leave a client walking fighters through traps the server is
+	 * locking them in, or drawing grenades the server has already blown up.
+	 * Copied rather than aliased, so the renderer's dead-reckoning never
+	 * mutates the snapshot object.
+	 */
+	private absorbItems(snap: GameSnapshot) {
+		this.latestTraps = (snap.traps ?? []).map((t) => ({ ...t }));
+		this.latestHeGrenades = (snap.heGrenades ?? []).map((g) => ({ ...g }));
+	}
+
 	/** Fold the authoritative local state in, and report how far ahead we are. */
 	private reconcileLocal(p: SnapshotPlayer): number {
 		const before = { x: this.predicted.state.x, y: this.predicted.state.y };
@@ -1010,6 +1105,7 @@ export class OnlineSession {
 			p.lastSeq,
 			PHYSICS_DT,
 			this.fieldOn(p.id),
+			this.trapsOn(p.id),
 		);
 		this.smoother.absorb(
 			this.predicted.state.x - before.x,
@@ -1055,6 +1151,7 @@ export class OnlineSession {
 			leadTicks,
 			PHYSICS_DT,
 			this.fieldOn(p.id),
+			this.trapsOn(p.id),
 		);
 		// A dropped dragon ride is a legitimate discontinuity, like a respawn:
 		// the predicted ride ended (or was refused) before this client's clock

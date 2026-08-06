@@ -193,6 +193,13 @@ export class EnemyBrain {
 	private stuckCheckY = 0;
 	private stuckCount = 0;
 	private zoneCooldown = 0;
+	/**
+	 * ms until this bot may use its item again. A cooldown rather than "use
+	 * when ready", because an item is a finite per-life resource and a brain
+	 * that threw both grenades in one exchange would be a brain with no item
+	 * for the rest of the round.
+	 */
+	private itemCooldownMs = 0;
 
 	/** The sword game: techniques, rhythms, stance hysteresis. */
 	private readonly melee: MeleeModule;
@@ -398,7 +405,51 @@ export class EnemyBrain {
 			this.wantsHeight(input),
 			delta,
 		);
+		this.decideItem(input, output, delta);
 		return output;
+	}
+
+	/**
+	 * The item: when to press the button and what it is for.
+	 *
+	 * The item fires on a *press edge* server-side, so the brain pulses `item`
+	 * for one tick and then stays silent — a held item button would only ever
+	 * spend one charge anyway, but a fresh cooldown is what keeps the resource
+	 * from being dumped in a single exchange. Lia's grenade is a ranged option
+	 * when the melee has no answer; Anands' trap is a floor hazard laid in the
+	 * face of somebody rushing in.
+	 */
+	private decideItem(input: AIInput, output: AIOutput, delta: number) {
+		this.itemCooldownMs = Math.max(0, this.itemCooldownMs - delta);
+		if (this.itemCooldownMs > 0) return;
+		if (input.selfItemCharges <= 0) return;
+		if (input.selfStunned) return;
+		if (!input.touchingDown && input.selfHero === "anands") return;
+
+		// The grenade needs a corridor to throw down: range to reach, nothing
+		// between, and a target that is not already being sworded (a grenade at
+		// melee range would hurt the bot's own exchange).
+		if (input.selfHero === "lia") {
+			const canReach =
+				input.distanceToPlayer > 120 && input.distanceToPlayer < 520;
+			if (!canReach || !input.hasLineOfSight) return;
+			output.item = true;
+			this.itemCooldownMs = 4200;
+			return;
+		}
+
+		// The trap is a delay, so it belongs in the path of a rush: an enemy
+		// close enough to step on it. The brain always faces the nearest foe, so
+		// the trap lands between them; a cooldown and the three-charge cap stop
+		// a brain from littering the floor with them.
+		if (
+			input.distanceToPlayer < 300 &&
+			input.distanceToPlayer > 70 &&
+			input.hasLineOfSight
+		) {
+			output.item = true;
+			this.itemCooldownMs = 6000;
+		}
 	}
 
 	// -------------------------------------------------------------------------
@@ -578,6 +629,7 @@ export class EnemyBrain {
 			aimAngle: 0,
 			evadeActive: false,
 			ultimate: false,
+			item: false,
 		};
 
 		switch (this.state) {

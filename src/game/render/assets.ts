@@ -83,6 +83,10 @@ export const TEX = {
 	accretion: "fx_accretion",
 	grenade: "fx_grenade",
 	halo: "fx_halo",
+	/** Anands' floor trap — see `createItemTextures`. */
+	trap: "fx_trap",
+	/** Lia's HE grenade — see `createItemTextures`. */
+	heGrenade: "fx_he_grenade",
 	/** The soft ellipse every fighter's team-tinted cast shadow is drawn with. */
 	shadow: "fx_shadow",
 } as const;
@@ -485,6 +489,7 @@ function createEruptionTexture(): Container {
  * `pixi-graphics` skill on when to bake.
  */
 function createUltimateTextures(renderer: Renderer): void {
+	createItemTextures(renderer);
 	// ---- the core ----
 	//
 	// Pure black with a tight falloff, and nothing else. Drawn at 128px and scaled
@@ -557,6 +562,52 @@ function createUltimateTextures(renderer: Renderer): void {
 		halo.circle(64, 64, (64 * i) / 8).fill({ color: 0xffffff, alpha: 0.055 });
 	}
 	bake(renderer, TEX.halo, halo);
+}
+
+/**
+ * The items' own art: Anands' trap pad and Lia's HE grenade.
+ *
+ * The trap is a floor pad — a jagged ring on a dark base, so it reads as
+ * *something you should not stand on* — drawn with its centre where the
+ * trigger test is (see `Items.ts`). The HE grenade is an olive military read:
+ * a rounded body with a fused top, deliberately nothing like the black hole's
+ * violet ball, because an item is not an ultimate.
+ */
+function createItemTextures(renderer: Renderer): void {
+	// ---- the trap ----
+	//
+	// A landmine, seen from the side: a squat disc sitting on the floor with a
+	// raised pressure-plate button on top. It is a *profile*, not a top-down
+	// pad — a mine drawn as a plan view reads as a floor decal, and this one
+	// has to read as a thing you could step on. The teal rim keeps the game's
+	// hazard language. Drawn bottom-anchored
+	// so the flat base sits exactly on the floor the trap was placed on.
+	const trap = new Graphics();
+	// The mine body: a shallow dome resting on its flat base.
+	trap.ellipse(20, 11, 18, 8).fill({ color: 0x0a1412, alpha: 0.92 });
+	trap.ellipse(20, 11, 18, 8).stroke({ width: 2, color: 0x2b3d38, alpha: 0.9 });
+	// The hazard rim, teal so it says "do not stand here" in the game's own voice.
+	trap
+		.ellipse(20, 11, 18, 8)
+		.stroke({ width: 1.5, color: 0x7ff0f4, alpha: 0.6 });
+	// The upper highlight, so the dome reads as round rather than flat.
+	trap.ellipse(20, 8.5, 14, 3).fill({ color: 0x3a5a4f, alpha: 0.7 });
+	// The pressure plate: the red button you do not want to stand on.
+	trap.ellipse(20, 8, 7, 3.5).fill({ color: 0xff5d5d, alpha: 0.95 });
+	// The flat base, where the mine meets the floor.
+	trap.rect(1, 18, 38, 2).fill({ color: 0x7ff0f4, alpha: 0.4 });
+	bake(renderer, TEX.trap, trap);
+
+	// ---- the HE grenade ----
+	//
+	// A dark olive sphere with a bright fuse cap, white so the body can be
+	// team-tinted in flight.
+	const he = new Graphics();
+	he.circle(16, 18, 13).fill({ color: 0xffffff, alpha: 0.25 });
+	he.circle(16, 18, 11).fill({ color: 0x7d8a4f, alpha: 0.9 });
+	he.circle(16, 18, 11).stroke({ width: 1.5, color: 0x2a2f1a, alpha: 0.9 });
+	he.rect(14, 2, 4, 5).fill(0xd9b86a);
+	bake(renderer, TEX.heGrenade, he);
 }
 
 /**

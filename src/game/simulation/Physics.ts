@@ -23,6 +23,7 @@ import {
 	type WallSide,
 } from "./Collision.js";
 import { type HeroKit, LIA_KIT } from "./Heroes.js";
+import { TRAP_TRIGGER_MS, type Trap, trapCatches } from "./Items.js";
 import {
 	bombBlastFor,
 	bombFallHeight,
@@ -69,6 +70,26 @@ export {
 	LIA_KIT,
 	RANGED_WEAPONS,
 } from "./Heroes.js";
+export type { HeGrenadeState, Trap } from "./Items.js";
+/**
+ * Items, re-exported by name for the same reason melee and the ultimate are:
+ * `server/` reaches this module through `server/physics.ts`, and anything
+ * behind an `export *` silently arrives as an empty namespace. The server owns
+ * the charges and the damage; it imports the physics both sides must agree on
+ * from here.
+ */
+export {
+	HE_GRENADE_RADIUS,
+	heBlastDamage,
+	heGrenadeEnd,
+	heGrenadeTouches,
+	launchHeGrenade,
+	placeTrap,
+	TRAP_DAMAGE,
+	tickHeGrenade,
+	trapCatches,
+	trapFor,
+} from "./Items.js";
 export type {
 	MeleeAction,
 	MeleeMove,
@@ -120,7 +141,6 @@ export {
 	sweptThrustBox,
 	zeroMoveCounts,
 } from "./Melee.js";
-
 export type { GrenadeState, Singularity } from "./Ultimate.js";
 /**
  * The ultimate, re-exported by name for the same reason melee is: `server/`
@@ -312,6 +332,16 @@ export interface PlayerIntent extends MeleeIntent {
 	 * its own schedule and be applied on a tick neither side agreed on.
 	 */
 	ultimate: boolean;
+	/**
+	 * The item button, held.
+	 *
+	 * `tickPlayer` does nothing with it — using an item is the server's decision
+	 * alone, exactly like casting the ultimate, because a use spends a charge
+	 * only the server counts. It travels on the one input path every other
+	 * button uses, and the server edge-detects the press the same way it
+	 * edge-detects attack.
+	 */
+	item: boolean;
 }
 
 /** Everything false: neutral input, and what a stunned fighter is reduced to. */
@@ -326,6 +356,7 @@ export const NEUTRAL_INTENT: Readonly<PlayerIntent> = Object.freeze({
 	face: 0,
 	dash: 0,
 	ultimate: false,
+	item: false,
 });
 
 export interface PlayerPosition extends MeleeState {
@@ -405,6 +436,21 @@ export interface PlayerPosition extends MeleeState {
 	/** The dragon's line, px/s. Set once at launch; velocity is pinned to it. */
 	dragonVX: number;
 	dragonVY: number;
+	/**
+	 * ms of **mobility lock** remaining: the fighter was caught in a trap.
+	 *
+	 * The trap's effect, carried in `PlayerPosition` for the same reason
+	 * `freezeTimer` is: it is a state both sides simulate, so a caught fighter's
+	 * own client predicts the lock exactly as it predicts a dash. While non-zero
+	 * the fighter is rooted for movement — no walk, no dash, no jump — but
+	 * nothing else: they can still attack, block, use items and cast, which is
+	 * the whole difference between a trap and a stun. See specs/items.md.
+	 *
+	 * Deliberately **not** a stun: a stun is a state a fighter has been *put* in
+	 * by damage, and it is drawn that way. This says "your feet are gone", which
+	 * is a different read and a different escape (there is none but the timer).
+	 */
+	trapTimer: number;
 }
 
 export function createPlayerState(
@@ -434,6 +480,7 @@ export function createPlayerState(
 		dragonTimer: 0,
 		dragonVX: 0,
 		dragonVY: 0,
+		trapTimer: 0,
 		...createMeleeState(facing),
 	};
 }
@@ -464,6 +511,7 @@ export function copyPlayerState(
 	target.dragonTimer = source.dragonTimer;
 	target.dragonVX = source.dragonVX;
 	target.dragonVY = source.dragonVY;
+	target.trapTimer = source.trapTimer;
 	copyMeleeState(source, target);
 	return target;
 }
@@ -520,6 +568,13 @@ export function isFrozen(s: PlayerPosition): boolean {
  * learn it from the snapshot, and a kit applied on top of the result would be
  * erased by the next reconciliation. Defaults to Lia's kit, so every caller
  * from before heroes existed behaves exactly as it always has.
+ *
+ * `traps` are the floor traps **as this fighter experiences them** — the
+ * caller has already applied the friendly-fire rule with `trapFor`, so the
+ * owner is simply handed `[]` and this function never needs to know whose trap
+ * it is. Like `field`, it is an argument rather than something applied on top
+ * of the result: a trap lock applied after the tick would be erased by the
+ * next reconciliation. Defaults to no traps.
  */
 export function tickPlayer(
 	pos: PlayerPosition,
@@ -528,6 +583,7 @@ export function tickPlayer(
 	world: World = DEFAULT_WORLD,
 	field: Singularity | null = null,
 	kit: HeroKit = LIA_KIT,
+	traps: readonly Trap[] = [],
 ): PlayerPosition {
 	const s: PlayerPosition = { ...pos };
 
@@ -568,12 +624,15 @@ export function tickPlayer(
 	// a whiffed Massive or uppercut cannot be walked or jumped out of. A plunging
 	// fighter and a stuck one are rooted the same way — the bomb is a commitment
 	// from release to extraction. A dragon rider is cargo; the dragon steers.
+	// A trapped fighter is rooted for movement *only*: the lock takes the feet
+	// and nothing else, so the trapped fighter still attacks, blocks and casts.
 	const rooted =
 		stunned ||
 		isCommitted(s) ||
 		s.plunging ||
 		s.plungeStuckTimer > 0 ||
-		s.dragonTimer > 0;
+		s.dragonTimer > 0 ||
+		s.trapTimer > 0;
 	// The charge roots the *walk* and nothing else. Dash, jump and block are the
 	// delivery tools a 4s commitment has to keep — see `isCharging`.
 	const charging = isCharging(s);
@@ -598,6 +657,7 @@ export function tickPlayer(
 	s.coyoteTimer = decay(s.coyoteTimer, dt);
 	s.jumpBufferTimer = decay(s.jumpBufferTimer, dt);
 	s.wallCoyoteTimer = decay(s.wallCoyoteTimer, dt);
+	s.trapTimer = decay(s.trapTimer, dt);
 
 	const wantsJump = input.up && !rooted;
 	if (wantsJump && !s.jumpHeld) {
@@ -897,6 +957,30 @@ export function tickPlayer(
 		s.wallCoyoteTimer = WALL_COYOTE_MS;
 	} else if (s.wallCoyoteTimer <= 0) {
 		s.wallTouch = "none";
+	}
+
+	// ---- the trap ----
+	//
+	// Last, on the moved position, so the moment the feet cross a trap's patch
+	// the lock lands. Tested only while not already trapped, so a trap never
+	// *refreshes* a lock it is already holding — the 3s is a sentence, not a
+	// re-arm. `trapCatches` is deterministic and both sides run it against the
+	// same traps, so the lock predicts exactly like the black hole's pull. The
+	// trigger's *consequences* — the trap's destruction, the damage, the
+	// caption — are the server's alone; this function only sets the timer both
+	// sides share.
+	//
+	// `traps` arrived already filtered by `trapFor`, so the owner's own traps
+	// and every teammate's are not here to catch them. A trap is single-use:
+	// the server removes it from the world the tick it springs, so a trap that
+	// is still in the list is still armed.
+	if (s.trapTimer <= 0) {
+		for (const t of traps) {
+			if (trapCatches(t, s.x, s.y)) {
+				s.trapTimer = TRAP_TRIGGER_MS;
+				break;
+			}
+		}
 	}
 
 	// Latch the intent that was actually allowed, not the raw button. A fighter

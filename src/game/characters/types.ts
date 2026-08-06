@@ -112,6 +112,10 @@ export interface AIInput {
 	foes: FoeInfo[];
 	/** Open black holes. */
 	fields: FieldInfo[];
+	/** Hostile floor traps. Pre-filtered by the friendly-fire predicate. */
+	traps: { x: number; y: number }[];
+	/** Item charges left this life, so the brain knows when it has one to spend. */
+	selfItemCharges: number;
 }
 
 export interface AIOutput {
@@ -139,6 +143,12 @@ export interface AIOutput {
 	 * rather than a wire-only field.
 	 */
 	ultimate: boolean;
+	/**
+	 * The item button, on the press. The server spends a charge on the press
+	 * edge and owns the throw or placement, exactly like the ultimate's cast —
+	 * so a brain that never sets this is a brain that never uses its item.
+	 */
+	item: boolean;
 }
 
 /**

@@ -341,6 +341,9 @@ export function FightHud({ training = false }: { training?: boolean }) {
 	const ultKey = codeLabel(bindings.codesFor("ultimate")[0] ?? "");
 	const ult = hud ? Math.max(0, Math.min(ULT_MAX_CHARGE, hud.ult)) : 0;
 	const ultReady = ult >= ULT_MAX_CHARGE;
+	const itemKey = codeLabel(bindings.codesFor("item")[0] ?? "");
+	const item = hud?.itemCharges ?? 0;
+	const itemMax = hud?.itemMaxCharges ?? 0;
 
 	// The Play of the Game replay owns the whole frame. A live HP bar over
 	// footage from a minute ago is not a HUD, it is a second fight the player
@@ -366,6 +369,25 @@ export function FightHud({ training = false }: { training?: boolean }) {
 					)}
 				</section>
 			) : null}
+
+			{/* The item's charges, tucked beside the ultimate: a finite resource
+			    next to the earned one, so the player can see at a glance what this
+			    life has left to spend. Charged pips that grey out one by one. */}
+			<section className="vdh-item">
+				<span className="vdh-item-label">{hud?.itemLabel ?? "ITEM"}</span>
+				<div className="vdh-item-pips">
+					{Array.from({ length: itemMax }, (_, i) => (
+						// The pips are a fixed, never-reordered row — the slot index
+						// *is* the identity, so the index-key rule is a false positive.
+						<span
+							// biome-ignore lint/suspicious/noArrayIndexKey: static pip row.
+							key={i}
+							className={`vdh-item-pip${i < item ? "" : " vdh-item-pip-empty"}`}
+						/>
+					))}
+				</div>
+				{itemKey ? <span className="vdh-item-key">{itemKey}</span> : null}
+			</section>
 
 			<section className={`vdh-ult${ultReady ? " vdh-ult-ready" : ""}`}>
 				<span className="vdh-ult-label">ULTIMATE</span>

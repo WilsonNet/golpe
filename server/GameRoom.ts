@@ -12,6 +12,7 @@ import type {
 } from "../src/game/characters/types.js";
 import {
 	type DenyEventMsg,
+	type ExplosionMsg,
 	type GameSnapshot,
 	type MatchStatus,
 	type MeleeEventMsg,
@@ -21,6 +22,7 @@ import {
 	type SnapshotCinematic,
 	type SnapshotPlayer,
 	type TeamStatus,
+	type TrappedMsg,
 } from "../src/game/online/types.js";
 import { packIntent, packState } from "../src/game/online/wire.js";
 import {
@@ -99,9 +101,14 @@ import {
 	type GrenadeState,
 	grenadeEnd,
 	grenadeTouches,
+	HE_GRENADE_RADIUS,
 	HERO_IDS,
+	type HeGrenadeState,
 	type HeroId,
 	hasLineOfSight,
+	heBlastDamage,
+	heGrenadeEnd,
+	heGrenadeTouches,
 	isBulletOutOfBounds,
 	isFrozen,
 	isHeroId,
@@ -109,6 +116,7 @@ import {
 	isStunned,
 	kitFor,
 	launchGrenade,
+	launchHeGrenade,
 	MASSIVE_BLAST_DAMAGE,
 	MASSIVE_BLAST_KNOCKBACK_PX_S,
 	MASSIVE_BLAST_RADIUS_PX,
@@ -123,6 +131,7 @@ import {
 	PLAYER_WIDTH,
 	type PlayerIntent,
 	type PlayerPosition,
+	placeTrap,
 	rectsOverlap,
 	resolveMelee,
 	SINGULARITY_DAMAGE_INTERVAL_MS,
@@ -131,9 +140,14 @@ import {
 	type Singularity,
 	singularityGrip,
 	sweptThrustBox,
+	TRAP_DAMAGE,
+	type Trap,
 	tickBullet,
 	tickGrenade,
+	tickHeGrenade,
 	tickPlayer,
+	trapCatches,
+	trapFor,
 	ULT_CHARGE_MELEE_MULTIPLIER,
 	ULT_CHARGE_PER_DAMAGE,
 	ULT_CHARGE_PER_KILL,
@@ -276,6 +290,24 @@ interface ConnectedPlayer {
 	 */
 	ult: number;
 	/**
+	 * Item charges left this life, server-owned like the ultimate's charge.
+	 *
+	 * Reset to the kit's maximum on respawn and on a round reset — dying is the
+	 * price of the second grenade, and a new round starts everybody's items
+	 * fresh. Unlike `ult` it never survives anything, because an item is a
+	 * *finite* resource by design: the charges are the whole of the item.
+	 */
+	itemCharges: number;
+	/**
+	 * Press-edge latch for the item button.
+	 *
+	 * The item is used on the press, not the release (there is no aim phase to
+	 * hold through — the aim angle of the press is the throw), so the held
+	 * button travels on the wire like every other and this is the edge that
+	 * turns a press into exactly one use.
+	 */
+	itemHeld: boolean;
+	/**
 	 * Release-edge detection for the ultimate button.
 	 *
 	 * Holding R is the *aim phase* — the cast is decided when the button is let
@@ -386,6 +418,7 @@ function idleInput(seq = 0): PlayerInput {
 		face: 0,
 		dash: 0,
 		ultimate: false,
+		item: false,
 		aimAngle: 0,
 	};
 }
@@ -476,6 +509,22 @@ export class GameRoom {
 	/** ms since the open singularity last dealt damage. */
 	private singularityDamageAcc = 0;
 	private nextUltId = 0;
+
+	// ---- items ----
+	//
+	// Owned here for the same reason the ultimate is: only the server may decide
+	// that an item was used, and only the server may decide when a trap has
+	// caught somebody. Traps are world state (like the singularity) because the
+	// client predicts their effect through `tickPlayer`; HE grenades are
+	// server-owned projectiles (like bullets) because a throw is a one-shot the
+	// client can never see coming before the snapshot does.
+	private traps: Trap[] = [];
+	private heGrenades: HeGrenadeState[] = [];
+	private nextItemId = 0;
+	/** HE blasts since the last broadcast, for the client's explosion effects. */
+	private explosions: ExplosionMsg[] = [];
+	/** Traps that just caught somebody, for the client's caption. */
+	private trappedEvents: TrappedMsg[] = [];
 
 	// =========================================================
 	//  PLAY OF THE GAME
@@ -723,6 +772,8 @@ export class GameRoom {
 			ult: this.startUltCharge,
 			ultHeld: false,
 			ultAimAngle: 0,
+			itemCharges: kitFor(hero).item.maxCharges,
+			itemHeld: false,
 			stats: newStats(),
 			potgBurst: { damage: 0, absorbed: 0 },
 		};
@@ -845,6 +896,12 @@ export class GameRoom {
 			player.state.chargeTimer = 0;
 			player.state.massiveReady = false;
 			player.state.parryMassiveTimer = 0;
+			// And a different item: the old one's charges are meaningless to the
+			// new kit, and the old kit's traps stay on the floor for whoever
+			// placed them — a hero who leaves their traps behind is their own
+			// fault, but the charges cannot travel across kits.
+			player.itemCharges = kitFor(hero).item.maxCharges;
+			player.itemHeld = false;
 			console.log(
 				`[HERO] ${player.name} switches to ${kitFor(hero).melee.label} / ${kitFor(hero).ranged.label}`,
 			);
@@ -1130,6 +1187,7 @@ export class GameRoom {
 			face: out.face,
 			dash: out.dash,
 			ultimate: out.ultimate,
+			item: out.item,
 			aimAngle: out.aimAngle,
 		};
 	}
@@ -1249,6 +1307,12 @@ export class GameRoom {
 			selfTeam: bot.team,
 			allies,
 			foes,
+			selfItemCharges: bot.itemCharges,
+			// Hostile traps, pre-filtered by the same predicate the simulation
+			// uses, so a bot can route around them without re-deriving a rule.
+			traps: this.traps
+				.filter((t) => t.ownerId !== bot.id && hostile(t.ownerTeam, bot.team))
+				.map((t) => ({ x: t.x, y: t.y })),
 			fields: this.singularity
 				? [
 						{
@@ -1535,6 +1599,13 @@ export class GameRoom {
 		// where it is there so a probe or a practising player gets more than one
 		// throw per run.
 		player.ult = Math.max(player.ult, this.startUltCharge);
+		// Items, though, are a per-life resource: dying is the price of the
+		// second grenade, so a respawn grants the full kit again — and takes
+		// the dead fighter's traps off the floor with them, so a player cannot
+		// stack a fresh three on top of the three that just got them killed.
+		player.itemCharges = kitFor(player.hero).item.maxCharges;
+		player.itemHeld = false;
+		this.traps = this.traps.filter((t) => t.ownerId !== player.id);
 		// The reel's burst buckets, though, are a life's worth of pressure: a
 		// play is a run of moments, and the moment ended at death.
 		player.potgBurst = { damage: 0, absorbed: 0 };
@@ -1757,6 +1828,7 @@ export class GameRoom {
 			player.ult = this.startUltCharge;
 			player.ultHeld = false;
 			player.ultAimAngle = 0;
+			player.itemHeld = false;
 			// A fresh personality per match, so sixteen bots do not replay the same
 			// fight every five minutes.
 			if (player.brain)
@@ -1814,6 +1886,8 @@ export class GameRoom {
 				// Rounded: the HUD draws a bar, and a fractional trickle would make
 				// every snapshot differ in a digit nobody can see.
 				ult: Math.round(p.ult),
+				// Charges are whole numbers by construction — each use spends one.
+				itemCharges: p.itemCharges,
 			});
 		}
 		const cinematic: SnapshotCinematic | null = this.cinematic
@@ -1852,6 +1926,21 @@ export class GameRoom {
 			// leave one pulling fighters into a hole that has closed.
 			singularity: this.singularity ? { ...this.singularity } : null,
 			cinematic,
+			// Traps are fed into `tickPlayer` the same way the singularity is, so
+			// they travel in full every snapshot too.
+			traps: this.traps.map((t) => ({ ...t })),
+			heGrenades: this.heGrenades.map((g) => ({
+				id: g.id,
+				ownerId: g.ownerId,
+				ownerTeam: g.ownerTeam,
+				x: g.x,
+				y: g.y,
+				vx: g.vx,
+				vy: g.vy,
+			})),
+			// One-shot effects, drained every snapshot like `melee` and `denies`.
+			explosions: this.explosions.slice(),
+			trapped: this.trappedEvents.slice(),
 		};
 	}
 
@@ -2000,6 +2089,11 @@ export class GameRoom {
 			if (!input.ultimate && player.ultHeld) this.tryCastUltimate(player);
 			player.ultHeld = input.ultimate;
 
+			// The item is used on the press, not the release — the aim angle of
+			// the press *is* the throw, so there is no aim phase to hold through.
+			if (input.item && !player.itemHeld) this.tryUseItem(player);
+			player.itemHeld = input.item;
+
 			// A fighter holds a melee weapon or a ranged one, never both: firing
 			// is gated on the stance the simulation says they are actually in,
 			// and the stat card is the hero's ranged weapon — the machine gun
@@ -2042,6 +2136,7 @@ export class GameRoom {
 		this.resolveDragonHits();
 		this.tickBullets(dt);
 		this.tickUltimate(dt);
+		this.tickItems(dt);
 		this.applyTrainingRules(dt);
 
 		// A training session is not a deathmatch. It keeps the old round lifecycle:
@@ -2616,6 +2711,166 @@ export class GameRoom {
 		this.sweepLatches.delete(rider.id);
 	}
 
+	/**
+	 * Try to use the item, on the press of the item button. Silently refused
+	 * when the conditions are not met, exactly like `tryCastUltimate` — every
+	 * refusal is a state the player can already see.
+	 */
+	private tryUseItem(player: ConnectedPlayer) {
+		const item = kitFor(player.hero).item;
+		if (player.itemCharges <= 0) return;
+		if (!player.alive || this.phase !== "live") return;
+		if (isFrozen(player.state)) return;
+		if (isStunned(player.state) || isKnockedDown(player.state)) return;
+		if (this.cinematic) return;
+
+		// The charge is spent up front, so a player who disconnects mid-throw
+		// does not come back armed. The item is a finite resource on purpose.
+		player.itemCharges--;
+		console.log(
+			`[ITEM] ${player.name} uses ${item.id} (${player.itemCharges} left)`,
+		);
+
+		if (item.id === "he-grenade") {
+			this.heGrenades.push(
+				launchHeGrenade(
+					this.nextItemId++,
+					player.id,
+					player.state.x + PLAYER_WIDTH / 2,
+					player.state.y + PLAYER_HEIGHT / 2,
+					player.lastInput.aimAngle,
+					player.team,
+				),
+			);
+			return;
+		}
+
+		// The trap is left on the floor right in front of the fighter. It needs
+		// a floor under the feet to mean anything, so an airborne placement is
+		// refused (the charge is returned).
+		if (!player.state.grounded) {
+			player.itemCharges++;
+			return;
+		}
+		this.traps.push(
+			placeTrap(
+				this.nextItemId++,
+				player.id,
+				player.state.x,
+				player.state.y,
+				player.state.facing,
+				player.team,
+			),
+		);
+	}
+
+	/** Advance HE grenades and the traps. */
+	private tickItems(dt: number) {
+		this.tickHeGrenades(dt);
+		this.tickTraps();
+	}
+
+	private tickHeGrenades(dt: number) {
+		if (this.heGrenades.length === 0) return;
+
+		// Compact in place, exactly like the bullets: a grenade that ends this
+		// tick is removed by not being kept.
+		let kept = 0;
+		for (const g of this.heGrenades) {
+			tickHeGrenade(g, dt, this.world);
+
+			let touched = false;
+			for (const player of this.players.values()) {
+				if (!player.alive) continue;
+				if (
+					!heGrenadeTouches(
+						g,
+						player.id,
+						player.state.x,
+						player.state.y,
+						player.team,
+					)
+				) {
+					continue;
+				}
+				touched = true;
+				break;
+			}
+
+			// The HE is not deniable: a direct hit on a hostile fighter goes off
+			// on them. Geometry is a bounce, never a detonation — the fuse is
+			// what a bounced throw spends.
+			if (!heGrenadeEnd(g, touched)) {
+				this.heGrenades[kept++] = g;
+				continue;
+			}
+			this.explodeHeGrenade(g);
+		}
+		this.heGrenades.length = kept;
+	}
+
+	private explodeHeGrenade(g: HeGrenadeState) {
+		this.explosions.push({ x: g.x, y: g.y, radius: HE_GRENADE_RADIUS });
+		console.log(
+			`[ITEM] HE grenade ${g.id} detonates at ${Math.round(g.x)},${Math.round(g.y)}`,
+		);
+		for (const player of this.players.values()) {
+			if (!player.alive) continue;
+			// The friendly-fire rule, asked the same way every weapon asks it.
+			// The thrower and their teammates walk out of their own blast.
+			if (player.id === g.ownerId) continue;
+			if (!hostile(g.ownerTeam, player.team)) continue;
+			const dx = g.x - (player.state.x + PLAYER_WIDTH / 2);
+			const dy = g.y - (player.state.y + PLAYER_HEIGHT / 2);
+			const dist = Math.hypot(dx, dy);
+			const damage = heBlastDamage(dist);
+			if (damage <= 0) continue;
+			// The HE feeds the meter like a bullet: it is an ordinary weapon, not
+			// an ultimate, and the Overwatch economy pays for participation.
+			this.damage(player, damage, g.ownerId, true, "bullet");
+		}
+	}
+
+	/**
+	 * Spring the traps. A trap catches the hostile fighters whose feet cross
+	 * its patch; the lock itself was already set by the shared `tickPlayer` —
+	 * this is the *consequence*, which only the server may own: the trap is
+	 * destroyed, the little bit of damage is dealt, and the caption is sent.
+	 * A trap is single-use, so springing removes it from the world.
+	 */
+	private tickTraps() {
+		if (this.traps.length === 0) return;
+		// Compact in place: a sprung trap is destroyed by not being kept.
+		let kept = 0;
+		for (const trap of this.traps) {
+			// On the one tick it springs, a trap catches everyone standing in it
+			// — anyone who "stepped in" that moment.
+			let sprung = false;
+			for (const player of this.players.values()) {
+				if (!player.alive) continue;
+				// Same filter `tickPlayer` was handed: never the owner, never a
+				// teammate. The overlap test is the same shared function, so the
+				// server's trigger can never disagree with the lock the client
+				// predicted.
+				if (trapFor([trap], player.id, player.team).length === 0) continue;
+				if (!trapCatches(trap, player.state.x, player.state.y)) continue;
+				sprung = true;
+				this.trappedEvents.push({
+					victimId: player.id,
+					x: player.state.x,
+					y: player.state.y,
+				});
+				this.damage(player, TRAP_DAMAGE, trap.ownerId, true, "bullet");
+			}
+			if (sprung) {
+				console.log(`[ITEM] trap ${trap.id} springs and is spent`);
+				continue;
+			}
+			this.traps[kept++] = trap;
+		}
+		this.traps.length = kept;
+	}
+
 	/** Advance grenades in flight and the open singularity. */
 	private tickUltimate(dt: number) {
 		this.tickGrenades(dt);
@@ -2812,12 +3067,21 @@ export class GameRoom {
 			p.pendingInput = null;
 			p.tickInput = null;
 			p.simulatedIntent = null;
+			// A new round is a new life for the items too: everyone gets their
+			// full kit again, and every trap on the floor is gone with the round
+			// that placed it.
+			p.itemCharges = kitFor(p.hero).item.maxCharges;
+			p.itemHeld = false;
 			p.potgBurst = { damage: 0, absorbed: 0 };
 			if (p.brain) p.brain = new EnemyBrain(botConfig(), this.world, p.hero);
 		});
 		this.bullets = [];
 		this.meleeEvents.length = 0;
 		this.denies.length = 0;
+		this.traps = [];
+		this.heGrenades.length = 0;
+		this.explosions.length = 0;
+		this.trappedEvents.length = 0;
 		this.resetTimer = -1;
 		// The room's copy of the same countdown the fighters are carrying.
 		this.roundFreezeMs = this.freezeTimeMs;
@@ -2881,5 +3145,8 @@ export class GameRoom {
 		// listening humans does not accumulate them forever.
 		this.meleeEvents.length = 0;
 		this.denies.length = 0;
+		// Item events are the same shape, and cleared for the same reason.
+		this.explosions.length = 0;
+		this.trappedEvents.length = 0;
 	}
 }

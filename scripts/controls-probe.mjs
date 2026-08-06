@@ -159,10 +159,31 @@ async function run() {
 		`blocking=${rightHeld.playerPhys.blocking}`,
 	);
 
-	const spaceRise = await jumpRise(page, "Space");
-	check("Space jumps", spaceRise >= JUMP_RISE_PX, `rose ${spaceRise}px`);
+	const spaceUppercut = await hold(page, "Space");
+	check(
+		"Space uppercuts",
+		spaceUppercut.during.playerPhys.meleeAction === "uppercut",
+		`action=${spaceUppercut.during.playerPhys.meleeAction}`,
+	);
 	const wRise = await jumpRise(page, "KeyW");
 	check("W still jumps", wRise >= JUMP_RISE_PX, `rose ${wRise}px`);
+
+	// The item took F when the uppercut moved to Space. Lia's item is the HE
+	// grenade, and the observable is the server spending a charge: two uses in
+	// the life, one left after a press. Held for a few frames — a sub-frame
+	// tap can land between two intent polls and never reach the wire, which is
+	// exactly the edge the server is supposed to own.
+	const chargesBefore = (await state(page)).itemCharges;
+	await page.keyboard.down("KeyF");
+	await page.waitForTimeout(150);
+	await page.keyboard.up("KeyF");
+	await page.waitForTimeout(200);
+	const chargesAfter = (await state(page)).itemCharges;
+	check(
+		"F uses the item and spends a charge",
+		chargesAfter === chargesBefore - 1,
+		`charges ${chargesBefore} -> ${chargesAfter}`,
+	);
 
 	// ---- the menu takes the keyboard ----
 	await settle(page);

@@ -50,6 +50,7 @@ function randomIntent(rand: () => number): PlayerIntent {
 		face: axis(rand),
 		dash: axis(rand),
 		ultimate: rand() < 0.05,
+		item: rand() < 0.1,
 	};
 }
 

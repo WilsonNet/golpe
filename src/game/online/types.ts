@@ -159,6 +159,12 @@ export interface SnapshotPlayer {
 	 * benefit — the simulation never reads it.
 	 */
 	ult: number;
+	/**
+	 * Item charges left this life. Server-counted like the ultimate's charge:
+	 * only the server knows a use spent one. Resets to the kit's maximum on
+	 * respawn and on a round reset — see specs/items.md.
+	 */
+	itemCharges: number;
 }
 
 export interface SnapshotBullet {
@@ -312,6 +318,64 @@ export interface GameSnapshot {
 	singularity: SnapshotSingularity | null;
 	/** Set only while the room is frozen for a cast. */
 	cinematic: SnapshotCinematic | null;
+	/** Anands' floor traps, as they stand. Cleared on a round reset. */
+	traps: SnapshotTrap[];
+	/** HE grenades in flight. Server-owned, dead-reckoned like bullets. */
+	heGrenades: SnapshotHeGrenade[];
+	/** HE blasts since the previous snapshot. Effects only. */
+	explosions: ExplosionMsg[];
+	/** A trap just caught somebody, for the caption. Effects only. */
+	trapped: TrappedMsg[];
+}
+
+/**
+ * A floor trap, as both sides see it.
+ *
+ * Sent in full every snapshot (like the singularity) because the client feeds
+ * it into `tickPlayer` for every fighter it predicts: a lost datagram must not
+ * leave a client walking a fighter through a trap the server is locking it in.
+ * A trap is single-use — the server removes it from the world the tick it
+ * springs, so a trap that is in the list is armed, and one that is gone caught
+ * somebody.
+ */
+export interface SnapshotTrap {
+	id: number;
+	ownerId: string;
+	/** The owner's side, for the client's friendly-fire filter. */
+	ownerTeam: TeamId | null;
+	/** Centre, in world coordinates. */
+	x: number;
+	y: number;
+}
+
+/** An HE grenade in flight. Server-owned, like a bullet. */
+export interface SnapshotHeGrenade {
+	id: number;
+	ownerId: string;
+	/** The thrower's side, so a client tints the arc and skips its own team. */
+	ownerTeam: TeamId | null;
+	x: number;
+	y: number;
+	/** Carried so the client can dead-reckon the arc between snapshots. */
+	vx: number;
+	vy: number;
+}
+
+/** An HE grenade just went off. Effects only, exactly like `melee` events. */
+export interface ExplosionMsg {
+	x: number;
+	y: number;
+	/** The blast's reach, so the client draws the ring to the true radius. */
+	radius: number;
+}
+
+/** A trap just caught somebody. Effects only, exactly like `denies`. */
+export interface TrappedMsg {
+	/** Who got caught, so the caption pops over the right fighter. */
+	victimId: string;
+	/** Where, in world body space, for the splash. */
+	x: number;
+	y: number;
 }
 
 /**

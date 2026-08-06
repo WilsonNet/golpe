@@ -59,6 +59,7 @@ function neutralOutput(): AIOutput {
 		aimAngle: 0,
 		evadeActive: false,
 		ultimate: false,
+		item: false,
 	};
 }
 
@@ -261,6 +262,7 @@ export class TrainingDummy {
 		out.block = beat.hold?.block ?? false;
 		out.uppercut = beat.hold?.uppercut ?? false;
 		out.ultimate = beat.hold?.ultimate ?? false;
+		out.item = beat.hold?.item ?? false;
 		if (beat.swordStance !== undefined) out.swordStance = beat.swordStance;
 		if (beat.aimAngle !== undefined) out.aimAngle = beat.aimAngle;
 		if (beat.face) out.face = beat.face;

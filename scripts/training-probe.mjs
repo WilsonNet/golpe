@@ -1201,6 +1201,73 @@ const BATTERY = [
 			return c.fails;
 		},
 	},
+
+	// ---- the items ---------------------------------------------------------
+	// The item button is the third member of the kit, and each hero's item is
+	// measured the same way every other ability is: one press, one consequence,
+	// judged by the server. `explosions` and `trapped` are counters on the
+	// training report because a clean run where the item never fired would
+	// prove nothing.
+
+	{
+		name: "an HE grenade lands and blasts the dummy",
+		scenario: {
+			name: "HE grenade",
+			config: { behaviour: "idle" },
+			steps: [{ intent: { item: true }, holdMs: 60, aimAngle: AIM_RIGHT }],
+			// The grenade has to fly and explode; the blast lands after the fuse
+			// or on contact, so the settle has to outlast the flight.
+			settleMs: 1600,
+		},
+		verify(report) {
+			const c = checks(report);
+			c.atLeast("HE blasts", report.explosions, 1);
+			// The dummy sits 60px away, so the throw connects close to the
+			// epicentre — a third of a bar at minimum, and the point is that the
+			// grenade is a real weapon, not a cosmetic lob.
+			c.atLeast("blast damage", report.player.damageDealt, 30);
+			return c.fails;
+		},
+	},
+
+	{
+		name: "a trap catches the walking dummy",
+		dagger: true,
+		// Custom run: the trap has to be laid, then the *dummy* has to walk into
+		// it — the trap's whole behaviour is about where the other fighter
+		// goes, so a scenario that only pressed buttons at the player would
+		// never spring anything.
+		async run(page) {
+			await page.evaluate(async () => {
+				// `reset` clears the counters after its own settle, so it has to
+				// be awaited before the trap is laid — otherwise the trap's spring
+				// can race the counter reset.
+				await window.__training.reset();
+				await new Promise((r) => setTimeout(r, 300));
+				// Lay the trap one step in front of the player, facing the dummy.
+				await window.__training.input({ item: true }, 60, 0);
+				await new Promise((r) => setTimeout(r, 400));
+				// Walk the dummy left, straight across where the trap is.
+				await window.__training.set({
+					behaviour: "script",
+					script: {
+						beats: [{ ms: 1500, hold: { moveLeft: true } }],
+						loop: false,
+					},
+				});
+				await new Promise((r) => setTimeout(r, 2000));
+			});
+			return { report: await report(page), extra: {} };
+		},
+		verify(report) {
+			const c = checks(report);
+			c.atLeast("trap springs", report.trapped, 1);
+			// The little bit of damage that makes a sprung trap read as having
+			// done something.
+			c.atLeast("trap damage", report.player.damageDealt, 10);
+			return c.fails;
+		},
+	},
 ];
 
 const report = (page) => page.evaluate(() => window.__training.report());

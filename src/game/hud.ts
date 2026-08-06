@@ -14,6 +14,12 @@ export interface HudState {
 	maxHp: number;
 	/** Ultimate charge, 0..100. */
 	ult: number;
+	/** Item charges left this life, server-counted. */
+	itemCharges: number;
+	/** The kit's full charge count, so the HUD can draw the pips. */
+	itemMaxCharges: number;
+	/** The item's badge — "HE GRENADE" or "TRAP". */
+	itemLabel: string;
 	/** The local fighter's stance — the badge beside the name. */
 	stance: "sword" | "gun";
 	/** The local fighter's hero — the badge reads "SWORD" or "DAGGER" from it. */

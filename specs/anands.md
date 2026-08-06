@@ -111,6 +111,36 @@ an obstacle or a hostile black hole.
   segments, golden sparks — baked in its own colours, because the one ultimate
   that must read as gold cannot be tinted into being gold.
 
+## The trap (item)
+
+The item half of the kit: a floor hazard laid one step in front of the fighter
+on F — a **landmine seen from the side**, drawn as a squat dome sitting on the
+floor. Where Lia's HE grenade *kills*, the trap *delays* — the dagger already
+hits first and runs the initiative, and a delay that locks a fleeing enemy in
+place for the follow-up is the exact tool a storm of stabs wants.
+
+- **Three per life.** The trap is a mobility hindrance, not a kill tool, so it
+  gets more charges than the grenade's two — and three is the cap that keeps it
+  from becoming spam. Charges reset on death and on a round reset; a dead
+  Anands' traps leave the floor with her.
+- **Visible and single-use.** Anyone can see it, and nothing can destroy it
+  before it springs — the seeing is the counterplay. The moment an enemy's feet
+  cross its patch it **bursts into particles and is destroyed**, like a Dota
+  mine: a trap is either on the floor and armed or it no longer exists.
+- **Friendly traps are faded.** Your own and every teammate's are drawn at a
+  fraction of full opacity, so the side a mine belongs to is answered at a
+  glance.
+- **The spring:** the first hostile fighter whose feet cross the patch is
+  mobility-locked for **3 seconds** — no walk, no dash, no jump — but can still
+  attack, block, use items and cast. The lock is `trapTimer` in state, set by
+  the shared `tickPlayer` on both sides, so a caught fighter's own client
+  predicts it. It deals a little damage (10): not the point, but the reason a
+  sprung trap reads as having done something. A full jump clears it.
+- **The burst and caption:** the trap pops in teal particles and a **TRAPPED!**
+  splash appears over the victim — Jumanji green to the DENY splash's Frank
+  Miller black-and-white. See [items.md](items.md) for the wire and the full
+  rules.
+
 ## The AI
 
 `EnemyBrain` picks its modules from the hero: `DaggerBrain` for melee and

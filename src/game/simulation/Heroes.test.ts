@@ -99,6 +99,7 @@ describe("hero registry", () => {
 		expect(LIA_KIT.melee).toBe(MELEE_WEAPONS.sword);
 		expect(LIA_KIT.ranged).toBe(RANGED_WEAPONS.gun);
 		expect(LIA_KIT.ultimate).toBe("black-hole");
+		expect(LIA_KIT.item.id).toBe("he-grenade");
 	});
 
 	it("Anands carries the dagger kit", () => {
@@ -106,6 +107,7 @@ describe("hero registry", () => {
 		expect(kit.melee).toBe(MELEE_WEAPONS.dagger);
 		expect(kit.ranged).toBe(RANGED_WEAPONS.machinegun);
 		expect(kit.ultimate).toBe("dragon-thrust");
+		expect(kit.item.id).toBe("trap");
 	});
 
 	it("the machine gun fires faster than the pistol and hits weaker", () => {

@@ -719,6 +719,9 @@ export class Input {
 			// edge-detecting it here as well would mean two sources of truth for one
 			// one-shot, and the client's would be the wrong one.
 			ultimate: this.actionDown("ultimate"),
+			// The item button is the same story: the server owns the charge and the
+			// press edge, so this is held state on the one input path.
+			item: this.actionDown("item"),
 			swordStance: this.swordStance,
 			// You face where you aim. That is what lets a player retreat while still
 			// guarding the side the attacker is coming from.

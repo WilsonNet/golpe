@@ -3,28 +3,31 @@
 **Intent:** the game is a hero shooter with one shared skeleton — movement,
 aiming, stances, the ultimate meter, the deathmatch lifecycle are the same for
 everybody. What differs is the **kit**: which melee weapon, which ranged weapon,
-and which ultimate a hero carries. Heroes are compositions of weapons, Brawlhalla
-style: two heroes can share a weapon, and an ultimate is the one thing that is
-always unique.
+which ultimate and which item a hero carries. Heroes are compositions of
+weapons, Brawlhalla style: two heroes can share a weapon or an item, and an
+ultimate is the one thing that is always unique.
 
-Lia is the first hero and the reference kit: sword + gun + black hole. Anands is
-the second: dagger + machine gun + dragon thrust — see [anands.md](anands.md)
-for her full kit.
+Lia is the first hero and the reference kit: sword + gun + black hole + HE
+grenade. Anands is the second: dagger + machine gun + dragon thrust + trap — see
+[anands.md](anands.md) for her full kit and [items.md](items.md) for the item
+half of the kit.
 
 ## What a hero is
 
-A hero is defined by three things, and nothing else:
+A hero is defined by four things, and nothing else:
 
 | | Lia | Anands |
 |---|---|---|
 | **Melee weapon** (sword stance) | Sword | Dagger |
 | **Ranged weapon** (gun stance) | Gun | Machine gun |
 | **Ultimate** | Black Hole | Dragon Thrust |
+| **Item** | HE Grenade | Trap |
 
 Everything else a fighter has — movement, jumps, dashes, the stance system,
 the meter economy, hitpoints — is shared code that a hero does not get to
 change. This is the whole point of the composition: a future hero is a new
-weapon table and a new ultimate entry, not a fork of the simulation.
+weapon table, a new ultimate entry and a new item, not a fork of the
+simulation.
 
 ## The kit on the wire
 
@@ -52,11 +55,13 @@ fighter (like their name), so nothing about it ever has to be replayed.
 
 ## The kit parameter
 
-`tickPlayer(pos, intent, dt, world, field, kit)` — the kit is the sixth
+`tickPlayer(pos, intent, dt, world, field, kit, traps)` — the kit is the sixth
 argument, defaulting to Lia's so every pre-hero caller behaves exactly as it
-always has. It threads through the whole prediction path: `PredictedPlayer`
-and `RemoteFighter` each carry a kit (the local one from the URL, the remotes
-from the snapshot), and the server ticks every fighter with `kitFor(player.hero)`.
+always has; `traps` is the seventh, the room's floor traps already filtered for
+friendly fire, defaulting to none. The kit threads through the whole prediction
+path: `PredictedPlayer` and `RemoteFighter` each carry a kit (the local one from
+the URL, the remotes from the snapshot), and the server ticks every fighter with
+`kitFor(player.hero)`.
 
 A kit is:
 
@@ -66,6 +71,7 @@ interface HeroKit {
   melee: MeleeWeaponDef;   // which moves, whether block/charge/chain exist
   ranged: RangedWeaponDef; // cooldown, damage, speed
   ultimate: UltimateId;    // black-hole | dragon-thrust
+  item: ItemDef;           // he-grenade | trap, and its charge count
 }
 ```
 
@@ -95,7 +101,8 @@ unique (`slash` is the sword's, `stab` is the dagger's), which is what keeps
 The stance badge names the actual weapon — SWORD/GUN for Lia, DAGGER/MACHINE
 GUN for Anands — because the stance is the slot and the hero is the weapon in
 it. The foe panel's plaque adds the foe's hero. The health bar is never tinted,
-whatever the hero.
+whatever the hero. The item's charge pips sit in the bottom-right corner above
+the ultimate meter, so a player reads "how much item do I have left" at a glance.
 
 ## Bots
 
@@ -103,9 +110,10 @@ A bot's hero is **random per bot** by default, so a busy room exercises every
 kit and the AI-vs-AI loop covers both heroes' brains. `?botHero=` (creator-only)
 pins the room's bots to one hero — how a probe measures the dagger at sixteen
 fighters. The bot brain is constructed with its hero, and `EnemyBrain` picks
-its melee module (`MeleeBrain` for the sword, `DaggerBrain` for the dagger) and
+its melee module (`MeleeBrain` for the sword, `DaggerBrain` for the dagger),
 its ultimate module (`UltimateBrain` for the hole, `DragonBrain` for the
-thrust) from it — see [anands.md](anands.md) for the dagger's strategies.
+thrust) and its item behaviour from it — see [anands.md](anands.md) for the
+dagger's strategies.
 
 ## Not implemented
 

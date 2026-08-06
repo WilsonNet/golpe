@@ -42,6 +42,7 @@
 
 import { resolveOverlap } from "../simulation/Collision";
 import { type HeroId, type HeroKit, LIA_KIT } from "../simulation/Heroes";
+import type { Trap } from "../simulation/Items";
 import {
 	copyPlayerState,
 	DEFAULT_WORLD,
@@ -180,7 +181,11 @@ export class RemoteFighter {
 	 * Called once per local physics step, so this fighter stays on the same tick
 	 * as the locally predicted player.
 	 */
-	predict(dt: number, field: Singularity | null = null) {
+	predict(
+		dt: number,
+		field: Singularity | null = null,
+		traps: readonly Trap[] = [],
+	) {
 		if (!this.intent) return;
 		this.state = tickPlayer(
 			this.state,
@@ -189,6 +194,7 @@ export class RemoteFighter {
 			this.world,
 			field,
 			this.kit,
+			traps,
 		);
 	}
 
@@ -205,6 +211,7 @@ export class RemoteFighter {
 		leadTicks: number,
 		dt: number,
 		field: Singularity | null = null,
+		traps: readonly Trap[] = [],
 	): RollbackResult {
 		const beforeX = this.state.x;
 		const beforeY = this.state.y;
@@ -223,6 +230,7 @@ export class RemoteFighter {
 					this.world,
 					field,
 					this.kit,
+					traps,
 				);
 				resimTicks++;
 			}

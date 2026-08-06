@@ -65,11 +65,13 @@ import { heroFrames, TEX, tex } from "./render/assets";
 import { BlackHoleFx } from "./render/BlackHoleFx";
 import { DenyFx } from "./render/DenyFx";
 import { DragonFx } from "./render/DragonFx";
+import { ItemFx } from "./render/ItemFx";
 import { type ImpactEvent, MeleeFx } from "./render/MeleeFx";
 import { Nameplates } from "./render/Nameplates";
 import { Shadows } from "./render/Shadows";
 import { SpritePool } from "./render/SpritePool";
 import type { Stage } from "./render/Stage";
+import { TrappedFx } from "./render/TrappedFx";
 import { UltAimLine } from "./render/UltAimLine";
 import {
 	applyWorld,
@@ -186,6 +188,7 @@ function intentFromAI(output: AIOutput): PlayerIntent {
 		face: output.face,
 		dash: output.dash,
 		ultimate: output.ultimate,
+		item: output.item,
 	};
 }
 
@@ -222,6 +225,8 @@ export class Match {
 	private readonly aimLine: AimLine;
 	private readonly ultAim: UltAimLine;
 	private readonly denyFx: DenyFx;
+	private readonly trappedFx: TrappedFx;
+	private readonly items: ItemFx;
 	private readonly input: Input;
 	private readonly diagnostics: PhysicsDiagnostics;
 	private readonly bullets: BulletSystem;
@@ -363,6 +368,13 @@ export class Match {
 		// fighter who denied the ultimate, and it must never be buried behind a
 		// sprite it is announcing.
 		this.denyFx = new DenyFx(stage.nameplates);
+		// And the TRAPPED caption, the Jumanji half of the same register — a trap
+		// springing is a moment worth shouting over the fighter it just caught.
+		this.trappedFx = new TrappedFx(stage.nameplates);
+		// The items: HE grenades fly in the projectile layer, their blasts in the
+		// effects layer, and the traps sit on the floor under the fighters — a
+		// pad you can see is the whole of the counterplay.
+		this.items = new ItemFx(stage.field, stage.effects, this.arena, stage);
 		this.bullets = new BulletSystem(
 			stage.projectiles,
 			tex(TEX.fireball),
@@ -570,6 +582,9 @@ export class Match {
 			hp: this.local.fighter.hp,
 			maxHp: this.local.fighter.maxHp,
 			ult: session ? session.localUlt : 0,
+			itemCharges: session ? session.localItemCharges : 0,
+			itemMaxCharges: kitFor(this.hero).item.maxCharges,
+			itemLabel: kitFor(this.hero).item.label,
 			stance: this.local.body.stance,
 			hero: this.hero,
 			foeHero: this.onlineMode
@@ -783,6 +798,22 @@ export class Match {
 					// counts it, because a deny is a first-class outcome there.
 					this.denyFx.deny(event.x, event.y);
 					this.training?.recordDeny();
+				},
+				onExplosion: (event) => {
+					// The blast, and nothing else: the damage already travelled in
+					// the state. The training room counts it, because an HE blast is
+					// a first-class outcome there.
+					this.items.explode(event.x, event.y, event.radius);
+					this.training?.recordExplosion();
+				},
+				onTrapped: (event) => {
+					// The caption and the burst, and nothing else: the lock already
+					// travelled in the victim's state. The burst is the trap going
+					// off — it is single-use, and the server has already removed it
+					// from the world. Pure presentation, exactly like a deny.
+					this.trappedFx.trapped(event.x, event.y);
+					this.items.trapBurst(event.x, event.y);
+					this.training?.recordTrapped();
 				},
 				onFighterAdded: (id) => this.addRemoteFighter(id),
 				onFighterRemoved: (id) => this.despawnFighter(id),
@@ -1018,6 +1049,9 @@ export class Match {
 			enemyPhys: this.onlineMode
 				? (this.online?.remoteState ?? null)
 				: (this.offlineFoe?.body ?? null),
+			// The item's charges, for the controls probe to read a binding off.
+			itemCharges: this.online?.localItemCharges ?? 0,
+			itemMaxCharges: kitFor(this.hero).item.maxCharges,
 			remote: this.onlineMode
 				? this.online?.remotePosition
 				: this.offlineFoe
@@ -1261,6 +1295,8 @@ export class Match {
 		meleeFxSystem(this.queries, this.fx, dtMs, (id) => this.ultAuraVisible(id));
 		this.fx.update(dtMs);
 		this.denyFx.update(dtMs);
+		this.trappedFx.update(dtMs);
+		this.updateItems(dtMs);
 		this.updateUltimate(dtMs);
 		this.stage.update(dtMs);
 		if (shot) this.applyReplayCamera(shot.shot, dtMs);
@@ -1306,18 +1342,43 @@ export class Match {
 	}
 
 	/**
-	 * Everything the ultimate draws: the meter, the grenade and the hole.
+	 * Everything the items draw: the HE grenades in flight, their blasts, and
+	 * the traps on the floor.
 	 *
-	 * Runs on every frame including the frozen ones — the cinematic stops the
-	 * *simulation*, and a cutscene during which the arena stopped animating would
-	 * look like the game had crashed rather than paused for effect.
-	 *
-	 * The victim list is derived with the same `fieldFor` + `singularityGrip` the
-	 * simulation uses, never with a radius the renderer keeps for itself. A hole
-	 * that visibly tears at somebody it is not holding is the most confusing thing
-	 * a field ability can do, and the only way to guarantee it cannot happen is to
-	 * ask the same function.
+	 * Runs on every frame including the frozen ones, like the ultimate. A
+	 * replay draws the items *it recorded*, not whatever the live match is
+	 * doing underneath — the same rule the black hole follows.
 	 */
+	private updateItems(dtMs: number) {
+		const session = this.online;
+		if (!session || this.potgSample) {
+			// No server (`?offline=true`) or a replay running: the recorded frames
+			// do not carry the item world state, so nothing is drawn — the same
+			// rule the black hole's replay follows, minus the recorded field.
+			this.items.syncHeGrenades([], this.itemClock);
+			this.items.syncTraps([], "", null);
+			this.items.update(dtMs);
+			return;
+		}
+
+		this.items.syncHeGrenades(session.heGrenades, session.renderClock);
+		this.items.syncTraps(session.traps, session.manager.myId, session.myTeam);
+		this.items.update(dtMs);
+
+		// The deck's item button carries the charge count, so it is told on the
+		// integer boundary — every snapshot — rather than on every frame.
+		const charges = session.localItemCharges;
+		if (charges !== this.lastItemCharges) {
+			this.lastItemCharges = charges;
+			EventBus.emit("item-charge", charges);
+		}
+	}
+
+	/** Last value pushed over `item-charge`, so the deck is told only on a change. */
+	private lastItemCharges = -1;
+
+	/** A render clock for the item effects in a replay, where there is no server. */
+	private itemClock = 0;
 	private updateUltimate(dtMs: number) {
 		// A replay draws the hole *it recorded*, not whatever the live match is
 		// doing underneath — the room keeps playing during the ceremony, and a
@@ -2032,7 +2093,9 @@ export class Match {
 		const foes: FoeInfo[] = [];
 		let selfTeam: TeamId | null = null;
 		let selfUltCharge = 0;
+		let selfItemCharges = 0;
 		const fields: { x: number; y: number; hostile: boolean }[] = [];
+		const traps: { x: number; y: number }[] = [];
 		let selfId = "local";
 		const enemyGrounded = foe.grounded;
 
@@ -2042,6 +2105,7 @@ export class Match {
 			selfId = myId;
 			selfTeam = session.myTeam;
 			selfUltCharge = session.localUlt;
+			selfItemCharges = session.localItemCharges;
 			for (const [id, fighter] of session.remotes) {
 				const d = Math.hypot(
 					fighter.state.x - self.x,
@@ -2076,6 +2140,11 @@ export class Match {
 					y: field.y,
 					hostile: fieldAffects(field, myId, selfTeam),
 				});
+			}
+			for (const trap of session.traps) {
+				if (trap.ownerId === myId) continue;
+				if (!hostile(trap.ownerTeam, selfTeam)) continue;
+				traps.push({ x: trap.x, y: trap.y });
 			}
 		} else if (this.offlineFoe) {
 			foes.push({
@@ -2130,6 +2199,8 @@ export class Match {
 			allies,
 			foes,
 			fields,
+			traps,
+			selfItemCharges,
 		};
 	}
 
@@ -2531,6 +2602,8 @@ export class Match {
 		this.fx.reset();
 		this.blackHole.reset();
 		this.denyFx.reset();
+		this.trappedFx.reset();
+		this.items.reset();
 		this.aimLine.reset();
 		this.ultAim.reset();
 		this.stage.reset();
@@ -2561,6 +2634,8 @@ export class Match {
 		this.aimLine.destroy();
 		this.ultAim.destroy();
 		this.denyFx.destroy();
+		this.trappedFx.destroy();
+		this.items.destroy();
 		this.training?.destroy();
 		this.online?.disconnect();
 	}

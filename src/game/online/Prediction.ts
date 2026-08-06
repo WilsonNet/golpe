@@ -10,6 +10,7 @@
  */
 
 import { type HeroKit, LIA_KIT } from "../simulation/Heroes";
+import type { Trap } from "../simulation/Items";
 import {
 	copyPlayerState,
 	createPlayerState,
@@ -179,6 +180,7 @@ export class PredictedPlayer {
 		intent: PlayerIntent,
 		dt: number,
 		field: Singularity | null = null,
+		traps: readonly Trap[] = [],
 	): number {
 		const seq = this.nextSeq++;
 		this.state = tickPlayer(
@@ -188,6 +190,7 @@ export class PredictedPlayer {
 			this.world,
 			field,
 			this.kit,
+			traps,
 		);
 		this.pending.push({ seq, intent: { ...intent } });
 		// Remember which buttons the stream has carried, so the frozen-tick
@@ -211,6 +214,7 @@ export class PredictedPlayer {
 		lastSeq: number,
 		dt: number,
 		field: Singularity | null = null,
+		traps: readonly Trap[] = [],
 	): ReconcileResult {
 		const predictedX = this.state.x;
 		const predictedY = this.state.y;
@@ -234,6 +238,7 @@ export class PredictedPlayer {
 				this.world,
 				field,
 				this.kit,
+				traps,
 			);
 		}
 		this.state = replayed;

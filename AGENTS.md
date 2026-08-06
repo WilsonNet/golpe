@@ -2,9 +2,9 @@
 
 An online-first 2D hero shooter: GunZ: The Duel's K-Style, rebuilt in two
 dimensions on a deterministic simulation shared by client and server. Every
-fighter is a **hero** — a composition of a melee weapon, a ranged weapon and a
-unique ultimate (see `specs/heroes.md`). Lia is the sword-and-pistol reference
-kit; Anands is the dagger storm (see `specs/anands.md`).
+fighter is a **hero** — a composition of a melee weapon, a ranged weapon, a
+unique ultimate and an item (see `specs/heroes.md`). Lia is the sword-and-pistol
+reference kit; Anands is the dagger storm (see `specs/anands.md`).
 
 **This file is an index.** It holds only what every session needs; everything
 else lives one link away and is loaded when it is actually relevant.
@@ -42,6 +42,7 @@ skill({ name: "feedback-loop" })    # the full workflow
 |---|---|
 | What should the game *do*? | [`specs/`](specs/README.md) — the source of truth |
 | Who are the heroes, and how do kits work? | [`specs/heroes.md`](specs/heroes.md) · [`specs/anands.md`](specs/anands.md) |
+| What are items, and how do charges work? | [`specs/items.md`](specs/items.md) |
 | What should the menu do? | [`specs/menu.md`](specs/menu.md) — when it shows, and how choices become URLs |
 | What happens when a match ends? | [`specs/play-of-the-game.md`](specs/play-of-the-game.md) — the reel, the camera edit, then the podium |
 | What rule will I break if I'm careless? | [`docs/invariants.md`](docs/invariants.md) |
@@ -100,6 +101,15 @@ One line each; the war story behind every one is in
 - **Changing hero resets the ultimate meter.** Ultimates are unique per hero,
   and a free dragon thrust would be a cheese. The Esc menu's hero change goes
   to the server (reliable); the echo comes home in the snapshot's `hero`.
+- **Item charges are a per-life resource, server-owned like the ultimate's
+  charge.** A use spends one charge on the press edge — there is no aim phase —
+  and the charges travel in the snapshot beside `ult`. They reset on respawn
+  and round reset, never in between; a hero change spends them for the new kit.
+  The trap's *lock* is `trapTimer` in `PlayerPosition` (both sides simulate it,
+  like `freezeTimer`); the trap is single-use — the server destroys it the tick
+  it springs, and the burst and "TRAPPED!" caption are the server's alone.
+  Friendly traps (your own and teammates') are drawn faded, so the side a mine
+  belongs to is read at a glance.
 - **Systems read the simulation and write only presentation.** A system that
   wrote back into `body` would change authoritative state outside `tickPlayer`.
 - **`specs/` is the source of truth.** Update it in the same commit.
@@ -257,8 +267,10 @@ part of what they must prove.
 **double-tap A/D** dash (melee stance) or tumble (gun stance) · **LMB** the
 melee weapon's attack (hold 2.5s then release = Massive Strike for Lia — a
 floor slam, or the plunge bomb if airborne) · **Shift** block (Lia) — or the
-**thrust**, a knockdown lunge (Anands: the dagger has no block) · **F**
-uppercut (Lia) — or the **shoryuken** anti-air (Anands) · **Q/E**
+**thrust**, a knockdown lunge (Anands: the dagger has no block) · **Space**
+uppercut (Lia) — or the **shoryuken** anti-air (Anands) · **F** the item —
+Lia's HE grenade, Anands' floor trap (2 and 3 uses per life; see
+[specs/items.md](specs/items.md)) · **Q/E**
 sword/gun stance · **P** toggle AI vs AI · **hold Tab** scoreboard · **Esc**
 menu. Sword is the default stance.
 

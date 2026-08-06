@@ -305,6 +305,13 @@ export const DECK_CSS = `
 .vg-btn.jump   { width: 42%; height: 42%; left: 0; top: 29%; }
 .vg-btn.upper  { width: 34%; height: 34%; left: 33%; top: 0; }
 .vg-btn.block  { width: 34%; height: 34%; left: 33%; bottom: 0; }
+/* The item button rides in the one corner the diamond leaves free — top-left —
+   in the item's olive so a thumb can find it without reading. */
+.vg-btn.item {
+	width: 30%; height: 30%; left: 2%; top: 3%;
+	background: radial-gradient(circle at 35% 28%, #6d8a4f, #33421f);
+	color: #eaf2d8;
+}
 
 /* ---- stance pills ----
    Where a handheld puts SELECT and START, and for the same reason: two things
