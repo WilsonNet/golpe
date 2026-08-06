@@ -41,6 +41,7 @@ import {
 	type MatchPhase,
 	matchEndReason,
 	matchWinner,
+	mvpOf,
 	RESPAWN_DELAY_MS,
 	SCORE_LIMIT,
 	type ScoreEntry,
@@ -130,7 +131,13 @@ import { TrainingDummy } from "./TrainingDummy.js";
 
 /** Per-fighter counters. Only the server sees a bullet connect, or a hit land through invincibility. */
 function newStats(): Omit<TrainingFighterStats, "hp"> {
-	return { bulletsFired: 0, bulletHits: 0, damageDealt: 0, damageTaken: 0 };
+	return {
+		bulletsFired: 0,
+		bulletHits: 0,
+		damageDealt: 0,
+		damageTaken: 0,
+		damageBlocked: 0,
+	};
 }
 
 /** The bomb's small horizontal shove off the crater, alongside the knockup. */
@@ -185,6 +192,12 @@ interface ConnectedPlayer {
 	/** Deathmatch score. */
 	kills: number;
 	deaths: number;
+	/**
+	 * Ultimate denies: a kill while the victim held the cast, or a guard that
+	 * caught the grenade. Both spent the caster's whole meter; both credit the
+	 * fighter who stopped it. The scoreboard's DENIES column.
+	 */
+	denies: number;
 	/**
 	 * Down and waiting to respawn.
 	 *
@@ -642,6 +655,7 @@ export class GameRoom {
 			hp,
 			kills: 0,
 			deaths: 0,
+			denies: 0,
 			alive: true,
 			respawnTimer: 0,
 			lastHurtBy: null,
@@ -1151,6 +1165,9 @@ export class GameRoom {
 			name: p.name,
 			kills: p.kills,
 			deaths: p.deaths,
+			damage: p.stats.damageDealt,
+			denies: p.denies,
+			blocked: p.stats.damageBlocked,
 			bot: p.brain !== null,
 			team: p.team,
 		}));
@@ -1242,6 +1259,7 @@ export class GameRoom {
 					x: killer.state.x + PLAYER_WIDTH / 2,
 					y: killer.state.y + PLAYER_HEIGHT / 2,
 				});
+				killer.denies++;
 			}
 		}
 		// The highlight reel, before the credit fields are cleared: every question
@@ -1422,6 +1440,10 @@ export class GameRoom {
 		attacker: { id: string; name: string } | null,
 	) {
 		if (amount <= 0) return;
+		// The scoreboard's BLOCKED column, counted at the one chokepoint every
+		// guard-turn passes through — a melee block and a bullet block must not
+		// disagree about what blocking is worth.
+		defender.stats.damageBlocked += amount;
 		defender.potgBurst.absorbed += amount;
 		if (defender.potgBurst.absorbed < POTG_ABSORB_BURST) return;
 		this.potg.note(
@@ -1499,8 +1521,12 @@ export class GameRoom {
 				: null;
 
 		if (this.mode === "tdm") {
+			// The MVP is the side's most valuable fighter by weighted whole-match
+			// stats, not necessarily the frags leader — the same `mvpOf` the client
+			// uses, so the log and the ceremony cannot disagree.
+			const mvp = mvpOf(standings);
 			console.log(
-				`[MATCH] ${this.id} over by ${reason}: ${teamName(this.winnerTeam) || "nobody"} wins ${this.teamScores.join("-")} (MVP ${winner?.name ?? "nobody"})`,
+				`[MATCH] ${this.id} over by ${reason}: ${teamName(this.winnerTeam) || "nobody"} wins ${this.teamScores.join("-")} (MVP ${mvp?.name ?? "nobody"})`,
 			);
 		} else {
 			console.log(
@@ -1656,6 +1682,9 @@ export class GameRoom {
 				input: p.simulatedIntent ? packIntent(p.simulatedIntent) : null,
 				kills: p.kills,
 				deaths: p.deaths,
+				damage: p.stats.damageDealt,
+				denies: p.denies,
+				blocked: p.stats.damageBlocked,
 				alive: p.alive,
 				// Beside `hp` rather than in the roster: teams are an argument to the
 				// client's own `tickPlayer` — see `SnapshotPlayer`.
@@ -2339,6 +2368,7 @@ export class GameRoom {
 						x: player.state.x + PLAYER_WIDTH / 2,
 						y: player.state.y + PLAYER_HEIGHT / 2,
 					});
+					player.denies++;
 					denied = true;
 					break;
 				}

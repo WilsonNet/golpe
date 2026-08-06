@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { pickSpawn, SPAWN_POINTS } from "./Arena.js";
 import {
+	MVP_BLOCKED_PER_BURST,
+	MVP_DAMAGE_PER_BURST,
+	MVP_STAT_BURST,
 	matchEndReason,
 	matchWinner,
+	mvpOf,
+	mvpScore,
 	rankScores,
 	SCORE_LIMIT,
 	type ScoreEntry,
@@ -12,7 +17,16 @@ import {
 import { PLAYER_HEIGHT, PLAYER_WIDTH, penetrationDepth } from "./Physics.js";
 
 function entry(id: string, kills: number, deaths = 0, name = id): ScoreEntry {
-	return { id, name, kills, deaths, bot: false };
+	return {
+		id,
+		name,
+		kills,
+		deaths,
+		bot: false,
+		damage: 0,
+		denies: 0,
+		blocked: 0,
+	};
 }
 
 describe("rankScores", () => {
@@ -53,6 +67,48 @@ describe("rankScores", () => {
 	it("handles an empty match", () => {
 		expect(rankScores([])).toEqual([]);
 		expect(matchWinner([])).toBeNull();
+	});
+});
+
+describe("mvpScore", () => {
+	/**
+	 * The whole point of the MVP: the frags leader is not automatically the
+	 * most valuable fighter. Two denies — each worth more than a frag — must be
+	 * able to overtake a one-frag lead when the rest of the field is level.
+	 */
+	it("lets denies outweigh a frag lead", () => {
+		const fragger = entry("a", 8, 3);
+		const denier = { ...entry("b", 7, 4), denies: 2 };
+		expect(mvpScore(denier)).toBeGreaterThan(mvpScore(fragger));
+		expect(mvpOf([fragger, denier])?.id).toBe("b");
+	});
+
+	it("prices damage and blocked damage in bursts, not points", () => {
+		// 99 damage is no burst; 100 is one. Points must never round-trip as a
+		// float that two clients could disagree about.
+		expect(mvpScore(entry("a", 0, 0, "A"))).toBe(
+			mvpScore({ ...entry("a", 0, 0, "A"), damage: 99 }),
+		);
+		expect(mvpScore({ ...entry("a", 0, 0, "A"), damage: 100 })).toBe(
+			MVP_DAMAGE_PER_BURST,
+		);
+		expect(
+			mvpScore({ ...entry("a", 0, 0, "A"), blocked: MVP_STAT_BURST }),
+		).toBe(MVP_BLOCKED_PER_BURST);
+	});
+
+	it("stays integer for four-digit damage", () => {
+		const score = mvpScore({ ...entry("a", 12, 5, "A"), damage: 4860 });
+		expect(Number.isInteger(score)).toBe(true);
+	});
+
+	it("is independent of input order, like rankScores", () => {
+		const entries = [
+			{ ...entry("a", 4, 4, "Ana"), damage: 900, denies: 2, blocked: 300 },
+			{ ...entry("b", 5, 5, "Bo"), damage: 300, blocked: 900 },
+			{ ...entry("c", 4, 3, "Cy"), denies: 1, blocked: 100 },
+		];
+		expect(mvpOf(entries)?.id).toBe(mvpOf([...entries].reverse())?.id);
 	});
 });
 

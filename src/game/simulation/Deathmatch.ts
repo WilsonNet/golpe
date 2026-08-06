@@ -72,6 +72,22 @@ export interface ScoreEntry {
 	/** True for a server-hosted bot, so the UI can say so. */
 	bot: boolean;
 	/**
+	 * Damage points dealt, counted by the server only — no client sees a hit
+	 * land. Travels in the snapshot beside the frags, like they do.
+	 */
+	damage: number;
+	/**
+	 * Ultimate denies: a kill while the victim held the cast, or a guard that
+	 * caught the grenade. Both spent the caster's whole meter, and both credit
+	 * the fighter who stopped them.
+	 */
+	denies: number;
+	/**
+	 * Damage the sword guard turned away. "Blocked", never "absorbed": it is
+	 * what a defender took off their own HP bar.
+	 */
+	blocked: number;
+	/**
 	 * Which side, in team deathmatch. `null` in a free-for-all, and absent from
 	 * anything that predates teams.
 	 *
@@ -108,6 +124,59 @@ export function rankScores(entries: readonly ScoreEntry[]): Standing[] {
 				a.id.localeCompare(b.id),
 		)
 		.map((entry, i) => ({ ...entry, place: i + 1 }));
+}
+
+/**
+ * MVP weights: the Play-of-the-Game table applied to a whole match.
+ *
+ * The two honours must agree about what is worth remembering. A frag is the
+ * unit; a **deny** outscores it outright because taking somebody's ultimate
+ * away is the rarest thing in the game; damage and blocked damage are
+ * burst-priced and cheap, because they *colour* a performance — a fighter who
+ * merely farmed a health bar of damage should never out-score one who closed
+ * a kill. Kills stay the largest part of the score; these numbers decide the
+ * order behind the frag leader, and are the whole reason a TDM support with
+ * three denies can be the MVP over their side's cleanest fragger.
+ */
+const MVP_KILL_WEIGHT = 100;
+const MVP_DENY_WEIGHT = 140;
+export const MVP_DAMAGE_PER_BURST = 20;
+export const MVP_BLOCKED_PER_BURST = 10;
+/** Damage points per burst for the two burst rows, like `POTG_DAMAGE_BURST`. */
+export const MVP_STAT_BURST = 100;
+
+/**
+ * One fighter's whole-match worth. Integer arithmetic only — damage runs to
+ * four digits, and floating point is how two clients end up disagreeing about
+ * a tie.
+ */
+export function mvpScore(entry: ScoreEntry): number {
+	return (
+		entry.kills * MVP_KILL_WEIGHT +
+		entry.denies * MVP_DENY_WEIGHT +
+		Math.floor(entry.damage / MVP_STAT_BURST) * MVP_DAMAGE_PER_BURST +
+		Math.floor(entry.blocked / MVP_STAT_BURST) * MVP_BLOCKED_PER_BURST
+	);
+}
+
+/**
+ * The most valuable fighter of the match, not the one who happened to land the
+ * most frags. Frags still lead, and the tie-break chain is the same total one
+ * `rankScores` uses, so two clients cannot disagree about who it is.
+ */
+export function mvpOf(entries: readonly ScoreEntry[]): Standing | null {
+	if (entries.length === 0) return null;
+	const ranked = [...entries]
+		.sort(
+			(a, b) =>
+				mvpScore(b) - mvpScore(a) ||
+				b.kills - a.kills ||
+				a.deaths - b.deaths ||
+				a.name.localeCompare(b.name) ||
+				a.id.localeCompare(b.id),
+		)
+		.map((entry, i) => ({ ...entry, place: i + 1 }));
+	return ranked[0] ?? null;
 }
 
 /**

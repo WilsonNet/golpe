@@ -156,7 +156,13 @@ A human types a name before their client connects, and it is remembered in
 - **Hold Tab:** the full scoreboard, as a DOM overlay. Held rather than toggled,
   because a scoreboard you press twice is one you leave open over a fight.
   Released on window blur as well as on key-up, since switching windows mid-hold
-  never delivers a key-up.
+  never delivers a key-up. Each row carries the frags, the deaths, and the three
+  stats only the server can count — **damage dealt, ultimate denies, and damage
+  the guard turned away** ("Blocked", never "absorbed": it is what a defender
+  took off their own HP bar). The stat columns are cumulative match totals, and
+  they travel in the snapshot beside the frags for the same reason those do: a
+  client cannot derive any of them from prediction, and a scoreboard row that
+  quietly stayed at zero would be worse than no row.
 - **The ending is four beats, and the podium is the last one.** First: a few
   seconds of breathing — the arena holds the last moment, and nothing is said
   about it. Then the **victory card** (VICTORY or DEFEAT, who it belongs to,

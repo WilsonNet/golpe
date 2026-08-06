@@ -290,10 +290,17 @@ still exactly right there and is unchanged.
   the side's round score and how many of it are still standing. The order *inside*
   a block is `rankScores`'s, untouched — the standings are ranked once, by the
   same pure function the server uses, and re-sorting here is how a live scoreboard
-  ends up disagreeing with the podium it turns into.
+  ends up disagreeing with the podium it turns into. The rows carry the same stat
+  columns a free-for-all's do — damage dealt, denies, damage blocked — because
+  they are the whole evidence a teammate was carrying a side that lost.
 - **Match over:** the podium leads with **the side that won** and the final round
   score, and names the top individual as MVP underneath. The match was won by a
-  team; the MVP is the footnote. A timed match that ends level says `DRAW`.
+  team; the MVP is the footnote. The MVP is `mvpOf`, a weighted whole-match
+  score — frags, then denies at more than a frag apiece, then damage and blocked
+  damage in cheap health-bar bursts, the same values the Play of the Game
+  weights moments with — so the support who denied two ultimates can carry the
+  line over their side's cleanest fragger. A timed match that ends level says
+  `DRAW`.
 
 ## Verification
 

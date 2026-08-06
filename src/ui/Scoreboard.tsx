@@ -130,6 +130,15 @@ export function ScoreTable({
 					<th>Fighter</th>
 					<th className="vd-num">Frags</th>
 					<th className="vd-num">Deaths</th>
+					<th className="vd-num" title="Damage dealt">
+						DMG
+					</th>
+					<th className="vd-num" title="Ultimates taken away">
+						Denies
+					</th>
+					<th className="vd-num" title="Damage the guard turned away">
+						Blocked
+					</th>
 				</tr>
 			</thead>
 			<tbody>
@@ -142,6 +151,9 @@ export function ScoreTable({
 						</td>
 						<td className="vd-num">{s.kills}</td>
 						<td className="vd-num">{s.deaths}</td>
+						<td className="vd-num">{s.damage}</td>
+						<td className="vd-num">{s.denies}</td>
+						<td className="vd-num">{s.blocked}</td>
 					</tr>
 				))}
 			</tbody>

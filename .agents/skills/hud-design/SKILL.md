@@ -86,6 +86,13 @@ measurement. Never mix in `px` for layout (hairlines at 1-2px are fine).
   round score and standing count; the order inside a block is `rankScores`'s,
   untouched. The podium leads with the winning side and demotes the top fighter
   to an MVP line.
+- **The scoreboard rows carry seven columns**: place, name, frags, deaths, and
+  the three server-only stats — **DMG, DENIES, BLOCKED** ("Blocked", never
+  "absorbed"). They travel in the snapshot beside kills/deaths (a client cannot
+  derive them), and the podium's MVP is `mvpOf` — a weighted whole-match score,
+  not the frags leader: the support who denied two ultimates can carry the line.
+  The same weights are what the Play of the Game prices moments with, so the two
+  honours never disagree about what is worth remembering.
 
 ## The design language
 

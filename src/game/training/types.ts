@@ -202,6 +202,8 @@ export interface TrainingFighterStats {
 	bulletHits: number;
 	damageDealt: number;
 	damageTaken: number;
+	/** Damage the sword guard turned away. */
+	damageBlocked: number;
 	hp: number;
 }
 

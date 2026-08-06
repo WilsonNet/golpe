@@ -12,7 +12,7 @@
  * of the table rather than being three more rows in it.
  */
 
-import { rankScores } from "../game/simulation/Deathmatch";
+import { mvpOf, rankScores } from "../game/simulation/Deathmatch";
 import { TEAM_NAMES } from "../game/simulation/Teams";
 import { teamCss } from "../game/teamPalette";
 import { HUD_CSS } from "./hudStyles";
@@ -76,8 +76,12 @@ export function MatchOver() {
 	// A team match was won by a side. The MVP still gets the middle of the podium
 	// — somebody carried it and that is worth showing — but the headline is the
 	// side, because that is what everybody in the room was actually playing for.
+	// The named MVP is `mvpOf`, not the podium's top row: the side's most
+	// valuable fighter can be the support with the denies, not the cleanest
+	// fragger.
 	const team = over.winnerTeam ?? null;
 	const teamScores = over.teamScores ?? null;
+	const mvp = mvpOf(standings) ?? podium[0];
 
 	return (
 		<div className="vd-veil">
@@ -98,7 +102,7 @@ export function MatchOver() {
 							{over.reason === "time" ? "  ·  time" : ""}
 						</div>
 						<p className="vd-sub">
-							{winner ? `MVP: ${winner.name}, ${winner.kills} frags.` : ""}
+							{mvp ? `MVP: ${mvp.name}, ${mvp.kills} frags.` : ""}
 						</p>
 					</>
 				) : (

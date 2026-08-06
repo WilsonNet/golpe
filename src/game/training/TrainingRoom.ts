@@ -415,6 +415,7 @@ export class TrainingRoom {
 					bulletHits: 0,
 					damageDealt: 0,
 					damageTaken: 0,
+					damageBlocked: 0,
 					hp: this.deps.localHp(),
 				},
 				dummy: {
@@ -422,6 +423,7 @@ export class TrainingRoom {
 					bulletHits: 0,
 					damageDealt: 0,
 					damageTaken: 0,
+					damageBlocked: 0,
 					hp: 0,
 				},
 			},

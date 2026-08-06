@@ -71,6 +71,10 @@ interface FighterInfo {
 	hp: number;
 	kills: number;
 	deaths: number;
+	/** The scoreboard's stat columns: damage dealt, denies, guard-blocked. */
+	damage: number;
+	denies: number;
+	blocked: number;
 	alive: boolean;
 	/** Ultimate charge, 0..100. Server-owned; the client only draws it. */
 	ult: number;
@@ -85,7 +89,17 @@ interface FighterInfo {
 }
 
 function newInfo(): FighterInfo {
-	return { hp: 100, kills: 0, deaths: 0, alive: true, ult: 0, team: null };
+	return {
+		hp: 100,
+		kills: 0,
+		deaths: 0,
+		damage: 0,
+		denies: 0,
+		blocked: 0,
+		alive: true,
+		ult: 0,
+		team: null,
+	};
 }
 
 export interface OnlineCallbacks {
@@ -395,6 +409,9 @@ export class OnlineSession {
 				name: roster?.name ?? id,
 				kills: info.kills,
 				deaths: info.deaths,
+				damage: info.damage,
+				denies: info.denies,
+				blocked: info.blocked,
 				bot: roster?.bot ?? false,
 				team: info.team,
 			});
@@ -878,6 +895,9 @@ export class OnlineSession {
 		info.hp = p.hp;
 		info.kills = p.kills;
 		info.deaths = p.deaths;
+		info.damage = p.damage;
+		info.denies = p.denies;
+		info.blocked = p.blocked;
 		info.alive = p.alive;
 		info.ult = p.ult ?? 0;
 		info.team = p.team ?? null;

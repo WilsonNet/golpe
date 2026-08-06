@@ -25,6 +25,7 @@
 import { useEffect, useState } from "react";
 import { EventBus } from "../game/EventBus";
 import type { MatchOverMsg } from "../game/online/types";
+import { mvpOf } from "../game/simulation/Deathmatch";
 import type { TeamId } from "../game/simulation/Teams";
 import { TEAM_NAMES } from "../game/simulation/Teams";
 import { teamCss } from "../game/teamPalette";
@@ -78,6 +79,9 @@ export function VictoryCard() {
 	const winnerTeam = over?.winnerTeam ?? null;
 	const winner =
 		(over?.standings.find((s) => s.id === over.winnerId) ?? null) || null;
+	// A team match was won by a side; the MVP is who carried it, which is the
+	// whole-match weighted score, not necessarily the cleanest fragger.
+	const mvp = over ? mvpOf(over.standings) : null;
 
 	// The line under the word: the fighter or side it belongs to. A team win is
 	// tinted in the side's colour; a personal one in the card's own accent.
@@ -94,8 +98,8 @@ export function VictoryCard() {
 		} else {
 			line = `${TEAM_NAMES[winnerTeam]} WIN`;
 			lineColor = teamCss(winnerTeam);
-			sub = winner
-				? `MVP: ${winner.name}${winner.id === info.myId ? " — you" : ""}`
+			sub = mvp
+				? `MVP: ${mvp.name}${mvp.id === info.myId ? " — you" : ""}`
 				: "";
 		}
 	} else if (over && winner) {

@@ -116,6 +116,17 @@ export interface SnapshotPlayer {
 	input: PackedIntent | null;
 	kills: number;
 	deaths: number;
+	/**
+	 * The scoreboard's stat columns, server-counted like the scores: damage
+	 * dealt, ultimate denies and damage the guard turned away.
+	 *
+	 * In the snapshot for the same reason `kills` is: only the server sees a
+	 * hit land, so a client cannot derive any of these from prediction — and a
+	 * scoreboard row that quietly stayed at zero would be worse than no row.
+	 */
+	damage: number;
+	denies: number;
+	blocked: number;
 	alive: boolean;
 	/**
 	 * Which side this fighter is on, or `null` in a free-for-all.

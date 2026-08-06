@@ -148,7 +148,9 @@ export const HUD_CSS = `
 	border: 1px solid rgba(255, 255, 255, 0.2);
 	border-radius: 10px;
 	padding: 20px 24px;
-	min-width: 460px;
+	/* Six columns now (frags, deaths, damage, denies, blocked) — the four
+	   original ones fit 460px, the stat rows want a hair more. */
+	min-width: 580px;
 	max-height: 88vh;
 	overflow-y: auto;
 }
