@@ -38,10 +38,14 @@ const STAB_BEATS: MeleeBeat[] = [
 	{ ms: 80 },
 ];
 
-/** A committed thrust: the block press *is* the move. One press, then wait it out. */
+/**
+ * A committed thrust: the block press *is* the move. One press, then wait out
+ * the whole 880ms of it — the anticipation, the dash and the recovery — before
+ * deciding anything again, so a thrust chain is never a spam.
+ */
 const THRUST_BEATS: MeleeBeat[] = [
 	{ ms: 55, press: { block: true } },
-	{ ms: 460 },
+	{ ms: 825 },
 ];
 
 /** The shoryuken: one uppercut press, then the recovery. */
@@ -177,7 +181,7 @@ export class DaggerBrain {
 
 		// The spacing read: a grounded foe in the lunge's band, not doing
 		// anything that would stop a lunge landing. The anticipation is the
-		// trade — a foe who reads it jumps the line and the dagger eats 320ms
+		// trade — a foe who reads it jumps the line and the dagger eats 480ms
 		// of recovery — so this is rolled, never held. Without it, dagger-vs-
 		// dagger duels are all stabs and the thrust never exists at all.
 		if (

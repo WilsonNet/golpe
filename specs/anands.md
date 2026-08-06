@@ -26,7 +26,7 @@ ultimate — is simply absent here, and the dagger's answer is to hit first.
 | Move | Startup | Active | Recovery | Total | Damage | Reach | Blockable | Cancellable |
 |---|---|---|---|---|---|---|---|---|
 | **Stab** | 45ms | 55ms | 90ms | 190ms | 5 | 30px | **yes** | **yes** |
-| **Thrust** | 260ms | 140ms | 320ms | 720ms | 16 | sweep | **no** | **no** |
+| **Thrust** | 260ms | 140ms | 480ms | 880ms | 16 | sweep | **no** | **no** |
 | **Shoryuken** | 90ms | 140ms | 320ms | 550ms | 8 | 34px, tall | **yes** | **no** |
 
 On hit:
@@ -53,7 +53,10 @@ On hit:
   jumps during the wind-up is over the line when it arrives. What the
   anticipation buys is the rest of the move: unblockable, unparryable, hitting
   **everyone in the path** (the one melee move that does), and knocking them
-  down for a full second and a half. It does not fall in the air — `selfVx`
+  down for a full second and a half. The 480ms recovery is the cost of that
+  power and the thing that keeps thrust spam honest: a whiff is a walk-in, and
+  back-to-back thrusts are a choice a foe can punish, not a rhythm to lean on.
+  It does not fall in the air — `selfVx`
   pins the dash like a dash pins its line — so an airborne thrust is a flat
   lunge across the arena.
 - **The shoryuken is an anti-air with a gate.** Its hitbox starts 52px above

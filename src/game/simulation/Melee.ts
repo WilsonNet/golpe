@@ -332,10 +332,11 @@ export const MOVES: Record<MeleeMove, MoveDef> = {
 		/** The dash. `selfVx` carries the body; the hitbox sweeps the path. */
 		activeMs: 140,
 		/**
-		 * The commitment. A whiffed thrust is a 320ms walk-in for the foe who
-		 * jumped it.
+		 * The commitment. A whiffed thrust is a 480ms walk-in for the foe who
+		 * jumped it — long enough that a thrust chain reads as a choice, not a
+		 * spam.
 		 */
-		recoveryMs: 320,
+		recoveryMs: 480,
 		/**
 		 * Strong to compensate for the lack of a guard: this is the dagger's
 		 * heavy, and it out-damages the chain's finisher while being far more
