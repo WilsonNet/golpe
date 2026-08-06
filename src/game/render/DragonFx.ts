@@ -1,42 +1,61 @@
 /**
- * The dragon thrust's trail: the golden serpent that follows the rider.
+ * The dragon thrust: a spectral golden serpent, in the spirit of Hanzo's
+ * ultimate — a face leading a body of light.
  *
  * Pure presentation, like every effect: it reads the rider's *drawn* position
  * and velocity from `Match`, and it writes nothing back. The simulation does
  * not know a dragon is being drawn — it only knows the ride timer, which is
  * exactly the division the whole architecture rests on.
  *
- * The dragon is a chain of body segments that follows the rider's path like a
- * wake: each segment chases the one ahead of it, the head leads at the rider,
- * and the whole chain is rotated along the ride's direction. Gold and red,
- * baked rather than tinted — the black hole's art precedent: a tint cannot
- * carry gold.
+ * The read, in order: a solid, detailed **head** (horns, glowing eye, red
+ * mane) leading a body-length ahead of the rider; a **body of light** — many
+ * segments chained behind it, additive-blended so they glow over the arena,
+ * tapering to a fading tail; **energy motes** streaming backward along the
+ * whole body; and a **mane wake** shedding off the head. When the ride ends
+ * the body collapses quickly and the glow is gone — the dragon is an instant,
+ * not a resident.
  */
 
 import { Container, Sprite } from "pixi.js";
 import { TEX, tex } from "./assets";
 import { ParticleSystem } from "./Particles";
-import type { Stage } from "./Stage";
 
-/** How many body segments trail the head. Each is one scale arc. */
-const SEGMENTS = 7;
-/** How fast the wake's far end fades out. */
-const FADE_PER_MS = 1 / 260;
-/** Cadence of the golden spark emissions while riding. */
-const SPARK_EVERY_MS = 22;
-/** The head is bigger than the body — it is the face of the move. */
-const HEAD_SCALE = 1.25;
-const BODY_SCALE = 1.0;
+/** How many body segments trail the head. Each is one thick gold plate. */
+const SEGMENTS = 26;
+/** How fast the wake dissolves after the ride ends. */
+const FADE_PER_MS = 1 / 60;
+/** Cadence of the tail sparks while riding. */
+const SPARK_EVERY_MS = 18;
+/** Cadence of the energy motes streaming along the body. */
+const MOTE_EVERY_MS = 10;
+/** Cadence of the mane sparks shedding off the head. */
+const MANE_EVERY_MS = 24;
+/** The head's size against its texture. */
+const HEAD_SCALE = 2.4;
+/** The head leads this far ahead of the rider, so the player stays visible. */
+const HEAD_LEAD_PX = 52;
+/** How fast the body's sine wave travels along it — the serpentine motion. */
+const WAVE_SPEED = 0.008;
 
 export class DragonFx {
 	/** Where the rider is and how they are travelling, or null when no ride. */
 	private rider: { x: number; y: number; vx: number; vy: number } | null = null;
 	private alpha = 0;
 	private sparkAccMs = 0;
+	private moteAccMs = 0;
+	private maneAccMs = 0;
+	/** The body's sine-wave phase — the undulation travels while riding. */
+	private wavePhase = 0;
+	/** The body and glow: behind the fighters, so the rider rides over them. */
 	private readonly node: Container;
+	/** The head and mane: in front, leading far enough ahead not to cover. */
+	private readonly frontNode: Container;
 	/** The segment sprites, tail first — index 0 is the farthest behind. */
 	private readonly segments: Sprite[] = [];
 	private readonly head: Sprite;
+	private readonly headGlow: Sprite;
+	/** The red-gold mane wake streaming off the back of the head. */
+	private readonly mane: Sprite;
 	private readonly particles: ParticleSystem;
 	/** Each segment's own chase lag, in px. */
 	private readonly lag: number[] = [];
@@ -44,44 +63,82 @@ export class DragonFx {
 	private readonly chain: { x: number; y: number }[] = [];
 
 	constructor(
-		private readonly stage: Stage,
+		fieldLayer: Container,
+		effectsLayer: Container,
 		particles?: ParticleSystem,
 	) {
-		// The serpent sits *behind* the fighter it is carrying — the rider is
-		// the head of the dragon, and a head with a body drawn over it would be
-		// a head with no body.
+		// Two layers, like the black hole: the glow and the body sit *behind*
+		// the fighters (field), so the rider rides over the serpent instead of
+		// being buried inside it; the head, the mane and the motes sit in
+		// front (effects), and the head leads far enough ahead that it never
+		// covers the player it is carrying.
 		this.node = new Container();
 		this.node.visible = false;
 		this.node.alpha = 0;
-		stage.effects.addChild(this.node);
+		fieldLayer.addChild(this.node);
 
-		this.head = new Sprite(tex(TEX.dragonHead));
-		this.head.anchor.set(0.4, 0.5);
-		this.head.scale.set(HEAD_SCALE, HEAD_SCALE);
-		this.node.addChild(this.head);
+		// The halo: a soft gold aura behind the head. Painted gold, never the
+		// white halo disc — the white disc's stacked fills read as a white
+		// blast over the bright sky, and a head lit by a blast is a head you
+		// cannot see.
+		this.headGlow = new Sprite(tex(TEX.dragonGlow));
+		this.headGlow.anchor.set(0.5);
+		this.headGlow.scale.set(1.5, 1.5);
+		this.headGlow.alpha = 0.6;
+		this.node.addChild(this.headGlow);
 
 		for (let i = 0; i < SEGMENTS; i++) {
 			const segment = new Sprite(tex(TEX.dragonBody));
 			segment.anchor.set(0.5, 0.5);
-			segment.scale.set(BODY_SCALE, BODY_SCALE);
+			// The body is **painted**, not additive: the sky is bright, and
+			// additive gold washes to white over it (the same rule that forced
+			// the ultimate aura to be painted). Painted gold stays gold; the
+			// bloom comes from the motes and the head's halo instead.
 			this.node.addChild(segment);
 			this.segments.push(segment);
-			this.lag.push(16 + i * 9);
+			// A dense serpent: the plates sit closer than their width, so the
+			// whole body is one overlapped band with no sky between — even on
+			// the inside of a curve.
+			this.lag.push(14 + (i % 3) * 3);
 			this.chain.push({ x: 0, y: 0 });
 		}
 
-		this.particles = particles ?? new ParticleSystem(stage.effects);
+		// The head and the mane ride in front — above the fighters — and lead
+		// far enough ahead that they never cover the rider.
+		this.frontNode = new Container();
+		this.frontNode.visible = false;
+		effectsLayer.addChild(this.frontNode);
+
+		this.head = new Sprite(tex(TEX.dragonHead));
+		this.head.anchor.set(0.2, 0.5);
+		this.head.scale.set(HEAD_SCALE, HEAD_SCALE);
+		this.frontNode.addChild(this.head);
+
+		// The mane wake: a red-gold wisp streaming off the back of the head.
+		// Painted, for the same reason the halo is — additive washes on the
+		// bright sky.
+		this.mane = new Sprite(tex(TEX.dragonMane));
+		this.mane.anchor.set(0.5, 0.5);
+		this.mane.tint = 0xff7a4d;
+		this.mane.scale.set(3.2, 3.2);
+		this.mane.alpha = 0.6;
+		this.frontNode.addChild(this.mane);
+
+		this.particles = particles ?? new ParticleSystem(effectsLayer);
 	}
 
 	/** A ride started (or the rider changed). */
 	setRider(rider: { x: number; y: number; vx: number; vy: number }) {
 		this.rider = rider;
 		this.alpha = 1;
-		// The node starts at alpha 0 (it fades in and out), so making the
-		// dragon visible means applying the alpha to the node itself — the
-		// first version set the field and left the node transparent forever.
+		// The nodes start at alpha 0 (they fade in and out), so making the
+		// dragon visible means applying the alpha to the nodes themselves —
+		// the first version set the field and left the nodes transparent
+		// forever.
 		this.node.alpha = 1;
 		this.node.visible = true;
+		this.frontNode.alpha = 1;
+		this.frontNode.visible = true;
 		// The chain starts coiled behind the rider along the launch line, so
 		// the first frames read as a dragon arriving rather than a dragon
 		// assembling.
@@ -90,8 +147,8 @@ export class DragonFx {
 		const ny = rider.vy / len;
 		for (let i = 0; i < SEGMENTS; i++) {
 			this.chain[i] = {
-				x: rider.x - nx * (this.lag[i] ?? 16) * 2,
-				y: rider.y - ny * (this.lag[i] ?? 16) * 2,
+				x: rider.x - nx * (this.lag[i] ?? 20) * 2,
+				y: rider.y - ny * (this.lag[i] ?? 20) * 2,
 			};
 		}
 	}
@@ -110,57 +167,74 @@ export class DragonFx {
 		dtMs: number,
 	) {
 		if (rider) this.setRider(rider);
+		else this.rider = null;
 		if (!this.rider) {
-			// Fade out after the ride ends instead of popping.
+			// Dissolve instead of popping — but fast, and the motes die with
+			// the ride: the dragon is an instant, not a resident.
 			if (this.alpha > 0) {
 				this.alpha = Math.max(0, this.alpha - FADE_PER_MS * dtMs);
 				this.node.alpha = this.alpha;
-				if (this.alpha <= 0) this.node.visible = false;
+				this.frontNode.alpha = this.alpha;
+				if (this.alpha <= 0) {
+					this.node.visible = false;
+					this.frontNode.visible = false;
+				}
 			}
+			this.particles.clear();
 			this.particles.update(dtMs);
 			return;
 		}
 
 		this.alpha = 1;
 		this.node.visible = true;
+		this.frontNode.visible = true;
+		this.wavePhase += dtMs * WAVE_SPEED;
 
 		const { x, y, vx, vy } = this.rider;
 		const len = Math.hypot(vx, vy) || 1;
 		const nx = vx / len;
 		const ny = vy / len;
+		const angle = Math.atan2(vy, vx);
 
-		// The head leads at the rider, angled down the line — but a full body
-		// ahead, never on top of them: the rider is the head of the dragon, and
-		// a head drawn over the rider's sprite would hide the player the move
-		// belongs to.
-		this.head.position.set(x + nx * 18, y + ny * 6);
-		this.head.rotation = Math.atan2(vy, vx);
-		// A little bob against the direction of travel — the head rides the
-		// current, it does not pull it.
-		this.head.y += Math.sin((this.stage.cameraX + x) * 0.02) * 1.5;
+		// The head leads ahead of the rider, angled down the line — never on
+		// top of them: the rider is the head of the dragon, and a head drawn
+		// over the player's sprite would hide the fighter the move belongs to.
+		this.head.position.set(x + nx * HEAD_LEAD_PX, y + ny * 6);
+		this.head.rotation = angle;
+		this.headGlow.position.set(x + nx * HEAD_LEAD_PX - nx * 6, y + ny * 6);
+		this.mane.position.set(x + nx * (HEAD_LEAD_PX - 26), y + ny * 6);
+		this.mane.rotation = angle;
 
-		// Each segment chases the one ahead: the wake. The farthest one is
-		// dimmest, so the tail reads as distance rather than as more heads.
-		let prevX = x;
-		let prevY = y;
+		// Each segment is placed **exactly** behind the one ahead — no chase,
+		// or a ride this fast would leave the tail behind and the body would
+		// read as a few beads near the head. The body is one unit behind the
+		// head, like Hanzo's: always fully formed. A sine wave rides along it —
+		// the perpendicular offset grows toward the tail — so the serpent
+		// visibly coils as it travels.
+		let prevX = x + nx * HEAD_LEAD_PX;
+		let prevY = y + ny * 6;
 		for (let i = 0; i < SEGMENTS; i++) {
+			const lag = this.lag[i] ?? 20;
+			// The wave: two wide, slow curves along the whole length, growing
+			// toward the tail — the body sweeps, it does not wiggle.
+			const wave = Math.sin(i * 0.4 + this.wavePhase) * (24 + i * 4);
 			const p = this.chain[i]!;
-			const targetX = prevX - nx * (this.lag[i] ?? 16);
-			const targetY = prevY - ny * (this.lag[i] ?? 16);
-			p.x += (targetX - p.x) * 0.35;
-			p.y += (targetY - p.y) * 0.35;
+			p.x = prevX - nx * lag - ny * wave;
+			p.y = prevY - ny * lag + nx * wave;
 			const segment = this.segments[i]!;
 			segment.position.set(p.x, p.y);
-			segment.rotation = Math.atan2(targetY - p.y, targetX - p.x);
+			segment.rotation = Math.atan2(p.y - prevY, p.x - prevX);
 			const t = (SEGMENTS - i) / SEGMENTS;
-			segment.alpha = 0.35 + 0.6 * t;
-			segment.scale.set(BODY_SCALE * (0.7 + 0.4 * t));
+			// Dense and even: one continuous serpent — fully opaque scales
+			// overlapping so no sky shows through, tapering clearly from the
+			// thick chest behind the head to the thin tail.
+			segment.alpha = 1;
+			segment.scale.set(1.2 * (0.45 + 0.55 * t));
 			prevX = p.x;
 			prevY = p.y;
 		}
 
-		// The wake: golden sparks shedding off the tail, and a soft mane wisp
-		// streaming off the head.
+		// The tail sparks: golden-red embers shedding off the last segment.
 		this.sparkAccMs += dtMs;
 		while (this.sparkAccMs >= SPARK_EVERY_MS) {
 			this.sparkAccMs -= SPARK_EVERY_MS;
@@ -171,12 +245,57 @@ export class DragonFx {
 				x: tail.x,
 				y: tail.y,
 				tint: Math.random() < 0.5 ? 0xffd166 : 0xff9a3d,
-				speed: [40, 130],
-				angle: [Math.atan2(ny, nx) + 2.4, Math.atan2(ny, nx) + 3.8],
-				lifeMs: 320,
+				speed: [40, 150],
+				angle: [angle + 2.3, angle + 3.9],
+				lifeMs: 300,
 				scale: [1.6, 0],
-				alpha: [0.8, 0],
+				alpha: [0.9, 0],
 			});
+		}
+
+		// The mane sparks: the head sheds bright embers as it moves — the
+		// face of the dragon should look alive, not just lit.
+		this.maneAccMs += dtMs;
+		while (this.maneAccMs >= MANE_EVERY_MS) {
+			this.maneAccMs -= MANE_EVERY_MS;
+			this.particles.burst({
+				texture: TEX.spark,
+				count: 2,
+				x: x + nx * (HEAD_LEAD_PX - 20),
+				y: y + ny * 6 + (Math.random() * 2 - 1) * 8,
+				tint: Math.random() < 0.6 ? 0xfff2b8 : 0xff7a4d,
+				speed: [60, 180],
+				angle: [angle + 2.1, angle + 3.9],
+				lifeMs: 260,
+				scale: [1.7, 0],
+				alpha: [0.9, 0],
+			});
+		}
+
+		// The energy motes: light streaming backward along the whole body, the
+		// way Hanzo's dragon is a river of light rather than a few sparks.
+		this.moteAccMs += dtMs;
+		while (this.moteAccMs >= MOTE_EVERY_MS) {
+			this.moteAccMs -= MOTE_EVERY_MS;
+			// Two motes per beat, one near the head and one halfway down the
+			// body, so the stream reads along the whole length.
+			for (const i of [0, Math.floor(SEGMENTS / 2)]) {
+				const p = this.chain[i]!;
+				this.particles.burst({
+					texture: TEX.shard,
+					count: 2,
+					x: p.x + (Math.random() * 14 - 7),
+					y: p.y + (Math.random() * 14 - 7),
+					tint: Math.random() < 0.6 ? 0xffe9a8 : 0xff9a3d,
+					// Flowing *backward* along the line, against the travel.
+					angle: [angle + Math.PI - 0.45, angle + Math.PI + 0.45],
+					speed: [160, 340],
+					lifeMs: 320,
+					scale: [2, 0],
+					alpha: [0.9, 0],
+					rotation: angle,
+				});
+			}
 		}
 
 		this.particles.update(dtMs);
@@ -186,6 +305,7 @@ export class DragonFx {
 		this.rider = null;
 		this.alpha = 0;
 		this.node.visible = false;
+		this.frontNode.visible = false;
 		this.particles.clear();
 	}
 }

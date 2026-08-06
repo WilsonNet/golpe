@@ -346,7 +346,7 @@ export class Match {
 		this.blackHole = new BlackHoleFx(stage.field, stage.effects, stage);
 		// The dragon rides in the effects layer too: it is a wake that follows
 		// the rider, never a field the arena has to make room for.
-		this.dragonFx = new DragonFx(stage);
+		this.dragonFx = new DragonFx(stage.field, stage.effects);
 		this.plates = new Nameplates(stage.nameplates, this.arena);
 		// Between the arena and the fighters: a shadow falls on the ledge below and
 		// is never drawn over the feet that cast it. See `Stage.shadows`.

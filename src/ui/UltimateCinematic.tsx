@@ -79,9 +79,15 @@ export function UltimateCinematic() {
 			// the game unfreezes on the next one 50ms later — but a portrait that
 			// waited for a message it never got would sit over a live fight forever.
 			// A timer that is a little wrong is strictly better than one that hangs.
+			//
+			// The dragon clears at the freeze itself: its ride is a 1500px/s
+			// streak that can be over in a blink, and a card that lingered a
+			// hundred milliseconds past the freeze would cover the whole payoff.
+			// The black hole keeps a beat of margin — its lob is slow enough to
+			// watch.
 			timer.current = window.setTimeout(
 				clear,
-				Math.max(200, e.durationMs) + 120,
+				Math.max(200, e.durationMs) + (e.hero === "anands" ? 0 : 120),
 			);
 		}) as never);
 

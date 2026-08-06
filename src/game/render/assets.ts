@@ -55,6 +55,7 @@ export const TEX = {
 	dragonBody: "fx_dragon_body",
 	/** The dragon's mane and wake: a soft red-gold wisp, tintable. */
 	dragonMane: "fx_dragon_mane",
+	dragonGlow: "fx_dragon_glow",
 	/** Staggered by a sword hit. Derived from the fighter's own strip. */
 	disabled: "dude_disabled",
 	/** Flat on the floor, after the chain's finisher. */
@@ -327,28 +328,76 @@ export function createFxTextures(renderer: Renderer): void {
 	dagger.rect(-2, 2, 3, 6).fill(0x6a2fd0);
 	bake(renderer, TEX.dagger, dagger);
 
-	// The dragon's head: a golden serpent with a red mane, baked in its own
-	// colours — the one ultimate that must read as *gold* from across the
-	// arena, and a tint could not do that. Facing +x; the renderer rotates it
-	// along the ride.
+	// The dragon's head: a proper Chinese dragon — outlined so it pops against
+	// the bright sky, two swept horns, a big glowing eye, a red flame mane and
+	// trailing whiskers — baked in its own colours, because the one ultimate
+	// that must read as *gold* from across the arena cannot be tinted into
+	// being gold. Facing +x; the renderer rotates it along the ride.
+	const OUT = 0x2a1a00;
 	const head = new Graphics();
+	// The outline silhouette — a bulky skull, not a bar: the head must read
+	// as a head from any ride direction, so it is round rather than long.
 	head
-		.poly([0, 14, 22, 14, 30, 10, 34, 12, 30, 16, 20, 20, 2, 20])
-		.fill(0xffd166);
-	head.poly([34, 12, 42, 13, 42, 15, 34, 16]).fill(0xffffff);
-	head.circle(30, 13, 1.6).fill(0x3a1c00);
-	head.poly([0, 14, 0, 22, 6, 26, 14, 24, 10, 18]).fill(0xff5a3d);
-	head.poly([2, 20, 10, 24, 20, 24, 14, 20]).fill(0xffffff);
+		.poly([
+			-2, 22, 10, 8, 34, 4, 56, 10, 68, 24, 60, 40, 40, 52, 12, 52, -4, 40, -6,
+			30,
+		])
+		.fill(OUT);
+	// The skull dome: a big rounded mass.
+	head
+		.poly([2, 20, 14, 8, 34, 5, 52, 10, 62, 22, 56, 36, 40, 44, 12, 44, 2, 34])
+		.fill(0xffc94d);
+	// The snout: short and blunt, jutting from the skull's front (right).
+	head.poly([56, 22, 72, 26, 74, 32, 62, 38, 54, 34]).fill(0xffd166);
+	head.poly([72, 27, 80, 29, 78, 33, 70, 31]).fill(0xfff2b8);
+	// The lower jaw, dropping below the skull.
+	head.poly([8, 42, 44, 40, 58, 42, 50, 52, 20, 54, 8, 50]).fill(0xffd166);
+	head.poly([58, 42, 66, 46, 60, 50, 52, 46]).fill(0xfff2b8);
+	// The brow ridge, shading the eye socket.
+	head.poly([16, 24, 36, 16, 52, 20, 46, 28, 28, 32]).fill(0xffb238);
+	// The glowing eye: a large slanted slit on the skull's front — dark ring,
+	// white-hot core, cyan pupil. Big enough to read at speed.
+	head.poly([22, 18, 42, 12, 50, 18, 38, 26]).fill(OUT);
+	head.poly([24, 18, 40, 14, 46, 18, 36, 24]).fill(0xffffff);
+	head.poly([28, 18, 37, 15, 41, 18, 35, 22]).fill(0x6fd8ff);
+	// The nostril.
+	head.poly([62, 27, 65, 27, 64, 30]).fill(OUT);
+	// Teeth along the mouth seam.
+	head.poly([12, 46, 18, 46, 15, 51]).fill(0xffffff);
+	head.poly([22, 46, 28, 46, 25, 51]).fill(0xffffff);
+	head.poly([32, 46, 38, 46, 35, 51]).fill(0xffffff);
+	// The horns: two thick swept-back ivory blades on top of the skull — wide
+	// enough to carry weight against the skull's bulk, curving back over the
+	// mane.
+	head.poly([4, 18, 12, 2, 20, -6, 22, 0, 18, 10, 8, 20]).fill(OUT);
+	head.poly([6, 16, 12, 5, 18, -2, 19, 3, 16, 10, 9, 17]).fill(0xfff2d8);
+	head.poly([12, 10, 15, 2, 18, -3, 19, 1, 17, 7, 13, 11]).fill(0xffe9b8);
+	head.poly([16, 14, 24, 0, 32, -6, 34, -1, 30, 6, 21, 15]).fill(OUT);
+	head.poly([18, 12, 24, 2, 30, -3, 31, 1, 28, 7, 21, 12]).fill(0xfff2d8);
+	head.poly([22, 7, 26, 0, 29, -3, 30, 1, 27, 6, 23, 8]).fill(0xffe9b8);
+	// The mane: red flame spikes sweeping back behind the skull — the one
+	// colour that is not gold, so the head separates from the body at a
+	// glance.
+	head.poly([0, 14, 8, 2, 14, 0, 12, 10, 4, 16]).fill(0x2a0a02);
+	head.poly([2, 12, 8, 4, 12, 2, 10, 10, 4, 14]).fill(0xff5a3d);
+	head.poly([-4, 18, 4, 8, 12, 4, 10, 14, 0, 20]).fill(0xff5a3d);
+	head.poly([-6, 24, 4, 14, 12, 10, 10, 20, -2, 28]).fill(0xff7a4d);
+	head.poly([2, 28, 12, 20, 18, 18, 16, 28, 4, 34]).fill(0xff5a3d);
+	// The whiskers: two long golden feelers trailing from the snout.
+	head.poly([72, 30, 92, 32, 92, 35, 72, 33]).fill(0xffd166);
+	head.poly([58, 48, 78, 56, 76, 59, 58, 52]).fill(0xffb238);
 	bake(renderer, TEX.dragonHead, head);
 
-	// One body segment: a gold scale arc. Chained behind the head along the
-	// ride's path, each one rotated to the local curve of the trail.
+	// One body segment: a **scale** — a wide hexagon plate, pointed at both
+	// ends along the travel, so an overlapped chain reads as one segmented
+	// serpent (scales overlapping like a Chinese dragon's belly) instead of a
+	// string of coins. Deep amber at the rim, gold at the core, a hot spine
+	// down the middle — **painted** rather than additive, because additive
+	// gold washes to white over the bright sky.
 	const body = new Graphics();
-	body.arc(16, 16, 14, -0.5, Math.PI + 0.5, false);
-	body.stroke({ width: 7, color: 0xffd166 });
-	body.arc(16, 16, 14, -0.5, Math.PI + 0.5, false);
-	body.stroke({ width: 2, color: 0xfff2b8 });
-	body.poly([2, 4, 12, 10, 8, 14]).fill(0xff9a3d);
+	body.poly([-30, 0, -14, 18, 14, 18, 30, 0, 14, -18, -14, -18]).fill(0xffc94d);
+	body.poly([-20, 0, -8, 11, 8, 11, 20, 0, 8, -11, -8, -11]).fill(0xffd166);
+	body.poly([-10, 0, -3, 5, 3, 5, 10, 0, 3, -5, -3, -5]).fill(0xfff2b8);
 	bake(renderer, TEX.dragonBody, body);
 
 	// The mane: a soft wisp, white so the wake can be tinted gold-to-red.
@@ -359,6 +408,17 @@ export function createFxTextures(renderer: Renderer): void {
 			.fill({ color: 0xffffff, alpha: 0.1 });
 	}
 	bake(renderer, TEX.dragonMane, mane);
+
+	// The dragon's own glow: a soft **gold** radial, baked gold rather than a
+	// white disc tinted — the white halo's stacked discs read white over the
+	// bright sky, and a head lit by a white blast is a head you cannot see.
+	const dragonGlow = new Graphics();
+	for (let i = 10; i >= 1; i--) {
+		dragonGlow
+			.circle(64, 64, (60 * i) / 10)
+			.fill({ color: 0xffc94d, alpha: 0.05 });
+	}
+	bake(renderer, TEX.dragonGlow, dragonGlow);
 
 	// The guard arc shown while blocking.
 	const guard = new Graphics();
