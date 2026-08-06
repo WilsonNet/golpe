@@ -12,7 +12,28 @@
 import { HERO_IDS, HEROES, type HeroId } from "../game/simulation/Heroes";
 import { HUD_CSS } from "./hudStyles";
 
+/**
+ * The sheet-frame drawing rules shared by the hero select and the root menu's
+ * compact fighter picker. One source of truth for how a hero's sprite is
+ * rendered: the face-on frame (cell 4 of every nine-cell strip) from the
+ * hero's own sheet, blown up pixel-perfect.
+ */
+export const HERO_SPRITE_CSS = `
+.hp-sprite {
+	width: 64px;
+	height: 96px;
+	background-size: 576px 96px;
+	image-rendering: pixelated;
+	image-rendering: crisp-edges;
+	/* The face-on frame is cell 4 of every nine-cell strip. */
+	background-position: -256px 0;
+}
+.hp-sprite-lia { background-image: url("assets/dude.png"); }
+.hp-sprite-anands { background-image: url("assets/anands.png"); }
+`;
+
 const HERO_CSS = `
+${HERO_SPRITE_CSS}
 .hp-cards {
 	display: flex;
 	gap: 14px;
@@ -36,18 +57,7 @@ const HERO_CSS = `
 	box-shadow: 0 0 12px rgba(255, 209, 102, 0.35);
 }
 .hp-sprite {
-	width: 64px;
-	height: 96px;
 	margin: 0 auto 6px;
-	background-size: 576px 96px;
-	image-rendering: pixelated;
-	image-rendering: crisp-edges;
-}
-.hp-sprite-lia { background-image: url("assets/dude.png"); }
-.hp-sprite-anands { background-image: url("assets/anands.png"); }
-.hp-sprite {
-	/* The face-on frame is cell 4 of every nine-cell strip. */
-	background-position: -256px 0;
 }
 .hp-name {
 	font: 700 15px/1.1 var(--vd-font, inherit);

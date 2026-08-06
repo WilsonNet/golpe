@@ -33,12 +33,29 @@ written by someone who knew what they were asking for — a shared link, a saved
 bookmark, or a probe. Every automated script runs exactly this way, and none of
 them ever sees the menu.
 
+## The home screen
+
+The root is three sections in strict hierarchy — seven buttons of equal weight
+made every choice look like every other choice:
+
+- **Play** — starting a fight is the primary job, so it is first: the gold
+  Quick match (the only filled button on the page), then Host/Join as siblings,
+  then Practice.
+- **Your fighter** — the hero picker lives here, on the home screen, beside the
+  name field: a hero shooter should show its heroes, and the choice rides every
+  match started here. There is no separate Heroes page; picking is the
+  discoverable face of `vento.hero`.
+- **Learn & settings** — How to play and Options, smallest and quietest.
+
+Two-column rows (Host/Join, How to play/Options) collapse to a single column on
+a phone so every button is a thumb-sized target.
+
 ## The flows
 
 | Entry | What it commits | Notes |
 |---|---|---|
 | Quick match (primary) | `?bots=1` | A duel vs a server bot: action in one click. The room link is the bot's seat — friends replace it. |
-| Heroes | — | Who you play by default: Lia or Anands. Written to `vento.hero` and into every launch request below. |
+| Your fighter (on home) | `vento.hero`, and `?hero=` on every launch below | Two portrait chips: Lia and Anands, each the fighter's own sheet frame. Picking writes the preference immediately; a commit below carries it. |
 | Host a match | `?mode=…&screen=N&bots=N&scoreLimit=N&timeLimit=N` (+ `fill`, `freezeTime`, `ultCharge`) | Every room-creator choice, defaults pre-filled to the server's own defaults. |
 | Join a match | `?room=<id>` | One field accepts the bare id *or* the whole link. |
 | Practice | `?training=true` | The training room, one click away. |

@@ -47,9 +47,52 @@ order of value:
 | 5 | Error prevention | Constraints before validation: clamped fields, enforced team floor, join id checked against `ROOM_ID_RE` |
 | 6 | Recognition rather than recall | Options visible in the form, never remembered parameters; the share link is shown, not described |
 | 7 | Flexibility and efficiency | Query params stay the expert/agentic path; the menu is the novice path; both reach the same game |
-| 8 | Aesthetic and minimalist | Primary action first, everything else in order of frequency; measuring tools behind the Advanced disclosure |
+| 8 | Aesthetic and minimalist | Primary action first, everything else in order of frequency; measuring tools behind the Advanced disclosure; **spacing is part of the layout — a control with no air around it reads as broken** |
 | 9 | Help users recover from errors | Error text says what was wrong and what to do; nothing is a code |
 | 10 | Help and documentation | "How to play" reads the **live bindings** — a hint that lies about the button is worse than no hint |
+
+## Breathing room is a feature, not a nicety
+
+A screen with seven buttons of equal weight is cluttered; a screen with seven
+buttons *that touch each other* is broken. The menu's polish is its vertical
+rhythm, and it is explicit, not accidental. The values that ship today
+(`src/ui/menuStyles.ts`):
+
+- **28px of card padding** — the menu owns the whole screen, so its furniture
+  earns more air than an overlay's.
+- **24px between sections**, **10px inside a section** — a section is a flex
+  column with `gap: 10px`, so the heading, the Quick match button, the
+  Host/Join row and Practice all sit 10px apart and the sections sit 24px
+  apart. One number does the whole job instead of hand-tuned margins.
+- **4px inside a button** between its title and its one-line description.
+  At 3px it read as a label with a footnote; at 4px it reads as a button with
+  a caption.
+- **Every element must have air on all sides.** Audit the vertical gaps on the
+  real page (`getBoundingClientRect`, not eyeballs): section head hugged its
+  content at 9px, the name field and its description met at **0px**, and the
+  stacked buttons met at **0px**. All three read as one control until the air
+  was added.
+
+Two CSS traps cost real time on this screen and both look like the layout
+"just not working":
+
+- **Chromium shrink-to-fits `<button>` even with `display: flex`.** A button
+  with `width: auto` hugs its text. Every menu button needs an explicit
+  `width: 100%` (plus `box-sizing: border-box`), or a full-width "Practice"
+  renders 398px wide with a void to its right.
+- **A `.vd-two`/`.vd-hero-pick` @media rule that comes *before* the base rules
+  is dead on arrival** — later rules of equal specificity beat it, so the
+  phone kept two cramped columns and the card overhung the screen. Put the
+  phone block last, and test at a real 390px viewport, not a wide one.
+
+Breathing has a cost: the card grew to 812px before the hero chips were sized
+down (48×72 on the home screen, the Esc menu keeps its 64×96 cards), and it
+still ends 30px taller than a 778px viewport at the layout's previous density.
+That is the right trade — a menu that scrolls gracefully (`margin: auto` +
+`overflow-y: auto` on the page keeps the title reachable at the top and the
+footer reachable by scroll) beats a menu that fits but is cramped. What is not
+acceptable is a menu where the footer is *invisible without scroll on a
+standard laptop window*; aim for the whole card inside ~800px of height.
 
 ## The architectural law: the menu is a URL generator, never a booter
 
@@ -141,5 +184,9 @@ string. Rules that follow:
    menu is the novice path and must not have disturbed the expert path.
 4. Take a screenshot at a phone viewport: the menu is the first thing a mobile
    player sees, and the last thing a desktop player sees differently.
-5. Ground truth beats eyeballs: the probe asserts on `.vd-menu` presence and
+5. Measure the vertical gaps, don't eyeball them. `getBoundingClientRect` the
+   heading-to-content and element-to-element gaps and confirm the 24px/10px/4px
+   rhythm survived — a button at 0px from its neighbour is the exact bug that
+   ships as "unpolished".
+6. Ground truth beats eyeballs: the probe asserts on `.vd-menu` presence and
    the URL after commits, not on styling.

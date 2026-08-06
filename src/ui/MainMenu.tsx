@@ -8,7 +8,17 @@
  * configure something the game will not honour. What the address bar says after
  * a commit is exactly the link that would boot that match if it were shared.
  *
- * The nesting follows three rules, which are the whole UX of this screen:
+ * The home screen is three sections in strict hierarchy, because seven buttons
+ * of equal weight made every choice look like every other choice:
+ *
+ * - **Play** — starting a fight is the primary job, so it is first: the gold
+ *   Quick match, then Host/Join as siblings, then Practice.
+ * - **Your fighter** — who you bring. The hero picker lives here, on the home
+ *   screen, beside the name field: a hero shooter should show its heroes, and
+ *   the choice rides every match started here.
+ * - **Learn & settings** — the detours, smallest and quietest.
+ *
+ * The rules underneath stay the ones the whole screen is built on:
  *
  * - **The primary action is one click from the bare URL.** "Quick match" drops
  *   a stranger into a fight against a bot; everything else is a detour.
@@ -30,10 +40,9 @@ import { bindings, codeLabel } from "../game/input/Bindings";
 import type { LaunchParams } from "../game/online/launch";
 import { ROOM_ID_RE } from "../game/online/room";
 import { MAX_NAME, readStoredName, storeName } from "../game/playerName";
-import { HEROES, type HeroId } from "../game/simulation/Heroes";
+import { HERO_IDS, HEROES, type HeroId } from "../game/simulation/Heroes";
 import type { MatchMode } from "../game/simulation/Teams";
 import { ControlsDialog } from "./ControlsDialog";
-import { HeroSelect } from "./HeroSelect";
 import { HUD_CSS } from "./hudStyles";
 import { MENU_CSS } from "./menuStyles";
 
@@ -43,7 +52,7 @@ const SCORE_LIMIT_TDM = 15;
 const TIME_LIMIT_SEC = 300;
 const FREEZE_TIME_SEC = 4;
 
-type View = "home" | "heroes" | "host" | "join" | "howto" | "controls";
+type View = "home" | "host" | "join" | "howto" | "controls";
 
 interface HostSettings {
 	mode: MatchMode;
@@ -121,29 +130,13 @@ export function MainMenu({
 			<div className="vd-card">
 				<h1 className="vd-title">Vento Áureo</h1>
 				<p className="vd-sub">
-					A 2D swordfight, online first. Rooms are addressed, not matchmade —
-					the link <em>is</em> the invitation.
+					A 2D swordfight, online first — the link is the invitation.
 				</p>
 
 				{view === "home" ? (
 					<>
-						<div className="vd-name-row">
-							<label htmlFor="vd-name">Fighter name</label>
-							<input
-								id="vd-name"
-								className="vd-input"
-								value={name}
-								maxLength={MAX_NAME}
-								placeholder="your name"
-								autoComplete="off"
-								spellCheck={false}
-								onChange={(e) => {
-									setName(e.target.value);
-									storeName(e.target.value.trim().slice(0, MAX_NAME));
-								}}
-							/>
-						</div>
-						<div className="vd-menu-list">
+						<div className="vd-section">
+							<div className="vd-section-head">Play</div>
 							<button
 								className="vd-play-item vd-play-item-primary"
 								type="button"
@@ -151,41 +144,30 @@ export function MainMenu({
 							>
 								<strong>Quick match</strong>
 								<span>
-									A duel against a server bot, right now. Your room link is
-									ready to share.
+									Duel a server bot right now — your room link is ready to
+									share.
 								</span>
 							</button>
-							<button
-								className="vd-play-item"
-								type="button"
-								onClick={() => setView("heroes")}
-							>
-								<strong>Heroes — {HEROES[hero].name}</strong>
-								<span>
-									{hero === "lia"
-										? "Sword and pistol: reads, guards and the black hole."
-										: "Dagger and machine gun: a storm of stabs and a dragon."}
-								</span>
-							</button>
-							<button
-								className="vd-play-item"
-								type="button"
-								onClick={() => setView("host")}
-							>
-								<strong>Host a match</strong>
-								<span>
-									Choose the mode, the arena and the rules — then share the
-									link.
-								</span>
-							</button>
-							<button
-								className="vd-play-item"
-								type="button"
-								onClick={() => setView("join")}
-							>
-								<strong>Join a match</strong>
-								<span>Enter the room id or the link someone sent you.</span>
-							</button>
+							<div className="vd-two">
+								<button
+									className="vd-play-item"
+									type="button"
+									onClick={() => setView("host")}
+								>
+									<strong>Host a match</strong>
+									<span>
+										Choose the mode, arena and rules, then share the link.
+									</span>
+								</button>
+								<button
+									className="vd-play-item"
+									type="button"
+									onClick={() => setView("join")}
+								>
+									<strong>Join a match</strong>
+									<span>Enter a room id or a link someone sent you.</span>
+								</button>
+							</div>
 							<button
 								className="vd-play-item"
 								type="button"
@@ -194,48 +176,77 @@ export function MainMenu({
 								<strong>Practice</strong>
 								<span>The training room: a scriptable dummy and its menu.</span>
 							</button>
-							<button
-								className="vd-play-item"
-								type="button"
-								onClick={() => setView("howto")}
-							>
-								<strong>How to play</strong>
-								<span>Movement, the sword chain, and the ultimate.</span>
-							</button>
-							<button
-								className="vd-play-item"
-								type="button"
-								onClick={() => setView("controls")}
-							>
-								<strong>Options</strong>
-								<span>Aiming scheme, on-screen gamepad, and rebinding.</span>
-							</button>
 						</div>
-					</>
-				) : null}
 
-				{view === "heroes" ? (
-					<>
-						<h2 className="vd-title">Heroes</h2>
-						<p className="vd-sub">
-							You face the cursor and read the other side's weapon. Pick who you
-							bring — the default applies to every match you start here.
-						</p>
-						<HeroSelect
-							current={hero}
-							onPick={(picked) => {
-								setHero(picked);
-								storeHero(picked);
-								setView("home");
-							}}
-						/>
-						<button
-							className="vd-btn"
-							type="button"
-							onClick={() => setView("home")}
-						>
-							Back
-						</button>
+						<div className="vd-section">
+							<div className="vd-section-head">Your fighter</div>
+							<div className="vd-hero-pick">
+								{HERO_IDS.map((id) => (
+									<button
+										key={id}
+										type="button"
+										className={`vd-hero-chip${hero === id ? " vd-hero-chip-on" : ""}`}
+										aria-pressed={hero === id}
+										onClick={() => {
+											setHero(id);
+											storeHero(id);
+										}}
+									>
+										<span
+											className={`hp-sprite hp-sprite-${id}`}
+											aria-hidden="true"
+										/>
+										<span className="vd-hero-chip-meta">
+											<span className="vd-hero-chip-name">
+												{HEROES[id].name}
+											</span>
+											<span className="vd-hero-chip-kit">
+												{HEROES[id].melee.label} · {HEROES[id].ranged.label}
+											</span>
+										</span>
+									</button>
+								))}
+							</div>
+							<div className="vd-name-row">
+								<label htmlFor="vd-name">Fighter name</label>
+								<input
+									id="vd-name"
+									className="vd-input"
+									value={name}
+									maxLength={MAX_NAME}
+									placeholder="your name"
+									autoComplete="off"
+									spellCheck={false}
+									onChange={(e) => {
+										setName(e.target.value);
+										storeName(e.target.value.trim().slice(0, MAX_NAME));
+									}}
+								/>
+							</div>
+							<p className="vd-hero-blurb">{HEROES[hero].blurb}</p>
+						</div>
+
+						<div className="vd-section">
+							<div className="vd-section-head">Learn &amp; settings</div>
+							<div className="vd-two">
+								<button
+									className="vd-play-item"
+									type="button"
+									onClick={() => setView("howto")}
+								>
+									<strong>How to play</strong>
+									<span>Movement, the sword chain, and the ultimate.</span>
+								</button>
+								<button
+									className="vd-play-item"
+									type="button"
+									onClick={() => setView("controls")}
+								>
+									<strong>Options</strong>
+									<span>Aiming scheme, on-screen gamepad, rebinding.</span>
+								</button>
+							</div>
+						</div>
 					</>
 				) : null}
 
@@ -489,7 +500,11 @@ function HostForm({
 			<p className="vd-summary">{summary}</p>
 
 			<div className="vd-row-actions">
-				<button className="vd-btn" type="button" onClick={commit}>
+				<button
+					className="vd-btn vd-btn-primary"
+					type="button"
+					onClick={commit}
+				>
 					Create match
 				</button>
 				<button className="vd-btn" type="button" onClick={onBack}>
@@ -556,7 +571,7 @@ function JoinForm({
 				/>
 				<div className="vd-row-actions">
 					<button
-						className="vd-btn"
+						className="vd-btn vd-btn-primary"
 						type="submit"
 						disabled={value.trim() === ""}
 					>
