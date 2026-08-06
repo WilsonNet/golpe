@@ -20,7 +20,6 @@ import {
 	BULLET_SPEED,
 	COMBO_CHAIN,
 	isComboSlash,
-	MAX_FALL_SPEED,
 	MELEE_MOVES,
 	type MeleeAction,
 	type MeleeMove,
@@ -76,24 +75,35 @@ const JITTER_SAFETY_X = 2.0;
  * nothing real.
  */
 const JITTER_SAFETY_Y = 2.0;
+/** One fixed physics step, in ms — the movement a jitter frame is priced on. */
+const PHYSICS_STEP_MS = 1000 / 60;
 /** Floors, so a very short frame cannot produce a hair-trigger threshold. */
 const DIAG_JITTER_X = 35;
 const DIAG_JITTER_Y = 25;
 const DIAG_JITTER_CAM = 15;
-/** Fastest an actor can move horizontally: a dash. */
-const MAX_DASH_SPEED = 1000;
+/**
+ * Fastest an actor can move horizontally: the dragon thrust's ride, 1500 px/s.
+ *
+ * The ride is a legitimate movement mode, not a glitch — a dragon sweeping at
+ * a rendered 46fps covers ~60px a frame, and a metric whose limit is the
+ * sword's dash would report the game's own ultimate as jitter. It is still the
+ * *cap*: nothing else in the game moves this fast, so the limit is real.
+ */
+const MAX_ACTOR_SPEED = 1500;
 
 function jitterLimitX(dtMs: number): number {
 	return Math.max(
 		DIAG_JITTER_X,
-		MAX_DASH_SPEED * (dtMs / 1000) * JITTER_SAFETY_X,
+		MAX_ACTOR_SPEED * (dtMs / 1000) * JITTER_SAFETY_X,
 	);
 }
 
 function jitterLimitY(dtMs: number): number {
 	return Math.max(
 		DIAG_JITTER_Y,
-		MAX_FALL_SPEED * (dtMs / 1000) * JITTER_SAFETY_Y,
+		// The dragon rides vertically too: the y-limit is the actor cap, not
+		// the fall speed, or a straight-up ride reads as a teleport.
+		MAX_ACTOR_SPEED * (dtMs / 1000) * JITTER_SAFETY_Y,
 	);
 }
 
@@ -184,6 +194,16 @@ export interface DiagnosticSample {
 	 * parry the local player is on the wrong end of.
 	 */
 	enemyState?: PlayerPosition | null;
+	/**
+	 * Who the enemy state belongs to, when it is known.
+	 *
+	 * The melee tracker keeps one "remote" track, and a primary that switched
+	 * between samples feeds it two different fighters — fighter A's thrust
+	 * compared to fighter B's idle reads as an uncancellable move ending early.
+	 * The id lets the tracker drop the track when the subject changes; a metric
+	 * about "the opponent" must pin which opponent.
+	 */
+	enemyId?: string | null;
 	/** Rendered projectiles, keyed by stable id. */
 	bullets?: BulletSample[];
 	cameraX: number;
@@ -269,6 +289,13 @@ interface MeleeTrack {
 	 * `chained_in_the_air` check in `trackMelee`.
 	 */
 	wasGrounded: boolean;
+	/**
+	 * The tracker's frame the last time this fighter was seen riding the
+	 * dragon. A close-range ride can hit a wall in under a snapshot interval,
+	 * so the tracker can miss the ride entirely and still needs to know the
+	 * move that vanished was cancelled by a cast, not by a broken table.
+	 */
+	lastDragonFrame: number;
 }
 
 function newMeleeTrack(): MeleeTrack {
@@ -283,6 +310,7 @@ function newMeleeTrack(): MeleeTrack {
 		chainLength: 0,
 		wasKnockedDown: false,
 		wasGrounded: true,
+		lastDragonFrame: -100,
 	};
 }
 
@@ -310,6 +338,10 @@ export class PhysicsDiagnostics {
 	private durationMs = 0;
 	private frames: DiagnosticFrame[] = [];
 	private frameCount = 0;
+	/** Whose state the remote melee track is currently judging. */
+	private remoteTrackId: string | null = null;
+	/** The frame the local fighter last cast an ultimate, for the cancel excuse. */
+	private lastUltCastFrame = -100;
 	private jitter: JitterEvent[] = [];
 	private recon: ReconEvent[] = [];
 	private penetrations: PenetrationEvent[] = [];
@@ -624,7 +656,15 @@ export class PhysicsDiagnostics {
 	 * defect made visible instead of invisible.
 	 */
 	recordUltimateCast() {
-		if (this.active) this.localUltCasts++;
+		if (this.active) {
+			this.localUltCasts++;
+			// A cast legally ends the current move ("don't switch weapons or
+			// ult"): the dragon's launch sets `meleeAction = "none"` on the
+			// rider, and the tracker must not read that cancel as an
+			// uncancellable move ending early. Remembered by frame so the
+			// excuse applies to the move the cast actually cut short.
+			this.lastUltCastFrame = this.frameCount;
+		}
 	}
 
 	record(sample: DiagnosticSample) {
@@ -686,6 +726,13 @@ export class PhysicsDiagnostics {
 		const replacement = this.pendingMeleeReplacement;
 		this.pendingMeleeReplacement = null;
 		this.trackMelee("local", p, sample.dt, FRAME_TOLERANCE_MS, replacement);
+		// The primary can change (a sixteen-fighter room, a fighter leaving),
+		// and a track that spans two fighters compares one's swing to the
+		// other's idle. The id pins the subject — see `DiagnosticSample.enemyId`.
+		if (sample.enemyId !== this.remoteTrackId) {
+			this.remoteTrackId = sample.enemyId ?? null;
+			this.meleeTracks.delete("remote");
+		}
 		if (sample.enemyState) {
 			this.trackMelee(
 				"remote",
@@ -697,12 +744,22 @@ export class PhysicsDiagnostics {
 
 		if (this.skipJitterFrames > 0) {
 			this.skipJitterFrames--;
+			// Still remember where things are: the first measurement after the
+			// skip compares against the last *measured* frame, and a
+			// post-correction glide that has not finished decaying would
+			// otherwise read as one more jump the skip was supposed to hide.
 			this.snapshotPrev(frame);
 			return;
 		}
 
-		const limitX = jitterLimitX(sample.dt);
-		const limitY = jitterLimitY(sample.dt);
+		// The limit is the *simulated* time, not the rendered one: a frame that
+		// runs three fixed steps legitimately moves three times as far as one
+		// that runs one, and a metric priced on wall-clock would report a
+		// catch-up frame as a teleport. `physicsSteps` is exactly how long the
+		// frame's movement had.
+		const simMs = Math.max(1, sample.physicsSteps) * PHYSICS_STEP_MS;
+		const limitX = jitterLimitX(simMs);
+		const limitY = jitterLimitY(simMs);
 
 		this.checkJitter("player_x", frame.playerX, this.prev.px, limitX);
 		this.checkJitter("player_y", frame.playerY, this.prev.py, limitY);
@@ -908,8 +965,39 @@ export class PhysicsDiagnostics {
 		 * observe the move already gone while the (shorter) hitstun has expired.
 		 * Invulnerability lasts longer than the lightest hitstun, so it is the
 		 * reliable "you were just hit" marker.
+		 *
+		 * The reconcile's own verdict joins the list for the same reason: when the
+		 * server freezes a tick it acknowledges an input without applying it, and
+		 * the replayed state can lose a move (or gain one the client's refusal did
+		 * not produce) with no hit involved. The reconciler names those spellings
+		 * `server-ended` and `server-started`, and the tracker trusts the verdict —
+		 * it is the same both-spellings rule the guard-break Massive taught.
+		 *
+		 * The dragon ride outranks the move it cancelled: casting the dragon
+		 * legally ends whatever the rider was doing (`meleeAction = "none"`, the
+		 * same "don't switch weapons or ult" rule that cancels a charge), so a
+		 * thrust that vanishes when the dragon appears is the ultimate cancelling
+		 * a swing — the one cancel the table does not name, because it is not a
+		 * sword mechanic.
 		 */
-		const interrupted = stunned || s.iframeTimer > 0;
+		const interrupted =
+			stunned ||
+			s.iframeTimer > 0 ||
+			s.dragonTimer > 0 ||
+			// A ride this short was over before the next snapshot: a cast from
+			// close range ends at a wall in under one sample interval, so the
+			// rider's cancelled move must be excused for the whole ride, not
+			// only while the ride is visible. The ride lasts up to 900ms (~54
+			// rendered frames), so the window is measured in rides, not samples.
+			this.frameCount - (t.lastDragonFrame ?? -100) <= 60 ||
+			// The local fighter's own cast cut the move short: the ultimate is
+			// the one cancel the table cannot name, because it is not a sword
+			// mechanic. The ride freezes the cancelled move and ends it when the
+			// ride ends, up to 900ms later — so the excuse has to cover the
+			// whole ride, not just the cast frame.
+			(who === "local" && this.frameCount - this.lastUltCastFrame <= 60) ||
+			replacement?.reason === "server-ended" ||
+			replacement?.reason === "server-started";
 
 		// Nothing may act while stunned. This is the single rule that, if broken,
 		// makes every combo in the game meaningless.
@@ -1041,6 +1129,7 @@ export class PhysicsDiagnostics {
 		t.wasStunned = stunned;
 		t.wasMassiveReady = s.massiveReady;
 		t.wasPlunging = s.plunging;
+		if (s.dragonTimer > 0) t.lastDragonFrame = this.frameCount;
 		// Ground contact, for judging whether the next link was thrown airborne.
 		// Latched after the checks above so "a full sample airborne before the
 		// link" reads the same edge `canChain` reasons about.

@@ -22,6 +22,7 @@ import {
 	probeWall,
 	type WallSide,
 } from "./Collision.js";
+import { type HeroKit, LIA_KIT } from "./Heroes.js";
 import {
 	bombBlastFor,
 	bombFallHeight,
@@ -32,6 +33,7 @@ import {
 	isStunned,
 	type MeleeIntent,
 	type MeleeState,
+	MOVES,
 	meleePhase as meleePhaseOf,
 	PLUNGE_DECEL,
 	PLUNGE_SPEED,
@@ -54,6 +56,19 @@ export {
 	rectsOverlap,
 } from "./Arena.js";
 export type { WallSide } from "./Collision.js";
+export type { HeroId, HeroKit } from "./Heroes.js";
+/**
+ * The hero registry, re-exported by name for the server's benefit — same
+ * default/star rules as the melee and ultimate blocks above.
+ */
+export {
+	DEFAULT_HERO,
+	HERO_IDS,
+	isHeroId,
+	kitFor,
+	LIA_KIT,
+	RANGED_WEAPONS,
+} from "./Heroes.js";
 export type {
 	MeleeAction,
 	MeleeMove,
@@ -73,6 +88,7 @@ export type {
  * an explicit named export.
  */
 export {
+	applyHitToDefender,
 	applyMeleeResult,
 	blocksBullet,
 	blocksUltimate,
@@ -80,6 +96,9 @@ export {
 	bombBlastFor,
 	bombFallHeight,
 	COMBO_CHAIN,
+	DAGGER_DASH_DURATION_MS,
+	DAGGER_DASH_LOCKOUT_MS,
+	DAGGER_DASH_SPEED,
 	isComboSlash,
 	isKnockedDown,
 	isStunned,
@@ -90,6 +109,7 @@ export {
 	MASSIVE_CHARGE_MS,
 	MELEE_IFRAME_MS,
 	MELEE_MOVES,
+	MELEE_WEAPONS,
 	MOVES,
 	massiveSlamPoint,
 	meleePhase,
@@ -97,6 +117,7 @@ export {
 	PLUNGE_BLAST_BASE_RADIUS_PX,
 	resolveMelee,
 	SLASH_CANCELLED_MS,
+	sweptThrustBox,
 	zeroMoveCounts,
 } from "./Melee.js";
 
@@ -109,6 +130,15 @@ export type { GrenadeState, Singularity } from "./Ultimate.js";
  */
 export {
 	addCharge,
+	// The dragon thrust, re-exported beside the black hole it shares the meter
+	// with.
+	DRAGON_DAMAGE,
+	DRAGON_KNOCKBACK_PX_S,
+	DRAGON_RIDE_MS,
+	DRAGON_SPEED,
+	DRAGON_STUN_MS,
+	dragonSweptRect,
+	dragonVelocity,
 	fieldAffects,
 	fieldFor,
 	GRENADE_FUSE_MS,
@@ -119,6 +149,7 @@ export {
 	launchGrenade,
 	SINGULARITY_DAMAGE_INTERVAL_MS,
 	SINGULARITY_DURATION_MS,
+	SINGULARITY_HOLD_STUN_MS,
 	SINGULARITY_RADIUS,
 	SINGULARITY_REACH,
 	SINGULARITY_TICK_DAMAGE,
@@ -214,24 +245,12 @@ const WALL_COYOTE_MS = 100;
  */
 const BLOCK_MOVE_MULTIPLIER = 0.55;
 
-/** Dash impulse. An impulse on the shared simulation, not a movement mode. */
-export const DASH_SPEED = 1000;
-/** Minimum gap between dashes, so it cannot be held down as a speed boost. */
-export const DASH_LOCKOUT_MS = 250;
 /**
- * How long a dash holds its line — no gravity, no vertical drift at all.
- *
- * A dash that fell while it travelled was a dive, and it made the one thing a
- * dash is for — crossing a gap, breaking away, repositioning at the peak of a
- * jump — depend on how far through the arc you happened to be. Holding Y makes it
- * a *line*, which is what a player is aiming when they gesture it.
- *
- * **Deliberately shorter than `DASH_LOCKOUT_MS`.** The gap between the two is the
- * window in which gravity always gets a say, so no amount of dashing is level
- * flight: at 160 against a 250ms lockout, a chained dasher still falls for 90ms in
- * every 250. Raise this past the lockout and the fighter simply never comes down.
+ * The sword's double-tap dash — owned by the sword weapon in `Melee.ts`, where
+ * the dagger's faster burst lives beside it. Re-exported here so the old
+ * importers keep one home to import from.
  */
-export const DASH_DURATION_MS = 160;
+export { DASH_DURATION_MS, DASH_LOCKOUT_MS, DASH_SPEED } from "./Melee.js";
 
 /**
  * Tumble impulse — the gun's answer to the dash, deliberately slower.
@@ -373,6 +392,19 @@ export interface PlayerPosition extends MeleeState {
 	 * been hit. This says nothing except "not yet".
 	 */
 	freezeTimer: number;
+	/**
+	 * ms left of the dragon-thrust ride. While non-zero the fighter is cargo on
+	 * the dragon's line: gravity suppressed, velocity pinned to `dragonVX/Y`,
+	 * intent discarded, and nothing stops it except a hostile black hole or a
+	 * wall. See specs/anands.md.
+	 *
+	 * The ride's whole shape — direction, speed, remaining time — rides the wire,
+	 * so the client predicts its own cast exactly as it predicts a dash.
+	 */
+	dragonTimer: number;
+	/** The dragon's line, px/s. Set once at launch; velocity is pinned to it. */
+	dragonVX: number;
+	dragonVY: number;
 }
 
 export function createPlayerState(
@@ -399,6 +431,9 @@ export function createPlayerState(
 		tumbleTimer: 0,
 		tumbleActiveTimer: 0,
 		freezeTimer: 0,
+		dragonTimer: 0,
+		dragonVX: 0,
+		dragonVY: 0,
 		...createMeleeState(facing),
 	};
 }
@@ -426,6 +461,9 @@ export function copyPlayerState(
 	target.tumbleTimer = source.tumbleTimer;
 	target.tumbleActiveTimer = source.tumbleActiveTimer;
 	target.freezeTimer = source.freezeTimer;
+	target.dragonTimer = source.dragonTimer;
+	target.dragonVX = source.dragonVX;
+	target.dragonVY = source.dragonVY;
 	copyMeleeState(source, target);
 	return target;
 }
@@ -476,6 +514,12 @@ export function isFrozen(s: PlayerPosition): boolean {
  * hole it is. It is an argument rather than something applied on top of the
  * result for the reason the dash learned the hard way: anything that moves a
  * fighter from outside `tickPlayer` is erased by the next reconciliation.
+ *
+ * `kit` is the hero's weapons and ultimate. It is an argument for the same
+ * reason `field` is — the kit is a static property of the fighter, both sides
+ * learn it from the snapshot, and a kit applied on top of the result would be
+ * erased by the next reconciliation. Defaults to Lia's kit, so every caller
+ * from before heroes existed behaves exactly as it always has.
  */
 export function tickPlayer(
 	pos: PlayerPosition,
@@ -483,6 +527,7 @@ export function tickPlayer(
 	dt: number,
 	world: World = DEFAULT_WORLD,
 	field: Singularity | null = null,
+	kit: HeroKit = LIA_KIT,
 ): PlayerPosition {
 	const s: PlayerPosition = { ...pos };
 
@@ -507,20 +552,28 @@ export function tickPlayer(
 	// the disable ends a fixed tail after the hole lets go and no state outside
 	// `stunTimer` has to remember it — which is what keeps the wire format and
 	// every stun-aware system unchanged by this whole feature.
+	//
+	// A hostile hole is also the **only** thing that stops a dragon-thrust ride:
+	// being caught cancels the ride and the hold takes over on the same tick.
 	const grip = singularityGrip(field, s.x, s.y);
 	if (grip === "held") {
+		s.dragonTimer = 0;
 		s.stunTimer = Math.max(s.stunTimer, SINGULARITY_HOLD_STUN_MS);
 	}
 
-	tickMelee(s, input, dt);
+	tickMelee(s, input, dt, kit.melee);
 	// A stunned fighter still falls and still collides; it just does not steer.
 	const stunned = isStunned(s);
 	// Heavy moves root you where you stand. This is the "animation punishment":
 	// a whiffed Massive or uppercut cannot be walked or jumped out of. A plunging
 	// fighter and a stuck one are rooted the same way — the bomb is a commitment
-	// from release to extraction.
+	// from release to extraction. A dragon rider is cargo; the dragon steers.
 	const rooted =
-		stunned || isCommitted(s) || s.plunging || s.plungeStuckTimer > 0;
+		stunned ||
+		isCommitted(s) ||
+		s.plunging ||
+		s.plungeStuckTimer > 0 ||
+		s.dragonTimer > 0;
 	// The charge roots the *walk* and nothing else. Dash, jump and block are the
 	// delivery tools a 4s commitment has to keep — see `isCharging`.
 	const charging = isCharging(s);
@@ -587,7 +640,7 @@ export function tickPlayer(
 		s.vx = approach(s.vx, 0, friction * dt);
 	}
 
-	// ---- burst: dash (sword) or tumble (gun) ----
+	// ---- burst: dash (melee stance) or tumble (gun stance) ----
 	// One gesture, two tools. The double-tap is the same input in both stances,
 	// and which burst it is is decided here by the stance the simulation already
 	// owns — the input layer never needs to know what a dash means, so switching
@@ -595,6 +648,10 @@ export function tickPlayer(
 	// fighter cannot chain one into the other, and GunZ's own asymmetry is
 	// preserved: the sword's dash is faster than the gun's roll, so a sword
 	// fighter can always close the gap a rolling gunner opens.
+	//
+	// The melee stance's dash speed is the *weapon's* (the dagger weighs nothing,
+	// so its burst is a little quicker), the tumble belongs to the gun stance
+	// and never changes.
 	//
 	// An impulse on the shared simulation, not a separate movement path: it sets
 	// velocity and then ordinary physics and collision carry it.
@@ -608,9 +665,10 @@ export function tickPlayer(
 			// and it is the cost that keeps a gunner honest: the roll is a dodge
 			// along the floor, not a flatline across the arena.
 		} else {
-			s.vx = input.dash > 0 ? DASH_SPEED : -DASH_SPEED;
-			s.dashTimer = DASH_LOCKOUT_MS;
-			s.dashActiveTimer = DASH_DURATION_MS;
+			const burst = kit.melee.burst;
+			s.vx = input.dash > 0 ? burst.speed : -burst.speed;
+			s.dashTimer = burst.lockoutMs;
+			s.dashActiveTimer = burst.durationMs;
 			// Flatten the arc from the first frame, so a dash thrown while rising or
 			// falling travels the same line as one thrown standing still.
 			s.vy = 0;
@@ -685,6 +743,28 @@ export function tickPlayer(
 	// it.
 	if (grip === "held") {
 		// Nothing. The pull below owns both axes.
+	} else if (s.dragonTimer > 0) {
+		// The dragon-thrust ride: cargo on a line. The velocity is pinned to the
+		// dragon's own (set at launch), gravity does not apply, and the timer
+		// ticks down here so both sides expire the ride on the same tick. When it
+		// runs out the rider keeps no speed — the dragon is a ride, not a
+		// launching pad — and the next tick's ordinary physics takes over from
+		// zero. The move the rider was making is frozen for the whole ride (the
+		// dragon gate in `tickMelee` never advances it) and dies with it: the
+		// cast is "don't switch weapons or ult", and the cancel lands at the
+		// ride's end on both sides of the wire.
+		s.dragonTimer = decay(s.dragonTimer, dt);
+		if (s.dragonTimer > 0) {
+			s.vx = s.dragonVX;
+			s.vy = s.dragonVY;
+			s.jumping = false;
+		} else {
+			s.vx = 0;
+			s.vy = 0;
+			s.meleeAction = "none";
+			s.meleeTimer = 0;
+			s.hitLatch = false;
+		}
 	} else if (s.plunging) {
 		// The plunge bomb: no gravity, no steering — a vertical dive at a fixed
 		// speed, faster than a fall can ever get. The fighter sheds horizontal
@@ -693,6 +773,23 @@ export function tickPlayer(
 		// exactly that line. It ends at floor contact, below.
 		s.vy = PLUNGE_SPEED;
 		s.vx = approach(s.vx, 0, PLUNGE_DECEL * dt);
+		s.jumping = false;
+	} else if (
+		s.meleeAction !== "none" &&
+		meleePhaseOf(s) === "active" &&
+		(s.meleeAction === "thrust" || s.meleeAction === "shoryuken")
+	) {
+		// The dagger's move-driven motion. The thrust's active window is a flat
+		// line — `selfVx` along the facing, `vy` pinned to zero so an airborne
+		// thrust does not fall, exactly like a dash. The shoryuken's active
+		// window rises at a constant `selfVy`, and gravity owns the recovery.
+		// Both live here, in the shared simulation, so both sides compute the
+		// same line and the hitbox and the sweep agree with the body.
+		const def = MOVES[s.meleeAction];
+		if (def.selfVx !== undefined) {
+			s.vx = s.facing >= 0 ? def.selfVx : -def.selfVx;
+		}
+		if (def.selfVy !== undefined) s.vy = def.selfVy;
 		s.jumping = false;
 	} else if (s.dashActiveTimer > 0 && !s.grounded) {
 		s.vy = 0;
@@ -762,6 +859,26 @@ export function tickPlayer(
 		s.dashActiveTimer = 0;
 		s.tumbleActiveTimer = 0;
 	}
+	// The dragon stops at geometry: the range of the thrust *is* "until an
+	// obstacle". A wall, the ceiling, or a floor hit while moving downward all
+	// end the ride — the one that does not is a ride already running along the
+	// floor, which is a line the dragon is allowed to sweep. Ending the ride
+	// also ends whatever move the rider was making when the ride began — the
+	// cast's cancel, delivered here on both sides of the wire.
+	if (s.dragonTimer > 0) {
+		if (
+			contacts.wall !== "none" ||
+			contacts.ceiling ||
+			(contacts.grounded && s.dragonVY > 0)
+		) {
+			s.dragonTimer = 0;
+			s.vx = 0;
+			s.vy = 0;
+			s.meleeAction = "none";
+			s.meleeTimer = 0;
+			s.hitLatch = false;
+		}
+	}
 	if (contacts.grounded) s.vy = 0;
 	if (contacts.ceiling && s.vy < 0) s.vy = 0;
 
@@ -789,8 +906,12 @@ export function tickPlayer(
 	return s;
 }
 
-export function canFire(lastAttackTime: number, now: number): boolean {
-	return now - lastAttackTime >= ATTACK_COOLDOWN;
+export function canFire(
+	lastAttackTime: number,
+	now: number,
+	cooldownMs: number = ATTACK_COOLDOWN,
+): boolean {
+	return now - lastAttackTime >= cooldownMs;
 }
 
 // ---------------------------------------------------------------------------

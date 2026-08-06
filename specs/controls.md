@@ -57,10 +57,23 @@ The third slot is a *convention*, not a constraint.
 | Slash / fire | **Left Click** | — | **Pad X** |
 | Block | **Left Shift** | **Right Shift** | **Pad LT** |
 | Uppercut | **F** | — | **Pad Y** |
-| Ultimate — Black Hole | **R** | — | **Pad B** |
+| Ultimate | **R** | — | **Pad B** |
 | Sword stance | **Q** | — | **Pad LB** |
 | Gun stance | **E** | — | **Pad RB** |
 | Toggle AI vs AI | **P** | — | — |
+
+**The buttons are the skeleton; the hero decides what they do in the melee
+stance.** Lia's Shift raises a guard and her F is the uppercut. Anands' Shift is
+the **thrust** — the dagger has no block, and the whole of that trade is that
+the block button is a committed lunge — and her F is the shoryuken. The
+simulation is handed the same buttons either way, so a binding never knows or
+cares which hero is using it; the HUD badge names the weapon the hero actually
+carries. See [anands.md](anands.md).
+
+**The Esc menu has a Heroes item** beside Controls — changing hero mid-match
+sends the request to the server, which confirms it in the next snapshot. The
+root menu's hero picker sets the default every match starts with. See
+[heroes.md](heroes.md).
 
 **The ultimate is R, and Pad B.** Every game with an ultimate put it on R and a
 player's hand goes looking for it there. On a pad it is the right-hand face

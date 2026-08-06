@@ -134,6 +134,21 @@ interface JoinMsg {
 	 * it is honoured on the same terms.
 	 */
 	freezeTime?: number;
+	/**
+	 * The hero this client's own fighter plays. **Per-client, not creator-only** —
+	 * it is the answer to "who do you want to be", and the last person through the
+	 * door still gets to pick. `?hero=anands` in the URL, or the Esc menu's hero
+	 * select mid-match.
+	 */
+	hero?: unknown;
+	/**
+	 * The hero the room's bots play, when the creator asks for one.
+	 *
+	 * Creator-only, like the other room properties: a probe that wants sixteen
+	 * daggers on the floor is the only caller, and `?botHero=` is its flag.
+	 * Absent means random per bot.
+	 */
+	botHero?: unknown;
 }
 
 function clamp(
@@ -274,7 +289,7 @@ io.onConnection((channel) => {
 					? {}
 					: { startUltCharge: clampUltCharge(msg.ultCharge) }),
 			});
-			room.addPlayer(channel, name);
+			room.addPlayer(channel, name, msg.hero);
 			room.addDummy();
 			console.log(
 				`[MATCH] Player ${channel.id} in training room ${room.id} vs dummy`,
@@ -328,10 +343,13 @@ io.onConnection((channel) => {
 				...(msg.ultCharge === undefined
 					? {}
 					: { startUltCharge: clampUltCharge(msg.ultCharge) }),
+				// The creator can pin every bot's hero (`?botHero=`); a probe
+				// measuring the dagger at sixteen fighters is the only caller.
+				...(msg.botHero === undefined ? {} : { botHero: msg.botHero }),
 			});
 		}
 
-		if (room.addPlayer(channel, name)) {
+		if (room.addPlayer(channel, name, msg.hero)) {
 			// Back to the size the room was created at, never the size this client
 			// asked for — a latecomer must not be able to resize a match in progress.
 			room.rebalanceBots(room.fillTarget);

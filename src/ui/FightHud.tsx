@@ -91,13 +91,26 @@ function FighterPanel({
 		>
 			<div className="vdh-plaque">
 				<span className="vdh-name">{name}</span>
-				{!foe ? (
+				{foe ? (
+					<span className="vdh-hero">
+						{hud.foeHero === "anands" ? "ANANDS" : "LIA"}
+					</span>
+				) : (
 					<span
 						className={`vdh-stance${hud.stance === "gun" ? " vdh-stance-gun" : ""}${hud.massiveReady ? " vdh-massive" : ""}`}
 					>
-						{hud.stance === "gun" ? "GUN" : "SWORD"}
+						{/* The badge names the actual weapon: Lia's sword and pistol,
+						    Anands' dagger and machine gun. The stance is the slot; the
+						    hero is the weapon in it. */}
+						{hud.stance === "gun"
+							? hud.hero === "anands"
+								? "MACHINE GUN"
+								: "GUN"
+							: hud.hero === "anands"
+								? "DAGGER"
+								: "SWORD"}
 					</span>
-				) : null}
+				)}
 			</div>
 			<div className="vdh-hp-row">
 				<div className="vdh-hp">

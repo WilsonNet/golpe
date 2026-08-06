@@ -13,18 +13,23 @@ src/game/
                     line-of-sight, penetrationDepth, narrowGaps
     Collision.ts    swept axis-separated AABB: moveAndCollide, probeWall, resolveOverlap
     Physics.ts      tuning constants, PlayerPosition, tickPlayer, bullets
-    Melee.ts        sword combat: the MOVES frame-data table, tickMelee, hitboxes, resolveMelee
+    Melee.ts        the shared MOVES frame-data table, the per-weapon tables
+                    (sword/dagger), tickMelee, hitboxes, resolveMelee, the thrust sweep
+    Heroes.ts       the hero registry: who exists, their weapons, and kitFor()
+    Ultimate.ts     the black hole and the dragon thrust: constants, sweeps, charge
     Deathmatch.ts   scoring limits, the win condition, and the one ranking both sides use
     Teams.ts        sides, the friendly-fire predicate, and the wipe-out round rules
   ecs/            miniplex world, entity components, and the per-frame systems
     world.ts        Entity shape, archetype queries, FighterEntity
-    systems.ts      animation, sprite sync, melee effects
+    systems.ts      per-hero animation (strips and poses), sprite sync, melee effects
   Match.ts        the fixed-timestep loop and the wiring between sim, netcode and renderer
   app.ts          Pixi Application bootstrap: init, load, build, tick
-  characters/     EnemyBrain (the coordinator) + AIConfig + four tactic modules:
+  characters/     EnemyBrain (the coordinator) + AIConfig + the tactic modules:
     MeleeBrain.ts   the sword: techniques, rhythms, stance hysteresis
+    DaggerBrain.ts  the dagger: stab spam, thrust reads, the shoryuken anti-air
     JumpBrain.ts    committed jump presses and the scripted double jump
-    UltimateBrain.ts when to hold the button, where to throw (a solved lob), when to release
+    UltimateBrain.ts the black hole: when to hold the button, where to throw
+    DragonBrain.ts  the dragon thrust: when a line is worth a cast
     TeamBrain.ts    team roles (vanguard/support), the cover line, bounded kiting
     types.ts        AIInput/AIOutput — the input-source contract, shared with the dummy
   combat/         BulletSystem.ts — the only simulated source of bullets offline
@@ -50,7 +55,9 @@ src/game/
     room.ts         which room, and keeping the address bar shareable
     types.ts        the wire messages, shared with the server
   render/         Stage.ts (layers + camera), ArenaRenderer.ts (draws from collider
-                  data), assets.ts, SpritePool.ts, Particles.ts, MeleeFx.ts,
+                  data), assets.ts (per-hero sheets, strips and generated poses),
+                  SpritePool.ts, Particles.ts, MeleeFx.ts (per-hero blades and the
+                  dagger's motion tells), DragonFx.ts (the dragon's wake),
                   Shadows.ts (team-tinted cast shadows, in their own layer)
   teamPalette.ts  the two team colours and the one function that applies them —
                   dependency-free, so the canvas and the React overlay share it
@@ -90,7 +97,8 @@ scripts/          diagnose.mjs (Playwright harness), deathmatch-probe.mjs (sixte
                   (stubs the Gamepad API — the only thing that can test controller
                   aim and the phone deck), training-probe.mjs (one interaction at
                   a time), potg-probe.mjs (the end-of-match ceremony — the only
-                  thing that reads past the final whistle), make-potg-art.py
+                  thing that reads past the final whistle), make-hero-art.py
+                  (generates the second hero's pixel-art sheets), make-potg-art.py
                   (generates the ceremony's sunburst and medal),
                   dev-herdr.mjs, probe-online.mjs, verify-modes.mjs
 specs/            the source of truth for intended behaviour

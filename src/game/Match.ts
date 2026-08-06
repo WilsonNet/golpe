@@ -61,9 +61,10 @@ import type {
 } from "./potg/types";
 import { AimLine } from "./render/AimLine";
 import { bodyCentre, drawArena } from "./render/ArenaRenderer";
-import { dudeFrames, TEX, tex } from "./render/assets";
+import { heroFrames, TEX, tex } from "./render/assets";
 import { BlackHoleFx } from "./render/BlackHoleFx";
 import { DenyFx } from "./render/DenyFx";
+import { DragonFx } from "./render/DragonFx";
 import { type ImpactEvent, MeleeFx } from "./render/MeleeFx";
 import { Nameplates } from "./render/Nameplates";
 import { Shadows } from "./render/Shadows";
@@ -84,24 +85,37 @@ import {
 	VICTORY_HOLD_MS,
 } from "./simulation/Deathmatch";
 import {
+	DEFAULT_HERO,
+	HEROES,
+	type HeroId,
+	isHeroId,
+	kitFor,
+} from "./simulation/Heroes";
+import {
+	applyHitToDefender,
 	applyMeleeResult,
-	BULLET_DAMAGE,
+	bodyRect,
 	canFire,
 	createPlayerState,
+	DRAGON_RIDE_MS,
+	dragonVelocity,
 	fieldAffects,
 	fieldFor,
 	hasLineOfSight,
 	isKnockedDown,
 	isStunned,
 	MAX_HP,
+	MOVES,
 	MS_PER_SECOND,
 	meleePhase,
 	NEUTRAL_INTENT,
 	type PlayerIntent,
 	type PlayerPosition,
+	rectsOverlap,
 	resolveMelee,
 	type Singularity,
 	singularityGrip,
+	sweptThrustBox,
 	tickPlayer,
 	ULT_MAX_CHARGE,
 } from "./simulation/Physics";
@@ -246,6 +260,15 @@ export class Match {
 	/** `?ultCharge=N`: what everybody in a freshly created room starts armed with. */
 	private ultCharge: number | undefined;
 	/**
+	 * Which hero this client's own fighter plays. From `?hero=` (the menu's
+	 * hero select writes it), or the Esc menu's hero select mid-match — the
+	 * server confirms the change in the next snapshot, and this field follows
+	 * the echo.
+	 */
+	private hero: HeroId = DEFAULT_HERO;
+	/** `?botHero=` — the hero every bot in a room this client creates plays. */
+	private botHero: HeroId | null = null;
+	/**
 	 * Which ruleset this room plays — a *proposal* until the server answers.
 	 *
 	 * `?mode=tdm` asks for team deathmatch; the room's creator decides, and
@@ -258,6 +281,7 @@ export class Match {
 	private freezeTime: number | undefined;
 	private online: OnlineSession | undefined;
 	private training: TrainingRoom | undefined;
+	private dragonFx!: DragonFx;
 
 	private localBrain: EnemyBrain | undefined;
 	private remoteBrain: EnemyBrain | undefined;
@@ -270,6 +294,8 @@ export class Match {
 	private resetAt = -1;
 	private elapsed = 0;
 	private playerName = "";
+	/** The ultimate button's state last fixed step, for the dragon's release edge. */
+	private ultHeldLast = false;
 	/**
 	 * The room this client asked for, from `?room=` or freshly minted.
 	 *
@@ -309,6 +335,10 @@ export class Match {
 			wantsTeams ? Math.max(askedScreens, TDM_MIN_SCREENS) : askedScreens,
 		);
 		this.view = screen;
+		// `?hero=` picks who this client plays before the room exists. Invalid
+		// values fall back to the default rather than failing to boot.
+		this.hero = isHeroId(launch.hero) ? launch.hero : DEFAULT_HERO;
+		this.botHero = launch.botHero;
 		drawArena(stage.background, stage.arena, this.arena);
 
 		this.queries = createQueries(this.world);
@@ -317,6 +347,9 @@ export class Match {
 		// front of them. See `BlackHoleFx` — a 150px black disc drawn over the actors
 		// hid the fighters it was holding.
 		this.blackHole = new BlackHoleFx(stage.field, stage.effects, stage);
+		// The dragon rides in the effects layer too: it is a wake that follows
+		// the rider, never a field the arena has to make room for.
+		this.dragonFx = new DragonFx(stage);
 		this.plates = new Nameplates(stage.nameplates, this.arena);
 		// Between the arena and the fighters: a shadow falls on the ledge below and
 		// is never drawn over the feet that cast it. See `Stage.shadows`.
@@ -436,6 +469,9 @@ export class Match {
 				START_ENEMY_X,
 				START_ENEMY_Y,
 				-1,
+				// The offline foe plays the mirror hero, so the escape hatch
+				// exercises both kits without needing a server.
+				this.foeHero(),
 			);
 			// No server, so no roster to be named by.
 			this.offlineFoe.fighter.name = "Rival";
@@ -444,6 +480,7 @@ export class Match {
 		}
 
 		EventBus.emit("current-scene-ready", this);
+		this.installHeroSelect();
 	}
 
 	// =========================================================
@@ -456,12 +493,16 @@ export class Match {
 		x: number,
 		y: number,
 		facing: number,
+		hero: HeroId = this.hero,
 	): FighterEntity {
 		// The strip's idle frames are the strip's own table — see `CLIPS` in
 		// ecs/systems.ts, where `left-idle` and `right-idle` name these indices.
+		// The *sheet* the indices cut from is the hero's own: every character
+		// strip shares the nine-frame layout.
 		const idleClip = facing < 0 ? CLIPS["left-idle"] : CLIPS["right-idle"];
 		const [idleFrame] = idleClip.frames;
-		const sprite = new Sprite(dudeFrames[idleFrame]);
+		const frames = heroFrames(HEROES[hero].sheet);
+		const sprite = new Sprite(frames[idleFrame]);
 		sprite.anchor.set(SPRITE_ANCHOR_CENTRE);
 		this.stage.actors.addChild(sprite);
 
@@ -472,7 +513,15 @@ export class Match {
 			// client who that is yet.
 			// No side until a snapshot says otherwise, which is also what every
 			// fighter in a free-for-all keeps for the whole match.
-			fighter: { id, local, hp: MAX_HP, maxHp: MAX_HP, name: "", team: null },
+			fighter: {
+				id,
+				local,
+				hp: MAX_HP,
+				maxHp: MAX_HP,
+				name: "",
+				team: null,
+				hero,
+			},
 			body: createPlayerState(x, y, facing),
 			sprite,
 			anim: { clip: "right-idle", frame: 0, elapsedMs: 0 },
@@ -515,17 +564,23 @@ export class Match {
 	private lastHudSentAt = -1;
 	private lastHudStance: HudState["stance"] = "sword";
 	private lastHudName = "";
+	private lastHudHero: HudState["hero"] = "lia";
 
 	private emitHud(force = false) {
 		const session = this.online;
+		const foeId = this.online?.primaryRemoteId ?? "";
 		const state: HudState = {
 			hp: this.local.fighter.hp,
 			maxHp: this.local.fighter.maxHp,
 			ult: session ? session.localUlt : 0,
 			stance: this.local.body.stance,
+			hero: this.hero,
+			foeHero: this.onlineMode
+				? (session?.heroOf(foeId) ?? "lia")
+				: this.foeHero(),
 			name: this.local.fighter.name,
 			foeName: this.onlineMode
-				? (this.online?.nameOf(this.online?.primaryRemoteId ?? "") ?? "")
+				? (this.online?.nameOf(foeId) ?? "")
 				: (this.offlineFoe?.fighter.name ?? ""),
 			foeHp: this.onlineMode
 				? (this.online?.remoteHp ?? MAX_HP)
@@ -543,9 +598,11 @@ export class Match {
 		};
 		const stanceChanged = state.stance !== this.lastHudStance;
 		const nameChanged = state.name !== this.lastHudName;
+		const heroChanged = state.hero !== this.lastHudHero;
 		this.lastHudStance = state.stance;
 		this.lastHudName = state.name;
-		if (!force && !stanceChanged && !nameChanged) {
+		this.lastHudHero = state.hero;
+		if (!force && !stanceChanged && !nameChanged && !heroChanged) {
 			if (this.elapsed - this.lastHudSentAt < HUD_MIN_INTERVAL_MS) return;
 		}
 		this.lastHudSentAt = this.elapsed;
@@ -591,6 +648,21 @@ export class Match {
 		}) as never);
 	}
 
+	/**
+	 * The Esc menu's hero select. The request goes to the server (reliably —
+	 * it is a one-shot, like `join`), and the change comes home in the next
+	 * snapshot's `hero` field, where `onLocalHero` swaps the sheet and the
+	 * HUD. The client never applies it optimistically, so a refused request
+	 * cannot leave the two sides disagreeing about whose kit is whose.
+	 */
+	private installHeroSelect() {
+		EventBus.on("hero-select", ((hero: unknown) => {
+			if (!isHeroId(hero)) return;
+			if (hero === this.hero) return;
+			this.online?.requestHero(hero);
+		}) as never);
+	}
+
 	private startOnline(name: string) {
 		this.playerName = name;
 		this.local.fighter.name = name;
@@ -615,7 +687,30 @@ export class Match {
 					// player's own hit flashes the bar without the 50ms throttle.
 					this.emitHud(true);
 				},
+				onLocalHero: (hero) => {
+					// The server echoed a hero change (the URL's `?hero=`, or the
+					// Esc menu). Swap the sheet under the fighter, the kit the HUD
+					// describes, and the aim preview's shape.
+					if (hero === this.hero) return;
+					this.hero = hero;
+					this.local.fighter.hero = hero;
+					this.local.anim = { clip: "right-idle", frame: 0, elapsedMs: 0 };
+					const frames = heroFrames(HEROES[hero].sheet);
+					const idle =
+						CLIPS[this.local.body.facing < 0 ? "left-idle" : "right-idle"];
+					this.local.sprite.texture =
+						frames[idle.frames[0] ?? 4] ?? this.local.sprite.texture;
+					this.emitHud(true);
+				},
 				onReconcile: (result) => {
+					// A predicted dragon ride the server refused snaps the fighter
+					// back from wherever the ride had carried it — a legitimate
+					// discontinuity, like a respawn, and announced as one. The
+					// glide takes longer than a hit's: the ride can end 75px from
+					// where the prediction was when the wall stopped it.
+					if (result.dragonDropped) {
+						this.diagnostics.markTeleport(8);
+					}
 					// A correction this large is a respawn, not a misprediction. The
 					// server replaces the whole state, so the sword state changes too;
 					// counting that as a prediction desync would blame the netcode for a
@@ -643,7 +738,7 @@ export class Match {
 						console.log(`[DESYNC] ${JSON.stringify(result.meleeDivergence)}`);
 					}
 				},
-				onTeleport: () => this.diagnostics.markTeleport(),
+				onTeleport: (frames) => this.diagnostics.markTeleport(frames),
 				onRoundReset: () => {
 					this.diagnostics.markRoundReset();
 					// A hole and a portrait both outlive the match they belong to
@@ -836,6 +931,9 @@ export class Match {
 			mode: this.mode,
 			...(this.freezeTime === undefined ? {} : { freezeTime: this.freezeTime }),
 			screens: this.arena.screens,
+			// The hero is a per-client choice: it rides the join like the name.
+			hero: this.hero,
+			...(this.botHero === null ? {} : { botHero: this.botHero }),
 		});
 
 		if (this.trainingMode) {
@@ -850,9 +948,39 @@ export class Match {
 		}
 
 		if (this.aiMode) {
-			this.localBrain = new EnemyBrain(fightConfig(), this.arena);
+			this.localBrain = new EnemyBrain(fightConfig(), this.arena, this.hero);
 			console.log("[AI-ONLINE] AI brain created for local player");
 		}
+	}
+
+	/**
+	 * The local fighter's ultimate was released: if they play Anands, start the
+	 * dragon ride on the predicted state, the way the server will.
+	 *
+	 * Pure prediction — the server judges the release and echoes the real ride
+	 * in the next snapshot, and a release that was refused (meter empty, a
+	 * stun the client had not seen yet) reconciles back to standing. The ride
+	 * itself is deterministic shared code, so the prediction and the truth are
+	 * the same line at the same speed.
+	 */
+	private predictDragonCast() {
+		const session = this.online;
+		if (!session?.connected) return;
+		if (kitFor(this.hero).ultimate !== "dragon-thrust") return;
+		if (session.localUlt < ULT_MAX_CHARGE) return;
+		if (this.local.fighter.hp <= 0) return;
+		if (isStunned(this.local.body) || isKnockedDown(this.local.body)) return;
+		const velocity = dragonVelocity(this.aimAngle);
+		const s = session.predicted.state;
+		s.dragonTimer = DRAGON_RIDE_MS;
+		s.dragonVX = velocity.vx;
+		s.dragonVY = velocity.vy;
+		s.vx = 0;
+		s.vy = 0;
+		// The black hole's cast is announced by its cinematic; the dragon has no
+		// cinematic, so the metric and the HUD learn about *this* cast from the
+		// prediction that just made it — the same event, one tick earlier.
+		this.diagnostics.recordUltimateCast();
 	}
 
 	/** A fighter appeared in a snapshot. Give it something to be drawn with. */
@@ -871,8 +999,12 @@ export class Match {
 	}
 
 	private startOfflineAi() {
-		this.localBrain = new EnemyBrain(fightConfig(), this.arena);
-		this.remoteBrain = new EnemyBrain(fightConfig(), this.arena);
+		this.localBrain = new EnemyBrain(fightConfig(), this.arena, this.hero);
+		this.remoteBrain = new EnemyBrain(
+			fightConfig(),
+			this.arena,
+			this.foeHero(),
+		);
 		console.log("=== AI VS AI MODE ENABLED ===");
 	}
 
@@ -1263,8 +1395,8 @@ export class Match {
 		}
 
 		// The aim phase: while the ultimate button is held and a cast is legal,
-		// show the arc the grenade will fly on this angle. It is the *release*
-		// that casts, so the aim itself must not be hidden behind anything.
+		// show where the ultimate will go. Lia's is the grenade's arc; Anands'
+		// is the dragon's straight line — the same preview rule, two geometries.
 		const at = this.local.renderPos ?? this.local.body;
 		const centre = bodyCentre(at.x, at.y);
 		this.ultAim.update(
@@ -1274,6 +1406,7 @@ export class Match {
 			centre.y,
 			this.aimAngle,
 			this.arena,
+			kitFor(this.hero).ultimate === "dragon-thrust" ? "beam" : "arc",
 		);
 
 		const field: Singularity | null = session.singularity;
@@ -1293,6 +1426,23 @@ export class Match {
 
 		this.blackHole.syncGrenades(session.grenades, dtMs);
 		this.blackHole.update(field, victims, dtMs);
+
+		// The dragon: a serpent behind whoever is riding. The rider's drawn
+		// position is what the trail chases — the same smoothing rule as the
+		// nameplates and the shadows.
+		let rider: { x: number; y: number; vx: number; vy: number } | null = null;
+		for (const e of this.queries.fighters) {
+			if (e.body.dragonTimer <= 0) continue;
+			const pos = e.renderPos ?? e.body;
+			rider = {
+				x: pos.x + PLAYER_WIDTH / 2,
+				y: pos.y + PLAYER_HEIGHT / 2,
+				vx: e.body.dragonVX,
+				vy: e.body.dragonVY,
+			};
+			break;
+		}
+		this.dragonFx.update(rider, dtMs);
 	}
 
 	/**
@@ -1312,8 +1462,14 @@ export class Match {
 		const session = this.online;
 		if (!session) return false;
 		if (session.frozen) return false;
-		if (session.singularity) return false;
-		if (session.grenades.length > 0) return false;
+		// Lia's cast is refused while a hole is open — one black hole per room.
+		// Anands' is not: the hole is the *counter* to the dragon, and a dragon
+		// thrown into one is a dragon about to be caught, which is a real
+		// decision the aim has to be able to show.
+		if (kitFor(this.hero).ultimate === "black-hole") {
+			if (session.singularity) return false;
+			if (session.grenades.length > 0) return false;
+		}
 		if (session.matchStatus?.phase !== "live") return false;
 		if (!this.input.actionDown("ultimate")) return false;
 		if (this.local.fighter.hp <= 0) return false;
@@ -1825,6 +1981,10 @@ export class Match {
 				: this.offlineFoe
 					? { x: this.offlineFoe.body.x, y: this.offlineFoe.body.y }
 					: null,
+			// The primary remote's id, so the melee tracker knows when its
+			// "remote" subject has changed — comparing fighter A's swing to
+			// fighter B's idle is how a switch reads as a broken state machine.
+			enemyId: this.online?.primaryRemoteId ?? null,
 			// The opponent's state **as the server sent it**, not as this client
 			// predicted it.
 			//
@@ -1891,6 +2051,7 @@ export class Match {
 	private perceive(
 		self: PlayerPosition,
 		foe: PlayerPosition,
+		foeHero: HeroId,
 		selfHP: number,
 		enemyHP: number,
 	): AIInput {
@@ -1903,6 +2064,7 @@ export class Match {
 		let selfUltCharge = 0;
 		const fields: { x: number; y: number; hostile: boolean }[] = [];
 		let selfId = "local";
+		const enemyGrounded = foe.grounded;
 
 		const session = this.online;
 		if (session?.connected) {
@@ -1987,6 +2149,9 @@ export class Match {
 			selfStuck: self.plungeStuckTimer > 0,
 			selfMassiveReady: self.massiveReady,
 			selfId,
+			selfHero: this.hero,
+			enemyHero: foeHero,
+			enemyGrounded,
 			selfAirJumps: self.airJumps,
 			selfUltCharge,
 			enemyVX: foe.vx,
@@ -2048,7 +2213,8 @@ export class Match {
 				const output = this.localBrain.decide(
 					this.perceive(
 						this.local.body,
-						foe,
+						foe.state,
+						foe.hero,
 						this.local.fighter.hp,
 						session.remoteHp,
 					),
@@ -2068,13 +2234,25 @@ export class Match {
 			// rather than by the rendered frame. A frame can run zero fixed steps
 			// — on a 120Hz+ display, roughly half of them — and a gesture consumed
 			// into a frame that ran none was silently dropped: the player
-			// double-tapped and nothing happened, which read as a cooldown far
+			// double-taps and nothing happened, which read as a cooldown far
 			// longer than the 250ms lockout. A local AI brain already carries its
 			// dash inside `localIntent`, so it wins and the human gesture stays.
 			const intent =
 				this.localBrain !== undefined
 					? this.localIntent
 					: Input.withDash(this.localIntent, this.input.consumeDash());
+			// The dragon's cast is predicted locally, exactly like a dash. The
+			// black hole cannot be — its release is followed by a server-declared
+			// freeze, which is what hides the round trip. The dragon has no
+			// freeze: the release *is* the launch, and without this the rider
+			// would stand still until the next snapshot caught up — a visible
+			// snap forward of a few frames on every cast. The release edge, the
+			// meter and the standing conditions are the same ones the server
+			// will judge, and reconciliation corrects any difference.
+			if (this.ultHeldLast && !intent.ultimate) {
+				this.predictDragonCast();
+			}
+			this.ultHeldLast = intent.ultimate;
 			session.fixedStep(intent, this.aimAngle, dt);
 		});
 
@@ -2111,6 +2289,20 @@ export class Match {
 			// but a fighter is drawn before its first snapshot lands, and a colourless
 			// frame is better than a wrong one that never corrects itself.
 			entity.fighter.team = session.teamOf(id);
+			// Same argument, one field over: the hero chooses the strip and the
+			// poses, and it arrives on the snapshot like everything else. A hero
+			// change swaps the sheet on the next snapshot.
+			const hero = session.heroOf(id);
+			if (hero !== entity.fighter.hero) {
+				entity.fighter.hero = hero;
+				// The remote's own sheet, from the animation system's strip table —
+				// the idle frame is the same index in every hero's layout.
+				const frames = heroFrames(HEROES[hero].sheet);
+				const idle = CLIPS[entity.body.facing < 0 ? "left-idle" : "right-idle"];
+				entity.sprite.texture =
+					frames[idle.frames[0] ?? 4] ?? entity.sprite.texture;
+				entity.anim = { clip: "right-idle", frame: 0, elapsedMs: 0 };
+			}
 		}
 	}
 
@@ -2132,10 +2324,24 @@ export class Match {
 					this.localBrain !== undefined
 						? this.localIntent
 						: Input.withDash(this.localIntent, this.input.consumeDash());
-				this.local.body = tickPlayer(this.local.body, intent, dt, this.arena);
+				this.local.body = tickPlayer(
+					this.local.body,
+					intent,
+					dt,
+					this.arena,
+					null,
+					kitFor(this.hero),
+				);
 			}
 			if (foe.fighter.hp > 0) {
-				foe.body = tickPlayer(foe.body, this.remoteIntent, dt, this.arena);
+				foe.body = tickPlayer(
+					foe.body,
+					this.remoteIntent,
+					dt,
+					this.arena,
+					null,
+					kitFor(this.foeHero()),
+				);
 			}
 			this.bullets.step(dt);
 		});
@@ -2152,6 +2358,7 @@ export class Match {
 				this.perceive(
 					this.local.body,
 					foe.body,
+					this.foeHero(),
 					this.local.fighter.hp,
 					foe.fighter.hp,
 				),
@@ -2170,6 +2377,7 @@ export class Match {
 				this.perceive(
 					foe.body,
 					this.local.body,
+					this.hero,
 					foe.fighter.hp,
 					this.local.fighter.hp,
 				),
@@ -2181,14 +2389,26 @@ export class Match {
 		}
 	}
 
+	/**
+	 * The offline foe's hero: the mirror of the local fighter's, so the escape
+	 * hatch exercises both kits without needing a server.
+	 */
+	private foeHero(): HeroId {
+		return this.hero === "anands" ? "lia" : "anands";
+	}
+
 	private handleOfflineAttacks(foe: FighterEntity) {
 		const now = this.elapsed;
+		const localKit = kitFor(this.hero);
+		const foeKit = kitFor(this.foeHero());
 
-		// A fighter holds a sword or a gun, never both.
+		// A fighter holds a melee weapon or a ranged one, never both. The rate
+		// and the round are the hero's weapon's, exactly as the server decides
+		// them.
 		if (
 			this.local.body.stance === "gun" &&
 			this.localIntent.attack &&
-			canFire(this.localAttackAt, now)
+			canFire(this.localAttackAt, now, localKit.ranged.cooldownMs)
 		) {
 			this.localAttackAt = now;
 			const c = bodyCentre(this.local.body.x, this.local.body.y);
@@ -2200,7 +2420,7 @@ export class Match {
 			foe.fighter.hp > 0 &&
 			foe.body.stance === "gun" &&
 			this.remoteIntent.attack &&
-			canFire(this.remoteAttackAt, now)
+			canFire(this.remoteAttackAt, now, foeKit.ranged.cooldownMs)
 		) {
 			this.remoteAttackAt = now;
 			const c = bodyCentre(foe.body.x, foe.body.y);
@@ -2221,7 +2441,9 @@ export class Match {
 	 *
 	 * Mirrors `GameRoom.resolveMeleeHits` because both call the same simulation
 	 * code — the escape hatch must not become a second, divergent set of combat
-	 * rules, since it is the one path nobody dogfoods.
+	 * rules, since it is the one path nobody dogfoods. The dagger's thrust is
+	 * swept here the way the server sweeps it, so an offline dagger duel is
+	 * the same fight it would be online.
 	 */
 	private resolveOfflineMelee(foe: FighterEntity) {
 		const sides: [FighterEntity, FighterEntity][] = [
@@ -2231,6 +2453,35 @@ export class Match {
 
 		for (const [attacker, defender] of sides) {
 			if (attacker.fighter.hp <= 0 || defender.fighter.hp <= 0) continue;
+
+			// The thrust's sweep: multi-target, like the server's. The offline
+			// room is a duel, so one sweep box against the one defender.
+			const box = sweptThrustBox(attacker.body);
+			if (
+				box &&
+				rectsOverlap(box, bodyRect(defender.body.x, defender.body.y))
+			) {
+				const damage = applyHitToDefender(defender.body, {
+					move: "thrust",
+					outcome: "hit",
+					damage: MOVES.thrust.damage,
+					x: box.x + box.w / 2,
+					y: box.y + box.h / 2,
+					dir: attacker.body.facing >= 0 ? 1 : -1,
+				});
+				this.fx.impact(
+					{
+						move: "thrust",
+						outcome: "hit",
+						x: box.x + box.w / 2,
+						y: box.y + box.h / 2,
+						dir: attacker.body.facing >= 0 ? 1 : -1,
+					},
+					defender.fighter.id,
+				);
+				if (damage > 0) this.applyOfflineDamage(defender, damage, "sword");
+				continue;
+			}
 
 			const result = resolveMelee(attacker.body, defender.body);
 			if (!result) continue;
@@ -2242,6 +2493,8 @@ export class Match {
 	}
 
 	private bulletTargets(foe: FighterEntity): BulletTarget[] {
+		const localDamage = kitFor(this.hero).ranged.damage;
+		const foeDamage = kitFor(this.foeHero()).ranged.damage;
 		return [
 			{
 				owner: "enemy",
@@ -2249,7 +2502,7 @@ export class Match {
 				y: foe.body.y,
 				alive: foe.fighter.hp > 0,
 				state: foe.body,
-				onHit: () => this.applyOfflineDamage(foe, BULLET_DAMAGE, "bullet"),
+				onHit: () => this.applyOfflineDamage(foe, localDamage, "bullet"),
 			},
 			{
 				owner: "player",
@@ -2257,8 +2510,7 @@ export class Match {
 				y: this.local.body.y,
 				alive: this.local.fighter.hp > 0,
 				state: this.local.body,
-				onHit: () =>
-					this.applyOfflineDamage(this.local, BULLET_DAMAGE, "bullet"),
+				onHit: () => this.applyOfflineDamage(this.local, foeDamage, "bullet"),
 			},
 		];
 	}

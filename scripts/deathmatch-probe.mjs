@@ -34,6 +34,10 @@ const DIAG_MS = Number(arg("diagnostic", 12000));
 const WALL_CLOCK_MS = (TIME_LIMIT_SEC + 60) * 1000;
 /** How many 800px screens wide the arena is. Defaults to the classic one. */
 const SCREENS = Math.max(1, Number(arg("screens", 1)) || 1);
+/** `--hero=anands` plays the whole room as the dagger hero. */
+const HERO = arg("hero", "");
+/** `--botHero=anands` seats every bot as the dagger hero. */
+const BOT_HERO = arg("botHero", "");
 
 function sinkConsole(page, lines = []) {
 	page.on("console", (msg) => lines.push(msg.text()));
@@ -172,7 +176,9 @@ async function main() {
 	const url =
 		`${BASE_URL}/?ai=true&bots=${FIGHTERS - 1}` +
 		`&scoreLimit=${SCORE_LIMIT}&timeLimit=${TIME_LIMIT_SEC}` +
-		(SCREENS > 1 ? `&screen=${SCREENS}` : "");
+		(SCREENS > 1 ? `&screen=${SCREENS}` : "") +
+		(HERO ? `&hero=${HERO}` : "") +
+		(BOT_HERO ? `&botHero=${BOT_HERO}` : "");
 	console.log(`[PROBE] ${url}`);
 	await page.goto(url);
 	await page.waitForFunction(() => typeof window.__matchState === "function", {

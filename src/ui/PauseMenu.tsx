@@ -14,10 +14,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { EventBus } from "../game/EventBus";
+import { readStoredHero, storeHero } from "../game/heroPref";
+import type { HeroId } from "../game/simulation/Heroes";
 import { ControlsDialog } from "./ControlsDialog";
+import { HeroSelect } from "./HeroSelect";
 import { HUD_CSS } from "./hudStyles";
 
-type View = "menu" | "controls";
+type View = "menu" | "controls" | "heroes";
 
 export function PauseMenu({
 	onExitToMenu,
@@ -107,6 +110,13 @@ export function PauseMenu({
 							<button
 								className="vd-btn"
 								type="button"
+								onClick={() => setView("heroes")}
+							>
+								Heroes
+							</button>
+							<button
+								className="vd-btn"
+								type="button"
 								onClick={() => setView("controls")}
 							>
 								Controls
@@ -142,6 +152,31 @@ export function PauseMenu({
 								</button>
 							)}
 						</div>
+					</>
+				) : view === "heroes" ? (
+					<>
+						<h2 className="vd-title">Heroes</h2>
+						<p className="vd-sub">
+							Changing hero applies on the server's next snapshot — the ultimate
+							meter resets with it.
+						</p>
+						<HeroSelect
+							current={readStoredHero()}
+							onPick={(hero: HeroId) => {
+								storeHero(hero);
+								// The match hears the change and asks the server; the
+								// echo comes home in the next snapshot's `hero` field.
+								EventBus.emit("hero-select", hero);
+								setView("menu");
+							}}
+						/>
+						<button
+							className="vd-btn"
+							type="button"
+							onClick={() => setView("menu")}
+						>
+							Back
+						</button>
 					</>
 				) : (
 					<>

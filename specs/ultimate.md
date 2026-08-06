@@ -1,10 +1,19 @@
-# The Ultimate: Black Hole Grenade
+# The Ultimate
 
 **Intent:** one button that changes the shape of a fight. It is earned slowly,
 spent in an instant, announced to everybody in the room, and it can be thrown
 away on a bad angle. The reward is not the damage — it is that four fighters
 stop being able to move while you and everyone you are not fighting cut them
 apart.
+
+**An ultimate is the one thing that is always unique per hero.** The meter
+economy below is shared by every hero; what the meter spends is the hero's
+own. Lia's ultimate is the **Black Hole Grenade** specified here. Anands'
+ultimate is the **dragon thrust** — a ride, not a throw — specified in
+[anands.md](anands.md). The cast button, the hold-to-aim release-to-cast
+gesture and the meter are the same for both; only the geometry that comes out
+differs, and the aim preview shows the hero's own shape (the grenade's arc or
+the dragon's straight beam).
 
 Three references, deliberately: **Overwatch** for how it is earned and how it is
 announced, **Dota 2's Enigma** for what the field actually does, and **Zarya's

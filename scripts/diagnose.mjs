@@ -33,9 +33,14 @@ const SCREENS = Math.max(1, Number(arg("screens", 1)) || 1);
 // ultimate the long way (~285s of passive charge), so the bots' ultimate use is
 // measured with `--ultCharge=100` and read from `ultimateSummary.localCasts`.
 const ULT_CHARGE = Math.max(0, Number(arg("ultCharge", 0)) || 0);
+// `--hero=anands` makes both duellists play the dagger — the canonical run
+// stays the sword game, and this is how the dagger's AI-vs-AI behaviour is
+// measured without changing what `diagnose.mjs` proves by default.
+const HERO = arg("hero", "");
 const URL_PARAMS =
 	`${SCREENS > 1 ? `&screen=${SCREENS}` : ""}` +
-	`${ULT_CHARGE > 0 ? `&ultCharge=${ULT_CHARGE}` : ""}`;
+	`${ULT_CHARGE > 0 ? `&ultCharge=${ULT_CHARGE}` : ""}` +
+	`${HERO ? `&hero=${HERO}` : ""}`;
 
 /** Attach a console sink to a page and return the collected lines. */
 function sinkConsole(page, lines = []) {

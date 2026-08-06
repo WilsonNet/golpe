@@ -22,8 +22,7 @@
  */
 
 import type { World } from "../simulation/Arena.js";
-import type { MeleeBrain } from "./MeleeBrain.js";
-import type { AIInput, AIOutput, TeamRole } from "./types.js";
+import type { AIInput, AIOutput, MeleeModuleView, TeamRole } from "./types.js";
 
 /** A hostile inside this much of an ally means the ally is being threatened. */
 // Team reflexes, rolled per decision. Each is a chance per frame the reflex
@@ -141,7 +140,7 @@ export class TeamBrain {
 	decide(
 		input: AIInput,
 		output: AIOutput,
-		melee: MeleeBrain,
+		melee: MeleeModuleView,
 		role: TeamRole | null,
 		delta: number,
 	): TeamContext {
@@ -251,7 +250,7 @@ export class TeamBrain {
 	private steerVanguard(
 		input: AIInput,
 		output: AIOutput,
-		melee: MeleeBrain,
+		melee: MeleeModuleView,
 		delta: number,
 	) {
 		const support = this.nearestAliveAlly(input);

@@ -13,6 +13,7 @@
 
 import { World } from "miniplex";
 import type { Sprite } from "pixi.js";
+import type { HeroId } from "../simulation/Heroes";
 import type { PlayerPosition } from "../simulation/Physics";
 import type { TeamId } from "../simulation/Teams";
 import type { ClipName } from "./systems";
@@ -62,6 +63,13 @@ interface Entity {
 		 * renderer is allowed to look at, refreshed from the snapshot like `hp`.
 		 */
 		team: TeamId | null;
+		/**
+		 * Which hero this fighter is, for presentation: which strip the walk
+		 * cycle is cut from, which generated poses it wears, and which blade
+		 * the effects layer draws. Refreshed from the snapshot, like `team` —
+		 * a hero change mid-match swaps the sheet on the next snapshot.
+		 */
+		hero: HeroId;
 	};
 
 	/** A server-owned projectile, keyed by the id the server assigned. */
@@ -124,7 +132,10 @@ export function createQueries(world: GameWorld) {
 	return {
 		fighters: world.with("fighter", "body"),
 		drawnFighters: world.with("fighter", "body", "sprite"),
-		animated: world.with("body", "sprite", "anim"),
+		// Animation reads the hero (for the strip and the poses), so a fighter
+		// without one — there are none, but an archetype is a promise — is not
+		// animated.
+		animated: world.with("fighter", "body", "sprite", "anim"),
 		bullets: world.with("bullet", "position", "sprite"),
 	};
 }

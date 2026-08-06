@@ -12,6 +12,7 @@ import {
 	type ScoreEntry,
 	type Standing,
 } from "../simulation/Deathmatch";
+import { type HeroId, kitFor } from "../simulation/Heroes";
 import {
 	fieldFor,
 	isBulletOutOfBounds,
@@ -86,6 +87,8 @@ interface FighterInfo {
 	 * exactly why it arrives in the snapshot beside `hp` and not in the roster.
 	 */
 	team: TeamId | null;
+	/** Which hero, for the kit that `tickPlayer` replays every fighter with. */
+	hero: HeroId;
 }
 
 function newInfo(): FighterInfo {
@@ -99,12 +102,19 @@ function newInfo(): FighterInfo {
 		alive: true,
 		ult: 0,
 		team: null,
+		hero: "lia",
 	};
 }
 
 export interface OnlineCallbacks {
 	onStatus: (msg: string) => void;
 	onLocalHp: (hp: number) => void;
+	/**
+	 * The local fighter's hero changed — the echo of the Esc menu's hero select
+	 * (or the hero the URL asked for, arriving on the first snapshot). The
+	 * client swaps the sheet and the HUD reads the new name from this.
+	 */
+	onLocalHero: (hero: HeroId) => void;
 	/**
 	 * The whole reconciliation result, for the diagnostic.
 	 *
@@ -115,7 +125,7 @@ export interface OnlineCallbacks {
 	 */
 	onReconcile: (result: ReconcileResult) => void;
 	/** A discontinuity that is expected — so it is not counted as jitter. */
-	onTeleport: () => void;
+	onTeleport: (frames?: number) => void;
 	/** The server reset the whole arena: all continuity is legitimately broken. */
 	onRoundReset: () => void;
 	/** A sword impact the server judged, for effects only. */
@@ -331,6 +341,25 @@ export class OnlineSession {
 		return this.info.get(id)?.team ?? null;
 	}
 
+	/**
+	 * The hero the snapshot says a fighter plays. Falls back to Lia before the
+	 * first snapshot names anybody.
+	 */
+	heroOf(id: string): HeroId {
+		return this.info.get(id)?.hero ?? "lia";
+	}
+
+	/**
+	 * The Esc menu's hero select: ask the server to switch this fighter's hero.
+	 * The server answers in the next snapshot's `hero` field, and `absorbInfo`
+	 * echoes it through `onLocalHero` — the client never applies the change
+	 * optimistically, so a refused request (a disconnecting room, a server on
+	 * an older build) cannot leave the client and the server disagreeing.
+	 */
+	requestHero(hero: HeroId) {
+		this.manager.sendHero(hero);
+	}
+
 	/** Is this fighter up? Dead fighters are still simulated, just not scoring. */
 	aliveOf(id: string): boolean {
 		return this.info.get(id)?.alive ?? true;
@@ -515,10 +544,15 @@ export class OnlineSession {
 	 * Teammates are filtered here rather than inside the brain, exactly as they
 	 * are on the server: a brain is only ever handed an enemy, so it has no way to
 	 * decide to attack its own side. See `GameRoom.nearestFoe`.
+	 *
+	 * Returns the fighter's state *and* hero: a client brain reading a dagger
+	 * must know it is reading a dagger.
 	 */
-	nearestFoe(from: PlayerPosition): PlayerPosition | null {
+	nearestFoe(
+		from: PlayerPosition,
+	): { state: PlayerPosition; hero: HeroId } | null {
 		const mine = this.myTeam;
-		let best: PlayerPosition | null = null;
+		let best: { state: PlayerPosition; hero: HeroId } | null = null;
 		let bestDist = Number.POSITIVE_INFINITY;
 		for (const [id, fighter] of this.fighters) {
 			if (!(this.info.get(id)?.alive ?? true)) continue;
@@ -529,7 +563,7 @@ export class OnlineSession {
 			);
 			if (dist < bestDist) {
 				bestDist = dist;
-				best = fighter.state;
+				best = { state: fighter.state, hero: fighter.hero };
 			}
 		}
 		return best;
@@ -901,8 +935,20 @@ export class OnlineSession {
 		info.alive = p.alive;
 		info.ult = p.ult ?? 0;
 		info.team = p.team ?? null;
+		// The hero is an argument to `tickPlayer` on the replay path, so it is
+		// absorbed with everything else the snapshot says about this fighter.
+		// `rollbackRemote` hands it to the remote's kit; the local one reads its
+		// own row here too, which is how the Esc menu's hero change comes home.
+		info.hero = p.hero;
 		this.info.set(p.id, info);
-		if (p.id === this.manager.myId) this.callbacks.onLocalHp(p.hp);
+		if (p.id === this.manager.myId) {
+			this.callbacks.onLocalHp(p.hp);
+			const kit = kitFor(p.hero);
+			if (kit.hero !== this.predicted.currentKit.hero) {
+				this.predicted.setKit(kit);
+				this.callbacks.onLocalHero(kit.hero);
+			}
+		}
 	}
 
 	/**
@@ -978,13 +1024,17 @@ export class OnlineSession {
 			// First sight. Adopted outright — there is nothing to reconcile against,
 			// and smoothing in from a default position would draw the fighter flying
 			// across the arena to its spawn.
-			fighter = new RemoteFighter(state, this.world);
+			fighter = new RemoteFighter(state, this.world, kitFor(p.hero));
 			this.fighters.set(p.id, fighter);
 			fighter.teleport(state, intent);
 			this.ensurePrimary();
 			this.callbacks.onFighterAdded(p.id);
 			return;
 		}
+		// The kit is set every snapshot — it is a table lookup and a comparison,
+		// and it is what lets a hero change travel through the same channel the
+		// first hero did.
+		fighter.setKit(kitFor(p.hero));
 
 		if (this.pendingTeleports.delete(p.id)) {
 			fighter.teleport(state, intent);
@@ -999,6 +1049,16 @@ export class OnlineSession {
 			PHYSICS_DT,
 			this.fieldOn(p.id),
 		);
+		// A dropped dragon ride is a legitimate discontinuity, like a respawn:
+		// the predicted ride ended (or was refused) before this client's clock
+		// did, and the fighter snaps back from wherever the prediction had
+		// carried it. Announced so the jitter metric skips the glide.
+		if (result.dragonDropped) {
+			// The dropped ride glides back over several frames — the smoother
+			// is not reset for it, unlike a respawn — so the suppression
+			// window has to cover the glide, not just the snap.
+			this.callbacks.onTeleport(8);
+		}
 		this.rollbackStats.record(result);
 		// A jump this large is a respawn the announcement lost the race to, or a
 		// fighter the server moved for a reason no client could predict. Either way

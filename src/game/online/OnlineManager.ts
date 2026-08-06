@@ -1,5 +1,6 @@
 import geckos from "@geckos.io/client";
 import type { PotgAnnounce } from "../potg/types";
+import type { HeroId } from "../simulation/Heroes";
 import type { MatchMode } from "../simulation/Teams";
 import type { TrainingConfigMsg, TrainingStateMsg } from "../training/types";
 import {
@@ -102,6 +103,18 @@ export interface JoinOptions {
 	mode?: MatchMode;
 	/** Freezetime in seconds, for a team room. Creator-only, like the rest. */
 	freezeTime?: number;
+	/**
+	 * Which hero this client's own fighter plays. **Per-client, not
+	 * creator-only** — it is the answer to "who do you want to be", and the
+	 * last person through the door still gets to pick.
+	 */
+	hero?: HeroId;
+	/**
+	 * The hero the room's bots play, when the creator asks for one.
+	 * Creator-only: a probe that wants sixteen daggers on the floor is the
+	 * only caller.
+	 */
+	botHero?: HeroId;
 }
 
 export class OnlineManager {
@@ -184,6 +197,8 @@ export class OnlineManager {
 					...(join.freezeTime === undefined
 						? {}
 						: { freezeTime: join.freezeTime }),
+					...(join.hero === undefined ? {} : { hero: join.hero }),
+					...(join.botHero === undefined ? {} : { botHero: join.botHero }),
 				},
 				RELIABLE,
 			);
@@ -272,6 +287,17 @@ export class OnlineManager {
 	sendInput(input: PlayerInput) {
 		if (this.channel && this._connected) {
 			this.channel.emit("input", input);
+		}
+	}
+
+	/**
+	 * The Esc menu's hero select. Reliable — it is a one-shot control message
+	 * with no second chance, like `join`: a lost hero request would leave the
+	 * player fighting the old hero with no error to show for it.
+	 */
+	sendHero(hero: HeroId) {
+		if (this.channel && this._connected) {
+			this.channel.emit("hero", { hero }, { reliable: true });
 		}
 	}
 

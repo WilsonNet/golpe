@@ -16,6 +16,10 @@ export interface HudState {
 	ult: number;
 	/** The local fighter's stance — the badge beside the name. */
 	stance: "sword" | "gun";
+	/** The local fighter's hero — the badge reads "SWORD" or "DAGGER" from it. */
+	hero: "lia" | "anands";
+	/** The primary remote's hero, for the mirrored duel panel. */
+	foeHero: "lia" | "anands";
 	/** The local fighter's name, once the roster knows it. */
 	name: string;
 	/** The primary remote fighter, for a duel's mirrored panel. */

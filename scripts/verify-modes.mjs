@@ -63,6 +63,18 @@ const MODES = [
 		fighters: 2,
 	},
 	/**
+	 * The second hero: a dagger-vs-dagger AI duel. The whole hero pipeline —
+	 * the kit on the wire, the per-hero sheets, the dagger brain — must boot
+	 * and fight exactly like the sword game does.
+	 */
+	{
+		label: "AI vs AI, dagger hero (two tabs)",
+		url: "/?online=true&ai=true&hero=anands",
+		tabs: 2,
+		needsFight: true,
+		fighters: 2,
+	},
+	/**
 	 * A room full of AI. The mode the deathmatch exists for, and the one where
 	 * everything that only breaks at scale breaks: sixteen fighters, sixteen
 	 * predicted bodies, a quadratic hitbox pass and a snapshot big enough to care

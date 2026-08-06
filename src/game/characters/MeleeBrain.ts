@@ -277,7 +277,11 @@ export class MeleeBrain {
 				input.enemyAction === "uppercut" ||
 				// The chain's finisher recovers for 420ms and cannot be cancelled out
 				// of, so a whiffed one is the same gift a whiffed Massive is.
-				input.enemyAction === "slash3");
+				input.enemyAction === "slash3" ||
+				// The dagger's two commitments: a whiffed thrust and a whiffed
+				// shoryuken both leave a 320ms recovery with no hitbox in it.
+				input.enemyAction === "thrust" ||
+				input.enemyAction === "shoryuken");
 		if (punishable && distance < STRIKE_RANGE_PX) {
 			return LONE_SLASH;
 		}
@@ -302,7 +306,14 @@ export class MeleeBrain {
 				// break that stops it is the same one that stops a slash — so a
 				// turtle can read the wind-up and turn the heaviest move in the
 				// game into their own free Massive.
-				input.enemyAction === "massive") &&
+				input.enemyAction === "massive" ||
+				// A dagger's blockable moves: the stab's spam is exactly what a
+				// guard answers — every one stopped is a guard break — and the
+				// shoryuken is blockable by design. The thrust is *not* here: a
+				// guard cannot stop it, and the read against it is the jump,
+				// which EnemyBrain owns.
+				input.enemyAction === "stab" ||
+				input.enemyAction === "shoryuken") &&
 			(input.enemyPhase === "startup" || input.enemyPhase === "active") &&
 			distance < STRIKE_RANGE_PX + GUARD_READ_GRACE_PX;
 		// A hurt fighter answers a read by covering up rather than by timing a

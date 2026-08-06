@@ -14,6 +14,8 @@
  * the requests.
  */
 
+import type { HeroId } from "../simulation/Heroes";
+import { isHeroId } from "../simulation/Heroes";
 import type { MatchMode } from "../simulation/Teams";
 
 /** A match the URL can ask for. `undefined` means "not asked". */
@@ -28,6 +30,20 @@ export interface LaunchParams {
 	offline: boolean;
 	/** `?training=true` (or `?training-room=true`) — the practice room. */
 	training: boolean;
+	/**
+	 * `?hero=lia|anands` — the hero this client's own fighter plays.
+	 *
+	 * Per-client, unlike the room properties: the menu's hero select writes it
+	 * into the boot URL, a shared room link does not carry it, and a joiner who
+	 * clicks a bare room link plays whatever the menu last picked.
+	 */
+	hero: HeroId | null;
+	/**
+	 * `?botHero=lia|anands` — the hero every bot in a freshly created room
+	 * plays. Creator-only, and a probe's flag: a room full of one hero is how
+	 * the dagger is measured at sixteen fighters. Absent means random per bot.
+	 */
+	botHero: HeroId | null;
 	/** `?bots=N` — opponents to seat. `0` is a legitimate answer: an empty room. */
 	bots: number | undefined;
 	/** `?fill=N` — keep the room at N fighters, bots as ballast. */
@@ -56,6 +72,11 @@ export interface LaunchParams {
  * and every probe and diagnostic runs exactly this way. `online` is absent on
  * purpose: it is vestigial, and a bare `?online=true` is just the old spelling
  * of the bare URL, which is the menu's own page.
+ *
+ * `hero` is in the set, which has one consequence worth naming: a bare
+ * `?hero=anands` boots straight into a match, exactly like `?ai=true` does.
+ * That is the point — the menu writes `hero` alongside the rest of the launch
+ * request, and a probe that wants a dagger needs no ceremony to get one.
  */
 const LAUNCH_KEYS = [
 	"room",
@@ -63,6 +84,7 @@ const LAUNCH_KEYS = [
 	"offline",
 	"training",
 	"training-room",
+	"hero",
 	"bots",
 	"fill",
 	"scoreLimit",
@@ -120,6 +142,14 @@ export function parseLaunchParams(search: string): LaunchParams {
 		training:
 			params.get("training") === "true" ||
 			params.get("training-room") === "true",
+		hero: (() => {
+			const raw = params.get("hero");
+			return isHeroId(raw) ? raw : null;
+		})(),
+		botHero: (() => {
+			const raw = params.get("botHero");
+			return isHeroId(raw) ? raw : null;
+		})(),
 		bots: countParam(params, "bots"),
 		fill: numberParam(params, "fill"),
 		scoreLimit: numberParam(params, "scoreLimit"),
@@ -157,6 +187,8 @@ export function serializeLaunchParams(params: LaunchParams): string {
 	if (params.online) url.set("online", "true");
 	if (params.offline) url.set("offline", "true");
 	if (params.training) url.set("training", "true");
+	if (params.hero !== null) url.set("hero", params.hero);
+	if (params.botHero !== null) url.set("botHero", params.botHero);
 	if (params.bots !== undefined) url.set("bots", String(params.bots));
 	if (params.fill !== undefined) url.set("fill", String(params.fill));
 	if (params.scoreLimit !== undefined)

@@ -20,6 +20,8 @@ const NOTHING: LaunchParams = {
 	ai: false,
 	online: false,
 	offline: false,
+	hero: null,
+	botHero: null,
 	training: false,
 	bots: undefined,
 	fill: undefined,
@@ -38,7 +40,7 @@ describe("parseLaunchParams", () => {
 
 	it("reads every field from a full link", () => {
 		const parsed = parseLaunchParams(
-			"?room=abc-123&ai=true&online=true&offline=true&training=true&bots=3&fill=8&scoreLimit=9&timeLimit=120&ultCharge=50&mode=tdm&freezeTime=2&screen=4",
+			"?room=abc-123&ai=true&online=true&offline=true&training=true&hero=anands&botHero=lia&bots=3&fill=8&scoreLimit=9&timeLimit=120&ultCharge=50&mode=tdm&freezeTime=2&screen=4",
 		);
 		expect(parsed).toEqual({
 			room: "abc-123",
@@ -46,6 +48,8 @@ describe("parseLaunchParams", () => {
 			online: true,
 			offline: true,
 			training: true,
+			hero: "anands",
+			botHero: "lia",
 			bots: 3,
 			fill: 8,
 			scoreLimit: 9,
@@ -132,6 +136,8 @@ describe("serialize → parse round trip", () => {
 			online: false,
 			offline: false,
 			training: false,
+			hero: "anands",
+			botHero: "anands",
 			bots: 0,
 			fill: undefined,
 			scoreLimit: 21,

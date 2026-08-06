@@ -9,6 +9,7 @@
  * already was and nothing moves at all.
  */
 
+import { type HeroKit, LIA_KIT } from "../simulation/Heroes";
 import {
 	copyPlayerState,
 	createPlayerState,
@@ -69,8 +70,30 @@ export interface ReconcileResult {
 	 * reports correct netcode as a defect.
 	 */
 	meleeReplaced: boolean;
-	/** Why the state was allowed to change without the client predicting it. */
-	replaceReason: "stun" | "iframe" | "massive-armed" | "unexplained" | null;
+	/**
+	 * Why the state was allowed to change without the client predicting it.
+	 * `server-ended`/`server-started` are the frozen-tick spellings: the server
+	 * acknowledged an input it froze, so the replayed state lost a move (or
+	 * gained one a refusal did not produce) with no hit involved.
+	 */
+	replaceReason:
+		| "stun"
+		| "iframe"
+		| "massive-armed"
+		| "server-ended"
+		| "server-started"
+		| "unexplained"
+		| null;
+	/**
+	 * A predicted dragon ride the server's state does not have.
+	 *
+	 * The dragon is cast by prediction — the release *is* the launch — and a
+	 * cast the server refuses (it judged the caster stunned on a hit this
+	 * client had not seen) drops the ride: the fighter snaps back from wherever
+	 * the prediction had ridden to. A legitimate discontinuity, exactly like a
+	 * respawn, and the jitter metric must be told not to count it.
+	 */
+	dragonDropped: boolean;
 	/** What diverged, when it did. Empty otherwise. */
 	meleeDivergence?: {
 		predictedAction: string;
@@ -93,13 +116,28 @@ export class PredictedPlayer {
 	 * `world` is the geometry prediction replays against — it must be the
 	 * room's, not the default's, or a wide room's replays would fight the
 	 * single-screen walls and reconciliation would yank every correction back.
+	 *
+	 * `kit` is the hero this fighter plays, threaded into every `tickPlayer`
+	 * replay for the same reason `world` is: the weapons a move belongs to must
+	 * be the same on the live step and every replayed one, or a replay would
+	 * not be a replay.
 	 */
 	constructor(
 		x: number,
 		y: number,
 		private readonly world: World = DEFAULT_WORLD,
+		private kit: HeroKit = LIA_KIT,
 	) {
 		this.state = createPlayerState(x, y);
+	}
+
+	/** Change the hero mid-match (the Esc menu's hero select). */
+	setKit(kit: HeroKit) {
+		this.kit = kit;
+	}
+
+	get currentKit(): HeroKit {
+		return this.kit;
 	}
 
 	get pendingCount(): number {
@@ -111,6 +149,16 @@ export class PredictedPlayer {
 		this.state = createPlayerState(x, y);
 		this.pending.length = 0;
 	}
+
+	/**
+	 * The buttons pressed in the recent input stream, acknowledged or not.
+	 *
+	 * The frozen-tick excuse asks whether the server's move could have come
+	 * from this client's own input — a thrust the client's replay latched
+	 * differently needs a block press in the stream, and one that was never
+	 * pressed is a genuine divergence, not a race.
+	 */
+	private recentButtons = { attack: false, block: false, uppercut: false };
 
 	/**
 	 * Advance one fixed step locally and remember the input so it can be
@@ -133,8 +181,21 @@ export class PredictedPlayer {
 		field: Singularity | null = null,
 	): number {
 		const seq = this.nextSeq++;
-		this.state = tickPlayer(this.state, intent, dt, this.world, field);
+		this.state = tickPlayer(
+			this.state,
+			intent,
+			dt,
+			this.world,
+			field,
+			this.kit,
+		);
 		this.pending.push({ seq, intent: { ...intent } });
+		// Remember which buttons the stream has carried, so the frozen-tick
+		// excuse can tell a latch race (the button was pressed) from a genuine
+		// divergence (it never was).
+		this.recentButtons.attack ||= intent.attack;
+		this.recentButtons.block ||= intent.block;
+		this.recentButtons.uppercut ||= intent.uppercut;
 		if (this.pending.length > MAX_PENDING_INPUTS) {
 			this.pending.splice(0, this.pending.length - MAX_PENDING_INPUTS);
 		}
@@ -156,6 +217,7 @@ export class PredictedPlayer {
 		const predictedAction = this.state.meleeAction;
 		const predictedBlocking = this.state.blocking;
 		const predictedMassiveReady = this.state.massiveReady;
+		const predictedDragon = this.state.dragonTimer;
 
 		// Drop every input the server has already folded in.
 		while (this.pending[0] !== undefined && this.pending[0].seq <= lastSeq) {
@@ -165,7 +227,14 @@ export class PredictedPlayer {
 		const rewound = copyPlayerState(authoritative, { ...this.state });
 		let replayed = rewound;
 		for (const p of this.pending) {
-			replayed = tickPlayer(replayed, p.intent, dt, this.world, field);
+			replayed = tickPlayer(
+				replayed,
+				p.intent,
+				dt,
+				this.world,
+				field,
+				this.kit,
+			);
 		}
 		this.state = replayed;
 
@@ -188,6 +257,41 @@ export class PredictedPlayer {
 			this.state.meleeAction === "massive" &&
 			predictedAction !== "massive" &&
 			!predictedMassiveReady;
+		// The frozen-tick trade, spelled the same way. The server freezes a
+		// fighter for up to `MAX_STARVED_TICKS` rather than invent a tick its
+		// client did not send — and a frozen tick *acknowledges* an input without
+		// applying it, so the next reconcile drops that input from the replay.
+		// The dagger's state-gated moves make the result visible: the client
+		// predicted a thrust the server never had (the input was eaten by the
+		// freeze), the server started a shoryuken the client's replay refused
+		// (the double-jump input the freeze swallowed left the server's air jumps
+		// a tick ahead), or the two simply disagree about which move a press
+		// edge started (the latches differ by the frozen tick). Every spelling is
+		// the same event — the server's state diverged from the client's by a
+		// tick the client was told about — and every one is excused, exactly
+		// like the massive's two spellings.
+		const serverEnded =
+			predictedAction !== "none" &&
+			this.state.meleeAction === "none" &&
+			this.state.stunTimer <= 0 &&
+			this.state.iframeTimer <= 0;
+		// A different move on the server is only the frozen-tick race if this
+		// client's own stream could have started it: the button its move needs
+		// must have been pressed. A move whose button never appears is a
+		// genuine divergence — the state machines ran different inputs.
+		const serverMove = this.state.meleeAction;
+		const serverMoveButton =
+			serverMove === "uppercut" || serverMove === "shoryuken"
+				? "uppercut"
+				: serverMove === "thrust"
+					? "block"
+					: "attack";
+		const serverMoved =
+			this.state.meleeAction !== "none" &&
+			this.state.meleeAction !== predictedAction &&
+			this.state.stunTimer <= 0 &&
+			this.state.iframeTimer <= 0 &&
+			this.recentButtons[serverMoveButton];
 		const reason: ReconcileResult["replaceReason"] =
 			this.state.stunTimer > 0
 				? "stun"
@@ -196,13 +300,24 @@ export class PredictedPlayer {
 					: (this.state.massiveReady && !predictedMassiveReady) ||
 							grantedMassive
 						? "massive-armed"
-						: null;
+						: serverEnded
+							? "server-ended"
+							: serverMoved
+								? "server-started"
+								: null;
 		const interrupted = reason !== null;
 
 		const changed =
 			this.state.meleeAction !== predictedAction ||
 			this.state.blocking !== predictedBlocking;
 		const diverged = !interrupted && changed;
+
+		// A predicted dragon ride the server's state does not have: the cast was
+		// refused (the server judged the caster stunned on a hit this client had
+		// not seen), so the fighter snaps back from wherever the prediction had
+		// ridden to. A legitimate discontinuity, like a respawn — announced so
+		// the jitter metric does not count it.
+		const dragonDropped = predictedDragon > 0 && rewound.dragonTimer <= 0;
 
 		return {
 			errorPx,
@@ -211,6 +326,7 @@ export class PredictedPlayer {
 			meleeDiverged: diverged,
 			meleeReplaced: changed,
 			replaceReason: changed ? (reason ?? "unexplained") : null,
+			dragonDropped,
 			// Captured so a rare divergence is diagnosable rather than a bare count.
 			// Captured whenever the state was replaced, not only when it was
 			// unexplained: the explained cases are exactly the ones another metric

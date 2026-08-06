@@ -1,7 +1,10 @@
 # Vento Áureo
 
-An online-first 2D sword-fighting game: GunZ: The Duel's K-Style, rebuilt in two
-dimensions on a deterministic simulation shared by client and server.
+An online-first 2D hero shooter: GunZ: The Duel's K-Style, rebuilt in two
+dimensions on a deterministic simulation shared by client and server. Every
+fighter is a **hero** — a composition of a melee weapon, a ranged weapon and a
+unique ultimate (see `specs/heroes.md`). Lia is the sword-and-pistol reference
+kit; Anands is the dagger storm (see `specs/anands.md`).
 
 **This file is an index.** It holds only what every session needs; everything
 else lives one link away and is loaded when it is actually relevant.
@@ -38,6 +41,7 @@ skill({ name: "feedback-loop" })    # the full workflow
 | Question | File |
 |---|---|
 | What should the game *do*? | [`specs/`](specs/README.md) — the source of truth |
+| Who are the heroes, and how do kits work? | [`specs/heroes.md`](specs/heroes.md) · [`specs/anands.md`](specs/anands.md) |
 | What should the menu do? | [`specs/menu.md`](specs/menu.md) — when it shows, and how choices become URLs |
 | What happens when a match ends? | [`specs/play-of-the-game.md`](specs/play-of-the-game.md) — the reel, the camera edit, then the podium |
 | What rule will I break if I'm careless? | [`docs/invariants.md`](docs/invariants.md) |
@@ -80,6 +84,22 @@ One line each; the war story behind every one is in
 - **One simulation.** `src/game/simulation/` never imports a rendering engine,
   touches the DOM, or reads wall-clock time. Client and server run the same
   `tickPlayer`.
+- **The hero kit is an argument to `tickPlayer`, never state.** The hero is a
+  static property of the fighter, like the name — it travels in the snapshot
+  beside `team`, and both sides pass `kitFor(hero)` into every tick and every
+  replay. A kit applied on top of predicted state would be erased by the next
+  reconciliation.
+- **The stance enum is the slot, not the weapon.** `"sword" | "gun"` means
+  melee weapon out or ranged weapon out; which weapon that slot means is the
+  hero's business. The wire format never changes when a hero does.
+- **The moves table is global; the weapon names its moves.** `stab` is the
+  dagger's, `slash` is the sword's — the shared `MOVES` table keeps the
+  phases, hitboxes and diagnostics weapon-agnostic, and `MeleeWeaponDef`
+  decides which moves a weapon can start, whether Shift blocks or thrusts,
+  and whether a charge exists.
+- **Changing hero resets the ultimate meter.** Ultimates are unique per hero,
+  and a free dragon thrust would be a cheese. The Esc menu's hero change goes
+  to the server (reliable); the echo comes home in the snapshot's `hero`.
 - **Systems read the simulation and write only presentation.** A system that
   wrote back into `body` would change authoritative state outside `tickPlayer`.
 - **`specs/` is the source of truth.** Update it in the same commit.
@@ -194,12 +214,15 @@ node scripts/verify-modes.mjs                          # smoke-check every mode
 node scripts/aim-probe.mjs                             # cursor, facing and shot direction
 node scripts/pad-probe.mjs                             # controller aim, gamepad and the phone deck
 node scripts/training-probe.mjs                        # one interaction, against a scripted dummy
+node scripts/training-probe.mjs --hero=anands          # ...as the dagger (its rows are dagger-only)
 node scripts/menu-probe.mjs                            # the root menu: every click a URL, boots a match
 node scripts/dash-probe.mjs                            # double-tap dash delivery, at a forced frame rate
 node scripts/screens-probe.mjs                         # ?screen=N room: spawn spread + follow camera
 node scripts/ultimate-probe.mjs                        # the black hole: hold to aim, release to cast, freeze, capture
 node scripts/potg-probe.mjs                            # play of the game: the reel, the camera edit, the podium waiting
 python3 scripts/make-potg-art.py                       # regenerate the ceremony's sunburst and medal
+python3 scripts/make-hero-art.py                      # regenerate the second hero's pixel-art sheets
+python3 scripts/make-roll-art.py                      # regenerate the tumble strip from a hero sheet
 ```
 
 Both `diagnose.mjs` and `deathmatch-probe.mjs` take `--screens=N` to run their
@@ -231,9 +254,11 @@ part of what they must prove.
 ## Controls
 
 **WASD/Space** move/jump (**jump again in the air** = double jump) ·
-**double-tap A/D** dash (sword) or tumble (gun) · **LMB** slash (hold 2.5s
-then release = Massive Strike — a floor slam, or the plunge bomb if airborne) ·
-**Shift** block · **F** uppercut · **Q/E**
+**double-tap A/D** dash (melee stance) or tumble (gun stance) · **LMB** the
+melee weapon's attack (hold 2.5s then release = Massive Strike for Lia — a
+floor slam, or the plunge bomb if airborne) · **Shift** block (Lia) — or the
+**thrust**, a knockdown lunge (Anands: the dagger has no block) · **F**
+uppercut (Lia) — or the **shoryuken** anti-air (Anands) · **Q/E**
 sword/gun stance · **P** toggle AI vs AI · **hold Tab** scoreboard · **Esc**
 menu. Sword is the default stance.
 

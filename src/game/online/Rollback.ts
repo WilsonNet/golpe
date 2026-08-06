@@ -41,6 +41,7 @@
  */
 
 import { resolveOverlap } from "../simulation/Collision";
+import { type HeroId, type HeroKit, LIA_KIT } from "../simulation/Heroes";
 import {
 	copyPlayerState,
 	DEFAULT_WORLD,
@@ -101,6 +102,12 @@ export interface RollbackResult {
 	frozen: boolean;
 	/** A discontinuity, not a misprediction: respawn, spawn or teleport. */
 	teleported: boolean;
+	/**
+	 * A predicted dragon ride the server's state does not have — refused, or
+	 * ended at a wall a lead-tick earlier than this client's clock. A
+	 * legitimate discontinuity, like a respawn; the jitter metric must be told.
+	 */
+	dragonDropped: boolean;
 }
 
 /**
@@ -144,12 +151,27 @@ export class RemoteFighter {
 	 * The geometry this fighter is predicted against — the room's, not the
 	 * default's: predicting a wide-room fighter against single-screen walls
 	 * would plant every correction at x=800 as a phantom wall contact.
+	 *
+	 * `kit` is the hero this fighter plays, from the snapshot — the same kit the
+	 * server ticks them with, so the client's carry-forward and re-simulations
+	 * run the same weapon tables the authoritative state came from.
 	 */
 	constructor(
 		state: PlayerPosition,
 		private readonly world: World = DEFAULT_WORLD,
+		private kit: HeroKit = LIA_KIT,
 	) {
 		this.state = { ...state };
+	}
+
+	/** The hero this fighter plays, learned from the snapshot. */
+	get hero(): HeroId {
+		return this.kit.hero;
+	}
+
+	/** A hero change (the Esc menu) swaps the kit this fighter replays with. */
+	setKit(kit: HeroKit) {
+		this.kit = kit;
 	}
 
 	/**
@@ -160,7 +182,14 @@ export class RemoteFighter {
 	 */
 	predict(dt: number, field: Singularity | null = null) {
 		if (!this.intent) return;
-		this.state = tickPlayer(this.state, this.intent, dt, this.world, field);
+		this.state = tickPlayer(
+			this.state,
+			this.intent,
+			dt,
+			this.world,
+			field,
+			this.kit,
+		);
 	}
 
 	/**
@@ -187,7 +216,14 @@ export class RemoteFighter {
 		if (intent) {
 			const depth = Math.max(0, Math.min(leadTicks, MAX_ROLLBACK_TICKS));
 			for (let i = 0; i < depth; i++) {
-				this.state = tickPlayer(this.state, intent, dt, this.world, field);
+				this.state = tickPlayer(
+					this.state,
+					intent,
+					dt,
+					this.world,
+					field,
+					this.kit,
+				);
 				resimTicks++;
 			}
 		}
@@ -199,11 +235,20 @@ export class RemoteFighter {
 		// re-decided here.
 		this.smoother.absorb(this.state.x - beforeX, this.state.y - beforeY);
 
+		// A predicted ride the server's state does not have: the dragon was
+		// refused (or ended at a wall a lead-tick earlier than this client's
+		// clock), so the fighter snaps back from wherever the prediction had
+		// ridden to. A legitimate discontinuity, like a respawn — announced so
+		// the jitter metric does not count it.
+		const dragonDropped =
+			this.state.dragonTimer > 0 && authoritative.dragonTimer <= 0;
+
 		return {
 			errorPx,
 			resimTicks,
 			frozen: intent === null,
 			teleported,
+			dragonDropped,
 		};
 	}
 

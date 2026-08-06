@@ -22,6 +22,10 @@ export const TEX = {
 	dude: "dude",
 	/** The tumble roll strip — see `rollFrames`. */
 	roll: "roll",
+	/** Anands' character strip — see `anandsFrames`. */
+	anands: "anands",
+	/** Anands' roll strip, derived from her own sheet like the dude's. */
+	"anands-roll": "anands-roll",
 	fireball: "fireball",
 	platform: "platform",
 	sky: "sky",
@@ -38,8 +42,20 @@ export const TEX = {
 	chunk: "fx_chunk",
 	arc: "fx_arc",
 	blade: "fx_blade",
+	/** The dagger: a short steel blade, the stab's own silhouette. */
+	dagger: "fx_dagger",
 	guard: "fx_guard",
-	/** Staggered by a sword hit. Derived from the dude strip — see `createHitTextures`. */
+	/**
+	 * The dragon thrust's head: a golden serpent's head with a red mane, the
+	 * front of Anands' ride. Baked with its own colours — it is the one
+	 * ultimate that is *gold*, and a tint would wash it.
+	 */
+	dragonHead: "fx_dragon_head",
+	/** One body segment of the dragon: a gold scale arc the trail chains. */
+	dragonBody: "fx_dragon_body",
+	/** The dragon's mane and wake: a soft red-gold wisp, tintable. */
+	dragonMane: "fx_dragon_mane",
+	/** Staggered by a sword hit. Derived from the fighter's own strip. */
 	disabled: "dude_disabled",
 	/** Flat on the floor, after the chain's finisher. */
 	downed: "dude_downed",
@@ -51,6 +67,15 @@ export const TEX = {
 	plunge: "dude_plunge",
 	/** Planted after a bomb: the sword is in the ground and the fighter is stuck. */
 	stuck: "dude_stuck",
+	/**
+	 * The dagger's three poses, derived from the fighter's own strip like the
+	 * hit poses: the thrust's anticipation (blade cocked back), the thrust's
+	 * dash (a horizontal streak), the shoryuken's rise, and the dragon ride.
+	 */
+	thrustWindup: "anands_thrust_windup",
+	thrustDash: "anands_thrust_dash",
+	shoryukenRise: "anands_shoryuken_rise",
+	dragonRide: "anands_dragon_ride",
 	/** The black hole's own art — see `createUltimateTextures`. */
 	singularity: "fx_singularity",
 	horizon: "fx_horizon",
@@ -61,24 +86,75 @@ export const TEX = {
 	shadow: "fx_shadow",
 } as const;
 
+/**
+ * The pose textures that are derived per hero from that hero's own strip.
+ * Keyed `"<hero>:<pose>"` (e.g. `"anands:disabled"`) so every hero gets a
+ * stagger that lines up with their own walk cycle. The `TEX.*` names above are
+ * the *dude's* copies, kept for the pre-hero callers.
+ */
+export type HeroPose =
+	| "disabled"
+	| "downed"
+	| "helpless"
+	| "slam"
+	| "plunge"
+	| "stuck"
+	| "thrustWindup"
+	| "thrustDash"
+	| "shoryukenRise"
+	| "dragonRide";
+
 /** The `dude` strip, sliced into its nine 32x48 frames. */
-export let dudeFrames: Texture[] = [];
+let dudeFrames: Texture[] = [];
 /**
  * The roll strip, sliced into sixteen 40x48 frames: 0-7 roll right, 8-15 roll
  * left (the same frames mirrored, so a left roll does not read as a right roll
  * viewed backwards — feet lead the wrong way otherwise).
  */
-export let rollFrames: Texture[] = [];
+let rollFrames: Texture[] = [];
+/** Anands' strip, sliced like the dude's: 0-3 walk left, 4 face-on, 5-8 right. */
+let anandsFrames: Texture[] = [];
+/** Anands' roll strip: 0-7 right, 8-15 left, exactly like the dude's. */
+let anandsRollFrames: Texture[] = [];
+
+/** Every hero's nine-frame strip, keyed by the hero's sheet name. */
+const FRAME_SETS: Record<string, Texture[]> = {};
+
+/** Every hero's roll strip. */
+const ROLL_SETS: Record<string, Texture[]> = {};
+
+/** The per-hero pose textures, keyed `hero:pose`. */
+const poseTextures = new Map<string, Texture>();
 
 /** One roll cell is wider than the body: a tumbled figure sprawls past it. */
 const ROLL_FRAME_W = 40;
 
+/** The generated (white, tintable) textures. */
 const generated = new Map<string, Texture>();
 
 export function tex(key: string): Texture {
 	const made = generated.get(key);
 	if (made) return made;
 	return Assets.get(key) ?? Texture.EMPTY;
+}
+
+/**
+ * A hero's nine-frame strip. Sheets are sliced once at load and kept forever:
+ * fighters are created and destroyed at sixteen-per-room, but the strip they
+ * are cut from does not change.
+ */
+export function heroFrames(sheet: string): Texture[] {
+	return FRAME_SETS[sheet] ?? dudeFrames;
+}
+
+/** A hero's roll strip. */
+export function heroRollFrames(sheet: string): Texture[] {
+	return ROLL_SETS[sheet] ?? rollFrames;
+}
+
+/** A hero's derived pose texture (disabled, downed, the dagger's thrust…). */
+export function heroPose(sheet: string, pose: HeroPose): Texture {
+	return poseTextures.get(`${sheet}:${pose}`) ?? Texture.EMPTY;
 }
 
 /**
@@ -94,6 +170,8 @@ export async function loadAssets(): Promise<void> {
 	const sources: Record<string, string> = {
 		[TEX.dude]: "assets/dude.png",
 		[TEX.roll]: "assets/roll.png",
+		[TEX.anands]: "assets/anands.png",
+		[TEX["anands-roll"]]: "assets/anands-roll.png",
 		[TEX.fireball]: "assets/fireball.png",
 		[TEX.platform]: "assets/platform.png",
 		[TEX.sky]: "assets/sky.png",
@@ -122,6 +200,7 @@ export async function loadAssets(): Promise<void> {
 			}),
 		);
 	}
+	FRAME_SETS[TEX.dude] = dudeFrames;
 
 	// The roll strip follows the same pattern, generated by
 	// `scripts/make-roll-art.py` from this same dude strip — see that script
@@ -136,6 +215,34 @@ export async function loadAssets(): Promise<void> {
 			}),
 		);
 	}
+	ROLL_SETS[TEX.roll] = rollFrames;
+
+	// Anands' strips, cut from the generated pixel art exactly like the dude's.
+	// `scripts/make-hero-art.py` writes them in the same 9-frame / 16-cell
+	// layout, so the slicing below is shared code, not a second format.
+	const anandsSheet = Assets.get(TEX.anands) as Texture;
+	anandsFrames = [];
+	for (let i = 0; i < 9; i++) {
+		anandsFrames.push(
+			new Texture({
+				source: anandsSheet.source,
+				frame: new Rectangle(i * PLAYER_WIDTH, 0, PLAYER_WIDTH, PLAYER_HEIGHT),
+			}),
+		);
+	}
+	FRAME_SETS[TEX.anands] = anandsFrames;
+
+	const anandsRollSheet = Assets.get(TEX["anands-roll"]) as Texture;
+	anandsRollFrames = [];
+	for (let i = 0; i < 16; i++) {
+		anandsRollFrames.push(
+			new Texture({
+				source: anandsRollSheet.source,
+				frame: new Rectangle(i * ROLL_FRAME_W, 0, ROLL_FRAME_W, PLAYER_HEIGHT),
+			}),
+		);
+	}
+	ROLL_SETS[TEX["anands-roll"]] = anandsRollFrames;
 }
 
 /**
@@ -211,6 +318,48 @@ export function createFxTextures(renderer: Renderer): void {
 	blade.rect(0, 3, 8, 4).fill(0x8a94a6);
 	bake(renderer, TEX.blade, blade);
 
+	// The dagger: a short steel blade, the opposite silhouette from the sword.
+	// Where the sword is a long straight line, the dagger is a leaf: wide at
+	// the base, pointed at the tip, and barely longer than the hand.
+	const dagger = new Graphics();
+	dagger.poly([2, 4, 14, 2, 24, 3, 24, 7, 14, 8, 2, 6]).fill(0xe8f0ff);
+	dagger.rect(0, 4, 3, 2).fill(0x8a94a6);
+	dagger.rect(-2, 2, 3, 6).fill(0x6a2fd0);
+	bake(renderer, TEX.dagger, dagger);
+
+	// The dragon's head: a golden serpent with a red mane, baked in its own
+	// colours — the one ultimate that must read as *gold* from across the
+	// arena, and a tint could not do that. Facing +x; the renderer rotates it
+	// along the ride.
+	const head = new Graphics();
+	head
+		.poly([0, 14, 22, 14, 30, 10, 34, 12, 30, 16, 20, 20, 2, 20])
+		.fill(0xffd166);
+	head.poly([34, 12, 42, 13, 42, 15, 34, 16]).fill(0xffffff);
+	head.circle(30, 13, 1.6).fill(0x3a1c00);
+	head.poly([0, 14, 0, 22, 6, 26, 14, 24, 10, 18]).fill(0xff5a3d);
+	head.poly([2, 20, 10, 24, 20, 24, 14, 20]).fill(0xffffff);
+	bake(renderer, TEX.dragonHead, head);
+
+	// One body segment: a gold scale arc. Chained behind the head along the
+	// ride's path, each one rotated to the local curve of the trail.
+	const body = new Graphics();
+	body.arc(16, 16, 14, -0.5, Math.PI + 0.5, false);
+	body.stroke({ width: 7, color: 0xffd166 });
+	body.arc(16, 16, 14, -0.5, Math.PI + 0.5, false);
+	body.stroke({ width: 2, color: 0xfff2b8 });
+	body.poly([2, 4, 12, 10, 8, 14]).fill(0xff9a3d);
+	bake(renderer, TEX.dragonBody, body);
+
+	// The mane: a soft wisp, white so the wake can be tinted gold-to-red.
+	const mane = new Graphics();
+	for (let i = 6; i >= 1; i--) {
+		mane
+			.ellipse(24, 12, (26 * i) / 6, (8 * i) / 6)
+			.fill({ color: 0xffffff, alpha: 0.1 });
+	}
+	bake(renderer, TEX.dragonMane, mane);
+
 	// The guard arc shown while blocking.
 	const guard = new Graphics();
 	guard.arc(28, 32, 26, Math.PI - 1.1, Math.PI + 1.1, false);
@@ -231,7 +380,8 @@ export function createFxTextures(renderer: Renderer): void {
 	}
 	bake(renderer, TEX.shadow, shadow);
 
-	createHitTextures(renderer);
+	createHeroPoses(renderer, "dude", dudeFrames);
+	createHeroPoses(renderer, "anands", anandsFrames);
 	createUltimateTextures(renderer);
 }
 
@@ -350,27 +500,37 @@ function createUltimateTextures(renderer: Renderer): void {
 }
 
 /**
- * The two "you have been hit" sprites, drawn *from the dude sheet itself*.
+ * One hero's "you have been hit" and dagger-pose sprites, drawn *from that
+ * hero's own sheet*.
  *
- * Every sword hit now puts its target into a disabled state, and a state nobody
+ * Every sword hit puts its target into a disabled state, and a state nobody
  * can see is a state that does not exist: through the whole LAN playtest the
  * sword landed, the fighter kept walking, and the hit read as nothing happening.
  * These are placeholders in the honest sense — they are the shipped character,
  * flushed and knocked about, so they line up perfectly with the walk cycle and
  * are replaced by deleting this function when the real art lands.
  *
- * Both bake onto the same canvas, and it is **centred on the body's centre** —
- * `syncSpriteToBody` centres a sprite on the collider, so anything drawn off that
- * centre is drawn off the fighter. That is also why the canvas is bigger than the
- * body: a fighter lying down is 48px long inside a 32px-wide collider, and a
- * texture cropped to its own content would have been re-centred on the content
- * instead of on the fighter, leaving it hovering in the middle of the box it is
- * meant to be lying at the bottom of.
+ * Every pose bakes onto the same canvas, and it is **centred on the body's
+ * centre** — `syncSpriteToBody` centres a sprite on the collider, so anything
+ * drawn off that centre is drawn off the fighter. That is also why the canvas
+ * is bigger than the body: a fighter lying down is 48px long inside a 32px-wide
+ * collider, and a texture cropped to its own content would have been
+ * re-centred on the content instead of on the fighter, leaving it hovering in
+ * the middle of the box it is meant to be lying at the bottom of.
+ *
+ * The dagger's own poses live here too, because they are the same trick: the
+ * thrust's anticipation and dash, the shoryuken's rise and the dragon ride are
+ * the character's own sheet, rotated and stretched to read as the move — and
+ * they will be replaced by the same human art that replaces the hit poses.
  */
-function createHitTextures(renderer: Renderer): void {
+function createHeroPoses(
+	renderer: Renderer,
+	sheet: string,
+	frames: Texture[],
+): void {
 	// The face-on frame. Staggering is not a direction, so the fighter turns to
 	// the camera for it, exactly as the existing `turn` clip does.
-	const source = dudeFrames[4] ?? dudeFrames[0];
+	const source = frames[4] ?? frames[0];
 	if (!source) return;
 
 	/** Padding around the body, so a prone or tilted pose cannot crop the canvas. */
@@ -386,6 +546,19 @@ function createHitTextures(renderer: Renderer): void {
 		new Graphics()
 			.rect(-PAD, -PAD, PLAYER_WIDTH + PAD * 2, PLAYER_HEIGHT + PAD * 2)
 			.fill({ color: 0x000000, alpha: 0 });
+
+	const pose = (name: HeroPose, node: Container) => {
+		poseTextures.set(`${sheet}:${name}`, renderer.generateTexture(node));
+		node.destroy({ children: true });
+		// The dude's poses keep their old TEX keys, so the pre-hero callers
+		// (the ultimate cinematic's CSS aside) keep working unchanged.
+		if (sheet === "dude") {
+			generated.set(
+				TEX[name] ?? `dude_${name}`,
+				poseTextures.get(`${sheet}:${name}`)!,
+			);
+		}
+	};
 
 	// ---- staggered ----
 	const stagger = new Container();
@@ -413,7 +586,7 @@ function createHitTextures(renderer: Renderer): void {
 	stars.fill(0xffe066);
 	stagger.addChild(stars);
 
-	bake(renderer, TEX.disabled, stagger);
+	pose("disabled", stagger);
 
 	// ---- on the floor ----
 	const down = new Container();
@@ -434,7 +607,7 @@ function createHitTextures(renderer: Renderer): void {
 	dust.fill({ color: 0xffffff, alpha: 0.35 });
 	down.addChild(dust);
 
-	bake(renderer, TEX.downed, down);
+	pose("downed", down);
 
 	// ---- helpless: the guard-break pose ----
 	//
@@ -460,7 +633,7 @@ function createHitTextures(renderer: Renderer): void {
 	helplessBlade.stroke({ width: 2, color: 0xffffff, alpha: 0.7 });
 	helpless.addChild(helplessBlade);
 
-	bake(renderer, TEX.helpless, helpless);
+	pose("helpless", helpless);
 
 	// ---- slam: the massive's swing ----
 	//
@@ -478,7 +651,7 @@ function createHitTextures(renderer: Renderer): void {
 	smashing.tint = 0xfff6e0;
 	slam.addChild(smashing);
 
-	bake(renderer, TEX.slam, slam);
+	pose("slam", slam);
 
 	// ---- plunge: the dive pose ----
 	//
@@ -495,7 +668,7 @@ function createHitTextures(renderer: Renderer): void {
 	diving.tint = 0xffffff;
 	plunge.addChild(diving);
 
-	bake(renderer, TEX.plunge, plunge);
+	pose("plunge", plunge);
 
 	// ---- stuck: planted after a bomb ----
 	//
@@ -517,5 +690,75 @@ function createHitTextures(renderer: Renderer): void {
 	crater.fill({ color: 0xffffff, alpha: 0.45 });
 	stuck.addChild(crater);
 
-	bake(renderer, TEX.stuck, stuck);
+	pose("stuck", stuck);
+
+	// ---- the dagger's own poses ----
+	//
+	// The thrust's anticipation: the dagger cocked back beside the hip, the
+	// body leaning into the lunge about to come. The whole move's tell — the
+	// foe reads this pose and jumps — so it has to be a pose, not a tint.
+	const windup = new Container();
+	windup.addChild(canvas());
+
+	const cocked = new Sprite(source);
+	cocked.anchor.set(0.5, 1);
+	cocked.position.set(PLAYER_WIDTH / 2, PLAYER_HEIGHT);
+	cocked.rotation = -0.22;
+	cocked.tint = 0xdcecff;
+	windup.addChild(cocked);
+
+	const glint = new Graphics();
+	glint.moveTo(PLAYER_WIDTH / 2 + 10, 34).lineTo(PLAYER_WIDTH / 2 + 2, 42);
+	glint.stroke({ width: 2, color: 0x9fd8ff, alpha: 0.9 });
+	windup.addChild(glint);
+
+	pose("thrustWindup", windup);
+
+	// The thrust's dash: a horizontal streak — the body rotated onto its side
+	// along the line of the lunge, stretched by the speed.
+	const dash = new Container();
+	dash.addChild(canvas());
+
+	const streaking = new Sprite(source);
+	streaking.anchor.set(0.5, 1);
+	streaking.position.set(PLAYER_WIDTH / 2, PLAYER_HEIGHT);
+	streaking.rotation = Math.PI / 2;
+	streaking.scale.set(1.25, 1);
+	streaking.tint = 0xbde8ff;
+	dash.addChild(streaking);
+
+	const streak = new Graphics();
+	streak.rect(-2, 20, PLAYER_WIDTH + 20, 6);
+	streak.fill({ color: 0x59d0ff, alpha: 0.55 });
+	dash.addChild(streak);
+
+	pose("thrustDash", dash);
+
+	// The shoryuken's rise: canted up and forward, dagger leading into the
+	// flame — the body is going up and the pose has to say so.
+	const rise = new Container();
+	rise.addChild(canvas());
+
+	const rising = new Sprite(source);
+	rising.anchor.set(0.5, 1);
+	rising.position.set(PLAYER_WIDTH / 2, PLAYER_HEIGHT);
+	rising.rotation = -0.7;
+	rising.tint = 0xffe3c4;
+	rise.addChild(rising);
+
+	pose("shoryukenRise", rise);
+
+	// The dragon ride: the rider is cargo on the line — canted forward along
+	// it, gold-washed so the pose and the dragon are recognisably one thing.
+	const ride = new Container();
+	ride.addChild(canvas());
+
+	const riding = new Sprite(source);
+	riding.anchor.set(0.5, 1);
+	riding.position.set(PLAYER_WIDTH / 2, PLAYER_HEIGHT);
+	riding.rotation = Math.PI / 2;
+	riding.tint = 0xffe9a8;
+	ride.addChild(riding);
+
+	pose("dragonRide", ride);
 }

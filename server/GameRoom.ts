@@ -73,28 +73,41 @@ import { botName, sanitiseName, uniqueName } from "./BotNames.js";
 import { PotgRecorder } from "./PlayOfTheGame.js";
 import {
 	addCharge,
+	applyHitToDefender,
 	applyMeleeResult,
 	BULLET_DAMAGE,
-	BULLET_SPEED,
 	type BulletState,
 	blocksBullet,
 	blocksUltimate,
+	bodyRect,
 	bombBlastFor,
 	bombFallHeight,
 	bulletHitsPlatform,
 	bulletHitsPlayer,
 	canFire,
 	createPlayerState,
+	DEFAULT_HERO,
+	DRAGON_DAMAGE,
+	DRAGON_KNOCKBACK_PX_S,
+	DRAGON_RIDE_MS,
+	DRAGON_SPEED,
+	DRAGON_STUN_MS,
+	dragonSweptRect,
+	dragonVelocity,
 	fieldAffects,
 	fieldFor,
 	type GrenadeState,
 	grenadeEnd,
 	grenadeTouches,
+	HERO_IDS,
+	type HeroId,
 	hasLineOfSight,
 	isBulletOutOfBounds,
 	isFrozen,
+	isHeroId,
 	isKnockedDown,
 	isStunned,
+	kitFor,
 	launchGrenade,
 	MASSIVE_BLAST_DAMAGE,
 	MASSIVE_BLAST_KNOCKBACK_PX_S,
@@ -110,12 +123,14 @@ import {
 	PLAYER_WIDTH,
 	type PlayerIntent,
 	type PlayerPosition,
+	rectsOverlap,
 	resolveMelee,
 	SINGULARITY_DAMAGE_INTERVAL_MS,
 	SINGULARITY_DURATION_MS,
 	SINGULARITY_TICK_DAMAGE,
 	type Singularity,
 	singularityGrip,
+	sweptThrustBox,
 	tickBullet,
 	tickGrenade,
 	tickPlayer,
@@ -186,6 +201,13 @@ interface ConnectedPlayer {
 	 * from.
 	 */
 	team: TeamId | null;
+	/**
+	 * Which hero this fighter plays. Chosen by the client (URL or the Esc menu's
+	 * hero select) and fixed until they change it — a hero change resets the
+	 * ultimate meter, because ultimates are unique per hero and a free dragon
+	 * thrust would be a cheese.
+	 */
+	hero: HeroId;
 	/** Full simulation state — never rebuilt per tick, or wall state is lost. */
 	state: PlayerPosition;
 	hp: number;
@@ -383,6 +405,17 @@ export class GameRoom {
 	 * once every fighter is current, because each blast judges the whole room.
 	 */
 	private pendingBlasts: PendingBlast[] = [];
+	/**
+	 * Who each fighter's sweeping move has already hit, this cast.
+	 *
+	 * The thrust and the dragon hit **everyone** in their path, so the
+	 * single-hit `hitLatch` does not apply — it would close on the first victim
+	 * and let the rest of the line walk away untouched. This is the sweep's own
+	 * latch: keyed by the sweeper, cleared the moment their move ends. Server
+	 * only, exactly like `pendingBlasts` — the consequence travels in the
+	 * victims' state, and a client never needs to know who was caught.
+	 */
+	private sweepLatches = new Map<string, Set<string>>();
 	/** Ultimate denies since the last broadcast, for the client's "DENY" splash. */
 	private denies: DenyEventMsg[] = [];
 	private channelIds: string[] = [];
@@ -524,6 +557,15 @@ export class GameRoom {
 	readonly fillTarget: number;
 
 	/**
+	 * The hero the room's bots play, fixed by whoever created the room.
+	 *
+	 * `null` means random per bot — the default, because a room full of one
+	 * hero is a probe's request, not a player's. `?botHero=anands` is how a
+	 * probe makes the deathmatch probe exercise the dagger at sixteen fighters.
+	 */
+	readonly botHero: HeroId | null;
+
+	/**
 	 * The arena this room plays in: bounds, platforms and spawn points for its
 	 * screen count.
 	 *
@@ -544,6 +586,7 @@ export class GameRoom {
 			startUltCharge?: number;
 			mode?: MatchMode;
 			freezeTimeMs?: number;
+			botHero?: unknown;
 		} = {},
 	) {
 		this.id = id;
@@ -565,6 +608,7 @@ export class GameRoom {
 			rules.scoreLimit ?? (this.mode === "tdm" ? TDM_SCORE_LIMIT : SCORE_LIMIT);
 		this.timeLimitMs = rules.timeLimitMs ?? TIME_LIMIT_MS;
 		this.fillTarget = Math.max(0, Math.min(rules.fillTarget ?? 0, MAX_PLAYERS));
+		this.botHero = isHeroId(rules.botHero) ? rules.botHero : null;
 		this.world = buildWorld(rules.screens ?? 1);
 		this.startUltCharge = Math.max(
 			0,
@@ -643,11 +687,13 @@ export class GameRoom {
 			dummy?: TrainingDummy | null;
 		},
 		team: TeamId | null = null,
+		hero: HeroId = DEFAULT_HERO,
 	): ConnectedPlayer {
 		return {
 			id,
 			name,
 			team,
+			hero,
 			channel: sources.channel ?? null,
 			brain: sources.brain ?? null,
 			dummy: sources.dummy ?? null,
@@ -716,12 +762,20 @@ export class GameRoom {
 			: pickTeamSpawn(occupied, this.world, team);
 	}
 
-	addPlayer(channel: ServerChannel, rawName?: unknown): boolean {
+	addPlayer(
+		channel: ServerChannel,
+		rawName?: unknown,
+		hero?: unknown,
+	): boolean {
 		// A room full of bots still has room for a human: bots exist to keep the
 		// arena busy, not to hold a seat against the people the arena is for.
 		if (this.isFull && !this.freeBotSlot()) return false;
 
 		const id = channel.id as string;
+		// The hero is a per-client choice: the joining client asked for one in
+		// its `join` message (or was handed it by the URL). A bad value falls
+		// back to the default rather than failing the seat.
+		const chosen = hero ?? DEFAULT_HERO;
 		// Deduplicated against the room, exactly as a bot's name is. Two players
 		// called `Wilson` on one scoreboard is indistinguishable from a scoring bug,
 		// and it happens constantly — people pick the same handle, and two tabs on one
@@ -739,12 +793,13 @@ export class GameRoom {
 			MAX_HP,
 			{ channel },
 			team,
+			isHeroId(chosen) ? chosen : DEFAULT_HERO,
 		);
 		slot.state.freezeTimer = this.roundFreezeMs;
 		this.players.set(id, slot);
 
 		channel.join(this.id);
-		channel.userData = { roomId: this.id };
+		channel.userData = { roomId: this.id, hero: slot.hero };
 
 		channel.on("input", (data: unknown) => {
 			const player = this.players.get(id);
@@ -761,6 +816,32 @@ export class GameRoom {
 			if (player.queue.length > cap) {
 				player.queue.splice(0, player.queue.length - cap);
 			}
+		});
+
+		// The Esc menu's hero select. Changing hero mid-match is allowed — the
+		// kit is a snapshot field, so every client rolls the change back and
+		// replays with the new weapons on the next snapshot — but it spends
+		// whatever the meter held, because ultimates are unique per hero.
+		channel.on("hero", (data: unknown) => {
+			const player = this.players.get(id);
+			const hero = (data as { hero?: unknown } | null)?.hero;
+			if (!player || !isHeroId(hero)) return;
+			player.hero = hero;
+			// A different hero, a different ultimate: the meter is the old one's.
+			player.ult = this.startUltCharge;
+			player.ultHeld = false;
+			// And a different melee weapon: cancel the move that belonged to the
+			// old one, and any charge a sword was building.
+			player.state.meleeAction = "none";
+			player.state.meleeTimer = 0;
+			player.state.hitLatch = false;
+			player.state.blocking = false;
+			player.state.chargeTimer = 0;
+			player.state.massiveReady = false;
+			player.state.parryMassiveTimer = 0;
+			console.log(
+				`[HERO] ${player.name} switches to ${kitFor(hero).melee.label} / ${kitFor(hero).ranged.label}`,
+			);
 		});
 
 		// The training room's only client→server message. Registered on every
@@ -803,6 +884,17 @@ export class GameRoom {
 	}
 
 	/**
+	 * The hero a bot gets. Random by default so a busy room exercises every
+	 * kit; `?botHero=` pins it for a probe.
+	 */
+	private botHeroFor(): HeroId {
+		if (this.botHero !== null) return this.botHero;
+		return (
+			HERO_IDS[Math.floor(Math.random() * HERO_IDS.length)] ?? DEFAULT_HERO
+		);
+	}
+
+	/**
 	 * Fill a slot with a server-hosted bot.
 	 *
 	 * The bot is an ordinary player from the simulation's point of view — same
@@ -816,13 +908,15 @@ export class GameRoom {
 		const id = `bot-${this.id}-${this.channelIds.length}`;
 		this.channelIds.push(id);
 		const team = this.nextTeam();
+		const hero = this.botHeroFor();
 		const slot = this.newSlot(
 			id,
 			botName(this.names),
 			this.spawnFor(team),
 			MAX_HP,
-			{ brain: new EnemyBrain(botConfig(), this.world) },
+			{ brain: new EnemyBrain(botConfig(), this.world, hero) },
 			team,
+			hero,
 		);
 		slot.state.freezeTimer = this.roundFreezeMs;
 		this.players.set(id, slot);
@@ -875,6 +969,11 @@ export class GameRoom {
 				{ x: 668, y: START_Y, facing: -1 },
 				dummy.config.dummyHp,
 				{ dummy },
+				null,
+				// The dummy plays whatever hero the training config asks for —
+				// practising the thrust against a *sword* dummy and the sword
+				// against a *dagger* dummy are different drills.
+				isHeroId(dummy.config.hero) ? dummy.config.hero : DEFAULT_HERO,
 			),
 		);
 		// Place both fighters where the config asks before anyone sees a snapshot.
@@ -909,7 +1008,16 @@ export class GameRoom {
 		const dummy = slot?.dummy;
 		if (!dummy || !msg) return;
 
-		if (msg.config) dummy.configure(msg.config);
+		if (msg.config) {
+			dummy.configure(msg.config);
+			// The dummy's hero can change live: the kit is read from the slot
+			// every tick, so a `dummyHero` patch just swaps the weapons under
+			// the same fighter. The meter is the old hero's — reset it.
+			if (slot && isHeroId(dummy.config.hero)) {
+				slot.hero = dummy.config.hero;
+				slot.ult = this.startUltCharge;
+			}
+		}
 		if (msg.clearRecording) dummy.clearRecording();
 		if (msg.reset) this.resetTraining();
 		// Echo unconditionally: the client's promise is waiting on this, and a
@@ -1125,6 +1233,9 @@ export class GameRoom {
 			selfStuck: bot.state.plungeStuckTimer > 0,
 			selfMassiveReady: bot.state.massiveReady,
 			selfId: bot.id,
+			selfHero: bot.hero,
+			enemyHero: foe.hero,
+			enemyGrounded: foe.state.grounded,
 			selfAirJumps: bot.state.airJumps,
 			selfUltCharge: bot.ult,
 			enemyVX: foe.state.vx,
@@ -1281,6 +1392,7 @@ export class GameRoom {
 			if (
 				killer.state.meleeAction === "slash3" ||
 				killer.state.meleeAction === "massive" ||
+				killer.state.meleeAction === "thrust" ||
 				// A bomb kill: the killer is planted in the ground the blast just
 				// made — the finisher of the sword game's heaviest move.
 				killer.state.plungeStuckTimer > 0
@@ -1315,7 +1427,7 @@ export class GameRoom {
 		amount: number,
 		sourceId: string,
 		paysCharge = true,
-		source: "melee" | "bullet" | "singularity" = "bullet",
+		source: "melee" | "bullet" | "singularity" | "dragon" = "bullet",
 	) {
 		if (!victim.alive || amount <= 0) return;
 		// Scores are frozen once the podium is decided; the fight is allowed to
@@ -1641,7 +1753,8 @@ export class GameRoom {
 			player.ultAimAngle = 0;
 			// A fresh personality per match, so sixteen bots do not replay the same
 			// fight every five minutes.
-			if (player.brain) player.brain = new EnemyBrain(botConfig(), this.world);
+			if (player.brain)
+				player.brain = new EnemyBrain(botConfig(), this.world, player.hero);
 		}
 		this.phase = "live";
 		this.matchElapsedMs = 0;
@@ -1689,6 +1802,9 @@ export class GameRoom {
 				// Beside `hp` rather than in the roster: teams are an argument to the
 				// client's own `tickPlayer` — see `SnapshotPlayer`.
 				team: p.team,
+				// The hero rides the snapshot for the same reason the team does:
+				// it is an argument to the client's `tickPlayer`.
+				hero: p.hero,
 				// Rounded: the HUD draws a bar, and a fractional trickle would make
 				// every snapshot differ in a digit nobody can see.
 				ult: Math.round(p.ult),
@@ -1857,12 +1973,15 @@ export class GameRoom {
 			};
 			// The hole this fighter is in, if any — already filtered for friendly
 			// fire, so the caster is handed null and walks through their own field.
+			// The kit is the hero's weapons: an argument, never state, so the two
+			// sides cannot disagree about which table a move belongs to.
 			player.state = tickPlayer(
 				player.state,
 				input,
 				dt,
 				this.world,
 				fieldFor(this.singularity, player.id, player.team),
+				kitFor(player.hero),
 			);
 			this.noteBlasts(player, prev);
 
@@ -1875,8 +1994,11 @@ export class GameRoom {
 			if (!input.ultimate && player.ultHeld) this.tryCastUltimate(player);
 			player.ultHeld = input.ultimate;
 
-			// A fighter holds a sword or a gun, never both: firing is gated on the
-			// stance the simulation says they are actually in.
+			// A fighter holds a melee weapon or a ranged one, never both: firing
+			// is gated on the stance the simulation says they are actually in,
+			// and the stat card is the hero's ranged weapon — the machine gun
+			// fires four times as often as the pistol, per its own cooldown.
+			const kit = kitFor(player.hero);
 			if (
 				player.alive &&
 				// Decided out here rather than in `tickPlayer`, so it needs the same
@@ -1885,7 +2007,7 @@ export class GameRoom {
 				!isFrozen(player.state) &&
 				player.state.stance === "gun" &&
 				input.attack &&
-				canFire(player.lastAttackTime, now)
+				canFire(player.lastAttackTime, now, kit.ranged.cooldownMs)
 			) {
 				player.lastAttackTime = now;
 				player.stats.bulletsFired++;
@@ -1894,8 +2016,8 @@ export class GameRoom {
 					ownerId: player.id,
 					x: player.state.x + PLAYER_WIDTH / 2,
 					y: player.state.y + PLAYER_HEIGHT / 2,
-					vx: Math.cos(input.aimAngle) * BULLET_SPEED,
-					vy: Math.sin(input.aimAngle) * BULLET_SPEED,
+					vx: Math.cos(input.aimAngle) * kit.ranged.speed,
+					vy: Math.sin(input.aimAngle) * kit.ranged.speed,
 				});
 			}
 		}
@@ -1910,6 +2032,8 @@ export class GameRoom {
 
 		this.resolveBlasts();
 		this.resolveMeleeHits();
+		this.resolveThrusts();
+		this.resolveDragonHits();
 		this.tickBullets(dt);
 		this.tickUltimate(dt);
 		this.applyTrainingRules(dt);
@@ -2156,6 +2280,131 @@ export class GameRoom {
 		}
 	}
 
+	/**
+	 * Judge every live thrust sweep against every other fighter.
+	 *
+	 * The dagger thrust is the one melee move that hits **everyone** in its
+	 * path — the move's whole identity is that a line of fighters is a line of
+	 * knockdowns — so it cannot go through `resolveMelee`, whose `hitLatch`
+	 * closes on the first connection. Instead the swept box (the path the dash
+	 * has covered so far, derivable from state alone) is tested against every
+	 * foe, and `sweepLatches` keeps each fighter at one hit per cast. The latch
+	 * clears the moment the thrust ends, so a second thrust is a fresh sweep.
+	 */
+	private resolveThrusts() {
+		for (const attacker of this.players.values()) {
+			if (!attacker.alive) continue;
+			const moving = attacker.state.meleeAction === "thrust";
+			if (!moving || meleePhase(attacker.state) !== "active") {
+				if (!moving) this.sweepLatches.delete(attacker.id);
+				continue;
+			}
+			const box = sweptThrustBox(attacker.state);
+			if (!box) continue;
+			let latched = this.sweepLatches.get(attacker.id);
+			if (!latched) {
+				latched = new Set();
+				this.sweepLatches.set(attacker.id, latched);
+			}
+			for (const defender of this.players.values()) {
+				if (defender === attacker || !defender.alive) continue;
+				if (!hostile(attacker.team, defender.team)) continue;
+				if (latched.has(defender.id)) continue;
+				if (!rectsOverlap(box, bodyRect(defender.state.x, defender.state.y))) {
+					continue;
+				}
+				latched.add(defender.id);
+				const damage = applyHitToDefender(defender.state, {
+					move: "thrust",
+					outcome: "hit",
+					damage: MOVES.thrust.damage,
+					x: box.x + box.w / 2,
+					y: box.y + box.h / 2,
+					dir: attacker.state.facing >= 0 ? 1 : -1,
+				});
+				this.damage(defender, damage, attacker.id, true, "melee");
+				this.meleeEvents.push({
+					attackerId: attacker.id,
+					victimId: defender.id,
+					move: "thrust",
+					outcome: "hit",
+					x: box.x + box.w / 2,
+					y: box.y + box.h / 2,
+					dir: attacker.state.facing >= 0 ? 1 : -1,
+				});
+			}
+		}
+	}
+
+	/**
+	 * Judge the dragon-thrust ride against every other fighter.
+	 *
+	 * Same shape as `resolveThrusts` — a swept box, a per-cast latch, everyone
+	 * on the line hit once — with two differences that make it an *ultimate*:
+	 * the sweep is the whole flight (any direction, not just along facing), and
+	 * the hit is an area knockback along the dragon's line rather than a
+	 * knockdown. Nothing blocks it: the dragon ignores guards by design, and
+	 * the only thing that stops the *rider* is a hostile black hole, handled in
+	 * `tickPlayer`.
+	 */
+	private resolveDragonHits() {
+		for (const rider of this.players.values()) {
+			if (!rider.alive) continue;
+			const riding = rider.state.dragonTimer > 0;
+			if (!riding) {
+				this.sweepLatches.delete(rider.id);
+				continue;
+			}
+			const box = dragonSweptRect(rider.state);
+			if (!box) continue;
+			let latched = this.sweepLatches.get(rider.id);
+			if (!latched) {
+				latched = new Set();
+				this.sweepLatches.set(rider.id, latched);
+			}
+			const nx = rider.state.dragonVX / DRAGON_SPEED;
+			const ny = rider.state.dragonVY / DRAGON_SPEED;
+			for (const victim of this.players.values()) {
+				if (victim === rider || !victim.alive) continue;
+				if (!hostile(rider.team, victim.team)) continue;
+				if (latched.has(victim.id)) continue;
+				if (!rectsOverlap(box, bodyRect(victim.state.x, victim.state.y))) {
+					continue;
+				}
+				latched.add(victim.id);
+				const v = victim.state;
+				// The knockback is the move: a shove along the dragon's line,
+				// hard enough to bowl a fighter over, with a brief stun so the
+				// shove reads. Directional, like a blast, so a line of fighters
+				// is swept rather than scattered.
+				v.stunTimer = Math.max(v.stunTimer, DRAGON_STUN_MS);
+				v.iframeTimer = MELEE_IFRAME_MS;
+				v.vx += nx * DRAGON_KNOCKBACK_PX_S;
+				v.vy += ny * DRAGON_KNOCKBACK_PX_S;
+				if (ny < 0) v.grounded = false;
+				v.meleeAction = "none";
+				v.meleeTimer = 0;
+				v.hitLatch = false;
+				v.blocking = false;
+				v.comboStep = 0;
+				v.comboTimer = 0;
+				v.plungeStuckTimer = 0;
+				// The ultimate pays nobody — the dragon feeds no meter, like the
+				// hole.
+				this.damage(victim, DRAGON_DAMAGE, rider.id, false, "dragon");
+				this.meleeEvents.push({
+					attackerId: rider.id,
+					victimId: victim.id,
+					move: "thrust",
+					outcome: "hit",
+					x: box.x + box.w / 2,
+					y: box.y + box.h / 2,
+					dir: nx >= 0 ? 1 : -1,
+				});
+			}
+		}
+	}
+
 	private tickBullets(dt: number) {
 		// Compact in place: advance every bullet, keep the survivors at the front,
 		// then truncate. Splicing mid-iteration meant the loop index and the array
@@ -2173,6 +2422,11 @@ export class GameRoom {
 
 			let consumed = false;
 			const shooter = this.players.get(b.ownerId);
+			// The bullet's damage is the shooter's weapon's — a machine gun round
+			// is worth half a pistol round, however fast the stream arrives.
+			const shotDamage = shooter
+				? kitFor(shooter.hero).ranged.damage
+				: BULLET_DAMAGE;
 			for (const player of this.players.values()) {
 				if (b.ownerId === player.id || !player.alive) continue;
 				// Straight through a teammate, and *not* consumed: a shot that stopped
@@ -2185,7 +2439,7 @@ export class GameRoom {
 				// consumed either way — it hit something — but an absorbed one deals
 				// nothing and is not counted as a hit against the shooter.
 				if (blocksBullet(player.state, b.vx)) {
-					this.absorbPotg(player, BULLET_DAMAGE, shooter ?? null);
+					this.absorbPotg(player, shotDamage, shooter ?? null);
 					consumed = true;
 					break;
 				}
@@ -2194,7 +2448,7 @@ export class GameRoom {
 				// the only honest source for the training report's bullet numbers.
 				const owner = this.players.get(b.ownerId);
 				if (owner) owner.stats.bulletHits++;
-				this.damage(player, BULLET_DAMAGE, b.ownerId);
+				this.damage(player, shotDamage, b.ownerId);
 				consumed = true;
 				break;
 			}
@@ -2264,19 +2518,42 @@ export class GameRoom {
 		if (!player.alive || this.phase !== "live") return;
 		if (isFrozen(player.state)) return;
 		if (isStunned(player.state) || isKnockedDown(player.state)) return;
-		// One at a time, both ways. Two overlapping holes would have to argue about
-		// which way a fighter between them is pulled, and two overlapping cinematics
-		// would mean one of them was never seen.
-		if (this.cinematic || this.pendingThrow || this.singularity) return;
+		// The black hole is the one ultimate that cannot overlap itself — one
+		// hole at a time, because two fields would have to argue about which
+		// way a fighter between them is pulled. The dragon is a fast streak,
+		// not a field; two dragons at once is chaos, not a contradiction.
+		if (kitFor(player.hero).ultimate === "black-hole") {
+			if (this.cinematic || this.pendingThrow || this.singularity) return;
+		}
 
-		// Spent at the release, before the freeze. A caster who disconnects mid
-		// cinematic must not come back still armed.
+		// Spent at the release, before anything happens. A caster who
+		// disconnects mid-cast must not come back still armed.
 		player.ult = 0;
 		// Casting is one of the two things that cancel a charge — "don't switch
 		// weapons or ult" — the other being a stance switch, both in `tickMelee`.
 		player.state.chargeTimer = 0;
 		player.state.massiveReady = false;
 		player.state.parryMassiveTimer = 0;
+
+		if (kitFor(player.hero).ultimate === "dragon-thrust") {
+			// Anands' ultimate: no cinematic, no throw — the release *is* the
+			// launch. The rider becomes cargo on the dragon's line: velocity
+			// pinned to the release angle, gravity suppressed, and the ride
+			// ends at the first obstacle (or a hostile black hole). The aim
+			// angle is the last held input's, exactly like the grenade's.
+			// Whatever move the rider was making stays frozen for the ride and
+			// dies with it, in `tickPlayer`, on both sides of the wire.
+			const velocity = dragonVelocity(player.ultAimAngle);
+			player.state.dragonVX = velocity.vx;
+			player.state.dragonVY = velocity.vy;
+			player.state.dragonTimer = DRAGON_RIDE_MS;
+			player.state.vx = 0;
+			player.state.vy = 0;
+			this.sweepLatches.delete(player.id);
+			console.log(`[ULT] ${player.name} casts Dragon Thrust`);
+			return;
+		}
+
 		this.cinematic = { casterId: player.id, msLeft: ULT_CINEMATIC_MS };
 		this.pendingThrow = {
 			ownerId: player.id,
@@ -2507,7 +2784,7 @@ export class GameRoom {
 			p.tickInput = null;
 			p.simulatedIntent = null;
 			p.potgBurst = { damage: 0, absorbed: 0 };
-			if (p.brain) p.brain = new EnemyBrain(botConfig(), this.world);
+			if (p.brain) p.brain = new EnemyBrain(botConfig(), this.world, p.hero);
 		});
 		this.bullets = [];
 		this.meleeEvents.length = 0;

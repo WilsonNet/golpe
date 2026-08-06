@@ -38,11 +38,16 @@ them ever sees the menu.
 | Entry | What it commits | Notes |
 |---|---|---|
 | Quick match (primary) | `?bots=1` | A duel vs a server bot: action in one click. The room link is the bot's seat — friends replace it. |
+| Heroes | — | Who you play by default: Lia or Anands. Written to `vento.hero` and into every launch request below. |
 | Host a match | `?mode=…&screen=N&bots=N&scoreLimit=N&timeLimit=N` (+ `fill`, `freezeTime`, `ultCharge`) | Every room-creator choice, defaults pre-filled to the server's own defaults. |
 | Join a match | `?room=<id>` | One field accepts the bare id *or* the whole link. |
 | Practice | `?training=true` | The training room, one click away. |
 | How to play | — | The controls reference, read from the *live* bindings — a hint that lies about the button is worse than no hint. |
 | Options | — | The same controls dialog as the Esc menu, so rebinding is possible before the first match. |
+
+The hero is **per-client**: the picker's choice rides every commit as
+`?hero=`, and a shared room link deliberately does not carry one, so a joiner
+plays whoever their own menu last picked. See [heroes.md](heroes.md).
 
 Hosting and joining are siblings, not parent and child of one "Play": they
 answer different questions, and neither is a step toward the other. The primary

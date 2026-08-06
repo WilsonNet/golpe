@@ -10,6 +10,7 @@
  */
 
 import { type Container, Sprite } from "pixi.js";
+import type { HeroId } from "../simulation/Heroes";
 import {
 	MASSIVE_BLAST_RADIUS_PX,
 	MASSIVE_CHARGE_MS,
@@ -47,6 +48,16 @@ const COLOR = {
 	slash3: 0xffc46b,
 	uppercut: 0x8ff0ff,
 	massive: 0xffb238,
+	/**
+	 * The dagger's family: steel first, then the two specials. The stab is a
+	 * pale blade white (steel, not the slash's hot white — close range, low
+	 * commitment); the thrust is an electric cyan — a *line*, the same read as
+	 * the dash wind, because the move is a line; the shoryuken is the one warm
+	 * colour in the kit, a flame the body is rising into.
+	 */
+	stab: 0xe8f0ff,
+	thrust: 0x59d0ff,
+	shoryuken: 0xff9a3d,
 	/**
 	 * A massive granted by a guard break is drawn a different colour, because it
 	 * came from a different place: it is not a charge you committed to, it is a
@@ -137,6 +148,24 @@ const SWING = {
 		handReach: 30,
 		handDrop: 12,
 	},
+	/**
+	 * The dagger stab: a quick forward jab. Short arc, no depth — the move is
+	 * an *extension*, not a cut, and the blade barely travels so the fighter
+	 * can throw the next one.
+	 */
+	stab: { from: -0.45, to: 0.45, depth: 0, lift: 2, handReach: 14 },
+	/**
+	 * The thrust: a straight line. The blade starts cocked back beside the hip
+	 * — the anticipation the whole move is built on — and ends pointing down
+	 * the dash, so the drawn blade matches the line the body is about to take.
+	 */
+	thrust: { from: 2.6, to: 0, depth: 0, lift: 4, handReach: 26 },
+	/**
+	 * The shoryuken: rising through a shallow arc to straight up. Flat depth —
+	 * the move is vertical, and a perspective slide would read as leaning into
+	 * a swing it is not making.
+	 */
+	shoryuken: { from: -1.2, to: -1.6, depth: 0, lift: -14 },
 } as const satisfies Record<MeleeMove, SwingArc>;
 
 /**
@@ -193,6 +222,8 @@ interface FighterFx {
 	arc: Sprite;
 	blade: Sprite;
 	guard: Sprite;
+	/** The hero this fighter's blade was last set up for. */
+	hero: HeroId;
 	emitAccMs: number;
 	/** Sprite the fighter is drawn with, for the impact scale punch. */
 	body?: Sprite;
@@ -205,6 +236,8 @@ interface FighterFx {
 	tumbleEmitMs: number;
 	/** Whether the fighter was mid-roll last frame, to notice a roll starting. */
 	wasRolling: boolean;
+	/** Whether the fighter was mid-thrust last frame, for the sweep wind. */
+	wasThrusting: boolean;
 	/** Cadence for the ultimate charge aura's motes. */
 	ultEmitMs: number;
 	/** Whether the massive was armed last frame, to notice the charge completing. */
@@ -282,12 +315,14 @@ export class MeleeFx {
 			arc: mk(TEX.arc, true),
 			blade: mk(TEX.blade, false),
 			guard: mk(TEX.guard, true),
+			hero: "lia",
 			emitAccMs: 0,
 			punch: 0,
 			dashEmitMs: 0,
 			wasDashing: false,
 			tumbleEmitMs: 0,
 			wasRolling: false,
+			wasThrusting: false,
 			ultEmitMs: 0,
 			wasArmed: false,
 			ultGlowMs: 0,
@@ -333,16 +368,26 @@ export class MeleeFx {
 		dtMs: number,
 		holdingUlt: boolean,
 		team: TeamId | null = null,
+		hero: HeroId = "lia",
 	) {
 		const f = this.fx(key);
 		// Latched here so `impact` — which is fired from a server event and knows
 		// only ids — can tint an attacker's sparks without being handed a team.
 		f.team = team;
+		// The weapon's own silhouette: a dagger fighter swings a dagger, and the
+		// swap is a one-line texture change when the hero changes (the Esc menu's
+		// hero select lands here on the next frame).
+		if (f.hero !== hero) {
+			f.hero = hero;
+			f.blade.texture = tex(hero === "anands" ? TEX.dagger : TEX.blade);
+			f.blade.anchor.set(hero === "anands" ? 0.25 : 0.12, 0.5);
+		}
 		const cx = s.x + PLAYER_WIDTH / 2;
 		const cy = s.y + PLAYER_HEIGHT / 2;
 		const dir = s.facing >= 0 ? 1 : -1;
 
 		this.drawSwing(f, s, cx, cy, dir);
+		this.drawDaggerMoves(f, s, cx, cy, dir, dtMs);
 		this.drawPostureBlade(f, s, cx, cy, dir);
 		this.drawGuard(f, s, cx, cy, dir);
 		this.drawDashWind(f, s, cx, cy, dtMs);
@@ -549,45 +594,58 @@ export class MeleeFx {
 	) {
 		const dashing = s.dashActiveTimer > 0;
 		const dir = s.vx > 0 ? 1 : -1;
+		// A thrust's active window is a dash the move itself is making, and the
+		// flat line gets the same wind — the tell reads as speed, not as a
+		// specific gesture, because that is what it is.
+		const thrusting = s.meleeAction === "thrust" && meleePhase(s) === "active";
+		const sweeping = dashing || thrusting;
+		const sweepDir = dashing ? dir : s.facing >= 0 ? 1 : -1;
 
-		if (dashing && !f.wasDashing) {
+		if (sweeping && !f.wasDashing && !f.wasThrusting) {
 			// The tell that a dash is starting: a small air-burst out of the
 			// trailing edge, whatever surface the dash was thrown from.
 			this.particles.burst({
 				texture: TEX.spark,
-				count: 5,
-				x: cx - dir * 20,
+				count: thrusting ? 7 : 5,
+				x: cx - sweepDir * 20,
 				y: cy,
 				// Wind is nearly colourless to begin with, so it takes the team
 				// strongly — a dash across the arena becomes a streak of your side.
-				tint: teamTint(DASH_WIND_COLOR, f.team, TINT.strong),
+				// The thrust's burst is the move's own cyan.
+				tint: teamTint(
+					thrusting ? COLOR.thrust : DASH_WIND_COLOR,
+					f.team,
+					TINT.strong,
+				),
 				// Backwards against travel, with a little up-and-down spread.
 				angle:
-					dir > 0
+					sweepDir > 0
 						? [Math.PI * 0.8, Math.PI * 1.2]
 						: [-Math.PI * 0.2, Math.PI * 0.2],
-				speed: [60, 170],
-				lifeMs: 240,
-				scale: [0.9, 0],
-				alpha: [0.35, 0],
+				lifeMs: 420,
+				speed: [180, 340],
+				scale: [1.6, 0],
+				alpha: [0.9, 0],
 			});
 		}
 
-		if (dashing) {
+		if (sweeping) {
 			f.dashEmitMs += dtMs;
 			// 160ms of dash at ~34ms cadence is about four emissions, each a
 			// couple of lines — enough to read as wind, not as confetti.
 			if (f.dashEmitMs >= 34) {
 				f.dashEmitMs = 0;
+				const colour = thrusting ? COLOR.thrust : DASH_WIND_COLOR;
 				this.particles.burst({
 					texture: TEX.shard,
-					count: 2,
-					x: cx - dir * 26,
+					count: thrusting ? 3 : 2,
+					x: cx - sweepDir * 26,
 					// A height that wanders, so the stream reads as a band rather
 					// than as one exact line through the body.
 					y: cy + (Math.random() * 2 - 1) * 14,
-					tint: teamTint(DASH_WIND_COLOR, f.team, TINT.strong),
-					angle: dir > 0 ? [Math.PI - 0.35, Math.PI + 0.35] : [-0.35, 0.35],
+					tint: teamTint(colour, f.team, TINT.strong),
+					angle:
+						sweepDir > 0 ? [Math.PI - 0.35, Math.PI + 0.35] : [-0.35, 0.35],
 					speed: [130, 300],
 					lifeMs: 240,
 					scale: [1.1, 0],
@@ -597,6 +655,77 @@ export class MeleeFx {
 		}
 
 		f.wasDashing = dashing;
+		f.wasThrusting = thrusting;
+	}
+
+	/**
+	 * The dagger's own motion tell: a full-body aura of speed while the thrust
+	 * dashes, and the shoryuken's rising flame.
+	 *
+	 * The thrust is the move that has no other read — the fighter becomes a
+	 * line for 140ms, so the *entire character* needs to read as moving: a
+	 * ring of cyan wind hugging the body, emitted while the dash runs. The
+	 * shoryuken gets a rising wisp of flame under the feet, because the one
+	 * thing that must be unmistakable about it is the direction: it goes up.
+	 */
+	private drawDaggerMoves(
+		f: FighterFx,
+		s: PlayerPosition,
+		cx: number,
+		cy: number,
+		dir: number,
+		dtMs: number,
+	) {
+		const thrusting = s.meleeAction === "thrust" && meleePhase(s) === "active";
+		if (thrusting) {
+			f.dashEmitMs += dtMs;
+			// A tight cadence around the whole body: 12ms is a constant stream
+			// that reads as the fighter being wrapped in the dash, which is the
+			// promise the move made — an airborne thrust does not fall, so its
+			// tell has to say "I am on a line" rather than "I am in the air".
+			if (f.dashEmitMs >= 12) {
+				f.dashEmitMs = 0;
+				this.particles.burst({
+					texture: TEX.spark,
+					count: 2,
+					x: cx + (Math.random() * 2 - 1) * 26,
+					y: cy + (Math.random() * 2 - 1) * 20,
+					tint: teamTint(COLOR.thrust, f.team, TINT.medium),
+					// A full circle, lightly backwards-biased: the body is the
+					// centre of the speed, not its edge.
+					angle:
+						dir > 0 ? [0.4, Math.PI * 1.9] : [Math.PI * 1.1, Math.PI * 2.6],
+					speed: [60, 200],
+					lifeMs: 300,
+					scale: [1.4, 0],
+					alpha: [0.7, 0],
+				});
+			}
+		}
+
+		// The shoryuken's flame: a warm updraft shedding off the feet for the
+		// whole rise, so the move reads as going *up* from its first frame.
+		const rising =
+			s.meleeAction === "shoryuken" &&
+			(meleePhase(s) === "startup" || meleePhase(s) === "active");
+		if (rising) {
+			f.tumbleEmitMs += dtMs;
+			if (f.tumbleEmitMs >= 26) {
+				f.tumbleEmitMs = 0;
+				this.particles.burst({
+					texture: TEX.shard,
+					count: 3,
+					x: cx + (Math.random() * 2 - 1) * 18,
+					y: cy + PLAYER_HEIGHT / 2 - 2,
+					tint: teamTint(COLOR.shoryuken, f.team, TINT.medium),
+					angle: [-Math.PI * 0.55, -Math.PI * 0.45],
+					speed: [80, 220],
+					lifeMs: 380,
+					scale: [1.2, 0],
+					alpha: [0.6, 0],
+				});
+			}
+		}
 	}
 
 	/**

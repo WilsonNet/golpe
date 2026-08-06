@@ -15,6 +15,7 @@
  * the wire format is untouched, since none of this travels over it.
  */
 
+import type { HeroId } from "../simulation/Heroes.js";
 import type { MeleeAction, MeleePhase } from "../simulation/Melee.js";
 import type { TeamId } from "../simulation/Teams.js";
 
@@ -90,6 +91,12 @@ export interface AIInput {
 	selfMassiveReady: boolean;
 	/** Who this fighter is, for stable team ordering. */
 	selfId: string;
+	/** Which hero this fighter is — the brain's weapon modules branch on it. */
+	selfHero: HeroId;
+	/** The enemy's hero, so a sword brain can read a dagger's options. */
+	enemyHero: HeroId;
+	/** Whether the enemy has the floor under it — the read for jumping a thrust. */
+	enemyGrounded: boolean;
 	/** Air jumps left. `AIR_JUMPS` means a double jump is still available. */
 	selfAirJumps: number;
 	/** Ultimate charge, 0..100. `ULT_MAX_CHARGE` means the ult is armed. */
@@ -132,4 +139,18 @@ export interface AIOutput {
 	 * rather than a wire-only field.
 	 */
 	ultimate: boolean;
+}
+
+/**
+ * What the team module needs of whichever melee module is running.
+ *
+ * `MeleeBrain` (sword) and `DaggerBrain` (dagger) both answer this — the team
+ * layer's cover guard and its stance reading are weapon-agnostic, so it should
+ * not know which one it is talking to.
+ */
+export interface MeleeModuleView {
+	/** Is the melee weapon drawn? Sword for Lia, dagger for Anands. */
+	swordDrawn: boolean;
+	/** Drop whatever rhythm is playing and raise the guard (sword) or decline (dagger). */
+	interruptWithGuard(output: AIOutput): void;
 }

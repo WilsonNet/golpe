@@ -16,6 +16,8 @@ it.
 
 | Spec | Covers |
 |---|---|
+| [heroes.md](heroes.md) | The hero system: kits, the wire, hero select, and who exists |
+| [anands.md](anands.md) | The dagger hero: stab spam, the thrust, the shoryuken, the dragon thrust |
 | [controls.md](controls.md) | Default bindings, rebinding, the Esc menu, and what a binding may never touch |
 | [movement.md](movement.md) | Walking, jumping, dashing, wall jumps, the feel constants and why they hold |
 | [combat.md](combat.md) | Stances, ranged attacks, damage, round lifecycle |

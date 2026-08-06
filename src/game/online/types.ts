@@ -3,6 +3,7 @@ import type {
 	MatchPhase,
 	ScoreEntry,
 } from "../simulation/Deathmatch.js";
+import type { HeroId } from "../simulation/Heroes.js";
 import type {
 	MeleeMove,
 	MeleeOutcome,
@@ -140,6 +141,14 @@ export interface SnapshotPlayer {
 	 * Twenty times a second, beside `hp`, it simply cannot drift.
 	 */
 	team: TeamId | null;
+	/**
+	 * Which hero this fighter plays. Beside `team`, and for the same reason:
+	 * the hero decides which weapons `tickPlayer` simulates with, so it is an
+	 * input to the simulation the client replays on every reconciliation. A
+	 * hero that arrived on the slow roster channel could not be rolled back
+	 * with the state that depends on it.
+	 */
+	hero: HeroId;
 	/**
 	 * Ultimate charge, 0..100.
 	 *

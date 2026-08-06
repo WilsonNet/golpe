@@ -9,6 +9,13 @@ for the GunZ-derived frame data, blocking, parries, the butterfly and the
 Massive Strike. This file covers the ranged half, damage and the round
 lifecycle.
 
+Since the arrival of heroes the game is a **hero shooter**: which melee weapon
+and which ranged weapon a fighter carries is decided by their hero (see
+[heroes.md](heroes.md) and [anands.md](anands.md)). The stance system below is
+the *slot* system — melee weapon out or ranged weapon out — and what fires is
+the hero's weapon. Lia's gun is the pistol described here; Anands' is the
+machine gun, faster and weaker per round.
+
 ## Authority
 
 **There is exactly one source of bullets:**

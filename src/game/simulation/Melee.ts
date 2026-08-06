@@ -20,10 +20,28 @@ import {
 } from "./Arena.js";
 import { MS_PER_SECOND } from "./units.js";
 
-export type MeleeMove = "slash" | "slash2" | "slash3" | "uppercut" | "massive";
+export type MeleeMove =
+	| "slash"
+	| "slash2"
+	| "slash3"
+	| "uppercut"
+	| "massive"
+	| "stab"
+	| "thrust"
+	| "shoryuken";
 export type MeleeAction = "none" | MeleeMove;
 export type MeleePhase = "none" | "startup" | "active" | "recovery";
 export type Stance = "sword" | "gun";
+
+/**
+ * Which melee weapon a hero carries in the sword stance.
+ *
+ * The stance enum on the wire stays `"sword" | "gun"` because it is the slot;
+ * this is what the sword slot means for a given hero. `tickMelee` is
+ * parameterised by the weapon's definition so a future weapon is a new table
+ * and a new entry here, not a branch anywhere else.
+ */
+export type MeleeWeaponId = "sword" | "dagger";
 
 /**
  * The three-hit ground chain, in order.
@@ -87,6 +105,20 @@ export interface MoveDef {
 	 * rather than just more damage.
 	 */
 	knockdown: boolean;
+	/** How long the knockdown holds, when `knockdown` is set. Defaults to `KNOCKDOWN_MS`. */
+	knockdownMs?: number;
+	/**
+	 * Horizontal speed the *attacker* travels during the active frames, along
+	 * their facing — the dagger thrust's dash. The one place a move moves its
+	 * own body.
+	 */
+	selfVx?: number;
+	/**
+	 * Vertical speed the *attacker* travels during the active frames — the
+	 * shoryuken's rise. Pinned for the whole active window, then gravity owns
+	 * the recovery.
+	 */
+	selfVy?: number;
 }
 
 export const MOVES: Record<MeleeMove, MoveDef> = {
@@ -253,10 +285,219 @@ export const MOVES: Record<MeleeMove, MoveDef> = {
 		knockbackVx: 420,
 		knockdown: false,
 	},
+	/**
+	 * The dagger's bread and butter. Where the slash is 330ms, the stab is
+	 * 190ms; where the slash deals 7, the stab deals 5. Fast enough to punish
+	 * the gap between a sword wielder's swings — a dagger in range *interrupts*
+	 * — and weak enough that trading with the sword still loses.
+	 */
+	stab: {
+		startupMs: 45,
+		activeMs: 55,
+		recoveryMs: 90,
+		damage: 5,
+		/** Shorter than the slash's 42: the dagger has to be walked in. */
+		reachPx: 30,
+		boxTopOffset: 8,
+		boxHeight: 30,
+		/** A sword guard stops a stab — and guard-breaks the dagger for it. */
+		blockable: true,
+		/**
+		 * Cancellable into the thrust (the dagger's shift press) and a stance
+		 * switch, exactly as the slash cancels into a block. The dagger's
+		 * rhythm: a storm of stabs that can be spent on one committed lunge.
+		 */
+		cancellable: true,
+		piercesIframes: false,
+		/** Shorter than the slash's 190ms: the dagger does not lock you down. */
+		hitstunMs: 140,
+		launchVy: 0,
+		knockbackVx: 90,
+		knockdown: false,
+	},
+	/**
+	 * The dagger's Shift move and its whole identity: a committed lunge that
+	 * knocks down **everyone in its path** for 1.5s. It is the answer to
+	 * everything a dagger cannot do — it has no guard, so it must take the
+	 * initiative, and the 260ms anticipation is the tell that lets a quick
+	 * foe jump the line before the dash begins.
+	 */
+	thrust: {
+		/**
+		 * The anticipation. Long enough to read and react to — a jump clears
+		 * the flat line entirely — which is the entire counterplay, because the
+		 * dash itself is unblockable and unparryable once it is committed.
+		 */
+		startupMs: 260,
+		/** The dash. `selfVx` carries the body; the hitbox sweeps the path. */
+		activeMs: 140,
+		/**
+		 * The commitment. A whiffed thrust is a 320ms walk-in for the foe who
+		 * jumped it.
+		 */
+		recoveryMs: 320,
+		/**
+		 * Strong to compensate for the lack of a guard: this is the dagger's
+		 * heavy, and it out-damages the chain's finisher while being far more
+		 * committal.
+		 */
+		damage: 16,
+		reachPx: 40,
+		boxTopOffset: 10,
+		boxHeight: 28,
+		blockable: false,
+		cancellable: false,
+		/** A foe just stabbed out of their iframes can still be lunged through. */
+		piercesIframes: true,
+		/** Equal to the knockdown, by construction. See `knockdownMs`. */
+		hitstunMs: 1500,
+		launchVy: 0,
+		knockbackVx: 240,
+		knockdown: true,
+		knockdownMs: 1500,
+		/** The dash: 1300 px/s, faster than the sword's dash (1000). */
+		selfVx: 1300,
+		/** The flat line: `vy` pinned to zero so an airborne thrust does not fall. */
+		selfVy: 0,
+	},
+	/**
+	 * The dagger's anti-air on the uppercut button. A rising stab that hits
+	 * into the air, knocks down, and — unlike the sword's uppercut — is
+	 * blockable. The trade for a knockdown that lands: a read guard stops it,
+	 * and it only fires while the second jump is still in hand, so it can
+	 * never be a third jump.
+	 */
+	shoryuken: {
+		startupMs: 90,
+		activeMs: 140,
+		recoveryMs: 320,
+		damage: 8,
+		reachPx: 34,
+		/** The box reaches 52px above the head — the anti-air. */
+		boxTopOffset: -52,
+		boxHeight: 96,
+		/** Blockable, unlike the sword's uppercut. */
+		blockable: true,
+		cancellable: false,
+		piercesIframes: false,
+		/** A weaker knockdown than the thrust's: 900ms, not 1500ms. */
+		hitstunMs: 900,
+		launchVy: 0,
+		knockbackVx: 120,
+		knockdown: true,
+		knockdownMs: 900,
+		/** The rise: a clean anti-air hop, not a jump (see `selfVy`). */
+		selfVy: -420,
+	},
 };
 
 /** Every move there is, derived from the table so it can never fall behind it. */
 export const MELEE_MOVES = Object.keys(MOVES) as MeleeMove[];
+
+/**
+ * The sword's double-tap dash. Owned here because it is the *sword weapon's*
+ * burst — the dagger's lives beside it in `MELEE_WEAPONS`. `Physics.ts`
+ * re-exports these so the old importers keep working; the tumble stays there,
+ * because a tumble is what the gun *stance* does and the gun stance never
+ * changes weapon.
+ */
+export const DASH_SPEED = 1000;
+/** Minimum gap between dashes, so it cannot be held down as a speed boost. */
+export const DASH_LOCKOUT_MS = 250;
+/**
+ * How long a dash holds its line — no gravity, no vertical drift at all.
+ *
+ * A dash that fell while it travelled was a dive, and it made the one thing a
+ * dash is for — crossing a gap, breaking away, repositioning at the peak of a
+ * jump — depend on how far through the arc you happened to be. Holding Y makes it
+ * a *line*, which is what a player is aiming when they gesture it.
+ *
+ * **Deliberately shorter than `DASH_LOCKOUT_MS`.** The gap between the two is the
+ * window in which gravity always gets a say, so no amount of dashing is level
+ * flight: at 160 against a 250ms lockout, a chained dasher still falls for 90ms in
+ * every 250. Raise this past the lockout and the fighter simply never comes down.
+ */
+export const DASH_DURATION_MS = 160;
+
+/**
+ * The dagger's double-tap dash: lighter weapon, faster burst.
+ *
+ * The sword dashes at `DASH_SPEED` (1000) for 160ms with a 250ms lockout; the
+ * dagger weighs nothing, so its burst is a little faster, a little shorter and
+ * ready a little sooner. The difference is a feel, not a gap the sword cannot
+ * close — the thrust is where the dagger's real speed lives.
+ */
+export const DAGGER_DASH_SPEED = 1100;
+export const DAGGER_DASH_DURATION_MS = 150;
+export const DAGGER_DASH_LOCKOUT_MS = 220;
+
+/**
+ * What a weapon is allowed to do, and which moves it can start.
+ *
+ * Everything about sword combat that varies between weapons lives in this
+ * table, and `tickMelee` branches on it rather than on the weapon's name. A
+ * future weapon (axe, fists, spear) is a new entry here plus its moves in
+ * `MOVES` — the state machine, phases, hitbox and resolution are shared.
+ */
+export interface MeleeWeaponDef {
+	id: MeleeWeaponId;
+	label: string;
+	/** Every move this weapon can start. Moves stay globally unique in `MOVES`. */
+	moves: readonly MeleeMove[];
+	/** Can this weapon raise a guard at all? Only the sword. */
+	blockable: boolean;
+	/** Does this weapon charge a massive? Only the sword. */
+	hasCharge: boolean;
+	/** The ground chain, or null for a chainless weapon. */
+	chain: readonly MeleeMove[] | null;
+	/**
+	 * The move the block button starts in neutral. Null for the sword, whose
+	 * block button *blocks*.
+	 */
+	shiftMove: MeleeMove | null;
+	/** The move the uppercut button starts. Sword: uppercut, dagger: shoryuken. */
+	specialMove: MeleeMove;
+	/** The melee stance's double-tap dash. See `DAGGER_DASH_*`. */
+	burst: { speed: number; durationMs: number; lockoutMs: number };
+}
+
+export const MELEE_WEAPONS: Record<MeleeWeaponId, MeleeWeaponDef> = {
+	sword: {
+		id: "sword",
+		label: "SWORD",
+		moves: ["slash", "slash2", "slash3", "uppercut", "massive"],
+		blockable: true,
+		hasCharge: true,
+		chain: COMBO_CHAIN,
+		shiftMove: null,
+		specialMove: "uppercut",
+		burst: {
+			speed: DASH_SPEED,
+			durationMs: DASH_DURATION_MS,
+			lockoutMs: DASH_LOCKOUT_MS,
+		},
+	},
+	dagger: {
+		id: "dagger",
+		label: "DAGGER",
+		moves: ["stab", "thrust", "shoryuken"],
+		blockable: false,
+		hasCharge: false,
+		chain: null,
+		shiftMove: "thrust",
+		specialMove: "shoryuken",
+		burst: {
+			speed: DAGGER_DASH_SPEED,
+			durationMs: DAGGER_DASH_DURATION_MS,
+			lockoutMs: DAGGER_DASH_LOCKOUT_MS,
+		},
+	},
+};
+
+/** Can this weapon start this move? A weapon never starts another's. */
+function weaponHasMove(weapon: MeleeWeaponDef, move: MeleeMove): boolean {
+	return (weapon.moves as readonly MeleeMove[]).includes(move);
+}
 
 /**
  * A fresh per-move tally.
@@ -566,6 +807,14 @@ export interface MeleeState {
 export interface MeleeTickState extends MeleeState {
 	grounded?: boolean;
 	y?: number;
+	/**
+	 * Air jumps left, for the shoryuken's "not a third jump" gate.
+	 * `PlayerPosition` carries the real value; a bare `MeleeState` without it
+	 * (unit tests) is treated as having a jump in hand.
+	 */
+	airJumps?: number;
+	/** ms left of a dragon-thrust ride. Only `PlayerPosition` ever sets it. */
+	dragonTimer?: number;
 }
 
 /** What `resolveMelee` needs of a fighter: melee state plus a body. */
@@ -870,8 +1119,13 @@ function decay(ms: number, dtMs: number): number {
  * Advance one fighter's melee state by `dt` seconds. Mutates `s`.
  *
  * Ordering is deliberate and load-bearing:
- *   timers → stun gate → plunge gate → stuck gate → stance → block → move
- *   start → move advance → edges.
+ *   timers → stun gate → dragon gate → plunge gate → stuck gate → stance →
+ *   block → charge → move start → move advance → edges.
+ *
+ * `weapon` is the melee weapon this fighter carries (sword or dagger). The
+ * state machine, phases and resolution are shared; the weapon decides which
+ * moves can start, whether the block button blocks or thrusts, and whether a
+ * charge exists at all.
  *
  * Block is processed before the attack so that a held block does not swallow an
  * attack press: pressing attack while blocking starts the swing and drops the
@@ -882,6 +1136,7 @@ export function tickMelee(
 	s: MeleeTickState,
 	input: MeleeIntent,
 	dt: number,
+	weapon: MeleeWeaponDef = MELEE_WEAPONS.sword,
 ): void {
 	const dtMs = dt * MS_PER_SECOND;
 
@@ -920,6 +1175,20 @@ export function tickMelee(
 		s.attackHeld = false;
 		s.blockHeld = false;
 		s.uppercutHeld = false;
+		return;
+	}
+
+	// ---- the dragon ride ----
+	//
+	// Riding the dragon thrust discards intent entirely, exactly like a plunge:
+	// the ride is a physics state owned by `tickPlayer` (the velocity is pinned
+	// to the dragon's line), and all this gate does is not fight it. The only
+	// thing that ends a ride early is a hostile black hole, which arrives as a
+	// stun and lands in the stun gate above.
+	if ((s.dragonTimer ?? 0) > 0) {
+		s.attackHeld = input.attack;
+		s.blockHeld = input.block;
+		s.uppercutHeld = input.uppercut;
 		return;
 	}
 
@@ -977,8 +1246,15 @@ export function tickMelee(
 	}
 	const sword = s.stance === "sword";
 
-	// ---- block ----
-	if (sword && input.block) {
+	// ---- block / shift ----
+	//
+	// The block button means different things per weapon. The sword raises a
+	// guard; the dagger has no guard at all — its shift press is the **thrust**,
+	// the committed lunge that is the entire answer to the missing block. The
+	// press edge starts it (the anticipation), a hold does nothing more, and a
+	// press mid-stab cancels the stab into it: the dagger's version of the
+	// slash-into-block cancel.
+	if (sword && weapon.blockable && input.block) {
 		// The parry window is gone: a guard stops the first slash *and* every
 		// later one, and each one it stops is a guard break. What still belongs to
 		// the press is the cancel — a block press ends a cancellable slash, and
@@ -1004,12 +1280,25 @@ export function tickMelee(
 		// tools that makes a 2.5s commitment survivable.
 		s.blocking = s.meleeAction === "none" && s.blockTimer >= BLOCK_STARTUP_MS;
 	} else {
+		if (
+			sword &&
+			!weapon.blockable &&
+			input.block &&
+			!s.blockHeld &&
+			weapon.shiftMove !== null
+		) {
+			// A shift press with a stab in flight cancels it into the thrust. A
+			// shift press mid-anticipation is ignored — the anticipation is already
+			// the thrust.
+			if (isCancellable(s)) endMove(s);
+			if (s.meleeAction === "none") startMove(s, weapon.shiftMove);
+		}
 		s.blocking = false;
 		s.blockTimer = 0;
 	}
 
 	// ---- charge ----
-	if (sword && input.attack) {
+	if (sword && weapon.hasCharge && input.attack) {
 		s.chargeTimer += dtMs;
 		if (s.chargeTimer >= MASSIVE_CHARGE_MS) s.massiveReady = true;
 	} else {
@@ -1035,9 +1324,16 @@ export function tickMelee(
 		const attackRelease = !input.attack && s.attackHeld;
 		const uppercutPress = input.uppercut && !s.uppercutHeld;
 
-		if (neutral && uppercutPress) {
-			startMove(s, "uppercut");
-		} else if (neutral && s.massiveReady) {
+		if (neutral && uppercutPress && weaponHasMove(weapon, weapon.specialMove)) {
+			// The dagger's shoryuken is not a third jump: it only fires while the
+			// second jump is still in hand, so a fighter that double-jumped has
+			// spent its vertical options and the anti-air is gone with them.
+			const canShoryuken =
+				weapon.specialMove !== "shoryuken" ||
+				s.airJumps === undefined ||
+				s.airJumps > 0;
+			if (canShoryuken) startMove(s, weapon.specialMove);
+		} else if (neutral && weapon.hasCharge && s.massiveReady) {
 			// Two kinds, two triggers. A guard break arms it and the *press* fires
 			// it — the player was not holding the button when the guard broke, so a
 			// click is the natural gesture. A full charge arms it and the *release*
@@ -1050,9 +1346,23 @@ export function tickMelee(
 			} else if (firesOnPress ? attackPress : attackRelease) {
 				startPlunge(s);
 			}
-		} else if (attackPress && (neutral || chaining)) {
-			// `comboStep` is one-based, so it is already the index of the *next* link.
-			startMove(s, (chaining && COMBO_CHAIN[s.comboStep]) || "slash");
+		} else if (
+			attackPress &&
+			(neutral || (weapon.chain !== null && chaining))
+		) {
+			// The dagger has no chain: every press is link one, the stab. `chain`
+			// being null is what makes a dagger's spam *just* spam — there is no
+			// third press that turns it into something bigger, which is the price
+			// of the button being that fast.
+			if (weapon.chain !== null && chaining) {
+				// `comboStep` is one-based, so it is already the index of the *next* link.
+				startMove(
+					s,
+					(COMBO_CHAIN[s.comboStep] as MeleeMove | undefined) ?? "slash",
+				);
+			} else if (neutral) {
+				startMove(s, (weapon.chain !== null ? "slash" : "stab") as MeleeMove);
+			}
 		}
 	}
 
@@ -1241,7 +1551,6 @@ export function applyMeleeResult(
 	defender: MeleeBody,
 	result: MeleeResult,
 ): number {
-	const def = MOVES[result.move];
 	attacker.hitLatch = true;
 
 	switch (result.outcome) {
@@ -1274,37 +1583,77 @@ export function applyMeleeResult(
 		}
 
 		default: {
-			defender.stunTimer = Math.max(
-				defender.stunTimer,
-				def.hitstunMs +
-					(result.outcome === "backstab" ? BACKSTAB_BONUS_STUN_MS : 0),
-			);
-			defender.iframeTimer = MELEE_IFRAME_MS;
-			defender.vx += result.dir * def.knockbackVx;
-			if (def.launchVy !== 0) {
-				defender.vy = def.launchVy;
-				defender.grounded = false;
-			}
-			if (def.knockdown) {
-				defender.knockdownTimer = KNOCKDOWN_MS;
-				// Spiked, not launched. A knockdown that left an airborne target
-				// floating would read as a weak launch, and the whole point of the
-				// finisher is that it puts somebody on the floor.
-				defender.vy = Math.max(defender.vy, KNOCKDOWN_SLAM_VY);
-			}
-			// Being hit ends whatever the defender was doing. Stun would do this next
-			// tick anyway; doing it now stops a swing that is already active from
-			// trading in the same frame it was interrupted.
-			defender.meleeAction = "none";
-			defender.meleeTimer = 0;
-			defender.hitLatch = false;
-			defender.blocking = false;
-			defender.comboStep = 0;
-			defender.comboTimer = 0;
-			// Any melee hit breaks a stuck bomber free — the one thing that can.
-			// The hit's own stun and knockback then play out normally on top.
-			defender.plungeStuckTimer = 0;
-			return def.damage;
+			// The shared hit branch — see `applyHitToDefender`. A normal swing
+			// additionally spends the attacker's `hitLatch`, because a swing hits
+			// at most one fighter; only the thrust's sweep skips that.
+			const damage = applyHitToDefender(defender, result);
+			attacker.hitLatch = true;
+			return damage;
 		}
 	}
+}
+
+/**
+ * Apply a resolved hit to the *defender*, with nothing latched on the attacker.
+ *
+ * The thrust's sweep is multi-target: it knocks down everyone in its path, so
+ * the attacker's `hitLatch` must never close on the first victim. This is the
+ * shared half of `applyMeleeResult`'s hit branch, extracted so the sweep loops
+ * can apply a stat card per victim without spending the attacker's latch.
+ */
+export function applyHitToDefender(
+	defender: MeleeBody,
+	result: MeleeResult,
+): number {
+	const def = MOVES[result.move];
+	defender.stunTimer = Math.max(
+		defender.stunTimer,
+		def.hitstunMs +
+			(result.outcome === "backstab" ? BACKSTAB_BONUS_STUN_MS : 0),
+	);
+	defender.iframeTimer = MELEE_IFRAME_MS;
+	defender.vx += result.dir * def.knockbackVx;
+	if (def.launchVy !== 0) {
+		defender.vy = def.launchVy;
+		defender.grounded = false;
+	}
+	if (def.knockdown) {
+		defender.knockdownTimer = def.knockdownMs ?? KNOCKDOWN_MS;
+		defender.vy = Math.max(defender.vy, KNOCKDOWN_SLAM_VY);
+	}
+	defender.meleeAction = "none";
+	defender.meleeTimer = 0;
+	defender.hitLatch = false;
+	defender.blocking = false;
+	defender.comboStep = 0;
+	defender.comboTimer = 0;
+	defender.plungeStuckTimer = 0;
+	return def.damage;
+}
+
+/**
+ * The region a sweeping move has covered so far this cast, or null when the
+ * move is not mid-sweep.
+ *
+ * The thrust dash is a straight line at a pinned Y — velocity is constant
+ * during the active window, so the ground it has covered is a pure function of
+ * `meleeTimer`, and the whole swept box (where the body has been, plus the
+ * reach ahead of it) is derivable from current state alone. That is what lets
+ * the server hit **everyone** in the path without needing the attacker's
+ * previous position — and lets the client predict the same box for nothing.
+ */
+export function sweptThrustBox(s: MeleeBody): Rect | null {
+	if (s.meleeAction !== "thrust" || s.hitLatch) return null;
+	if (meleePhase(s) !== "active") return null;
+	const def = MOVES.thrust;
+	const travelled =
+		(Math.max(0, s.meleeTimer - def.startupMs) / MS_PER_SECOND) *
+		(def.selfVx ?? 0);
+	const facing = s.facing >= 0 ? 1 : -1;
+	return {
+		x: facing > 0 ? s.x - travelled : s.x - def.reachPx - travelled,
+		y: s.y + def.boxTopOffset,
+		w: travelled + def.reachPx + PLAYER_WIDTH,
+		h: def.boxHeight,
+	};
 }

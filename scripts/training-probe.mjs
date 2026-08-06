@@ -52,6 +52,10 @@ function arg(name, fallback) {
 
 const ONLY = arg("only", "");
 const KEEP_OPEN = process.argv.includes("--keep-open");
+// `--hero=anands` runs the whole battery as the dagger hero: every row above
+// exercises the sword game, and the dagger rows below only make sense when
+// the player can actually play the dagger.
+const HERO = arg("hero", "lia");
 
 /**
  * Fail loudly if the game server is down.
@@ -201,6 +205,18 @@ const UPPERCUT = {
 const MASSIVE = { intent: { attack: true }, holdMs: 2550, aimAngle: AIM_RIGHT };
 /** A move's full duration, so the next step is not swallowed by its recovery. */
 const REST = 500;
+
+// ---- the dagger's steps -------------------------------------------------
+// The dagger uses the same three buttons with different meanings: LMB stabs,
+// Shift thrusts, F shoryukens. These steps drive them the way SLASH drives
+// the sword, and the dagger rows below consume them.
+const STAB = { intent: { attack: true }, holdMs: 60, aimAngle: AIM_RIGHT };
+const THRUST = { intent: { block: true }, holdMs: 60, aimAngle: AIM_RIGHT };
+const SHORYUKEN = {
+	intent: { uppercut: true },
+	holdMs: 60,
+	aimAngle: AIM_RIGHT,
+};
 
 /**
  * The ground chain, as three presses.
@@ -454,9 +470,12 @@ const BATTERY = [
 				},
 				// The guard has to outlast the first bomb's detonation (~3s in
 				// with the 2.5s charge) but end before the dummy's second
-				// cycle — the cycle is ~3.5s, so a hold much past 5s admits a
-				// second bomb and the damage total stops being one bomb.
-				steps: [{ intent: { block: true }, holdMs: 5000, aimAngle: 0 }],
+				// cycle — the cycle is ~3.7s, so the second bomb lands ~6.5s
+				// in. A hold of 4s clears the first bomb with a second of
+				// margin on either side; the original 5s sat knife-edge against
+				// the second cycle and the pass/fail flipped on a few frames of
+				// server timing.
+				steps: [{ intent: { block: true }, holdMs: 4000, aimAngle: 0 }],
 				settleMs: 1200,
 			});
 
@@ -1035,6 +1054,153 @@ const BATTERY = [
 			return c.fails;
 		},
 	},
+
+	// ====================================================================
+	//  THE DAGGER (Anands)
+	//
+	//  `--hero=anands` runs the whole battery as the dagger, and these rows
+	//  measure the dagger's own moves. The numbers are restated rather than
+	//  imported — a probe that shares arithmetic with the code under test
+	//  cannot disagree with it.
+	// ====================================================================
+
+	{
+		name: "dagger stabs land fast and weak",
+		dagger: true,
+		scenario: {
+			name: "dagger stabs",
+			config: { behaviour: "idle" },
+			steps: [
+				// Walk once into the 30px reach — 60px of spawn gap is outside
+				// it — then let the spam do the rest. Each landed stab knocks
+				// the dummy a few px back, and the reach swallows that drift, so
+				// a stationary dagger wielder keeps hitting: that is what "very
+				// spammable" means, and the row proves the whole rhythm lands.
+				{ intent: { right: true }, holdMs: 150, aimAngle: AIM_RIGHT },
+				{ ...STAB, restMs: 260 },
+				{ ...STAB, restMs: 260 },
+				{ ...STAB, restMs: 260 },
+			],
+			settleMs: 800,
+		},
+		verify(report) {
+			const c = checks(report);
+			c.eq(
+				"stab outcomes",
+				playerEvents(report)
+					.map((e) => `${e.move}:${e.outcome}`)
+					.join(","),
+				"stab:hit,stab:hit,stab:hit",
+			);
+			c.damage(5 * 3);
+			return c.fails;
+		},
+	},
+
+	{
+		name: "the thrust knocks the dummy down for a full second and a half",
+		dagger: true,
+		scenario: {
+			name: "dagger thrust",
+			config: { behaviour: "idle" },
+			steps: [{ ...THRUST, restMs: 900 }],
+			settleMs: 2200,
+		},
+		verify(report) {
+			const c = checks(report);
+			c.swung("thrust");
+			c.outcome("hit", "thrust");
+			c.damage(16);
+			c.atLeast("knockdowns", report.melee?.knockdowns ?? 0, 1);
+			return c.fails;
+		},
+	},
+
+	{
+		name: "a sword guard stops a stab — the spam has an answer",
+		dagger: true,
+		scenario: {
+			name: "stab vs guard",
+			config: { behaviour: "blockAll", dummyStance: "sword" },
+			steps: [{ ...STAB, restMs: 600 }],
+			settleMs: 1200,
+		},
+		verify(report) {
+			const c = checks(report);
+			c.outcome("parried", "stab");
+			c.damage(0);
+			c.atLeast("parries", report.melee?.parries ?? 0, 1);
+			return c.fails;
+		},
+	},
+
+	{
+		name: "the shoryuken knocks down but is blockable",
+		dagger: true,
+		scenario: {
+			name: "shoryuken",
+			config: { behaviour: "idle" },
+			steps: [{ ...SHORYUKEN, restMs: 900 }],
+			settleMs: 1600,
+		},
+		verify(report) {
+			const c = checks(report);
+			c.swung("shoryuken");
+			c.outcome("hit", "shoryuken");
+			c.damage(8);
+			c.atLeast("knockdowns", report.melee?.knockdowns ?? 0, 1);
+			return c.fails;
+		},
+	},
+
+	{
+		name: "the machine gun streams: more shots, weaker rounds",
+		dagger: true,
+		scenario: {
+			name: "machine gun",
+			config: { behaviour: "idle", dummyStance: "gun" },
+			steps: [
+				{ intent: { swordStance: false }, holdMs: 100, aimAngle: AIM_RIGHT },
+				{
+					intent: { swordStance: false, attack: true },
+					holdMs: 660,
+					aimAngle: AIM_RIGHT,
+				},
+			],
+			settleMs: 1200,
+		},
+		verify(report) {
+			const c = checks(report);
+			c.atLeast("bullets fired", report.bullets.fired ?? 0, 4);
+			c.eq(
+				"bullet damage",
+				report.player.damageDealt,
+				5 * (report.bullets.hits ?? 0),
+			);
+			return c.fails;
+		},
+	},
+
+	{
+		name: "the dragon thrust sweeps the line",
+		dagger: true,
+		scenario: {
+			name: "dragon thrust",
+			config: { behaviour: "idle" },
+			steps: [{ intent: { ultimate: true }, holdMs: 300, aimAngle: AIM_RIGHT }],
+			settleMs: 1600,
+		},
+		verify(report) {
+			const c = checks(report);
+			c.atLeast(
+				"dummy took the dragon's damage",
+				report.player.damageDealt,
+				30,
+			);
+			c.atLeast("melee events", report.events.length, 1);
+			return c.fails;
+		},
+	},
 ];
 
 const report = (page) => page.evaluate(() => window.__training.report());
@@ -1081,7 +1247,9 @@ async function main() {
 	// `&ultCharge=100` arms the meter: the deny row needs a castable ultimate,
 	// and at the real 0.35 charge/s the probe would be waiting out ~285s to
 	// measure one interaction.
-	await page.goto(`${BASE_URL}/?training=true&ultCharge=100`);
+	await page.goto(
+		`${BASE_URL}/?training=true&ultCharge=100${HERO !== "lia" ? `&hero=${HERO}` : ""}`,
+	);
 	await page.waitForFunction(() => !!window.__training, { timeout: 20000 });
 	const seated = await page.evaluate(() => window.__training.ready(20000));
 	if (!seated) {
@@ -1090,7 +1258,13 @@ async function main() {
 		);
 	}
 
-	const rows = BATTERY.filter((r) => !ONLY || r.name.includes(ONLY));
+	const rows = BATTERY.filter((r) => !ONLY || r.name.includes(ONLY)).filter(
+		// The sword rows press buttons that mean different things to the
+		// dagger (attack = stab, not slash), so a dagger run keeps only the
+		// rows that are actually about the dagger, and a sword run drops
+		// those — pressing attack as Lia is a slash, not a stab.
+		(r) => (HERO === "anands" ? r.dagger : !r.dagger),
+	);
 	const results = [];
 
 	for (const row of rows) {

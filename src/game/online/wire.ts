@@ -105,6 +105,10 @@ const MELEE_ACTIONS: readonly MeleeAction[] = [
 	// any client or server still running the old build.
 	"slash2",
 	"slash3",
+	// The dagger's moves, appended for the same reason.
+	"stab",
+	"thrust",
+	"shoryuken",
 ];
 
 /**
@@ -147,6 +151,11 @@ const NUMBER_FIELDS = [
 	"parryMassiveTimer",
 	"plungeOriginY",
 	"plungeStuckTimer",
+	// The dragon-thrust ride. Appended, for the same reason as every field
+	// before it.
+	"dragonTimer",
+	"dragonVX",
+	"dragonVY",
 ] as const;
 
 const ENUM_FIELDS = ["wallTouch", "stance", "meleeAction"] as const;

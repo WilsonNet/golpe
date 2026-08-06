@@ -5,8 +5,11 @@ import {
 	type Rect,
 	type World,
 } from "../simulation/Arena.js";
+import type { HeroId } from "../simulation/Heroes.js";
 import { BULLET_SPEED, JUMP_HEIGHT_PX } from "../simulation/Physics.js";
 import type { AIConfig } from "./AIConfig.js";
+import { DaggerBrain } from "./DaggerBrain.js";
+import { DragonBrain } from "./DragonBrain.js";
 import { JumpBrain } from "./JumpBrain.js";
 import {
 	MeleeBrain,
@@ -16,6 +19,11 @@ import {
 import { TeamBrain } from "./TeamBrain.js";
 import type { AIInput, AIOutput } from "./types.js";
 import { UltimateBrain } from "./UltimateBrain.js";
+
+/** The melee module, whichever hero's it is. See `EnemyBrain.constructor`. */
+type MeleeModule = MeleeBrain | DaggerBrain;
+/** The ultimate module, whichever hero's it is. */
+type UltModule = UltimateBrain | DragonBrain;
 
 export enum AIState {
 	IDLE = "IDLE",
@@ -187,11 +195,11 @@ export class EnemyBrain {
 	private zoneCooldown = 0;
 
 	/** The sword game: techniques, rhythms, stance hysteresis. */
-	private readonly melee = new MeleeBrain();
+	private readonly melee: MeleeModule;
 	/** The jump button: committed presses and the scripted double jump. */
 	private readonly jump = new JumpBrain();
-	/** The black hole: when to aim, where to throw, when to release. */
-	private readonly ultimate = new UltimateBrain();
+	/** The ultimate: when to hold the button and where to aim it. */
+	private readonly ultimate: UltModule;
 	/** Team roles, spacing and the cover guard. */
 	private readonly team: TeamBrain;
 
@@ -202,10 +210,24 @@ export class EnemyBrain {
 	 */
 	readonly world: World;
 
-	constructor(config: AIConfig, world: World = DEFAULT_WORLD) {
+	/** The hero this brain fights as — decides which melee and ult modules. */
+	readonly hero: HeroId;
+
+	constructor(
+		config: AIConfig,
+		world: World = DEFAULT_WORLD,
+		hero: HeroId = "lia",
+	) {
 		this.config = config;
 		this.world = world;
+		this.hero = hero;
 		this.team = new TeamBrain(world);
+		// One coordinator, one strategy per hero: the dagger has its own melee
+		// module (no guard, spam, thrusts, the shoryuken's air game) and its
+		// own ultimate module (the dragon is a line, not a lob). A future hero
+		// is a new pair of modules here — never a branch in this file.
+		this.melee = hero === "anands" ? new DaggerBrain() : new MeleeBrain();
+		this.ultimate = hero === "anands" ? new DragonBrain() : new UltimateBrain();
 	}
 
 	getConfig(): AIConfig {
@@ -348,6 +370,25 @@ export class EnemyBrain {
 			output.moveRight = input.playerX <= input.selfX;
 			output.dash = input.playerX >= input.selfX ? -1 : 1;
 			output.attack = false;
+		}
+
+		// ---- the thrust's anticipation ----
+		//
+		// The dagger thrust is unblockable — the guard is exactly the wrong
+		// answer to it — and the *designed* dodge is the jump: the dash is a
+		// flat line at the height it started, so a foe who leaves the ground
+		// during the 260ms anticipation is over the line when it arrives. The
+		// read lives here, on the shared coordinator, because it is the same
+		// for every hero: whoever you are, a thrust winding up nearby means
+		// get off the floor.
+		if (
+			input.enemyAction === "thrust" &&
+			input.enemyPhase === "startup" &&
+			input.distanceToPlayer < 300
+		) {
+			output.jump = true;
+			output.attack = false;
+			output.block = false;
 		}
 
 		// ---- the jump ----

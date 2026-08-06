@@ -9,10 +9,12 @@
  */
 
 import { syncSpriteToBody } from "../render/ArenaRenderer";
-import { dudeFrames, rollFrames, TEX, tex } from "../render/assets";
+import { heroFrames, heroPose, heroRollFrames } from "../render/assets";
 import type { MeleeFx } from "../render/MeleeFx";
 import type { Nameplates } from "../render/Nameplates";
 import type { Shadows } from "../render/Shadows";
+import type { HeroId } from "../simulation/Heroes";
+import { meleePhase } from "../simulation/Melee";
 import { PLAYER_WIDTH } from "../simulation/Physics";
 import { TINT, teamTint } from "../teamPalette";
 import type { AnimState, Queries } from "./world";
@@ -43,6 +45,11 @@ export const CLIPS = {
 	slam: { frames: [], fps: 1, sheet: "dude" },
 	plunge: { frames: [], fps: 1, sheet: "dude" },
 	stuck: { frames: [], fps: 1, sheet: "dude" },
+	// The dagger's own poses — generated per hero, like the hit poses.
+	"thrust-windup": { frames: [], fps: 1, sheet: "dude" },
+	"thrust-dash": { frames: [], fps: 1, sheet: "dude" },
+	shoryuken: { frames: [], fps: 1, sheet: "dude" },
+	dragon: { frames: [], fps: 1, sheet: "dude" },
 	"roll-right": { frames: [0, 1, 2, 3, 4, 5, 6, 7], fps: 25, sheet: "roll" },
 	"roll-left": {
 		frames: [8, 9, 10, 11, 12, 13, 14, 15],
@@ -64,6 +71,46 @@ export const CLIPS = {
  */
 export type ClipName = keyof typeof CLIPS;
 
+/**
+ * The texture set a clip's indices index into, for this fighter's hero.
+ *
+ * Every hero's character strip shares the nine-frame layout and every hero's
+ * roll strip the sixteen-cell one, so a clip written against the dude's layout
+ * slices any hero's sheet. This is the one place a hero's sheet name becomes
+ * a texture set.
+ */
+function stripFor(
+	hero: HeroId,
+	sheet: "dude" | "roll",
+): ReturnType<typeof heroFrames> {
+	const base = hero === "anands" ? "anands" : "dude";
+	return sheet === "roll" ? heroRollFrames(`${base}-roll`) : heroFrames(base);
+}
+
+export type PoseKey =
+	| "disabled"
+	| "downed"
+	| "helpless"
+	| "slam"
+	| "plunge"
+	| "stuck"
+	| "thrustWindup"
+	| "thrustDash"
+	| "shoryukenRise"
+	| "dragonRide";
+
+/**
+ * The generated pose texture for this fighter's hero.
+ *
+ * `heroPose` falls back to the dude's pose when one was not generated for the
+ * hero — every hero gets the same ten poses, because they are all derived from
+ * whatever sheet the hero actually ships with.
+ */
+function poseFor(hero: HeroId, pose: PoseKey) {
+	const sheet = hero === "anands" ? "anands" : "dude";
+	return heroPose(sheet, pose);
+}
+
 function playClip(anim: AnimState, clip: ClipName) {
 	if (anim.clip === clip) return;
 	anim.clip = clip;
@@ -76,11 +123,14 @@ function playClip(anim: AnimState, clip: ClipName) {
  *
  * Driven by velocity and facing rather than by input, so it works identically
  * for the locally predicted fighter and the interpolated remote one — the
- * remote has no input to read.
+ * remote has no input to read. Everything below is per-hero: the strip the
+ * walk cycle is cut from and the generated poses both come from the fighter's
+ * own sheet.
  */
 export function animationSystem(queries: Queries, dtMs: number) {
 	for (const e of queries.animated) {
 		const body = e.body;
+		const hero = e.fighter.hero;
 		const moving = Math.abs(body.vx) > 8;
 		const facingLeft = body.facing < 0;
 
@@ -97,14 +147,23 @@ export function animationSystem(queries: Queries, dtMs: number) {
 		// interrupt them — so they draw over everything.
 		if (body.plunging) {
 			playClip(e.anim, "plunge");
-			const plungeTex = tex(TEX.plunge);
+			const plungeTex = poseFor(hero, "plunge");
 			if (e.sprite.texture !== plungeTex) e.sprite.texture = plungeTex;
 			continue;
 		}
 		if (body.plungeStuckTimer > 0) {
 			playClip(e.anim, "stuck");
-			const stuckTex = tex(TEX.stuck);
+			const stuckTex = poseFor(hero, "stuck");
 			if (e.sprite.texture !== stuckTex) e.sprite.texture = stuckTex;
+			continue;
+		}
+
+		// The dragon ride: cargo on a line, the one pose that outranks even the
+		// hit states — the rider is the dragon and the dragon is not staggered.
+		if (body.dragonTimer > 0) {
+			playClip(e.anim, "dragon");
+			const dragonTex = poseFor(hero, "dragonRide");
+			if (e.sprite.texture !== dragonTex) e.sprite.texture = dragonTex;
 			continue;
 		}
 
@@ -114,8 +173,27 @@ export function animationSystem(queries: Queries, dtMs: number) {
 		// this is the body that is doing the smashing.
 		if (body.meleeAction === "massive") {
 			playClip(e.anim, "slam");
-			const slamTex = tex(TEX.slam);
+			const slamTex = poseFor(hero, "slam");
 			if (e.sprite.texture !== slamTex) e.sprite.texture = slamTex;
+			continue;
+		}
+
+		// The dagger's own moves are poses too: the thrust's anticipation (the
+		// tell the foe jumps), the dash's streak, the shoryuken's rise.
+		if (body.meleeAction === "thrust") {
+			const windup = meleePhase(body) === "startup";
+			playClip(e.anim, windup ? "thrust-windup" : "thrust-dash");
+			const thrustTex = poseFor(hero, windup ? "thrustWindup" : "thrustDash");
+			if (e.sprite.texture !== thrustTex) e.sprite.texture = thrustTex;
+			continue;
+		}
+		if (
+			body.meleeAction === "shoryuken" &&
+			(meleePhase(body) === "startup" || meleePhase(body) === "active")
+		) {
+			playClip(e.anim, "shoryuken");
+			const riseTex = poseFor(hero, "shoryukenRise");
+			if (e.sprite.texture !== riseTex) e.sprite.texture = riseTex;
 			continue;
 		}
 
@@ -126,8 +204,9 @@ export function animationSystem(queries: Queries, dtMs: number) {
 			// arena, not just to the two fighters doing it.
 			const broken = body.guardBroken;
 			playClip(e.anim, downed ? "downed" : broken ? "helpless" : "disabled");
-			const hitTexture = tex(
-				downed ? TEX.downed : broken ? TEX.helpless : TEX.disabled,
+			const hitTexture = poseFor(
+				hero,
+				downed ? "downed" : broken ? "helpless" : "disabled",
 			);
 			if (e.sprite.texture !== hitTexture) e.sprite.texture = hitTexture;
 			continue;
@@ -163,7 +242,7 @@ export function animationSystem(queries: Queries, dtMs: number) {
 		// The hit clips carry no frames — they are assigned above and never reach
 		// here — so a missing index means the strip, not the clip, is wrong.
 		const frameIndex = clip.frames[e.anim.frame] ?? clip.frames[0];
-		const frames = clip.sheet === "roll" ? rollFrames : dudeFrames;
+		const frames = stripFor(hero, clip.sheet);
 		const texture = frameIndex === undefined ? undefined : frames[frameIndex];
 		if (texture && e.sprite.texture !== texture) e.sprite.texture = texture;
 	}
@@ -229,6 +308,7 @@ export function meleeFxSystem(
 			dtMs,
 			holdingUlt(e.fighter.id),
 			e.fighter.team,
+			e.fighter.hero,
 		);
 	}
 }

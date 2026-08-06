@@ -25,12 +25,15 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { readStoredHero, storeHero } from "../game/heroPref";
 import { bindings, codeLabel } from "../game/input/Bindings";
 import type { LaunchParams } from "../game/online/launch";
 import { ROOM_ID_RE } from "../game/online/room";
 import { MAX_NAME, readStoredName, storeName } from "../game/playerName";
+import { HEROES, type HeroId } from "../game/simulation/Heroes";
 import type { MatchMode } from "../game/simulation/Teams";
 import { ControlsDialog } from "./ControlsDialog";
+import { HeroSelect } from "./HeroSelect";
 import { HUD_CSS } from "./hudStyles";
 import { MENU_CSS } from "./menuStyles";
 
@@ -40,7 +43,7 @@ const SCORE_LIMIT_TDM = 15;
 const TIME_LIMIT_SEC = 300;
 const FREEZE_TIME_SEC = 4;
 
-type View = "home" | "host" | "join" | "howto" | "controls";
+type View = "home" | "heroes" | "host" | "join" | "howto" | "controls";
 
 interface HostSettings {
 	mode: MatchMode;
@@ -76,6 +79,8 @@ const NOTHING: LaunchParams = {
 	online: false,
 	offline: false,
 	training: false,
+	hero: null,
+	botHero: null,
 	bots: undefined,
 	fill: undefined,
 	scoreLimit: undefined,
@@ -94,6 +99,9 @@ export function MainMenu({
 }) {
 	const [view, setView] = useState<View>("home");
 	const [name, setName] = useState(() => readStoredName() ?? "");
+	// Who this player defaults to. The hero select writes it to localStorage
+	// *and* into every launch request, so a commit and a preference agree.
+	const [hero, setHero] = useState<HeroId>(() => readStoredHero());
 
 	// Esc steps back through the menu; on the home view it does nothing. There
 	// is no game under this screen, so there is nothing else for it to mean.
@@ -139,12 +147,24 @@ export function MainMenu({
 							<button
 								className="vd-play-item vd-play-item-primary"
 								type="button"
-								onClick={() => onLaunch({ ...NOTHING, bots: 1 })}
+								onClick={() => onLaunch({ ...NOTHING, bots: 1, hero })}
 							>
 								<strong>Quick match</strong>
 								<span>
 									A duel against a server bot, right now. Your room link is
 									ready to share.
+								</span>
+							</button>
+							<button
+								className="vd-play-item"
+								type="button"
+								onClick={() => setView("heroes")}
+							>
+								<strong>Heroes — {HEROES[hero].name}</strong>
+								<span>
+									{hero === "lia"
+										? "Sword and pistol: reads, guards and the black hole."
+										: "Dagger and machine gun: a storm of stabs and a dragon."}
 								</span>
 							</button>
 							<button
@@ -169,7 +189,7 @@ export function MainMenu({
 							<button
 								className="vd-play-item"
 								type="button"
-								onClick={() => onLaunch({ ...NOTHING, training: true })}
+								onClick={() => onLaunch({ ...NOTHING, training: true, hero })}
 							>
 								<strong>Practice</strong>
 								<span>The training room: a scriptable dummy and its menu.</span>
@@ -194,12 +214,45 @@ export function MainMenu({
 					</>
 				) : null}
 
+				{view === "heroes" ? (
+					<>
+						<h2 className="vd-title">Heroes</h2>
+						<p className="vd-sub">
+							You face the cursor and read the other side's weapon. Pick who you
+							bring — the default applies to every match you start here.
+						</p>
+						<HeroSelect
+							current={hero}
+							onPick={(picked) => {
+								setHero(picked);
+								storeHero(picked);
+								setView("home");
+							}}
+						/>
+						<button
+							className="vd-btn"
+							type="button"
+							onClick={() => setView("home")}
+						>
+							Back
+						</button>
+					</>
+				) : null}
+
 				{view === "host" ? (
-					<HostForm onLaunch={onLaunch} onBack={() => setView("home")} />
+					<HostForm
+						onLaunch={onLaunch}
+						onBack={() => setView("home")}
+						hero={hero}
+					/>
 				) : null}
 
 				{view === "join" ? (
-					<JoinForm onLaunch={onLaunch} onBack={() => setView("home")} />
+					<JoinForm
+						onLaunch={onLaunch}
+						onBack={() => setView("home")}
+						hero={hero}
+					/>
 				) : null}
 
 				{view === "howto" ? <HowToPlay onBack={() => setView("home")} /> : null}
@@ -228,9 +281,11 @@ export function MainMenu({
 function HostForm({
 	onLaunch,
 	onBack,
+	hero,
 }: {
 	onLaunch: (params: LaunchParams) => void;
 	onBack: () => void;
+	hero: HeroId;
 }) {
 	const [settings, setSettings] = useState(DEFAULT_SETTINGS);
 	const [showAdvanced, setShowAdvanced] = useState(false);
@@ -249,6 +304,7 @@ function HostForm({
 	const commit = useCallback(() => {
 		onLaunch({
 			...NOTHING,
+			hero,
 			mode: settings.mode,
 			screens,
 			bots: settings.bots,
@@ -258,7 +314,7 @@ function HostForm({
 			freezeTime: settings.mode === "tdm" ? settings.freezeTime : undefined,
 			ultCharge: settings.ultCharge > 0 ? settings.ultCharge : undefined,
 		});
-	}, [onLaunch, settings, screens]);
+	}, [onLaunch, settings, screens, hero]);
 
 	const summary = useMemo(() => {
 		if (settings.mode === "tdm") {
@@ -454,9 +510,11 @@ function HostForm({
 function JoinForm({
 	onLaunch,
 	onBack,
+	hero,
 }: {
 	onLaunch: (params: LaunchParams) => void;
 	onBack: () => void;
+	hero: HeroId;
 }) {
 	const [value, setValue] = useState("");
 	const [error, setError] = useState("");
@@ -471,9 +529,9 @@ function JoinForm({
 				);
 				return;
 			}
-			onLaunch({ ...NOTHING, room: id });
+			onLaunch({ ...NOTHING, room: id, hero });
 		},
-		[value, onLaunch],
+		[value, onLaunch, hero],
 	);
 
 	return (

@@ -11,6 +11,16 @@ invented and that made the game famous. Refusing to cancel the heavy moves is
 what stops the butterfly being the only answer: a Massive Strike or an uppercut
 commits you to a long recovery, and a fighter who reads it gets a free punish.
 
+This is the **sword's** spec — the frame table below is the sword's, and the
+weapon system it lives in is described in [heroes.md](heroes.md). The dagger's
+kit is its own spec: [anands.md](anands.md). The two share the state machine
+(startup/active/recovery, the phases, the hitbox rules, the stun/knockdown
+replay path) and differ in what they are allowed to start: each weapon names
+its moves in `simulation/Melee.ts`'s weapon table, and `tickMelee` is
+parameterised by it. Everything in this file about the *mechanics* — the
+butterfly, the guard, the massive, the bomb — is a property of the sword
+weapon.
+
 The loop the mechanics are meant to produce:
 
 ```

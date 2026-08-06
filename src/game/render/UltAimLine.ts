@@ -21,6 +21,8 @@
 import { type Container, Graphics } from "pixi.js";
 import { pointInAnyPlatform, type World } from "../simulation/Arena";
 import {
+	DRAGON_RIDE_MS,
+	DRAGON_SPEED,
 	GRENADE_FUSE_MS,
 	GRENADE_GRAVITY,
 	GRENADE_SPEED,
@@ -50,12 +52,13 @@ interface TraceKey {
 	x: number;
 	y: number;
 	angle: number;
+	mode: "arc" | "beam";
 }
 
 export class UltAimLine {
 	private readonly gfx = new Graphics();
 	private alpha = 0;
-	private key: TraceKey = { x: -1, y: -1, angle: 0 };
+	private key: TraceKey = { x: -1, y: -1, angle: 0, mode: "arc" };
 	private keyed = false;
 
 	constructor(layer: Container) {
@@ -74,6 +77,12 @@ export class UltAimLine {
 	 * too — a dot trail that begins at the chest reads as coming from the
 	 * fighter rather than from the floor.
 	 */
+	/**
+	 * The shape of the preview: the grenade's arc, or the dragon's straight
+	 * line. Same contract, two geometries — the ability being aimed decides
+	 * which, and the preview must show the *actual* path: a dragon aimed like
+	 * a grenade would be a dragon aimed wrong.
+	 */
 	update(
 		dtMs: number,
 		visible: boolean,
@@ -81,6 +90,7 @@ export class UltAimLine {
 		centreY: number,
 		angle: number,
 		world: World,
+		mode: "arc" | "beam" = "arc",
 	) {
 		const target = visible ? MAX_ALPHA : 0;
 		// Faded rather than toggled: coming out of the aim hold, or dying and
@@ -97,11 +107,15 @@ export class UltAimLine {
 		const angleChanged = !this.keyed || this.key.angle !== angle;
 		const moved =
 			!this.keyed || this.key.x !== centreX || this.key.y !== centreY;
-		if (!angleChanged && !moved) return;
-		this.key = { x: centreX, y: centreY, angle };
+		const modeChanged = !this.keyed || this.key.mode !== mode;
+		if (!angleChanged && !moved && !modeChanged) return;
+		this.key = { x: centreX, y: centreY, angle, mode };
 		this.keyed = true;
 
-		const dots = traceArc(centreX, centreY, angle, world);
+		const dots =
+			mode === "beam"
+				? traceBeam(centreX, centreY, angle, world)
+				: traceArc(centreX, centreY, angle, world);
 		const landing = dots[dots.length - 1];
 
 		this.gfx.clear();
@@ -163,6 +177,43 @@ function traceArc(
 		if (y > world.bottom + 80) break;
 		points.push({ x, y });
 		if (pointInAnyPlatform(x, y, world)) break;
+	}
+	return points;
+}
+
+/**
+ * Trace the dragon's straight line on this angle, stopping where the dragon
+ * would stop.
+ *
+ * The dragon rides until an obstacle — the same end condition `tickPlayer`
+ * applies (a wall, the ceiling, or a floor met while moving downward) — so
+ * the preview walks the line step by step and stops at the first solid. The
+ * ride's 900ms cap is the same cap the simulation has, so a line across an
+ * open arena ends where the ride would.
+ */
+function traceBeam(
+	x0: number,
+	y0: number,
+	angle: number,
+	world: World,
+): { x: number; y: number }[] {
+	const points: { x: number; y: number }[] = [];
+	let x = x0;
+	let y = y0;
+	const vx = Math.cos(angle) * DRAGON_SPEED;
+	const vy = Math.sin(angle) * DRAGON_SPEED;
+	let rideMs = DRAGON_RIDE_MS;
+
+	points.push({ x, y });
+
+	while (rideMs > 0) {
+		x += vx * TRACE_DT;
+		y += vy * TRACE_DT;
+		rideMs -= TRACE_DT * 1000;
+		points.push({ x, y });
+		if (pointInAnyPlatform(x, y, world)) break;
+		if (x < world.left || x > world.right) break;
+		if (y < world.top || y > world.bottom) break;
 	}
 	return points;
 }

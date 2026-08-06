@@ -136,6 +136,13 @@ export const FIGHT_HUD_CSS = `
 	color: rgba(217, 244, 246, 0.55);
 	white-space: nowrap;
 }
+/* The foe panel's hero chip: who you are fighting, in the same plaque. */
+.vdh-hero {
+	font-size: 1.05cqw;
+	letter-spacing: 0.18em;
+	color: rgba(255, 209, 102, 0.65);
+	white-space: nowrap;
+}
 .vdh-stance.vdh-stance-gun {
 	color: rgba(226, 177, 132, 0.8);
 }

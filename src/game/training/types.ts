@@ -145,6 +145,13 @@ export interface TrainingConfig {
 	/** Where both fighters are placed on reset, in world pixels. */
 	spawn: TrainingSpawn;
 	dummyStance: "sword" | "gun";
+	/**
+	 * The dummy's hero. Defaults to Lia — the sword is the reference kit every
+	 * other weapon is practised against. `dummyHero: "anands"` makes the dummy
+	 * a dagger, which is a different drill: the thrust cannot be blocked, and
+	 * learning that against a sword dummy teaches the wrong lesson.
+	 */
+	hero: "lia" | "anands";
 	facing: DummyFacing;
 	timing: TrainingTiming;
 }
@@ -278,6 +285,7 @@ export function defaultTrainingConfig(): TrainingConfig {
 			dummy: { ...DEFAULT_TRAINING_SPAWN.dummy },
 		},
 		dummyStance: "sword",
+		hero: "lia",
 		facing: "foe",
 		timing: { ...DEFAULT_TRAINING_TIMING },
 	};

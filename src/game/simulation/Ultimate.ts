@@ -21,6 +21,7 @@ import {
 	PLAYER_HEIGHT,
 	PLAYER_WIDTH,
 	pointInAnyPlatform,
+	type Rect,
 	type World,
 } from "./Arena.js";
 import { hostile, type TeamId } from "./Teams.js";
@@ -448,4 +449,88 @@ function approach(value: number, target: number, maxDelta: number): number {
 	if (value < target) return Math.min(value + maxDelta, target);
 	if (value > target) return Math.max(value - maxDelta, target);
 	return target;
+}
+
+// ---------------------------------------------------------------------------
+// The dragon thrust (Anands' ultimate)
+//
+// The black hole is a *throw*; the dragon thrust is a *ride*. The caster
+// launches along the release angle at `DRAGON_SPEED`, gravity suppressed, and
+// is carried until an obstacle or a hostile black hole stops them. Everything
+// in the path is knocked back and damaged — the dragon hits multiple fighters
+// where a swing hits one, and no sword guard can stop it.
+// ---------------------------------------------------------------------------
+
+/**
+ * How fast the dragon flies. The same 1500 px/s as the plunge bomb — the game
+ * only ever has two speeds of "faster than a fall can get", and both are
+ * committed lines rather than steerable movement.
+ */
+export const DRAGON_SPEED = 1500;
+
+/**
+ * The ride's upper bound. In practice an obstacle ends it sooner — the range
+ * *is* "until it is blocked" — but a wide arena's far wall would be nothing at
+ * this speed without a cap, and 900ms is ~1350px: two screens of open floor.
+ */
+export const DRAGON_RIDE_MS = 900;
+
+/** Damage per fighter the dragon passes through. Big: it can hit several. */
+export const DRAGON_DAMAGE = 30;
+
+/**
+ * Knockback applied along the dragon's line. Directional, unlike a swing's
+ * shove — a foe struck from the side is bowled over in the dragon's direction,
+ * which is what makes a line of fighters feel like a line being swept.
+ */
+export const DRAGON_KNOCKBACK_PX_S = 650;
+
+/**
+ * The brief stun that makes the knockback read. The dragon is a *knockback*
+ * ultimate, not a hold like the black hole — the point is the sweep, and the
+ * stun is just enough that the victim cannot instantly recover the ground the
+ * dragon carried them off.
+ */
+export const DRAGON_STUN_MS = 300;
+
+/** Hitbox reach ahead of the rider. The body itself is the rest of the box. */
+const DRAGON_REACH_PX = 46;
+
+/** The ride's launch velocity along the release angle. `tickPlayer` pins to it. */
+export function dragonVelocity(angle: number): { vx: number; vy: number } {
+	return {
+		vx: Math.cos(angle) * DRAGON_SPEED,
+		vy: Math.sin(angle) * DRAGON_SPEED,
+	};
+}
+
+/**
+ * The region the dragon has swept since the ride began, or null when not
+ * riding.
+ *
+ * The ride is a straight line at constant speed, so the ground covered is a
+ * pure function of the remaining ride time — no previous position needed. The
+ * server tests every foe against this box every tick, and the box is exactly
+ * the path the rider's body has occupied plus the reach ahead of it, so a foe
+ * standing anywhere on the swept line is caught. Hitting multiple fighters is
+ * not a happy accident: it is the ability.
+ */
+export function dragonSweptRect(s: {
+	x: number;
+	y: number;
+	dragonTimer: number;
+	dragonVX: number;
+	dragonVY: number;
+}): Rect | null {
+	if (s.dragonTimer <= 0) return null;
+	const travelledX = (s.dragonVX * (DRAGON_RIDE_MS - s.dragonTimer)) / 1000;
+	const travelledY = (s.dragonVY * (DRAGON_RIDE_MS - s.dragonTimer)) / 1000;
+	const startX = s.x - travelledX;
+	const startY = s.y - travelledY;
+	return {
+		x: Math.min(startX, s.x),
+		y: Math.min(startY, s.y),
+		w: Math.abs(travelledX) + PLAYER_WIDTH + DRAGON_REACH_PX,
+		h: Math.abs(travelledY) + PLAYER_HEIGHT,
+	};
 }
