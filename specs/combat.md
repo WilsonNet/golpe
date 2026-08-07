@@ -13,10 +13,11 @@ Since the arrival of heroes the game is a **hero shooter**: which melee weapon
 and which ranged weapon a fighter carries is decided by their hero (see
 [heroes.md](heroes.md), [anands.md](anands.md) and [jeffs.md](jeffs.md)). The
 stance system below is the *slot* system — melee weapon out or ranged weapon
-out — and what fires is the hero's weapon. Lia's gun is the pistol described
-here; Anands' is the machine gun, faster and weaker per round; Jeffs' is the
-shotgun — six pellets in a fixed cone, slow, lethal at point blank (see
-[jeffs.md](jeffs.md)).
+out — and what fires is the hero's weapon. Lia's rifle is the semi-automatic
+described here; Anands' is the machine gun, faster and weaker per round; Jeffs'
+is the shotgun — six pellets in a fixed cone, slow, lethal at point blank (see
+[jeffs.md](jeffs.md)). Every weapon also carries a magazine and an auto-reload
+(see below).
 
 ## Authority
 
@@ -49,9 +50,10 @@ produced a second sprite nothing simulated — it froze on screen forever.
   exactly where the cursor was — see the cursor→world conversion in
   [movement.md](movement.md), and `scripts/aim-probe.mjs`, which measures the
   angle a bullet actually left with against the angle the cursor asked for.
-- Bullet speed **600 px/s**, damage **10** per hit.
+- Bullet speed **600 px/s**, damage **10** per hit, and a **12-round
+  magazine** that auto-reloads in **800ms** — see the reload section below.
 - Attack cooldown **250ms**, shared by all attacks.
-- Unlimited ammunition.
+- **Unlimited ammunition, one magazine at a time.**
 - Bullets fly in a straight line: **no gravity, no bounce, no collision
   response.** This is what makes their position a closed-form function of time,
   and it is why they are dead-reckoned rather than interpolated
@@ -81,6 +83,42 @@ produced a second sprite nothing simulated — it froze on screen forever.
   once. The weapon's cooldown, pellet damage and pellet speed are its stat
   card (`RANGED_WEAPONS.shotgun`), and the fan is fixed so client and server
   always spawn the same pattern from the same aim.
+
+## The magazine and the reload
+
+Every weapon carries **infinite ammo and one magazine**: there is no reserve,
+no pick-up and no manual reload key (R is the ultimate). The magazine is the
+only limit, and the reload is an **auto** rhythm that starts the moment the
+fighter is not firing — TF2's reload types, both of them:
+
+| Weapon | Magazine | Reload |
+|---|---|---|
+| Lia's rifle | 12 | 800ms for the whole magazine — the fastest in the game |
+| Anands' machine gun | 30 | 1800ms for the whole magazine — a decent burst, a decent pause |
+| Jeffs' shotgun | 5 | **Shell-by-shell** — 900ms for the rack from empty, 700ms per shell after it |
+
+The rules, in the order a player meets them:
+
+- **Holding fire delays the reload.** The fighter shoots until the trigger is
+  released — a burst that stops with rounds left does not reload until the
+  button is let go. An **empty** magazine is the exception: there is nothing
+  to do with the trigger, so the reload runs even while it is held, and the
+  moment a shell (or the whole magazine) lands, the held trigger fires it.
+- **Firing mid-reload cancels the load.** The rounds already in the magazine
+  stay, the round being loaded is lost, and the reload restarts from the
+  shells that are left. That is the whole "shoot in the middle of reload" —
+  the shotgun always has its next blast close, and the interruption is the
+  only cost, because ammo is infinite (there is no reserve to "keep").
+- **The shotgun reloads one shell at a time** (TF2's "Single" type), the rack
+  from empty the slow shell. The rifle and the machine gun refill everything
+  in one animation.
+- **Death, stun and a stance switch cancel the reload.** The gun left the
+  hand; the magazine waits for a new life. A respawn, a round reset and a
+  hero change refill the magazine.
+- The state (`ammo`, `reloadTimer`) rides the wire so every client draws the
+  HUD's ammo count and reload bar, but **only the server ticks it** — the
+  fire that spends a round is the server's decision, so the reload is too,
+  exactly like the ultimate meter. The client never simulates ammo.
 - Sprites come from a recycled pool; a bullet sprite is bound to a bullet **id**,
   never to a position in an array.
 - `EventBus` emits `bullet-fired` per shot, for the React UI.
@@ -151,5 +189,6 @@ randomised per match so no two fights are identical.
 
 - Knockback from **bullets** (melee knockback exists — see [melee.md](melee.md)).
 - Invincibility frames against **bullets** (melee has 180ms of them).
-- Ammunition or reloading.
+- Ammunition pick-ups or a reserve pool. Ammo is infinite by design; the
+  magazine is the whole economy.
 - Lag compensation on hit detection, ranged or melee.

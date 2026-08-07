@@ -27,6 +27,12 @@ export interface AllyInfo {
 	hp: number;
 	alive: boolean;
 	distance: number;
+	/**
+	 * Which hero the ally is, so the team brain can lean on the side's most
+	 * ranged kit for the support slot and a jeffs support can know its sword
+	 * is the last stand.
+	 */
+	hero: HeroId;
 }
 
 /** A living enemy. `foes.length` is how outnumbered the brain is. */
@@ -85,6 +91,12 @@ export interface AIInput {
 	enemyStuck: boolean;
 	/** Own melee state, so the brain does not fight its own animations. */
 	selfAction: MeleeAction;
+	/**
+	 * The sword's charge is accumulating (or the massive is armed). A stance
+	 * switch cancels a charge, so a brain that flips weapons mid-charge would
+	 * spend the whole charge nothing — the gate every stance decision needs.
+	 */
+	selfCharging: boolean;
 	selfStunned: boolean;
 	selfPlunging: boolean;
 	selfStuck: boolean;

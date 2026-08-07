@@ -121,6 +121,22 @@ export class BlossomBrain {
 			return;
 		}
 
+		// The one interrupt of a storm is a knockdown — the chain's finisher,
+		// the thrust, the shoryuken, a massive's blast. A foe inside the ring
+		// mid-startup of one can land it inside the channel, so the cast waits
+		// for that tell to pass: a storm thrown into a read knockdown is a
+		// storm that dies unborn.
+		const knockdownReady =
+			(input.enemyAction === "thrust" ||
+				input.enemyAction === "shoryuken" ||
+				input.enemyAction === "slash3" ||
+				input.enemyAction === "massive") &&
+			input.enemyPhase === "startup";
+		if (knockdownReady && input.distanceToPlayer <= CLUSTER_RADIUS_PX) {
+			this.lastDecline = "knockdown-ready";
+			return;
+		}
+
 		if (!this.choose(input, role)) {
 			this.lastDecline = "no-target";
 			return;
@@ -134,7 +150,9 @@ export class BlossomBrain {
 	/** Is a storm worth starting right now? */
 	private choose(input: AIInput, role: TeamRole | null): boolean {
 		// The crowd: two or more foes inside the ring are the storm's reason
-		// to exist.
+		// to exist — or one foe with an ally in the ring, because a fight the
+		// team is already in is a fight the enemy is committed to, and a
+		// committed enemy cannot just walk out of the storm.
 		let inRing = 0;
 		let finisher = false;
 		for (const foe of input.foes) {
@@ -143,7 +161,10 @@ export class BlossomBrain {
 				if (foe.hp <= FINISHER_HP) finisher = true;
 			}
 		}
-		if (inRing >= 2) return true;
+		const alliesInRing = input.allies.filter(
+			(a) => a.alive && a.distance <= CLUSTER_RADIUS_PX,
+		).length;
+		if (inRing >= 2 || (inRing >= 1 && alliesInRing >= 1)) return true;
 		// A support being swarmed answers with the storm under its own feet —
 		// the one ult that fights exactly where the caster already is.
 		if (role === "support" && inRing >= 1) return true;

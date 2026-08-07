@@ -91,6 +91,7 @@ import {
 	DEFAULT_HERO,
 	HEROES,
 	type HeroId,
+	type HeroKit,
 	isHeroId,
 	kitFor,
 } from "./simulation/Heroes";
@@ -119,6 +120,7 @@ import {
 	singularityGrip,
 	sweptThrustBox,
 	tickPlayer,
+	tickReload,
 	ULT_MAX_CHARGE,
 } from "./simulation/Physics";
 import {
@@ -585,6 +587,26 @@ export class Match {
 	private emitHud(force = false) {
 		const session = this.online;
 		const foeId = this.online?.primaryRemoteId ?? "";
+		// The magazine and the reload bar. Online, the local body carries the
+		// server's authoritative ammo (reconciled like everything else); the
+		// offline escape hatch keeps its own counters. The progress includes
+		// the round being loaded — for the shotgun that is the shell filling,
+		// for the rifle and the machine gun the whole magazine refilling.
+		const ranged = kitFor(this.hero).ranged;
+		const ammo = this.onlineMode ? this.local.body.ammo : this.localAmmo;
+		const reloadTimer = this.onlineMode
+			? this.local.body.reloadTimer
+			: this.localReload;
+		const shellTotal =
+			ranged.reloadShellMs !== undefined
+				? ammo === 0
+					? (ranged.reloadFirstShellMs ?? ranged.reloadShellMs ?? 0)
+					: (ranged.reloadShellMs as number)
+				: (ranged.reloadMs ?? 0);
+		const shellProgress =
+			reloadTimer > 0 ? 1 - Math.max(0, reloadTimer) / shellTotal : 0;
+		const reloadProgress =
+			(ammo + shellProgress * (ranged.magazine - ammo)) / ranged.magazine;
 		const state: HudState = {
 			hp: this.local.fighter.hp,
 			maxHp: this.local.fighter.maxHp,
@@ -592,6 +614,9 @@ export class Match {
 			itemCharges: session ? session.localItemCharges : 0,
 			itemMaxCharges: kitFor(this.hero).item.maxCharges,
 			itemLabel: kitFor(this.hero).item.label,
+			ammo: Math.max(0, Math.min(ranged.magazine, ammo)),
+			magazine: ranged.magazine,
+			reloadProgress: Math.max(0, Math.min(1, reloadProgress)),
 			stance: this.local.body.stance,
 			hero: this.hero,
 			foeHero: this.onlineMode
@@ -2222,6 +2247,7 @@ export class Match {
 						hp: session.hpOf(id),
 						alive: session.aliveOf(id),
 						distance: d,
+						hero: session.heroOf(id) ?? "lia",
 					});
 				}
 			}
@@ -2279,6 +2305,7 @@ export class Match {
 			selfPlunging: self.plunging,
 			selfStuck: self.plungeStuckTimer > 0,
 			selfMassiveReady: self.massiveReady,
+			selfCharging: self.chargeTimer > 0 || self.massiveReady,
 			selfId,
 			selfHero: this.hero,
 			enemyHero: foeHero,
@@ -2534,12 +2561,16 @@ export class Match {
 		// and the round are the hero's weapon's, exactly as the server decides
 		// them — a shotgun fans its pellets here the same way the server fans
 		// them, so the escape hatch never becomes a second set of combat rules.
+		// The magazine is the same contract: a shot spends one round, and the
+		// auto-reload below refills it.
 		if (
 			this.local.body.stance === "gun" &&
 			this.localIntent.attack &&
+			this.localAmmo > 0 &&
 			canFire(this.localAttackAt, now, localKit.ranged.cooldownMs)
 		) {
 			this.localAttackAt = now;
+			this.localAmmo--;
 			const c = bodyCentre(this.local.body.x, this.local.body.y);
 			this.bullets.fireFan(c.x, c.y, this.aimAngle, "player", localKit.ranged);
 			EventBus.emit("bullet-fired");
@@ -2549,9 +2580,11 @@ export class Match {
 			foe.fighter.hp > 0 &&
 			foe.body.stance === "gun" &&
 			this.remoteIntent.attack &&
+			this.remoteAmmo > 0 &&
 			canFire(this.remoteAttackAt, now, foeKit.ranged.cooldownMs)
 		) {
 			this.remoteAttackAt = now;
+			this.remoteAmmo--;
 			const c = bodyCentre(foe.body.x, foe.body.y);
 			this.bullets.fireFan(
 				c.x,
@@ -2563,6 +2596,28 @@ export class Match {
 			EventBus.emit("bullet-fired");
 		}
 
+		// The offline reload, mirrored from the server's: the same shared
+		// `tickReload` against the same intents, so the escape hatch's guns
+		// obey the same magazine as the online ones.
+		this.tickOfflineReload(
+			this.localAmmo,
+			(ammo) => (this.localAmmo = ammo),
+			this.localReload,
+			(t) => (this.localReload = t),
+			this.localIntent.attack,
+			localKit,
+			now,
+		);
+		this.tickOfflineReload(
+			this.remoteAmmo,
+			(ammo) => (this.remoteAmmo = ammo),
+			this.remoteReload,
+			(t) => (this.remoteReload = t),
+			this.remoteIntent.attack,
+			foeKit,
+			now,
+		);
+
 		this.resolveOfflineMelee(foe);
 		this.bullets.resolve(this.bulletTargets(foe));
 	}
@@ -2570,6 +2625,35 @@ export class Match {
 	private localAttackAt = 0;
 	private remoteAttackAt = 0;
 	private remoteBrainAim = 0;
+	/** The escape hatch's own magazines, mirrored from the server's model. */
+	private localAmmo = 0;
+	private remoteAmmo = 0;
+	private localReload = 0;
+	private remoteReload = 0;
+
+	/**
+	 * Drive the offline reload for one fighter: a small mutable wrapper around
+	 * the shared `tickReload`, since the offline path has no `PlayerPosition`
+	 * to mutate in place.
+	 */
+	private tickOfflineReload(
+		ammo: number,
+		setAmmo: (n: number) => void,
+		reload: number,
+		setReload: (t: number) => void,
+		attack: boolean,
+		kit: HeroKit,
+		now: number,
+	) {
+		const state = { ammo, reloadTimer: reload };
+		const dt = Math.min(0.25, (now - this.offlineReloadLastAt) / 1000);
+		this.offlineReloadLastAt = now;
+		tickReload(state, { attack }, kit, dt);
+		setAmmo(state.ammo);
+		setReload(state.reloadTimer);
+	}
+
+	private offlineReloadLastAt = 0;
 
 	/**
 	 * Judge sword hits without a server. `?offline=true` only.
@@ -2689,6 +2773,11 @@ export class Match {
 		this.local.fighter.hp = MAX_HP;
 		this.localIntent = { ...NO_INTENT };
 		this.remoteIntent = { ...NO_INTENT };
+		// A new life is a new magazine, online or off.
+		this.localAmmo = kitFor(this.hero).ranged.magazine;
+		this.localReload = 0;
+		this.remoteAmmo = kitFor(this.foeHero()).ranged.magazine;
+		this.remoteReload = 0;
 
 		if (this.offlineFoe) {
 			this.offlineFoe.body = createPlayerState(

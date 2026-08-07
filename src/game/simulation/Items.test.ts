@@ -10,7 +10,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_WORLD } from "./Arena.js";
 import { type HeroKit, kitFor } from "./Heroes.js";
-import type { TeamId } from "./Teams.js";
 import {
 	HE_GRENADE_FUSE_MS,
 	HE_GRENADE_GRAVITY,
@@ -32,6 +31,7 @@ import {
 	smokeCloudOverlaps,
 	smokeGrenadeEnd,
 	smokeHidesFrom,
+	smokeLobAngle,
 	TRAP_PLACE_OFFSET,
 	TRAP_RADIUS,
 	TRAP_TRIGGER_MS,
@@ -47,6 +47,7 @@ import {
 	type PlayerPosition,
 	tickPlayer,
 } from "./Physics.js";
+import type { TeamId } from "./Teams.js";
 
 describe("the item registry", () => {
 	it("gives Lia an HE grenade and Anands a trap", () => {
@@ -316,6 +317,25 @@ describe("the smoke grenade", () => {
 		expect(
 			smokeCloudOverlaps(cloud, 400 - 16 - SMOKE_RADIUS - 40, 400 - 24),
 		).toBe(false);
+	});
+
+	it("smokeLobAngle lands the canister where it is aimed", () => {
+		// A flat 30px drop at 300px range.
+		const a = smokeLobAngle(300, 0);
+		const t = 300 / (SMOKE_GRENADE_SPEED * Math.cos(a));
+		const landed =
+			SMOKE_GRENADE_SPEED * Math.sin(a) * t -
+			0.5 * SMOKE_GRENADE_GRAVITY * t * t;
+		expect(landed).toBeCloseTo(0, 0);
+		// A lob to a ledge 240px away and 120px up.
+		const b = smokeLobAngle(240, -120);
+		const t2 = 240 / (SMOKE_GRENADE_SPEED * Math.cos(b));
+		const landed2 =
+			SMOKE_GRENADE_SPEED * Math.sin(b) * t2 -
+			0.5 * SMOKE_GRENADE_GRAVITY * t2 * t2;
+		expect(landed2).toBeCloseTo(-120, 0);
+		// Straight up when the target is directly overhead.
+		expect(smokeLobAngle(0, -50)).toBeCloseTo(Math.PI / 2, 4);
 	});
 });
 

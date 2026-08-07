@@ -30,10 +30,12 @@ cone-spread burst.
 | Stat | Value |
 |---|---|
 | Pellets | 6 |
-| Cooldown | 900ms (vs the pistol's 250) |
+| Cooldown | 900ms (vs the rifle's 250) |
 | Damage per pellet | 17 (102 if all six land) |
 | Pellet speed | 900 px/s |
 | Spread | ±10°, six fixed angles |
+| Magazine | 5 shells |
+| Reload | shell-by-shell — 900ms for the rack from empty, 700ms per shell after |
 
 - **The delay is the whole weapon.** Nine hundred milliseconds between shots
   is nearly four pistol shots and over eight machine-gun rounds — a missed
@@ -54,6 +56,11 @@ cone-spread burst.
 - **The fan is deterministic.** The six angles are fixed (`-10°…+10°` in even
   steps) — no randomness, so both sides spawn the same pattern from the same
   aim and the client's prediction never disagrees with the server's.
+- **Five shells, TF2's reload.** The shotgun loads one shell at a time, the
+  rack from empty the slow one, and firing mid-reload keeps the loaded shells
+  and loses only the shell being loaded — the blast is always one shell away
+  from ready. See [combat.md](combat.md) for the reload rules every weapon
+  shares.
 - **Feeds the meter like any bullet.** The shotgun is an ordinary weapon; a
   point-blank kill pays the ultimate.
 
@@ -145,19 +152,29 @@ the blade), a new **BlossomBrain** for the ultimate and a smoke behaviour in
 the coordinator.
 
 - **BlossomBrain** holds the button when the storm pays: two or more foes
-  within ~240px of the caster, a finisher inside the ring, an outnumbered
-  fight, or a meter held ready for ten seconds (the patience rule the hole
-  shares). It never overrides the aim — there is nothing to aim.
-- **The shotgun is a range preference, not a new brain.** The bot fights the
-  sword game and fires the shotgun where the shotgun works: it closes to
-  ~110px before pulling the trigger, instead of the gun's 80px kite — the
-  coordinator's `GUN_KITE_RANGE_PX` becomes the shotgun's settle range for
-  this hero. Bots miss at range exactly like players, because the cone is
-  real.
-- **The smoke is a panic button.** The coordinator throws it at its own feet
-  when hurt (under 40 HP) with a foe inside ~320px, or when outnumbered — the
-  cloud is ally smoke, so the bot vanishes from the enemy's screen while
-  still seeing them. The aim for the throw is straight down.
+  within ~240px of the caster, a team fight (a foe *and* an ally in the ring —
+  the enemy is committed), a finisher inside the ring, an outnumbered fight,
+  or a meter held ready for ten seconds (the patience rule the hole shares).
+  It never overrides the aim — there is nothing to aim. It **waits out a
+  readied knockdown**: a foe inside the ring mid-startup of the finisher, the
+  thrust, the shoryuken or a massive would end the channel the moment it
+  lands, so a storm thrown into that tell is a storm that dies unborn.
+- **The executioner's stance.** The sword is the default at every range; the
+  shotgun is a *point-blank finisher* — a jeffs bot pulls it at ~140px when
+  the blast is the answer (a reeling foe is a free blast; a killshot is worth
+  the gamble; both rolled once per approach), fires once, and holsters again
+  so the sword covers the 900ms cooldown. A jeffs bot that kited with the
+  shotgun at range would never hit anything, so the gun never comes out
+  beyond the blast range at all.
+- **The smoke, three plays.** (1) *The combo:* the moment the blossom is
+  held, the bot smokes its own feet — the cloud blooms during the hold and
+  the cinematic freeze, so the channel starts inside friendly smoke and the
+  enemy cannot see the caster to shoot them through the storm. (2) *The team
+  play:* an ally being rushed gets a smoke lobbed onto them — the cloud is
+  *their* ally smoke, so they vanish from the enemy's screens mid-fight.
+  (3) *The panic button:* hurt or outnumbered, the bot smokes its own feet
+  and vanishes while still seeing everything. The aim is straight down for
+  the self-smokes and a solved lob (`smokeLobAngle`) for the team play.
 
 ## The art budget
 

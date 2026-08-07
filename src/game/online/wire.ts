@@ -164,6 +164,10 @@ const NUMBER_FIELDS = [
 	"trapTimer",
 	// The Death Blossom channel, appended for the same reason.
 	"blossomTimer",
+	// The magazine and the auto-reload. Server-ticked (the client only
+	// draws them), appended for the same reason as every field before.
+	"ammo",
+	"reloadTimer",
 ] as const;
 
 const ENUM_FIELDS = ["wallTouch", "stance", "meleeAction"] as const;

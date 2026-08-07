@@ -226,6 +226,9 @@ const SHORYUKEN = {
  * with a frame to spare — and a probe that pressed any earlier would measure a
  * swallowed input and call the combo broken.
  */
+/** The massive-delivery row's dummy spawn — the poll target for the reset. */
+const SPAWN_DUMMY_X = 330;
+
 const CHAIN = [
 	{ intent: { attack: true }, holdMs: 60, aimAngle: AIM_RIGHT },
 	{ intent: {}, holdMs: 110, aimAngle: AIM_RIGHT },
@@ -924,6 +927,17 @@ const BATTERY = [
 				settleMs: 800,
 			});
 
+			// The run's reset is async (a server round-trip), so the start
+			// position must be read after it lands — otherwise the previous
+			// row's dummy position is counted as this delivery's origin and a
+			// full walk reads as a 4px shuffle. The dummy's charge keeps it at
+			// its spawn for 2.6s, so polling for the spawn is safe: the read
+			// happens while the dummy is still rooted there.
+			await page.waitForFunction(
+				(spawnX) => (window.__gameState?.().enemyPhys?.x ?? -1) === spawnX,
+				SPAWN_DUMMY_X,
+				{ timeout: 3000 },
+			);
 			const startX = await page.evaluate(
 				() => window.__gameState?.().enemyPhys?.x ?? 0,
 			);

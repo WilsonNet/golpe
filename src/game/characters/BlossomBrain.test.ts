@@ -27,6 +27,7 @@ function input(over: Partial<AIInput> = {}): AIInput {
 		selfPlunging: false,
 		selfStuck: false,
 		selfMassiveReady: false,
+		selfCharging: false,
 		selfId: "me",
 		selfHero: "jeffs",
 		enemyHero: "lia",
@@ -90,7 +91,7 @@ describe("BlossomBrain", () => {
 	it("the patience rule eventually spends a full meter on a near foe", () => {
 		const brain = new BlossomBrain();
 		const i = input({
-			foes: [{ id: "a", distance: 200, hp: 100, x: 500, y:300 }],
+			foes: [{ id: "a", distance: 200, hp: 100, x: 500, y: 300 }],
 		});
 		// Simulate 11 seconds of armed ticks.
 		for (let t = 0; t < 700; t++) {

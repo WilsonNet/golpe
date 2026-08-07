@@ -376,6 +376,24 @@ export function FightHud({ training = false }: { training?: boolean }) {
 				</section>
 			) : null}
 
+			{/* The magazine and the reload, bottom-right above the item: the
+			    weapon's own resource beside the kit's. The count is the readable
+			    part; the bar fills as the reload lands — a shell at a time for
+			    the shotgun, the whole magazine for the rifle and the machine
+			    gun — and a CSS glide smooths the 20Hz snapshot steps. */}
+			<section className="vdh-ammo">
+				<span className="vdh-ammo-label">AMMO</span>
+				<span className="vdh-ammo-count">
+					{`${hud?.ammo ?? 0}/${hud?.magazine ?? 0}`}
+				</span>
+				<div className="vdh-ammo-track">
+					<div
+						className="vdh-ammo-fill"
+						style={{ width: `${(hud?.reloadProgress ?? 0) * 100}%` }}
+					/>
+				</div>
+			</section>
+
 			{/* The item's charges, tucked beside the ultimate: a finite resource
 			    next to the earned one, so the player can see at a glance what this
 			    life has left to spend. Charged pips that grey out one by one. */}

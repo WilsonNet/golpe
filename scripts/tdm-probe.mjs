@@ -45,6 +45,8 @@ const DIAG_MS = Number(arg("diagnostic", 12000));
  * new question — is only observable with `--ultCharge=100`.
  */
 const ULT_CHARGE = Math.max(0, Number(arg("ultCharge", 0)) || 0);
+/** `--botHero=jeffs` pins every bot to the executioner — the smoke support. */
+const BOT_HERO = arg("botHero", "");
 /**
  * Freezetime, in seconds. **The real one**, unlike the score and time limits.
  *
@@ -242,9 +244,19 @@ function assess(state, rounds, lines, diagnostic) {
 	const ult = diagnostic?.ultimateSummary;
 	if (team?.role) {
 		if (team.role === "support") {
-			if (team.gunFrames <= team.swordFrames) {
+			// A jeffs support is a *smoke* support: its shotgun is a
+			// point-blank weapon, so it keeps the sword for the last stand and
+			// holds its fire at band range — the stance expectation flips.
+			const smokeSupport = BOT_HERO === "jeffs";
+			if (
+				smokeSupport
+					? team.swordFrames <= team.gunFrames
+					: team.gunFrames <= team.swordFrames
+			) {
 				failures.push(
-					`support bot played sword ${team.swordFrames} frames to gun ${team.gunFrames}`,
+					smokeSupport
+						? `smoke support bot played gun ${team.gunFrames} frames to sword ${team.swordFrames}`
+						: `support bot played sword ${team.swordFrames} frames to gun ${team.gunFrames}`,
 				);
 			}
 			if (movement && movement.doubleJumps === 0) {
@@ -312,7 +324,8 @@ async function main() {
 		`${BASE_URL}/?ai=true&mode=tdm&bots=${FIGHTERS - 1}` +
 		`&scoreLimit=${SCORE_LIMIT}&timeLimit=${TIME_LIMIT_SEC}` +
 		`&freezeTime=${FREEZE_SEC}` +
-		(ULT_CHARGE > 0 ? `&ultCharge=${ULT_CHARGE}` : "");
+		(ULT_CHARGE > 0 ? `&ultCharge=${ULT_CHARGE}` : "") +
+		(BOT_HERO ? `&botHero=${BOT_HERO}` : "");
 	console.log(`[PROBE] ${url}`);
 	await page.goto(url);
 	await page.waitForFunction(() => typeof window.__matchState === "function", {

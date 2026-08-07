@@ -99,7 +99,7 @@ unique (`slash` is the sword's, `stab` is the dagger's), which is what keeps
 
 ## The HUD
 
-The stance badge names the actual weapon — SWORD/GUN for Lia, DAGGER/MACHINE
+The stance badge names the actual weapon — SWORD/RIFLE for Lia, DAGGER/MACHINE
 GUN for Anands, SWORD/SHOTGUN for Jeffs — because the stance is the slot and
 the hero is the weapon in it. The foe panel's plaque adds the foe's hero. The
 health bar is never tinted, whatever the hero. The item's charge pips sit in
@@ -117,6 +117,12 @@ its hero, and `EnemyBrain` picks its melee module (`MeleeBrain` for the sword,
 hole, `DragonBrain` for the thrust, `BlossomBrain` for the storm) and its item
 behaviour from it — see [anands.md](anands.md) for the dagger's strategies and
 [jeffs.md](jeffs.md) for the executioner's.
+
+**Team roles are hero-aware.** A side's support is its most ranged kit —
+Lia's rifle kites, while the dagger and the shotgun are blades first and hold
+the line — and a jeffs support is a *smoke* support: it keeps the sword for
+the last stand, holds its fire at band range (the shotgun cannot reach) and
+smokes the vanguard when it is rushed. See [jeffs.md](jeffs.md).
 
 ## Not implemented
 

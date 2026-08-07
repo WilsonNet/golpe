@@ -488,6 +488,26 @@ export function clampSmokePoint(
 }
 
 /**
+ * The launch angle (from the +x axis) whose arc lands a smoke canister at
+ * `dx, dy`. The same quadratic the ultimate's lob solver uses, against the
+ * smoke's own speed and gravity — a bot that wants to smoke a point has to
+ * solve the same ballistics a throw does. A target past the canister's
+ * maximum range (v²/g ≈ 544px) has no real root, so the answer is the
+ * maximum-lob 45°; the canister falls short and blooms on the ground, which
+ * is still a cloud between the bot and the enemy.
+ */
+export function smokeLobAngle(dx: number, dy: number): number {
+	if (Math.abs(dx) < 1) return Math.PI / 2;
+	const v2 = SMOKE_GRENADE_SPEED * SMOKE_GRENADE_SPEED;
+	const a = (SMOKE_GRENADE_GRAVITY * dx * dx) / (2 * v2);
+	const c = dy + a;
+	const disc = dx * dx - 4 * a * c;
+	if (disc < 0) return Math.PI / 4;
+	const u = (dx - Math.sqrt(disc)) / (2 * a);
+	return Math.atan(u);
+}
+
+/**
  * Is this fighter's body inside the cloud? Centre-to-centre, like the
  * singularity's grip — a fighter fully swallowed is hidden, a fighter at the
  * rim is not.

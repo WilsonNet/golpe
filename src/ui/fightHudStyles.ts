@@ -415,6 +415,55 @@ export const FIGHT_HUD_CSS = `
 	50% { text-shadow: 0 0 1.6cqw rgba(255, 93, 93, 0.85); }
 }
 
+/* ---- the magazine and the reload, bottom-right above the item ----
+   Gameplay tier, same register: the weapon's own resource sits above the
+   kit's finite one. The count is the readable part ("3/5"), and the bar is
+   the *becoming* — a shell climbing into a shotgun, the whole magazine
+   refilling the rifle and the machine gun. The CSS glide smooths the 20Hz
+   snapshot steps into a continuous fill. */
+.vdh-ammo {
+	position: absolute;
+	bottom: 9.2cqh;
+	right: 1.4cqw;
+	display: flex;
+	align-items: center;
+	gap: 0.8cqw;
+	width: 28cqw;
+}
+.vdh-ammo-label {
+	font-size: 1.1cqw;
+	letter-spacing: 0.18em;
+	color: rgba(217, 244, 246, 0.55);
+	white-space: nowrap;
+	text-shadow: 0 0.2cqh 0 rgba(0, 0, 0, 0.7);
+}
+.vdh-ammo-count {
+	font-size: 1.15cqw;
+	font-weight: bold;
+	font-variant-numeric: tabular-nums;
+	color: #f2e8ff;
+	min-width: 4cqw;
+	text-align: right;
+	text-shadow: 0 0.2cqh 0 rgba(0, 0, 0, 0.75);
+}
+.vdh-ammo-track {
+	position: relative;
+	flex: 1;
+	min-width: 0;
+	height: 0.9cqh;
+	background: rgba(10, 20, 32, 0.6);
+	border: 1px solid rgba(127, 240, 244, 0.25);
+	border-radius: 1px;
+	box-shadow: inset 0 0.3cqh 0.5cqh rgba(0, 0, 0, 0.4);
+	overflow: hidden;
+}
+.vdh-ammo-fill {
+	position: absolute;
+	inset: 0;
+	background: #7fa8e8;
+	transition: width 160ms linear;
+}
+
 /* ---- the item charges, bottom-right above the ultimate ----
    Gameplay tier, same register as the ultimate meter: the item is the finite
    resource next to the earned one, so its pips sit directly above the ult

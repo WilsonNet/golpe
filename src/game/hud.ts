@@ -20,6 +20,17 @@ export interface HudState {
 	itemMaxCharges: number;
 	/** The item's badge — "HE GRENADE" or "TRAP". */
 	itemLabel: string;
+	/** Rounds left in the magazine. Server-counted, like the charges. */
+	ammo: number;
+	/** The magazine's full size, so the HUD can draw the count and the bar. */
+	magazine: number;
+	/**
+	 * The magazine as a fraction, including the round being reloaded — the
+	 * reload bar's fill. 1 when full; while a shotgun loads a shell it climbs
+	 * past the shells already in, so the bar reads "how full is the gun
+	 * becoming" rather than "how long until the current shell lands".
+	 */
+	reloadProgress: number;
 	/** The local fighter's stance — the badge beside the name. */
 	stance: "sword" | "gun";
 	/** The local fighter's hero — the badge reads "SWORD" or "SHOTGUN" from it. */

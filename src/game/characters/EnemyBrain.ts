@@ -6,6 +6,7 @@ import {
 	type World,
 } from "../simulation/Arena.js";
 import type { HeroId } from "../simulation/Heroes.js";
+import { smokeLobAngle } from "../simulation/Items.js";
 import { BULLET_SPEED, JUMP_HEIGHT_PX } from "../simulation/Physics.js";
 import type { AIConfig } from "./AIConfig.js";
 import { BlossomBrain } from "./BlossomBrain.js";
@@ -469,14 +470,40 @@ export class EnemyBrain {
 			return;
 		}
 
-		// The smoke is a panic button: thrown at the bot's own feet, it turns
-		// the bot invisible to the enemy (the cloud is *ally* smoke — see
-		// specs/jeffs.md) while the bot still sees everything. Hurt, or facing
-		// an outnumbered fight, is when the cloud pays: the enemy cannot see
-		// the retreat, cannot count the fighters behind it, cannot read who
-		// walks back out. The aim is straight down so the canister blooms at
-		// the thrower's feet instead of sailing past them.
+		// The smoke is the jeffs bot's whole item game, in three plays:
+		//
+		// 1. The combo: the moment the Death Blossom is held, throw a smoke at
+		//    the bot's own feet. The cloud blooms during the hold and the
+		//    cinematic freeze, so the channel starts inside friendly smoke —
+		//    the enemy cannot see the caster to shoot them through the storm.
+		//    The item press is edge-latched server-side, so a held hold costs
+		//    exactly one canister; the cooldown paces later casts.
+		// 2. The team play: an ally is being rushed — smoke the ally. The
+		//    cloud is *their* ally smoke, so they vanish from the enemy's
+		//    screens while the fight is still theirs to watch.
+		// 3. The panic button: hurt, or facing an outnumbered fight — smoke
+		//    the bot's own feet and vanish while still seeing everything.
+		// The aim is straight down for the self-smokes (the canister blooms at
+		// the thrower's feet) and a solved lob for the team play.
 		if (input.selfHero === "jeffs") {
+			if (this.ultimate.hold && input.selfItemCharges > 0) {
+				output.item = true;
+				output.aimAngle = Math.PI / 2;
+				this.itemCooldownMs = 3000;
+				return;
+			}
+
+			const rushed = this.rushedAlly(input);
+			if (rushed) {
+				output.item = true;
+				output.aimAngle = smokeLobAngle(
+					rushed.x - input.selfX,
+					rushed.y - input.selfY,
+				);
+				this.itemCooldownMs = 9000;
+				return;
+			}
+
 			const outnumbered = input.foes.length > input.allies.length + 1;
 			const hurt = input.selfHP < 40 && input.distanceToPlayer < 320;
 			if (!hurt && !outnumbered) return;
@@ -485,6 +512,25 @@ export class EnemyBrain {
 			this.itemCooldownMs = 8000;
 			return;
 		}
+	}
+
+	/**
+	 * The ally a foe is about to reach, or null. The team smoke's target: a
+	 * rushed ally is a vanguard about to be swarmed, and a cloud over them is
+	 * the support's whole contribution to that exchange.
+	 */
+	private rushedAlly(input: AIInput): { x: number; y: number } | null {
+		let best: { x: number; y: number; d: number } | null = null;
+		for (const ally of input.allies) {
+			if (!ally.alive) continue;
+			for (const foe of input.foes) {
+				const d = Math.hypot(foe.x - ally.x, foe.y - ally.y);
+				if (d < 200 && (!best || d < best.d)) {
+					best = { x: ally.x, y: ally.y, d };
+				}
+			}
+		}
+		return best ? { x: best.x, y: best.y } : null;
 	}
 
 	// -------------------------------------------------------------------------

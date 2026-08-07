@@ -95,9 +95,9 @@ export {
 	placeTrap,
 	SMOKE_DURATION_MS,
 	smokeGrenadeEnd,
+	TRAP_DAMAGE,
 	tickHeGrenade,
 	tickSmokeGrenade,
-	TRAP_DAMAGE,
 	trapCatches,
 	trapFor,
 } from "./Items.js";
@@ -481,6 +481,21 @@ export interface PlayerPosition extends MeleeState {
 	 * hole's ticks.
 	 */
 	blossomTimer: number;
+	/**
+	 * Rounds left in the magazine. Infinite ammo, so this is the whole
+	 * economy: when it hits zero the reload runs and nothing else restores
+	 * it. **Server-ticked only** — the fire that spends it is the server's
+	 * decision, and the client draws it from the wire without ever simulating
+	 * it, exactly like the ultimate meter. Refilled on respawn, on a round
+	 * reset and on a hero change.
+	 */
+	ammo: number;
+	/**
+	 * ms until the next round (or the next shotgun shell) is loaded, zero
+	 * when not reloading. Server-ticked, like `ammo` — the client draws the
+	 * reload bar from it and never simulates it. See `tickReload`.
+	 */
+	reloadTimer: number;
 }
 
 export function createPlayerState(
@@ -512,6 +527,8 @@ export function createPlayerState(
 		dragonVY: 0,
 		trapTimer: 0,
 		blossomTimer: 0,
+		ammo: 0,
+		reloadTimer: 0,
 		...createMeleeState(facing),
 	};
 }
@@ -544,6 +561,8 @@ export function copyPlayerState(
 	target.dragonVY = source.dragonVY;
 	target.trapTimer = source.trapTimer;
 	target.blossomTimer = source.blossomTimer;
+	target.ammo = source.ammo;
+	target.reloadTimer = source.reloadTimer;
 	copyMeleeState(source, target);
 	return target;
 }
@@ -1045,6 +1064,84 @@ export function canFire(
 	cooldownMs: number = ATTACK_COOLDOWN,
 ): boolean {
 	return now - lastAttackTime >= cooldownMs;
+}
+
+// ---------------------------------------------------------------------------
+// The reload
+//
+// Infinite ammo, one magazine, and an **auto** reload that starts the moment
+// the fighter is not firing: no manual key (R is the ultimate), no reserve,
+// no pick-up. TF2's reload types are both here — the rifle and the machine
+// gun refill the whole magazine in one animation, and the shotgun loads its
+// shells one at a time ("Single" in TF2's terms), the rack from empty being
+// the slow one.
+//
+// This is **server-ticked only**. The fire that spends a round is the
+// server's decision, so the reload that follows it is too — the client draws
+// `ammo` and `reloadTimer` off the wire and never simulates them, exactly
+// like the ultimate meter. The function is pure and shared so the server can
+// be tested against the same numbers a client would draw.
+// ---------------------------------------------------------------------------
+
+/**
+ * Advance one fighter's reload by `dt` seconds. Mutates in place, like
+ * `tickBullet`.
+ *
+ * Rules, in the order they matter:
+ *
+ * - Dead, frozen, stunned or not holding the gun: no reload, and any reload
+ *   in progress is cancelled — a stance switch *is* dropping the weapon.
+ * - A full magazine never reloads.
+ * - **Holding fire with rounds in the mag delays the reload.** The fighter
+ *   shoots until the button is released — CS and TF2 both wait for the
+ *   trigger to be let go. An empty magazine is the exception: there is
+ *   nothing to do with the button, so the reload runs even while held, and
+ *   the moment a shell (or the full mag) lands, the held trigger fires it.
+ * - Firing cancels the reload — the in-progress round is lost. That is the
+ *   whole "shoot in the middle of reload": the loaded rounds stay, the one
+ *   being loaded does not, and the reload restarts from the shells that are
+ *   left. The interruption is the cost, and there is nothing else to pay —
+ *   ammo is infinite, so there is no "reload keep" to worry about.
+ * - The shotgun fills one shell at a time; the rack from an empty magazine
+ *   is the slow shell (`reloadFirstShellMs`), the shells after it the fast
+ *   ones. The rifle and the machine gun refill everything in `reloadMs`.
+ */
+export function tickReload(
+	s: Pick<PlayerPosition, "ammo" | "reloadTimer">,
+	input: Pick<PlayerIntent, "attack">,
+	kit: HeroKit,
+	dt: number,
+): void {
+	const r = kit.ranged;
+	const dtMs = dt * MS_PER_SECOND;
+
+	if (s.ammo >= r.magazine) {
+		s.reloadTimer = 0;
+		return;
+	}
+	if (input.attack && s.ammo > 0) {
+		s.reloadTimer = 0;
+		return;
+	}
+
+	const shellByShell = r.reloadShellMs !== undefined;
+	if (s.reloadTimer <= 0) {
+		s.reloadTimer = shellByShell
+			? s.ammo === 0
+				? (r.reloadFirstShellMs ?? r.reloadShellMs ?? 0)
+				: (r.reloadShellMs as number)
+			: (r.reloadMs ?? 0);
+	}
+	s.reloadTimer -= dtMs;
+	if (s.reloadTimer <= 0) {
+		if (shellByShell) {
+			s.ammo = Math.min(r.magazine, s.ammo + 1);
+			s.reloadTimer = s.ammo < r.magazine ? (r.reloadShellMs as number) : 0;
+		} else {
+			s.ammo = r.magazine;
+			s.reloadTimer = 0;
+		}
+	}
 }
 
 // ---------------------------------------------------------------------------

@@ -97,7 +97,7 @@ describe("hero registry", () => {
 	it("Lia carries the sword kit, unchanged", () => {
 		expect(LIA_KIT.hero).toBe("lia");
 		expect(LIA_KIT.melee).toBe(MELEE_WEAPONS.sword);
-		expect(LIA_KIT.ranged).toBe(RANGED_WEAPONS.gun);
+		expect(LIA_KIT.ranged).toBe(RANGED_WEAPONS.rifle);
 		expect(LIA_KIT.ultimate).toBe("black-hole");
 		expect(LIA_KIT.item.id).toBe("he-grenade");
 	});
@@ -123,26 +123,26 @@ describe("hero registry", () => {
 		const shotgun = RANGED_WEAPONS.shotgun;
 		// The delay is the weapon: nearly four pistol shots between blasts.
 		expect(shotgun.cooldownMs).toBeGreaterThan(
-			RANGED_WEAPONS.gun.cooldownMs * 3,
+			RANGED_WEAPONS.rifle.cooldownMs * 3,
 		);
 		// Point blank is lethal: all six pellets at 17 land 102 — a full bar.
 		expect(shotgun.pellets).toBe(6);
 		expect((shotgun.pellets ?? 1) * shotgun.damage).toBeGreaterThanOrEqual(100);
 		// A pellet is a fast round — the fan must arrive before it drifts off.
-		expect(shotgun.speed).toBeGreaterThan(RANGED_WEAPONS.gun.speed);
+		expect(shotgun.speed).toBeGreaterThan(RANGED_WEAPONS.rifle.speed);
 		// The cone is fixed at the muzzle: no randomness to desync over.
 		expect(shotgun.spreadDeg).toBeGreaterThan(0);
 	});
 
 	it("the machine gun fires faster than the pistol and hits weaker", () => {
 		expect(RANGED_WEAPONS.machinegun.cooldownMs).toBeLessThan(
-			RANGED_WEAPONS.gun.cooldownMs,
+			RANGED_WEAPONS.rifle.cooldownMs,
 		);
 		expect(RANGED_WEAPONS.machinegun.damage).toBeLessThan(
-			RANGED_WEAPONS.gun.damage,
+			RANGED_WEAPONS.rifle.damage,
 		);
 		expect(RANGED_WEAPONS.machinegun.speed).toBeGreaterThan(
-			RANGED_WEAPONS.gun.speed,
+			RANGED_WEAPONS.rifle.speed,
 		);
 	});
 

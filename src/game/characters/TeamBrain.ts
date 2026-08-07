@@ -22,6 +22,7 @@
  */
 
 import type { World } from "../simulation/Arena.js";
+import type { HeroId } from "../simulation/Heroes.js";
 import type { AIInput, AIOutput, MeleeModuleView, TeamRole } from "./types.js";
 
 /** A hostile inside this much of an ally means the ally is being threatened. */
@@ -35,6 +36,11 @@ const COVER_JUMP_CHANCE = 0.12;
 const THREAT_RANGE_PX = 300;
 /** A support stops backing off once its ally is this far ahead. */
 const ALLY_SPACING_PX = 400;
+/**
+ * The shotgun's blast range — the one distance a jeffs support's gun can
+ * still mean something. Beyond it the smoke support holds its fire.
+ */
+const SHOTGUN_BLAST_RANGE_PX = 140;
 
 const THREAT_RADIUS_PX = 330;
 /** The support's comfort band: inside the floor it runs, outside the ceiling it advances. */
@@ -167,12 +173,35 @@ export class TeamBrain {
 	 * A side is ordered, not random: the n-th fighter of a side alternates
 	 * vanguard/support. Stable across the match because ids never change, so a
 	 * bot does not swap jobs mid-fight.
+	 *
+	 * The order is **hero-aware**: the side's support is its most ranged kit —
+	 * Lia's rifle kites, while the dagger and the shotgun are blades first and
+	 * hold the line. The alternation still guarantees a split whatever the
+	 * composition is; the hero only decides which fighter fills which half.
 	 */
 	private roleForImpl(input: AIInput): TeamRole | null {
 		if (input.selfTeam === null) return null;
-		const ids = [...input.allies.map((a) => a.id), input.selfId].sort();
+		const supportRank = (hero: HeroId) => (hero === "lia" ? 0 : 1);
+		const ids = [...input.allies.map((a) => a.id), input.selfId];
+		// The id of the ally, or this fighter's own id (no hero lookup needed —
+		// the self hero is in the input, the allies' heroes travel in their
+		// rows).
+		ids.sort(
+			(a, b) =>
+				supportRank(
+					a === input.selfId ? input.selfHero : this.allyHero(a, input),
+				) -
+					supportRank(
+						b === input.selfId ? input.selfHero : this.allyHero(b, input),
+					) || a.localeCompare(b),
+		);
 		const index = ids.indexOf(input.selfId);
 		return index % 2 === 0 ? "vanguard" : "support";
+	}
+
+	/** The hero of a named ally, from the perception's rows. */
+	private allyHero(id: string, input: AIInput): HeroId {
+		return input.allies.find((a) => a.id === id)?.hero ?? "lia";
 	}
 
 	/**
@@ -228,8 +257,15 @@ export class TeamBrain {
 			output.moveRight = this.strafeDir > 0;
 		}
 
-		// The gun fires whenever the band is held and the lane is clear.
-		output.attack = input.hasLineOfSight && !input.selfStunned;
+		// The gun fires whenever the band is held and the lane is clear —
+		// except the shotgun, which is a point-blank weapon: a jeffs support
+		// holds its fire at band range and lets the smoke and the sword do
+		// the work.
+		const rangedFire =
+			input.selfHero === "jeffs"
+				? input.distanceToPlayer <= SHOTGUN_BLAST_RANGE_PX
+				: true;
+		output.attack = rangedFire && input.hasLineOfSight && !input.selfStunned;
 
 		// Spacing: a second support standing on this one is two guns at the same
 		// spot, which is one gun with twice the target area.

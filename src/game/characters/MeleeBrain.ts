@@ -30,6 +30,17 @@ const UPPERCUT_RANGE_PX = 58;
 /** Near enough to be worth charging at, far enough not to be punished for it. */
 const CHARGE_RANGE_PX = 150;
 
+// Jeffs' shotgun — the executioner's finisher. The sword is his default at
+// every range; the shotgun comes out at point blank, when the blast is the
+// answer, and holsters again after one blast so the sword covers the 900ms
+// cooldown.
+/** Inside this, a jeffs bot may pull the shotgun for the finisher blast. */
+const SHOTGUN_BLAST_RANGE_PX = 140;
+/** The shotgun holsters once the foe leaves this much. */
+const SHOTGUN_HOLSTER_RANGE_PX = 190;
+/** How long the shotgun stays out for one blast, before the sword follows. */
+const SHOTGUN_STANCE_MS = 320;
+
 // Decision ranges, in px past a move's own reach. Generous on purpose: these
 // reads must fire often enough that the mechanic they feed is actually tested.
 /** A swing already in flight threatens a blocker this far beyond its reach. */
@@ -161,6 +172,10 @@ export class MeleeBrain {
 	private guardDecision: boolean | null = null;
 	/** Whether this particular stun will be punished with a charge. Rolled once. */
 	private stunPunishDecision: boolean | null = null;
+	/** Jeffs: ms the shotgun stays out for one blast. */
+	private blastTimer = 0;
+	/** Jeffs: the roll for "this approach ends in a blast", decided once. */
+	private blastDecision: boolean | null = null;
 
 	reset() {
 		this.drawn = true;
@@ -170,6 +185,8 @@ export class MeleeBrain {
 		this.beatLoops = 0;
 		this.guardDecision = null;
 		this.stunPunishDecision = null;
+		this.blastTimer = 0;
+		this.blastDecision = null;
 	}
 
 	/** Whether the sword is currently drawn. The coordinator reads this for spacing. */
@@ -191,9 +208,14 @@ export class MeleeBrain {
 		this.aggressiveness = ctx.aggressiveness;
 
 		if (ctx.role === "support") {
-			this.drawn = false;
+			// A jeffs support is a *smoke* support: its shotgun is a
+			// point-blank weapon, so it keeps the sword for the last stand
+			// instead of kiting with a gun that cannot reach.
+			this.drawn = input.selfHero === "jeffs";
 		} else if (ctx.role === "vanguard") {
 			this.drawn = true;
+		} else if (input.selfHero === "jeffs") {
+			this.jeffsStance(input, distance, delta);
 		} else {
 			// Hysteresis, so a fighter at the boundary does not switch weapons every
 			// frame — a stance switch cancels a slash, so flicker would cancel every
@@ -256,6 +278,63 @@ export class MeleeBrain {
 		this.beats = null;
 		output.attack = false;
 		output.block = true;
+	}
+
+	/**
+	 * The executioner's stance game. The sword is the default at every range;
+	 * the shotgun is a **point-blank finisher** — it comes out when the blast
+	 * is the answer (a reeling foe is a free blast, a killshot is worth the
+	 * gamble), stays out for exactly one blast, and holsters again so the
+	 * sword covers the 900ms cooldown. A jeffs bot that kited with the
+	 * shotgun at range would be a jeffs bot that never hit anything, so the
+	 * gun never comes out beyond the blast range at all.
+	 */
+	private jeffsStance(input: AIInput, distance: number, delta: number) {
+		// The massive's charge and its delivery are the sword's own business:
+		// switching stance cancels the charge, so while it is accumulating or
+		// the massive is armed, the shotgun waits.
+		if (input.selfCharging) return;
+
+		if (distance > SHOTGUN_BLAST_RANGE_PX) this.blastDecision = null;
+
+		if (this.drawn) {
+			if (
+				distance <= SHOTGUN_BLAST_RANGE_PX &&
+				this.willBlast(input, distance)
+			) {
+				this.drawn = false;
+				this.blastTimer = SHOTGUN_STANCE_MS;
+			}
+			return;
+		}
+
+		// Shotgun out. One blast's worth, then the sword returns — unless the
+		// foe is still reeling, which is another free blast.
+		this.blastTimer -= delta;
+		const reeling = input.enemyStunned;
+		if (distance > SHOTGUN_HOLSTER_RANGE_PX && !reeling) {
+			this.drawn = true;
+		} else if (this.blastTimer <= 0 && !reeling) {
+			this.drawn = true;
+		}
+	}
+
+	/**
+	 * Is this approach worth ending in a blast? Rolled once per approach, like
+	 * the guard decision — a re-roll every frame would make any non-zero skill
+	 * a certainty and every stun a guaranteed shotgun.
+	 */
+	private willBlast(input: AIInput, distance: number): boolean {
+		if (input.enemyStunned) return true;
+		if (this.blastDecision === null) {
+			const closeness = 1 - distance / SHOTGUN_BLAST_RANGE_PX;
+			// A foe a single blast will finish is worth the gamble; a foe at
+			// full health gets the sword until they are not.
+			const killshot = input.enemyHP <= 60 ? 0.3 : 0;
+			const p = 0.12 + closeness * 0.3 + killshot + this.aggressiveness * 0.2;
+			this.blastDecision = Math.random() < Math.min(0.92, p);
+		}
+		return this.blastDecision;
 	}
 
 	/**

@@ -157,6 +157,7 @@ import {
 	tickGrenade,
 	tickHeGrenade,
 	tickPlayer,
+	tickReload,
 	tickSmokeGrenade,
 	trapCatches,
 	trapFor,
@@ -788,7 +789,11 @@ export class GameRoom {
 			channel: sources.channel ?? null,
 			brain: sources.brain ?? null,
 			dummy: sources.dummy ?? null,
-			state: createPlayerState(spawn.x, spawn.y, spawn.facing),
+			state: {
+				...createPlayerState(spawn.x, spawn.y, spawn.facing),
+				// The magazine starts full, like the item kit.
+				ammo: kitFor(hero).ranged.magazine,
+			},
 			hp,
 			kills: 0,
 			deaths: 0,
@@ -938,6 +943,8 @@ export class GameRoom {
 			// fault, but the charges cannot travel across kits.
 			player.itemCharges = kitFor(hero).item.maxCharges;
 			player.itemHeld = false;
+			// And a different magazine: the new kit's weapon starts full.
+			this.refillMagazine(player);
 			console.log(
 				`[HERO] ${player.name} switches to ${kitFor(hero).melee.label} / ${kitFor(hero).ranged.label}`,
 			);
@@ -1292,6 +1299,7 @@ export class GameRoom {
 					hp: p.hp,
 					alive: p.alive,
 					distance: d,
+					hero: p.hero,
 				});
 			}
 		}
@@ -1332,6 +1340,7 @@ export class GameRoom {
 			selfPlunging: bot.state.plunging,
 			selfStuck: bot.state.plungeStuckTimer > 0,
 			selfMassiveReady: bot.state.massiveReady,
+			selfCharging: bot.state.chargeTimer > 0 || bot.state.massiveReady,
 			selfId: bot.id,
 			selfHero: bot.hero,
 			enemyHero: foe.hero,
@@ -1641,6 +1650,7 @@ export class GameRoom {
 		// stack a fresh three on top of the three that just got them killed.
 		player.itemCharges = kitFor(player.hero).item.maxCharges;
 		player.itemHeld = false;
+		this.refillMagazine(player);
 		this.traps = this.traps.filter((t) => t.ownerId !== player.id);
 		// The dead fighter's clouds leave the floor with them, exactly like
 		// their traps: a respawn is a new life, and a new life does not stack
@@ -2167,9 +2177,13 @@ export class GameRoom {
 				!isFrozen(player.state) &&
 				player.state.stance === "gun" &&
 				input.attack &&
+				// An empty magazine cannot fire. The round is spent here, on the
+				// server, and the reload below is what brings it back.
+				player.state.ammo > 0 &&
 				canFire(player.lastAttackTime, now, kit.ranged.cooldownMs)
 			) {
 				player.lastAttackTime = now;
+				player.state.ammo--;
 				const muzzleX = player.state.x + PLAYER_WIDTH / 2;
 				const muzzleY = player.state.y + PLAYER_HEIGHT / 2;
 				// A shotgun fires a deterministic fan of pellets: fixed angles at
@@ -2195,6 +2209,11 @@ export class GameRoom {
 				}
 				player.stats.bulletsFired += pellets;
 			}
+
+			// The auto-reload, on the same input that just fired. Server-ticked:
+			// the client draws `ammo` and `reloadTimer` off the wire and never
+			// simulates them, exactly like the ultimate meter.
+			this.tickReload(player, input, dt);
 		}
 
 		// Counted down here rather than in `tickCinematic`, which stops running the
@@ -2908,6 +2927,32 @@ export class GameRoom {
 		);
 	}
 
+	/**
+	 * Advance one fighter's auto-reload, given the input that was just
+	 * simulated.
+	 *
+	 * The state (`ammo`, `reloadTimer`) rides the wire so every client draws
+	 * it, but only this side ticks it — the fire that spends a round is this
+	 * side's decision, so the reload is too. The rule is the shared pure
+	 * `tickReload`; this is the one gate that function cannot know about,
+	 * because it lives here with the fighter, not in the state: a dead,
+	 * frozen or disabled fighter reloads nothing.
+	 */
+	private tickReload(player: ConnectedPlayer, input: PlayerInput, dt: number) {
+		const s = player.state;
+		if (!player.alive || isFrozen(s) || isStunned(s) || isKnockedDown(s)) {
+			s.reloadTimer = 0;
+			return;
+		}
+		tickReload(s, input, kitFor(player.hero), dt);
+	}
+
+	/** The magazine is a per-life resource: refilled on every new life. */
+	private refillMagazine(player: ConnectedPlayer) {
+		player.state.ammo = kitFor(player.hero).ranged.magazine;
+		player.state.reloadTimer = 0;
+	}
+
 	/** Advance HE grenades, smoke canisters, the clouds and the traps. */
 	private tickItems(dt: number) {
 		this.tickHeGrenades(dt);
@@ -3321,6 +3366,7 @@ export class GameRoom {
 			// that placed it.
 			p.itemCharges = kitFor(p.hero).item.maxCharges;
 			p.itemHeld = false;
+			this.refillMagazine(p);
 			p.potgBurst = { damage: 0, absorbed: 0 };
 			if (p.brain) p.brain = new EnemyBrain(botConfig(), this.world, p.hero);
 		});

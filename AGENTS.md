@@ -3,7 +3,7 @@
 An online-first 2D hero shooter: GunZ: The Duel's K-Style, rebuilt in two
 dimensions on a deterministic simulation shared by client and server. Every
 fighter is a **hero** — a composition of a melee weapon, a ranged weapon, a
-unique ultimate and an item (see `specs/heroes.md`). Lia is the sword-and-pistol
+unique ultimate and an item (see `specs/heroes.md`). Lia is the sword-and-rifle
 reference kit; Anands is the dagger storm (see `specs/anands.md`).
 
 **This file is an index.** It holds only what every session needs; everything
@@ -274,6 +274,17 @@ Lia's HE grenade, Anands' floor trap (2 and 3 uses per life; see
 sword/gun stance · **P** toggle AI vs AI · **hold Tab** scoreboard · **Esc**
 menu. Sword is the default stance.
 
+**Every gun has a magazine and an auto-reload** — infinite ammo, no reserve,
+no manual key (R is the ultimate). The reload starts when the trigger is
+released (or instantly on an empty magazine, even while held), firing cancels
+it (loaded rounds stay, the round being loaded is lost), and a stance switch,
+stun or death cancels it too. Lia's rifle: 12 rounds, 800ms. Anands' machine
+gun: 30 rounds, 1800ms. Jeffs' shotgun: 5 shells, one at a time — 900ms for
+the rack from empty, 700ms per shell after (TF2's "Single" reload). The ammo
+count and reload bar live in the HUD's bottom-right corner, and `ammo` /
+`reloadTimer` ride the wire **server-ticked only** — the client draws them,
+never simulates them, exactly like the ultimate meter.
+
 **Every button is rebindable, and these are only the defaults.** Esc → Controls
 captures the key, mouse button *or gamepad button* you press — and the root
 menu's *Options* opens the same dialog before a match exists, because a new
@@ -462,9 +473,16 @@ reads as camera jitter. See [specs/deathmatch.md](specs/deathmatch.md) and
 **Bots play the whole game, in modules.** `EnemyBrain` is a coordinator over four
 tactic modules (`characters/`): melee rhythms, the jump controller (scripted
 double jumps for high ground), the ultimate (hold, aim a solved lob, release)
-and team play. A team room splits each side into **vanguards** (sword, the cover
-line) and **supports** (gun, kiting bounded at their own end screen) — measured
-complementary roles, not mirror fighters. A future weapon is a new module, never
+and team play. A team room splits each side into **vanguards** (blades, the cover
+line) and **supports** (gun, kiting bounded at their own end screen) — and the
+roles are **hero-aware**: the side's support is its most ranged kit, and a jeffs
+support is a *smoke* support that keeps the sword for the last stand and smokes
+a rushed vanguard. Jeffs' own brain is the executioner's: the sword is the
+default at every range and the shotgun is a point-blank finisher (pulled on a
+reeling foe, holstered after one blast), the blossom waits out a readied
+knockdown and casts into its own smoke, and the smoke has three plays — the
+blossom combo, the team save, the panic button. Measured complementary roles,
+not mirror fighters. A future weapon is a new module, never
 a new branch. The brain decides inside the same gaps the server's tick allows:
 a client brain that kept deciding through an ultimate's cinematic freeze held
 and released while no input could leave the client, so it is gated on the freeze
