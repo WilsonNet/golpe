@@ -747,7 +747,12 @@ export function tickPlayer(
 	}
 
 	// ---- jump (ground jump wins over wall jump) ----
-	if (s.jumpBufferTimer > 0) {
+	// A disable discards the buffered jump with it: once rooted by a stun or a
+	// trap, a press the fighter made before the disable landed does not fire
+	// through it. The fighter must press again — the same rule the latch at the
+	// bottom applies to a held button. Without the gate, a jump buffered one
+	// tick before a trap caught the fighter hopped them out of the lock.
+	if (!rooted && s.jumpBufferTimer > 0) {
 		if (s.grounded || s.coyoteTimer > 0) {
 			s.vy = JUMP_VELOCITY;
 			s.grounded = false;
@@ -844,6 +849,7 @@ export function tickPlayer(
 		s.vx = approach(s.vx, 0, PLUNGE_DECEL * dt);
 		s.jumping = false;
 	} else if (
+		s.trapTimer <= 0 &&
 		s.meleeAction !== "none" &&
 		meleePhaseOf(s) === "active" &&
 		(s.meleeAction === "thrust" || s.meleeAction === "shoryuken")
@@ -854,6 +860,10 @@ export function tickPlayer(
 		// window rises at a constant `selfVy`, and gravity owns the recovery.
 		// Both live here, in the shared simulation, so both sides compute the
 		// same line and the hitbox and the sweep agree with the body.
+		//
+		// A trap lock counters both: while `trapTimer` runs the body stays put
+		// — the move plays in place, and `sweptThrustBox` freezes its sweep to
+		// match. A lunge is movement, and the trap has the feet.
 		const def = MOVES[s.meleeAction];
 		if (def.selfVx !== undefined) {
 			s.vx = s.facing >= 0 ? def.selfVx : -def.selfVx;
@@ -987,6 +997,18 @@ export function tickPlayer(
 		for (const t of traps) {
 			if (trapCatches(t, s.x, s.y)) {
 				s.trapTimer = TRAP_TRIGGER_MS;
+				// The catch takes the velocity with it. Without this a fighter
+				// caught mid-dash or mid-tumble carried their burst's momentum
+				// ~170px out of the patch — the trapTimer ran, the fighter
+				// left — so the trap read as having done nothing. The burst
+				// state dies with the velocity, so the flat line's `vy` pin
+				// and the roll's reduced hitbox do not outlive the catch
+				// either. The dragon thrust is deliberately untouched: the
+				// trap locks the feet, and the ride is not the feet.
+				s.vx = 0;
+				s.vy = 0;
+				s.dashActiveTimer = 0;
+				s.tumbleActiveTimer = 0;
 				break;
 			}
 		}

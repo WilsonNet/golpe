@@ -8,7 +8,8 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { DEFAULT_WORLD } from "./Arena.js";
+import { DRAGON_SPEED } from "../../../tweakables/ultimate.js";
+import { DEFAULT_WORLD, PLAYER_HEIGHT, PLAYER_WIDTH } from "./Arena.js";
 import { type HeroKit, kitFor } from "./Heroes.js";
 import {
 	HE_GRENADE_FUSE_MS,
@@ -40,8 +41,10 @@ import {
 	trapCatches,
 	trapFor,
 } from "./Items.js";
+import { MOVES, sweptThrustBox } from "./Melee.js";
 import {
 	createPlayerState,
+	JUMP_BUFFER_MS,
 	NEUTRAL_INTENT,
 	type PlayerIntent,
 	type PlayerPosition,
@@ -226,6 +229,249 @@ describe("the trap", () => {
 		);
 		expect(locked.trapTimer).toBeLessThan(caught.trapTimer);
 		expect(locked.trapTimer).toBeCloseTo(TRAP_TRIGGER_MS - 1000 / 60, 0);
+	});
+
+	it("catches a dash dead: the burst's momentum dies with the catch", () => {
+		// Open floor past the right pillar (x 496..520), clear of the ledges:
+		// the fighter dashes across the patch at full speed.
+		const kit: HeroKit = kitFor("anands");
+		const s0 = groundedState(544);
+		const t = placeTrap(4, "someone-else", 610, 568 - PLAYER_HEIGHT, 1, null); // centre x 656
+		let caught: PlayerPosition | null = null;
+		let s = s0;
+		for (let i = 0; i < 60; i++) {
+			const next = tickPlayer(
+				s,
+				{ ...neutral(), right: true, dash: 1 },
+				1 / 60,
+				DEFAULT_WORLD,
+				null,
+				kit,
+				[t],
+			);
+			if (next.trapTimer > 0) {
+				caught = next;
+				break;
+			}
+			s = next;
+		}
+		expect(caught).not.toBeNull();
+		if (caught === null) throw new Error("the dash must spring the trap");
+		expect(caught.vx).toBe(0);
+		expect(caught.dashActiveTimer).toBe(0);
+		// The lock holds: the next tick's walk and dash input move nobody.
+		const locked = tickPlayer(
+			caught,
+			{ ...neutral(), right: true, dash: 1 },
+			1 / 60,
+			DEFAULT_WORLD,
+			null,
+			kit,
+			[t],
+		);
+		expect(locked.x).toBeCloseTo(caught.x, 1);
+		expect(locked.vx).toBe(0);
+	});
+
+	it("catches a tumble dead: the roll's momentum dies with the catch", () => {
+		const kit: HeroKit = kitFor("anands");
+		const s0 = { ...groundedState(544), stance: "gun" as const };
+		const t = placeTrap(5, "someone-else", 610, 568 - PLAYER_HEIGHT, 1, null); // centre x 656
+		let caught: PlayerPosition | null = null;
+		let s: PlayerPosition = s0;
+		for (let i = 0; i < 60; i++) {
+			const next = tickPlayer(
+				s,
+				{ ...neutral(), right: true, dash: 1 },
+				1 / 60,
+				DEFAULT_WORLD,
+				null,
+				kit,
+				[t],
+			);
+			if (next.trapTimer > 0) {
+				caught = next;
+				break;
+			}
+			s = next;
+		}
+		expect(caught).not.toBeNull();
+		if (caught === null) throw new Error("the roll must spring the trap");
+		expect(caught.vx).toBe(0);
+		expect(caught.tumbleActiveTimer).toBe(0);
+		const locked = tickPlayer(
+			caught,
+			{ ...neutral(), right: true, dash: 1 },
+			1 / 60,
+			DEFAULT_WORLD,
+			null,
+			kit,
+			[t],
+		);
+		expect(locked.x).toBeCloseTo(caught.x, 1);
+	});
+
+	it("a jump buffered before the catch cannot fire through the lock", () => {
+		const kit: HeroKit = kitFor("anands");
+		const state = groundedState(400);
+		const t = placeTrap(6, "someone-else", state.x, state.y, 1, null);
+		const caught = tickPlayer(
+			state,
+			neutral(),
+			1 / 60,
+			DEFAULT_WORLD,
+			null,
+			kit,
+			[t],
+		);
+		expect(caught.trapTimer).toBeGreaterThan(0);
+		// The jump was buffered the tick the trap caught the fighter: the lock
+		// discards it — no hop out of the trap; the press must be made again.
+		const buffered = { ...caught, jumpBufferTimer: JUMP_BUFFER_MS };
+		const locked = tickPlayer(
+			buffered,
+			{ ...neutral(), up: true },
+			1 / 60,
+			DEFAULT_WORLD,
+			null,
+			kit,
+			[t],
+		);
+		expect(locked.vy).toBe(0);
+		expect(locked.jumping).toBe(false);
+	});
+
+	it("counters the dagger's thrust and shoryuken, but not the stab", () => {
+		const kit: HeroKit = kitFor("anands");
+		const state = groundedState(400);
+		const t = placeTrap(7, "someone-else", state.x, state.y, 1, null);
+		const caught = tickPlayer(
+			state,
+			neutral(),
+			1 / 60,
+			DEFAULT_WORLD,
+			null,
+			kit,
+			[t],
+		);
+		expect(caught.trapTimer).toBeGreaterThan(0);
+		// A shift press (the lunge) is refused while the lock holds...
+		const thrust = tickPlayer(
+			caught,
+			{ ...neutral(), block: true },
+			1 / 60,
+			DEFAULT_WORLD,
+			null,
+			kit,
+			[t],
+		);
+		expect(thrust.meleeAction).toBe("none");
+		// ...and so is the uppercut button's shoryuken (the rise).
+		const shoryuken = tickPlayer(
+			caught,
+			{ ...neutral(), uppercut: true },
+			1 / 60,
+			DEFAULT_WORLD,
+			null,
+			kit,
+			[t],
+		);
+		expect(shoryuken.meleeAction).toBe("none");
+		// The stab carries no body, so it still starts: the lock has the feet,
+		// not the hands.
+		const stab = tickPlayer(
+			caught,
+			{ ...neutral(), attack: true },
+			1 / 60,
+			DEFAULT_WORLD,
+			null,
+			kit,
+			[t],
+		);
+		expect(stab.meleeAction).toBe("stab");
+		// Without the lock the same presses start the moves: the refusal is the
+		// trap's, not a broken input.
+		const free = tickPlayer(
+			state,
+			{ ...neutral(), block: true },
+			1 / 60,
+			DEFAULT_WORLD,
+			null,
+			kit,
+			[],
+		);
+		expect(free.meleeAction).toBe("thrust");
+	});
+
+	it("does not counter the dragon thrust: a caught rider keeps riding", () => {
+		const kit: HeroKit = kitFor("anands");
+		const state = groundedState(400);
+		const t = placeTrap(8, "someone-else", state.x, state.y, 1, null);
+		const caught = tickPlayer(
+			state,
+			neutral(),
+			1 / 60,
+			DEFAULT_WORLD,
+			null,
+			kit,
+			[t],
+		);
+		expect(caught.trapTimer).toBeGreaterThan(0);
+		// The ride is not the feet: a fighter caught mid-ride keeps riding, and
+		// a trapped fighter can still cast the dragon.
+		const riding = {
+			...caught,
+			dragonTimer: 500,
+			dragonVX: DRAGON_SPEED,
+			dragonVY: 0,
+		};
+		const after = tickPlayer(
+			riding,
+			neutral(),
+			1 / 60,
+			DEFAULT_WORLD,
+			null,
+			kit,
+			[t],
+		);
+		expect(after.dragonTimer).toBeGreaterThan(0);
+		expect(after.vx).toBeCloseTo(DRAGON_SPEED, 1);
+	});
+
+	it("freezes a mid-lunge's swept box: the lock lends the thrust no arc", () => {
+		const kit: HeroKit = kitFor("anands");
+		const state = groundedState(400);
+		const t = placeTrap(9, "someone-else", state.x, state.y, 1, null);
+		const caught = tickPlayer(
+			state,
+			neutral(),
+			1 / 60,
+			DEFAULT_WORLD,
+			null,
+			kit,
+			[t],
+		);
+		// Mid-lunge, 40ms into the active window (startup 260, active 140).
+		const midLunge = {
+			...caught,
+			meleeAction: "thrust" as const,
+			meleeTimer: MOVES.thrust.startupMs + 40,
+			facing: 1,
+		};
+		const box = sweptThrustBox(midLunge);
+		expect(box).not.toBeNull();
+		// Locked: the sweep is the reach ahead of the frozen body — no phantom
+		// arc from a lunge the body never made.
+		const travelled =
+			((midLunge.meleeTimer - MOVES.thrust.startupMs) / 1000) *
+			(MOVES.thrust.selfVx ?? 0);
+		expect(travelled).toBeGreaterThan(0);
+		expect(box?.w).toBeCloseTo(MOVES.thrust.reachPx + PLAYER_WIDTH);
+		// The same lunge without the lock sweeps the full arc.
+		const freeBox = sweptThrustBox({ ...midLunge, trapTimer: 0 });
+		expect(freeBox?.w).toBeCloseTo(
+			travelled + MOVES.thrust.reachPx + PLAYER_WIDTH,
+		);
 	});
 });
 

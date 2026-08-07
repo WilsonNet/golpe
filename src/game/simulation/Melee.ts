@@ -267,6 +267,8 @@ export interface MeleeTickState extends MeleeState {
 	dragonTimer?: number;
 	/** ms left of a Death Blossom channel. Only `PlayerPosition` ever sets it. */
 	blossomTimer?: number;
+	/** ms left of a trap lock. Only `PlayerPosition` ever sets it. */
+	trapTimer?: number;
 }
 
 /** What `resolveMelee` needs of a fighter: melee state plus a body. */
@@ -278,6 +280,8 @@ export interface MeleeBody extends MeleeState {
 	grounded: boolean;
 	/** ms left of a Death Blossom channel. Only `PlayerPosition` ever sets it. */
 	blossomTimer?: number;
+	/** ms left of a trap lock. Only `PlayerPosition` ever sets it. */
+	trapTimer?: number;
 }
 
 /** The melee half of a tick's input. `PlayerIntent` extends it. */
@@ -503,7 +507,24 @@ function endMove(s: MeleeState) {
 	s.hitLatch = false;
 }
 
-function startMove(s: MeleeState, move: MeleeMove) {
+/**
+ * Does this move relocate the fighter? The thrust lunges (`selfVx`) and the
+ * shoryuken rises (`selfVy`) — today, only the dagger's two. A body-carrying
+ * move is exactly the one thing the trap's lock refuses: the trap has the
+ * feet, and a move that needs them does not happen.
+ */
+function moveCarriesBody(move: MeleeMove): boolean {
+	const def = MOVES[move];
+	return def.selfVx !== undefined || def.selfVy !== undefined;
+}
+
+function startMove(s: MeleeTickState, move: MeleeMove) {
+	// A trap lock counters a body-carrying move at the door: the start is
+	// refused outright, so the lunge does not even begin. Gated here, at the
+	// one place every move passes through, so a future body-carrying move is
+	// refused while trapped by construction. The dragon-thrust *ride* is not a
+	// move — and not countered: a trapped Anands can still cast it.
+	if ((s.trapTimer ?? 0) > 0 && moveCarriesBody(move)) return;
 	s.meleeAction = move;
 	s.meleeTimer = 0;
 	s.hitLatch = false;
@@ -1121,9 +1142,16 @@ export function sweptThrustBox(s: MeleeBody): Rect | null {
 	if (s.meleeAction !== "thrust" || s.hitLatch) return null;
 	if (meleePhase(s) !== "active") return null;
 	const def = MOVES.thrust;
+	// A trap lock freezes the lunge mid-flight: the body stopped on the catch
+	// (tickPlayer zeroed the velocity and stopped pinning `selfVx`), so the
+	// box is the reach ahead of the frozen body — never the rest of the arc
+	// the cast *would* have covered. Claiming the phantom travel would hand a
+	// trapped lunge a sweep it never earned.
 	const travelled =
-		(Math.max(0, s.meleeTimer - def.startupMs) / MS_PER_SECOND) *
-		(def.selfVx ?? 0);
+		(s.trapTimer ?? 0) > 0
+			? 0
+			: (Math.max(0, s.meleeTimer - def.startupMs) / MS_PER_SECOND) *
+				(def.selfVx ?? 0);
 	const facing = s.facing >= 0 ? 1 : -1;
 	return {
 		x: facing > 0 ? s.x - travelled : s.x - def.reachPx - travelled,

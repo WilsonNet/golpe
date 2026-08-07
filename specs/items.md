@@ -76,6 +76,24 @@ either on the floor and armed or it no longer exists.
   works. A trapped fighter can still attack, block, use their own items and cast
   their ultimate. It is a delay, not a disable; the counter is the timer, not a
   button.
+- **The spring stops the victim dead.** The catch zeroes their velocity on the
+  tick it lands, so a dash, tumble or lunge caught mid-flight loses its momentum
+  right there — a caught fighter never slides out of the patch while the lock
+  runs. The burst state dies with the velocity: the airborne dash's flat line
+  and the roll's reduced hitbox do not outlive the catch.
+- **The lock takes every voluntary movement.** Walking, dashing, tumbling and
+  jumping are all gone for the full 3s — including a jump pressed *before* the
+  catch: a buffered jump does not fire through the lock, the press must be made
+  again. Gravity and knockback still apply; only intent is discarded.
+- **It counters the dagger's body-carrying moves.** The thrust and the shoryuken
+  are the two moves that relocate the fighter, and the trap has the feet: they
+  will not start while the lock holds, and one caught mid-lunge freezes in
+  place — its swept box is the reach ahead of the frozen body, never the
+  phantom arc the cast would have covered. The stab carries no body and still
+  works, like every weapon that plays where the fighter stands.
+- **It does not counter the dragon thrust.** The ride is not the feet: a trapped
+  Anands can still cast her ultimate, and a rider caught as the trap springs
+  keeps riding — the one voluntary movement the trap lets through.
 - The lock is carried in `PlayerPosition.trapTimer`, set inside `tickPlayer` on
   both sides, so a caught fighter's own client reels exactly as the server says
   — the same prediction property the black hole's pull relies on. The trap's

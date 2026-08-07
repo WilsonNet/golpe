@@ -165,8 +165,10 @@ Full rules in [`specs/items.md`](../specs/items.md).
   `trapTimer` is set by the shared `tickPlayer` on both sides — the caller hands
   it the room's traps already filtered by `trapFor`, so a caught fighter's own
   client reels and reconciles to ~0px, exactly like the black hole's pull. The
-  trap's destruction, the damage, the burst and the "TRAPPED!" caption are the
-  server's alone.
+  catch also zeroes the victim's velocity and burst state on that same shared
+  tick, so a dash, tumble or lunge caught mid-flight stops dead and predicts so.
+  The trap's destruction, the damage, the burst and the "TRAPPED!" caption are
+  the server's alone.
 - **A trap is single-use.** Nothing can destroy it before it springs, but the
   server removes it from the world the tick it catches somebody — so a trap in
   the snapshot is armed, and there is no spent state on the wire. That is what

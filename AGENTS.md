@@ -108,7 +108,12 @@ One line each; the war story behind every one is in
   and round reset, never in between; a hero change spends them for the new kit.
   The trap's *lock* is `trapTimer` in `PlayerPosition` (both sides simulate it,
   like `freezeTimer`); the trap is single-use — the server destroys it the tick
-  it springs, and the burst and "TRAPPED!" caption are the server's alone.
+  it springs, and the burst and "TRAPPED!" caption are the server's alone. The
+  catch zeroes the victim's velocity and burst state, so a dash, tumble or
+  lunge caught mid-flight stops dead — no momentum carries a caught fighter
+  out of the patch — and the lock discards buffered jumps. It counters the
+  dagger's body-carrying moves (thrust, shoryuken) but not the dragon-thrust
+  ride: a trapped Anands can still cast her ultimate.
   Friendly traps (your own and teammates') are drawn faded, so the side a mine
   belongs to is read at a glance.
 - **Systems read the simulation and write only presentation.** A system that
