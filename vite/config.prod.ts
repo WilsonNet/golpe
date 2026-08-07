@@ -11,10 +11,18 @@ export default defineConfig({
 		dedupe: ["pixi.js", "react", "react-dom"],
 	},
 	build: {
-		rollupOptions: {
+		// Vite 8 (rolldown) removed the object form of `manualChunks`; the
+		// replacement is `codeSplitting.groups`. Pixi keeps its own chunk so
+		// the big library ships once and browsers cache it between deploys.
+		rolldownOptions: {
 			output: {
-				manualChunks: {
-					pixi: ["pixi.js"],
+				codeSplitting: {
+					groups: [
+						{
+							name: "pixi",
+							test: /node_modules[\\/]pixi\.js[\\/]/,
+						},
+					],
 				},
 			},
 		},

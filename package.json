@@ -48,22 +48,22 @@
     "@geckos.io/server": "^3.1.0",
     "miniplex": "^2.0.0",
     "pixi.js": "^8.19.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
     "unique-names-generator": "^4.7.1"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.15",
-    "@types/node": "^25.8.0",
-    "@types/react": "^19.0.10",
-    "@types/react-dom": "^19.0.4",
-    "@vitejs/plugin-react": "^4.3.4",
+    "@biomejs/biome": "^2.5.7",
+    "@types/node": "^26.2.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.0.5",
     "concurrently": "^10.0.4",
-    "knip": "^6.31.0",
-    "playwright": "^1.61.1",
-    "tsx": "^4.22.0",
-    "typescript": "~5.7.2",
-    "vite": "^6.3.1",
-    "vitest": "^4.1.6"
+    "knip": "^6.32.0",
+    "playwright": "^1.62.1",
+    "tsx": "^4.23.11",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.1",
+    "vitest": "^4.1.10"
   }
 }
