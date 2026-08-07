@@ -71,7 +71,7 @@ so on an ordinary 2x display every cursor position doubled. The fighter believed
 the pointer was almost always to its right and below it, aim was up to **162°**
 wrong, and shots left in a direction nobody had pointed at. Nothing in the AI vs
 AI loop can see this — the bots hand the simulation an angle and never touch a
-cursor — which is why `scripts/aim-probe.mjs` exists and why it runs at
+cursor — which is why `scripts/aim-probe.ts` exists and why it runs at
 `--dpr=2`.
 
 ## Jumping
@@ -182,7 +182,7 @@ keep while dashing the other way); nothing about it reaches the simulation.
   dropped on the floor — the player double-tapped and nothing happened, which
   read as a cooldown far longer than the 250ms lockout. The gesture therefore
   sits pending until the next fixed step actually pulls it. Measured at 8ms
-  frames (52% zero-step): `scripts/dash-probe.mjs` went from 4/40 deliveries to
+  frames (52% zero-step): `scripts/dash-probe.ts` went from 4/40 deliveries to
   30/30 for the same double-tap.
 - **A dash is the only way to break away from an equal-speed opponent.** Walking
   backwards from someone who walks at your speed never opens a gap, which is why

@@ -21,7 +21,7 @@ allowed in the shared simulation.
   `piercesIframes`, `blockable`, `cancellable`, `knockdown`, `paysCharge`…
 - `MeleeWeaponDef`: `hasCharge`, `shiftMove`, `chain`, `burst`, `blockable`
 - `HeroDef`/`HeroKit`: melee, ranged, ultimate, item, sheet
-- `ITEMS` and `tweakables/`: charges, radii, durations
+- `ITEMS` and `src/tweakables/`: charges, radii, durations
 
 **2. Statuses** — named, shared state in `PlayerPosition` that any system may
 read: `stunTimer`, `knockdownTimer`, `trapTimer`, `iframeTimer`, the

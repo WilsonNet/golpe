@@ -358,12 +358,12 @@ hitbox and no tell left to give.
 the link after it, so a full three-hit combo is facing-locked for most of its
 ~600ms. That is a cost the player *chooses* three separate times, and it ends —
 unlike the old bug below, which charged it for simply holding a button.
-`scripts/aim-probe.mjs` measures the single-press case, which is unchanged at
+`scripts/aim-probe.ts` measures the single-press case, which is unchanged at
 44ms worst.
 
 Locking the whole move instead — which is what this said originally — meant a
 player holding the attack button chained slashes and **went 332ms at a time
-without obeying the cursor**, measured by `scripts/aim-probe.mjs`. That is the
+without obeying the cursor**, measured by `scripts/aim-probe.ts`. That is the
 whole of "the game struggles to follow the mouse pointer". Freeing recovery caps
 the worst case at a slash's startup plus active frames, measured at 154ms.
 
@@ -607,7 +607,7 @@ threshold: 10-20 slashes, 1-4 massives, 0-2 plunges, 1-8 uppercuts, 9-15 blocks,
 **Backstabs outnumbering clean hits is a defect**, not a fight going well.
 
 ```bash
-node scripts/diagnose.mjs --mode=online --runs=3
+node scripts/diagnose.ts --mode=online --runs=3
 ```
 
 ## Not implemented

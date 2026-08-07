@@ -14,7 +14,7 @@ import { chromium } from "playwright";
 const BASE = process.env.VENTO_URL ?? "http://localhost:8084";
 
 /** A launch key the menu must never add on its own. */
-function launchKeys(url) {
+function launchKeys(url: string): string[] {
 	const params = new URLSearchParams(new URL(url).search);
 	return [
 		"room",
@@ -34,7 +34,7 @@ function launchKeys(url) {
 }
 
 let failures = 0;
-function check(label, ok, detail = "") {
+function check(label: string, ok: boolean, detail = "") {
 	console.log(`${ok ? "OK  " : "FAIL"} ${label.padEnd(38)} ${detail}`);
 	if (!ok) failures++;
 }
@@ -79,12 +79,12 @@ const browser = await chromium.launch();
 	});
 	check("quick match boots the game", true);
 	check("quick match commits bots=1", launchKeys(page.url()).includes("bots"));
-	const myName = await page.evaluate(() => window.__matchState()?.myName);
+	const myName = await page.evaluate(() => window.__matchState?.()?.myName);
 	check("menu name is the match name", myName === "ProbeA", `myName=${myName}`);
 	// A player named by the menu never sees the name prompt's share box, so the
 	// fight window must say the link is in the address bar once.
 	await page.waitForFunction(
-		() => document.body.textContent.includes("address bar"),
+		() => document.body.textContent?.includes("address bar") ?? false,
 		{ timeout: 10000 },
 	);
 	check("room link is announced once", true);
@@ -107,7 +107,7 @@ const browser = await chromium.launch();
 	await page.waitForFunction(() => typeof window.__gameState === "function", {
 		timeout: 20000,
 	});
-	const s = await page.evaluate(() => window.__gameState());
+	const s = await page.evaluate(() => window.__gameState!());
 	check("practice boots training", s.trainingMode === true);
 	check(
 		"practice commits training=true",
@@ -187,7 +187,7 @@ const browser = await chromium.launch();
 		timeout: 20000,
 	});
 	const params = new URLSearchParams(new URL(page.url()).search);
-	const s = await page.evaluate(() => window.__gameState());
+	const s = await page.evaluate(() => window.__gameState!());
 	check("host form commits mode=tdm", params.get("mode") === "tdm");
 	check(
 		"server seated a team arena",

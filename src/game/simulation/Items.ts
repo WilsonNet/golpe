@@ -45,7 +45,7 @@ import {
 	TRAP_PLACE_OFFSET,
 	TRAP_RADIUS,
 	TRAP_TRIGGER_MS,
-} from "../../../tweakables/items.js";
+} from "../../tweakables/items.js";
 import {
 	DEFAULT_WORLD,
 	PLAYER_HEIGHT,

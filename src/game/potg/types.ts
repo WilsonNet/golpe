@@ -189,7 +189,7 @@ export interface PotgClip {
 /**
  * One camera movement of the replay, summarised while it runs.
  *
- * For `scripts/potg-probe.mjs` and nothing else. The pre-roll's entire job is to
+ * For `scripts/potg-probe.ts` and nothing else. The pre-roll's entire job is to
  * move a camera, and no other metric in the game reads one — so a cinematic that
  * quietly degraded into a static wide shot would leave every existing probe
  * green. `travel` is the furthest the camera got from where the movement

@@ -1,8 +1,9 @@
 #!/usr/bin/env node
+import type { Page } from "playwright";
 /**
  * Deathmatch feedback loop: a room full of AI, played to a winner.
  *
- * `diagnose.mjs` answers "is the physics clean in a duel?". This answers the
+ * `diagnose.ts` answers "is the physics clean in a duel?". This answers the
  * questions a duel cannot ask at all — does a sixteen-fighter room stay
  * consistent, does rollback predict fifteen strangers well enough to be worth
  * having, does the scoreboard add up, and does the match actually *end*.
@@ -11,35 +12,36 @@
  * than five minutes. Everything else is the real path: real server, real
  * snapshots, real prediction, real bots.
  *
- *   node scripts/deathmatch-probe.mjs
- *   node scripts/deathmatch-probe.mjs --fighters=16 --scoreLimit=5 --timeLimit=90
- *   node scripts/deathmatch-probe.mjs --scoreLimit=999 --timeLimit=20   # test the clock
+ *   tsx scripts/deathmatch-probe.ts
+ *   tsx scripts/deathmatch-probe.ts --fighters=16 --scoreLimit=5 --timeLimit=90
+ *   tsx scripts/deathmatch-probe.ts --scoreLimit=999 --timeLimit=20   # test the clock
  */
 import { chromium } from "playwright";
+import type { MatchStateSnapshot } from "../src/types/global";
 
 const BASE_URL = process.env.VENTO_URL ?? "http://localhost:8084";
 const RESULT_RE = /__DIAGNOSTIC_RESULT__(\{.*?\})__END__/s;
 
-function arg(name, fallback) {
+function arg(name: string, fallback: string): string {
 	const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
-	return hit ? hit.split("=")[1] : fallback;
+	return hit ? (hit.split("=")[1] ?? fallback) : fallback;
 }
 
-const FIGHTERS = Number(arg("fighters", 16));
-const SCORE_LIMIT = Number(arg("scoreLimit", 5));
-const TIME_LIMIT_SEC = Number(arg("timeLimit", 120));
+const FIGHTERS = Number(arg("fighters", "16"));
+const SCORE_LIMIT = Number(arg("scoreLimit", "5"));
+const TIME_LIMIT_SEC = Number(arg("timeLimit", "120"));
 /** How long the physics diagnostic samples for, inside the match. */
-const DIAG_MS = Number(arg("diagnostic", 12000));
+const DIAG_MS = Number(arg("diagnostic", "12000"));
 /** Give up rather than hang if the match never ends. */
 const WALL_CLOCK_MS = (TIME_LIMIT_SEC + 60) * 1000;
 /** How many 800px screens wide the arena is. Defaults to the classic one. */
-const SCREENS = Math.max(1, Number(arg("screens", 1)) || 1);
+const SCREENS = Math.max(1, Number(arg("screens", "1")) || 1);
 /** `--hero=anands` plays the whole room as the dagger hero. */
 const HERO = arg("hero", "");
 /** `--botHero=anands` seats every bot as the dagger hero. */
 const BOT_HERO = arg("botHero", "");
 
-function sinkConsole(page, lines = []) {
+function sinkConsole(page: Page, lines: string[] = []): string[] {
 	page.on("console", (msg) => lines.push(msg.text()));
 	page.on("pageerror", (err) => lines.push(`[PAGEERROR] ${err.message}`));
 	return lines;
@@ -63,15 +65,34 @@ async function assertServerUp() {
 }
 
 /** Poll `__matchState()` until `done` says stop, or the wall clock runs out. */
-async function waitForMatch(page, done, timeoutMs) {
+async function waitForMatch(
+	page: Page,
+	done: (s: MatchStateSnapshot) => boolean,
+	timeoutMs: number,
+): Promise<MatchStateSnapshot | null> {
 	const deadline = Date.now() + timeoutMs;
-	let last = null;
+	let last: MatchStateSnapshot | null = null;
 	while (Date.now() < deadline) {
 		last = await page.evaluate(() => window.__matchState?.() ?? null);
 		if (last && done(last)) return last;
 		await page.waitForTimeout(500);
 	}
 	return last;
+}
+
+/**
+ * The fields of the diagnostic report this probe reads.
+ */
+interface DiagnosticReport {
+	verdict?: string;
+	fpsStats?: { avgFps?: number };
+	jitterSummary?: unknown;
+	jitterEvents?: unknown[];
+	reconciliationSummary?: unknown;
+	collisionSummary?: unknown;
+	meleeSummary?: unknown;
+	bulletSummary?: unknown;
+	netSummary?: MatchStateSnapshot["net"];
 }
 
 /**
@@ -82,9 +103,13 @@ async function waitForMatch(page, done, timeoutMs) {
  * check trivially, and a probe that only reports correctness would call it a
  * pass.
  */
-function assess(state, diagnostic, lines) {
-	const failures = [];
-	const notes = [];
+function assess(
+	state: MatchStateSnapshot | null,
+	diagnostic: DiagnosticReport | null,
+	lines: string[],
+) {
+	const failures: string[] = [];
+	const notes: string[] = [];
 	if (!state) {
 		return { failures: ["no __matchState() — the client never booted"], notes };
 	}
@@ -208,7 +233,8 @@ async function main() {
 	await page.waitForTimeout(2000);
 
 	const hit = lines.find((l) => RESULT_RE.test(l));
-	const diagnostic = hit ? JSON.parse(hit.match(RESULT_RE)[1]) : null;
+	const json = hit?.match(RESULT_RE)?.[1];
+	const diagnostic: DiagnosticReport | null = json ? JSON.parse(json) : null;
 
 	const verdict = assess(final, diagnostic, lines);
 	console.log("\n===== DEATHMATCH =====");

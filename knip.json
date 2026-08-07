@@ -1,7 +1,12 @@
 {
 	"$schema": "https://unpkg.com/knip@6/schema.json",
-	"entry": ["scripts/*.mjs", "vite/*.mjs"],
-	"project": ["src/**/*.{ts,tsx}", "server/**/*.ts", "scripts/**/*.mjs"],
+	"entry": ["scripts/*.ts", "vite/*.ts"],
+	"project": [
+		"src/**/*.{ts,tsx}",
+		"server/**/*.ts",
+		"scripts/**/*.ts",
+		"vite/**/*.ts"
+	],
 	"vitest": true,
 	"ignoreBinaries": ["herdr"]
 }

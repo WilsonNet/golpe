@@ -305,9 +305,9 @@ still exactly right there and is unchanged.
 ## Verification
 
 ```bash
-node scripts/tdm-probe.mjs                                  # 8 bots, two sides, to a winner
-node scripts/tdm-probe.mjs --fighters=16 --scoreLimit=2     # a full room
-node scripts/tdm-probe.mjs --freeze=0                       # no countdown at all
+node scripts/tdm-probe.ts                                  # 8 bots, two sides, to a winner
+node scripts/tdm-probe.ts --fighters=16 --scoreLimit=2     # a full room
+node scripts/tdm-probe.ts --freeze=0                       # no countdown at all
 ```
 
 The probe asserts the room is `tdm`, that it is **three screens wide without

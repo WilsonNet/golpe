@@ -1,8 +1,9 @@
 #!/usr/bin/env node
+import type { Page } from "playwright";
 /**
  * Training-room feedback-loop harness.
  *
- * `diagnose.mjs` measures a whole chaotic match; this measures **one
+ * `diagnose.ts` measures a whole chaotic match; this measures **one
  * interaction**. Both are needed and neither replaces the other: the canonical
  * run answers "is the game healthy?", and this answers "does a block actually
  * stop a slash coming from the left?" — which no amount of watching two brains
@@ -15,11 +16,17 @@
  * Every expectation below is derivable from specs/melee.md. They are assertions,
  * not eyeballs.
  *
- *   node scripts/training-probe.mjs
- *   node scripts/training-probe.mjs --only=backstab
- *   node scripts/training-probe.mjs --keep-open   # leave the browser up
+ *   tsx scripts/training-probe.ts
+ *   tsx scripts/training-probe.ts --only=backstab
+ *   tsx scripts/training-probe.ts --keep-open   # leave the browser up
  */
 import { chromium } from "playwright";
+import type { MeleeEventMsg } from "../src/game/online/types";
+import type { MeleeMove, MeleeOutcome } from "../src/game/simulation/Physics";
+import type {
+	TrainingReport,
+	TrainingScenario,
+} from "../src/game/training/report";
 
 const BASE_URL = process.env.VENTO_URL ?? "http://localhost:8084";
 
@@ -45,9 +52,9 @@ const FRAME_TOLERANCE_MS = 40;
  */
 const MAX_AVG_RECON_PX = 5;
 
-function arg(name, fallback) {
+function arg(name: string, fallback: string): string {
 	const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
-	return hit ? hit.split("=")[1] : fallback;
+	return hit ? (hit.split("=")[1] ?? fallback) : fallback;
 }
 
 const ONLY = arg("only", "");
@@ -62,7 +69,7 @@ const HERO = arg("hero", "lia");
  *
  * A training room without a server produces a report full of zeroes, and every
  * "must be zero" row passes. This exact shape of false PASS has happened before
- * — see `diagnose.mjs`, which grew the same preflight for the same reason.
+ * — see `diagnose.ts`, which grew the same preflight for the same reason.
  */
 async function assertServerUp() {
 	const res = await fetch("http://localhost:9208/.wrtc/v2/connections", {
@@ -76,14 +83,14 @@ async function assertServerUp() {
 }
 
 /** Outcomes of the events caused by the local fighter, in order. */
-function playerEvents(report) {
+function playerEvents(report: TrainingReport) {
 	const dummyId = report.events.find((e) =>
 		e.attackerId.startsWith("dummy-"),
 	)?.attackerId;
 	return report.events.filter((e) => e.attackerId !== dummyId);
 }
 
-function dummyEvents(report) {
+function dummyEvents(report: TrainingReport) {
 	return report.events.filter((e) => e.attackerId.startsWith("dummy-"));
 }
 
@@ -95,13 +102,29 @@ function dummyEvents(report) {
  * `moves.slash` is really counting *combos started*. Rows that care about how many
  * times the sword was swung have to add the links up.
  */
-function chainSwings(side) {
+function chainSwings(side: TrainingReport["player"]) {
 	const m = side.moves ?? {};
 	return (m.slash ?? 0) + (m.slash2 ?? 0) + (m.slash3 ?? 0);
 }
 
-function checks(report) {
-	const fails = [];
+/** The assertion surface a row's `verify` is written in. */
+interface Checks {
+	fails: string[];
+	swung(move?: MeleeMove): void;
+	outcome(expected: MeleeOutcome, move?: MeleeMove): MeleeEventMsg | null;
+	never(outcome: MeleeOutcome): void;
+	damage(expected: number): void;
+	eq(
+		label: string,
+		actual: number | string | boolean,
+		expected: number | string | boolean,
+	): void;
+	atMost(label: string, actual: number, limit: number): void;
+	atLeast(label: string, actual: number, limit: number): void;
+}
+
+function checks(report: TrainingReport): Checks {
+	const fails: string[] = [];
 	const mine = playerEvents(report);
 	return {
 		fails,
@@ -153,23 +176,24 @@ function checks(report) {
  * Applied to every scenario, because a room that quietly desyncs would make
  * every other assertion in the battery meaningless.
  */
-function universalChecks(report) {
-	const fails = [];
-	const m = report.melee ?? {};
+function universalChecks(report: TrainingReport) {
+	const fails: string[] = [];
+	const m = report.melee;
 	if (!report.connected) fails.push("no training-state was ever received");
-	if (m.illegalActions > 0)
-		fails.push(`${m.illegalActions} actions while stunned`);
-	if (m.blockedUnblockables > 0) {
-		fails.push(`${m.blockedUnblockables} unblockables blocked`);
+	if ((m?.illegalActions ?? 0) > 0) {
+		fails.push(`${m?.illegalActions} actions while stunned`);
 	}
-	if (m.airborneChainLinks > 0) {
-		fails.push(`${m.airborneChainLinks} combo links thrown airborne`);
+	if ((m?.blockedUnblockables ?? 0) > 0) {
+		fails.push(`${m?.blockedUnblockables} unblockables blocked`);
 	}
-	if (m.frameDataViolations > 0) {
-		fails.push(`${m.frameDataViolations} frame data violations`);
+	if ((m?.airborneChainLinks ?? 0) > 0) {
+		fails.push(`${m?.airborneChainLinks} combo links thrown airborne`);
 	}
-	if (m.meleeDesyncFrames > 0) {
-		fails.push(`${m.meleeDesyncFrames} melee prediction desyncs`);
+	if ((m?.frameDataViolations ?? 0) > 0) {
+		fails.push(`${m?.frameDataViolations} frame data violations`);
+	}
+	if ((m?.meleeDesyncFrames ?? 0) > 0) {
+		fails.push(`${m?.meleeDesyncFrames} melee prediction desyncs`);
 	}
 	const recon = report.reconciliation;
 	if (!recon) {
@@ -244,17 +268,33 @@ const CHAIN = [
  * into a list of failures. Splitting them keeps the expectations readable as a
  * table, which is what makes them reviewable against the spec.
  */
-const BATTERY = [
+interface BatteryRow {
+	name: string;
+	/** The row needs the Lia kit (her ultimate or her item). */
+	lia?: boolean;
+	/** The row needs the dagger kit. */
+	dagger?: boolean;
+	/** Drive the scenario by hand, returning the report and any extra state. */
+	run?: (page: Page) => Promise<{ report: TrainingReport; extra: unknown }>;
+	/** A custom read after a `scenario` row settles. */
+	after?: (page: Page) => Promise<unknown>;
+	/** The ordinary path: hand the scenario to `__training.run`. */
+	scenario?: TrainingScenario;
+	/** `extra` is the row's own shape — a number, a boolean or a bundle. */
+	verify: (report: TrainingReport, extra: any) => string[];
+}
+
+const BATTERY: BatteryRow[] = [
 	{
 		name: "idle dummy does nothing",
 		async run(page) {
-			await page.evaluate(() => window.__training.set({ behaviour: "idle" }));
-			await page.evaluate(() => window.__training.reset());
+			await page.evaluate(() => window.__training!.set({ behaviour: "idle" }));
+			await page.evaluate(() => window.__training!.reset());
 			const samples = await page.evaluate(async () => {
 				const seen = [];
 				for (let i = 0; i < 30; i++) {
 					await new Promise((r) => setTimeout(r, 100));
-					const s = window.__training.state();
+					const s = window.__training!.state();
 					seen.push(`${s.dummy.meleeAction}|${s.dummy.blocking}`);
 				}
 				return [...new Set(seen)];
@@ -364,12 +404,15 @@ const BATTERY = [
 		 * ever leave the ground?
 		 */
 		async run(page) {
-			const running = page.evaluate((s) => window.__training.run(s), {
-				name: "uppercut beats a block",
-				config: { behaviour: "blockAll", facing: "foe" },
-				steps: [UPPERCUT],
-				settleMs: 900,
-			});
+			const running = page.evaluate(
+				(s: TrainingScenario) => window.__training!.run(s),
+				{
+					name: "uppercut beats a block",
+					config: { behaviour: "blockAll", facing: "foe" },
+					steps: [UPPERCUT],
+					settleMs: 900,
+				} as TrainingScenario,
+			);
 
 			let minVy = Number.POSITIVE_INFINITY;
 			for (let i = 0; i < 45; i++) {
@@ -443,44 +486,47 @@ const BATTERY = [
 		 */
 		name: "a plunge bomb ignores a block and knocks up",
 		async run(page) {
-			const running = page.evaluate((s) => window.__training.run(s), {
-				name: "plunge bomb",
-				config: {
-					behaviour: "script",
-					script: {
-						loop: true,
-						beats: [
-							// Turn away from the player first — facing is locked
-							// through a swing, so the turn has to happen while
-							// nothing is running, or the opener slash follows the
-							// spawn-facing and hits the blocking player's guard,
-							// which guard-breaks the charge away.
-							{ ms: 150, face: 1 },
-							// Charge, facing away from the player on the left.
-							{ ms: 2450, hold: { attack: true }, face: 1 },
-							// Turn toward the player and jump, still holding.
-							{
-								ms: 300,
-								hold: { attack: true, jump: true },
-								face: -1,
-							},
-							// Release mid-air: the dive begins.
-							{ ms: 60 },
-							// The dive, the stuck, and the next cycle's gap.
-							{ ms: 700 },
-						],
+			const running = page.evaluate(
+				(s: TrainingScenario) => window.__training!.run(s),
+				{
+					name: "plunge bomb",
+					config: {
+						behaviour: "script",
+						script: {
+							loop: true,
+							beats: [
+								// Turn away from the player first — facing is locked
+								// through a swing, so the turn has to happen while
+								// nothing is running, or the opener slash follows the
+								// spawn-facing and hits the blocking player's guard,
+								// which guard-breaks the charge away.
+								{ ms: 150, face: 1 },
+								// Charge, facing away from the player on the left.
+								{ ms: 2450, hold: { attack: true }, face: 1 },
+								// Turn toward the player and jump, still holding.
+								{
+									ms: 300,
+									hold: { attack: true, jump: true },
+									face: -1,
+								},
+								// Release mid-air: the dive begins.
+								{ ms: 60 },
+								// The dive, the stuck, and the next cycle's gap.
+								{ ms: 700 },
+							],
+						},
 					},
-				},
-				// The guard has to outlast the first bomb's detonation (~3s in
-				// with the 1.6s charge) but end before the dummy's second
-				// cycle — the cycle is ~3.7s, so the second bomb lands ~6.5s
-				// in. A hold of 4s clears the first bomb with a second of
-				// margin on either side; the original 5s sat knife-edge against
-				// the second cycle and the pass/fail flipped on a few frames of
-				// server timing.
-				steps: [{ intent: { block: true }, holdMs: 4000, aimAngle: 0 }],
-				settleMs: 1200,
-			});
+					// The guard has to outlast the first bomb's detonation (~3s in
+					// with the 1.6s charge) but end before the dummy's second
+					// cycle — the cycle is ~3.7s, so the second bomb lands ~6.5s
+					// in. A hold of 4s clears the first bomb with a second of
+					// margin on either side; the original 5s sat knife-edge against
+					// the second cycle and the pass/fail flipped on a few frames of
+					// server timing.
+					steps: [{ intent: { block: true }, holdMs: 4000, aimAngle: 0 }],
+					settleMs: 1200,
+				} as TrainingScenario,
+			);
 
 			// The bomb detonates ~3s into the cycle, so the poll has to outlast
 			// the charge. The player is the victim this time.
@@ -568,7 +614,7 @@ const BATTERY = [
 			const c = checks(report);
 			c.atLeast("exchanges observed", report.exchanges.length, 3);
 			for (const x of report.exchanges) {
-				for (const phase of ["startupMs", "activeMs", "recoveryMs"]) {
+				for (const phase of ["startupMs", "activeMs", "recoveryMs"] as const) {
 					const drift = Math.abs(x.measured[phase] - x.declared[phase]);
 					if (drift > FRAME_TOLERANCE_MS) {
 						c.fails.push(
@@ -631,10 +677,10 @@ const BATTERY = [
 			};
 			const once = async () => {
 				await page.evaluate(
-					(s) => window.__training.set({ behaviour: "script", script: s }),
+					(s) => window.__training!.set({ behaviour: "script", script: s }),
 					script,
 				);
-				await page.evaluate(() => window.__training.reset());
+				await page.evaluate(() => window.__training!.reset());
 				await page.evaluate(() => new Promise((r) => setTimeout(r, 3000)));
 				return report(page);
 			};
@@ -644,7 +690,8 @@ const BATTERY = [
 		},
 		verify(_report, { a, b }) {
 			const c = checks(a);
-			const seq = (r) => r.events.map((e) => `${e.move}:${e.outcome}`);
+			const seq = (r: TrainingReport) =>
+				r.events.map((e) => `${e.move}:${e.outcome}`);
 			// Determinism is a property of the *script*, so the dummy's own move
 			// count is the direct measure and the one that must match exactly.
 			// Impacts are not: the first hit knocks the target out of range, so how
@@ -681,26 +728,26 @@ const BATTERY = [
 			// Record the player butterflying, then hand the recording back to the
 			// dummy and watch it perform the same sequence.
 			await page.evaluate(() =>
-				window.__training.set({ behaviour: "record", facing: "foe" }),
+				window.__training!.set({ behaviour: "record", facing: "foe" }),
 			);
-			await page.evaluate(() => window.__training.reset());
+			await page.evaluate(() => window.__training!.reset());
 			for (let i = 0; i < 4; i++) {
 				await page.evaluate(() =>
-					window.__training.input({ attack: true }, 60),
+					window.__training!.input({ attack: true }, 60),
 				);
 				await page.evaluate(() =>
-					window.__training.input({ block: true }, 120),
+					window.__training!.input({ block: true }, 120),
 				);
 			}
 			const recording = await report(page);
 			const status = await page.evaluate(
-				() => window.__training.state().status,
+				() => window.__training!.state().status,
 			);
 
 			await page.evaluate(() =>
-				window.__training.set({ behaviour: "playback" }),
+				window.__training!.set({ behaviour: "playback" }),
 			);
-			await page.evaluate(() => window.__training.reset());
+			await page.evaluate(() => window.__training!.reset());
 			await page.evaluate(() => new Promise((r) => setTimeout(r, 3000)));
 			const playback = await report(page);
 			return { report: playback, extra: { recording, status, playback } };
@@ -734,35 +781,33 @@ const BATTERY = [
 			 * version of this row measured the three shots that landed after the
 			 * block ended and called a working guard a failure.
 			 */
-			const holdAndSample = async (facing) => {
-				await page.evaluate(
-					(f) =>
-						window.__training.set({
-							behaviour: "slash",
-							dummyStance: "gun",
-							facing: "foe",
-							// Both fighters in the clear lane *between* the two pillars.
-							// Far enough apart that the dummy's swings cannot reach and
-							// only its shots can — otherwise a melee hit would be doing
-							// the damage this row attributes to a bullet — and with no
-							// cover in between: at x=200 every shot died on PILLAR_LEFT
-							// and the row measured a wall rather than a guard.
-							spawn: {
-								player: { x: 330, y: 480 },
-								dummy: { x: 460, y: 480 },
-							},
-							timing: { periodMs: 300 },
-						}),
-					facing,
+			const holdAndSample = async (facing: number) => {
+				await page.evaluate(() =>
+					window.__training!.set({
+						behaviour: "slash",
+						dummyStance: "gun",
+						facing: "foe",
+						// Both fighters in the clear lane *between* the two pillars.
+						// Far enough apart that the dummy's swings cannot reach and
+						// only its shots can — otherwise a melee hit would be doing
+						// the damage this row attributes to a bullet — and with no
+						// cover in between: at x=200 every shot died on PILLAR_LEFT
+						// and the row measured a wall rather than a guard.
+						spawn: {
+							player: { x: 330, y: 480 },
+							dummy: { x: 460, y: 480 },
+						},
+						timing: { periodMs: 300 },
+					}),
 				);
-				await page.evaluate(() => window.__training.reset());
+				await page.evaluate(() => window.__training!.reset());
 				return page.evaluate(async (f) => {
-					const hold = window.__training.input({ block: true }, 2600, f);
+					const hold = window.__training!.input({ block: true }, 2600, f);
 					let first = null;
 					let last = null;
 					for (let i = 0; i < 26; i++) {
 						await new Promise((r) => setTimeout(r, 90));
-						const s = window.__training.state();
+						const s = window.__training!.state();
 						if (!s.local.blocking) continue;
 						// Damage is cumulative since the reset, so the total includes any
 						// shot that landed in the moment before the guard came up. The
@@ -820,7 +865,7 @@ const BATTERY = [
 		name: "a block denies an ultimate",
 		async run(page) {
 			const running = page.evaluate(() =>
-				window.__training.run({
+				window.__training!.run({
 					name: "deny",
 					config: {
 						behaviour: "blockAll",
@@ -874,58 +919,61 @@ const BATTERY = [
 		 */
 		name: "an armed massive walks and dashes",
 		async run(page) {
-			const running = page.evaluate((s) => window.__training.run(s), {
-				name: "armed massive delivery",
-				config: {
-					behaviour: "script",
-					// The dummy starts at 330 and delivers right, away from the
-					// player at 240. The lane between the ground pillars (280-304
-					// and 496-520) gives the delivery ~165px of clear ground; the
-					// default spawns put the right pillar 44px from the dummy,
-					// which stopped the delivery dead at the wall.
-					spawn: { player: { x: 240, y: 480 }, dummy: { x: 330, y: 480 } },
-					script: {
-						loop: true,
-						beats: [
-							// Turn away from the player first — the spawn-facing
-							// is toward them, and facing locks through a swing, so
-							// the turn has to happen before the opener slash.
-							{ ms: 150, face: 1 },
-							// Charge, facing away (the opener slash misses).
-							{ ms: 2450, hold: { attack: true }, face: 1 },
-							// The charge completes ~50ms into this beat: walk.
-							{
-								ms: 300,
-								hold: { attack: true, moveRight: true },
-								face: 1,
-							},
-							// Dash while armed — the burst closes distance. The
-							// dash is a beat-level one-shot, not a held button.
-							{ ms: 200, hold: { attack: true }, dash: 1, face: 1 },
-							// Walk some more.
-							{
-								ms: 300,
-								hold: { attack: true, moveRight: true },
-								face: 1,
-							},
-							// Release: the massive fires from where the delivery
-							// brought it — and whiffs, because the player is far
-							// behind it. The eruption must still happen. Every
-							// beat keeps the facing, or the dummy turns back to
-							// "foe" the moment a beat forgets it — including this
-							// one and the gap after.
-							{ ms: 60, face: 1 },
-							{ ms: 700, face: 1 },
-						],
+			const running = page.evaluate(
+				(s: TrainingScenario) => window.__training!.run(s),
+				{
+					name: "armed massive delivery",
+					config: {
+						behaviour: "script",
+						// The dummy starts at 330 and delivers right, away from the
+						// player at 240. The lane between the ground pillars (280-304
+						// and 496-520) gives the delivery ~165px of clear ground; the
+						// default spawns put the right pillar 44px from the dummy,
+						// which stopped the delivery dead at the wall.
+						spawn: { player: { x: 240, y: 480 }, dummy: { x: 330, y: 480 } },
+						script: {
+							loop: true,
+							beats: [
+								// Turn away from the player first — the spawn-facing
+								// is toward them, and facing locks through a swing, so
+								// the turn has to happen before the opener slash.
+								{ ms: 150, face: 1 },
+								// Charge, facing away (the opener slash misses).
+								{ ms: 2450, hold: { attack: true }, face: 1 },
+								// The charge completes ~50ms into this beat: walk.
+								{
+									ms: 300,
+									hold: { attack: true, moveRight: true },
+									face: 1,
+								},
+								// Dash while armed — the burst closes distance. The
+								// dash is a beat-level one-shot, not a held button.
+								{ ms: 200, hold: { attack: true }, dash: 1, face: 1 },
+								// Walk some more.
+								{
+									ms: 300,
+									hold: { attack: true, moveRight: true },
+									face: 1,
+								},
+								// Release: the massive fires from where the delivery
+								// brought it — and whiffs, because the player is far
+								// behind it. The eruption must still happen. Every
+								// beat keeps the facing, or the dummy turns back to
+								// "foe" the moment a beat forgets it — including this
+								// one and the gap after.
+								{ ms: 60, face: 1 },
+								{ ms: 700, face: 1 },
+							],
+						},
 					},
-				},
-				// The player just guards for the whole cycle — holding the run
-				// open past the charge and the delivery, without getting in the
-				// way (the dummy faces away, so the guard never breaks its
-				// charge).
-				steps: [{ intent: { block: true }, holdMs: 6500, aimAngle: 0 }],
-				settleMs: 800,
-			});
+					// The player just guards for the whole cycle — holding the run
+					// open past the charge and the delivery, without getting in the
+					// way (the dummy faces away, so the guard never breaks its
+					// charge).
+					steps: [{ intent: { block: true }, holdMs: 6500, aimAngle: 0 }],
+					settleMs: 800,
+				} as TrainingScenario,
+			);
 
 			// The run's reset is async (a server round-trip), so the start
 			// position must be read after it lands — otherwise the previous
@@ -991,7 +1039,7 @@ const BATTERY = [
 		name: "killed while holding loses the ultimate",
 		async run(page) {
 			const running = page.evaluate(() =>
-				window.__training.run({
+				window.__training!.run({
 					name: "deny-kill",
 					config: {
 						behaviour: "script",
@@ -1262,13 +1310,13 @@ const BATTERY = [
 				// `reset` clears the counters after its own settle, so it has to
 				// be awaited before the trap is laid — otherwise the trap's spring
 				// can race the counter reset.
-				await window.__training.reset();
+				await window.__training!.reset();
 				await new Promise((r) => setTimeout(r, 300));
 				// Lay the trap one step in front of the player, facing the dummy.
-				await window.__training.input({ item: true }, 60, 0);
+				await window.__training!.input({ item: true }, 60, 0);
 				await new Promise((r) => setTimeout(r, 400));
 				// Walk the dummy left, straight across where the trap is.
-				await window.__training.set({
+				await window.__training!.set({
 					behaviour: "script",
 					script: {
 						beats: [{ ms: 1500, hold: { moveLeft: true } }],
@@ -1290,10 +1338,10 @@ const BATTERY = [
 	},
 ];
 
-const report = (page) => page.evaluate(() => window.__training.report());
+const report = (page: Page) => page.evaluate(() => window.__training!.report());
 
 /** Condense a report to what a human needs to read when a row fails. */
-function digest(report) {
+function digest(report: TrainingReport) {
 	return {
 		durationMs: report.durationMs,
 		player: report.player,
@@ -1325,7 +1373,7 @@ async function main() {
 		viewport: { width: 900, height: 900 },
 	});
 	const page = await ctx.newPage();
-	const pageErrors = [];
+	const pageErrors: string[] = [];
 	page.on("pageerror", (e) => pageErrors.push(e.message));
 
 	// No `ai=true`: the local fighter has to be driven by `__training.input()`,
@@ -1338,7 +1386,7 @@ async function main() {
 		`${BASE_URL}/?training=true&ultCharge=100${HERO !== "lia" ? `&hero=${HERO}` : ""}`,
 	);
 	await page.waitForFunction(() => !!window.__training, { timeout: 20000 });
-	const seated = await page.evaluate(() => window.__training.ready(20000));
+	const seated = await page.evaluate(() => window.__training!.ready(20000));
 	if (!seated) {
 		throw new Error(
 			"the training room never seated a dummy — the server is up but the room is empty",
@@ -1359,19 +1407,24 @@ async function main() {
 					? !r.dagger && !r.lia
 					: !r.dagger,
 	);
-	const results = [];
+	const results: {
+		name: string;
+		pass: boolean;
+		fails: string[];
+		report: TrainingReport;
+	}[] = [];
 
 	for (const row of rows) {
-		let report_;
-		let extra;
+		let report_: TrainingReport;
+		let extra: unknown;
 		if (row.run) {
 			const out = await row.run(page);
 			report_ = out.report;
 			extra = out.extra;
 		} else {
 			report_ = await page.evaluate(
-				(s) => window.__training.run(s),
-				row.scenario,
+				(s: TrainingScenario) => window.__training!.run(s),
+				row.scenario!,
 			);
 			extra = row.after ? await row.after(page) : undefined;
 		}

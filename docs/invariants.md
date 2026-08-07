@@ -242,7 +242,7 @@ stops the butterfly being the only option.
   window where the direction is a promise — a steerable live hitbox is an
   unreadable one. Locking the whole move made a player holding the attack button
   ignore the cursor for 332ms at a time; freeing recovery cut the worst case to
-  154ms, both measured by `scripts/aim-probe.mjs`.
+  154ms, both measured by `scripts/aim-probe.ts`.
 - **Backstab needs a full body width of separation.** Fighters do not collide
   with each other, so in a scramble the bodies overlap and facing is locked
   mid-swing. Deciding "behind" from a few pixels made the backstab the default
@@ -312,8 +312,8 @@ stops the butterfly being the only option.
   when the mouse last twitched — a cursor held still while the camera moves is
   still aiming somewhere.
 - **Aim is invisible to the AI-vs-AI loop.** The brains hand the simulation an
-  angle and never touch a cursor, so `diagnose.mjs` cannot fail on any of the
-  above. `scripts/aim-probe.mjs` drives a real mouse, and it must be run at
+  angle and never touch a cursor, so `diagnose.ts` cannot fail on any of the
+  above. `scripts/aim-probe.ts` drives a real mouse, and it must be run at
   `--dpr=2` — every backing-store bug is invisible at 1.
 - **The simulation is handed an angle with no provenance.** A mouse points at a
   place; a controller gives a direction; a thumb gives a vector. All three become
@@ -751,10 +751,10 @@ the ways a *side* breaks things a free-for-all could not.
   holds has to *take* it, visibly. Two owners means the loser is silently
   unbound, and the player finds out mid-fight that jump does nothing.
 - **Nothing in AI vs AI presses a key.** The brains hand the simulation an intent
-  directly, so every binding in the game can be wrong while `diagnose.mjs`
-  reports PASS — the same blind spot that made `aim-probe.mjs` necessary.
-  `scripts/controls-probe.mjs` is the instrument for this one, and
-  `scripts/pad-probe.mjs` for the controller and the on-screen deck.
+  directly, so every binding in the game can be wrong while `diagnose.ts`
+  reports PASS — the same blind spot that made `aim-probe.ts` necessary.
+  `scripts/controls-probe.ts` is the instrument for this one, and
+  `scripts/pad-probe.ts` for the controller and the on-screen deck.
 - **A polled API can be stubbed; an evented one has to be driven.** Playwright
   cannot press a physical gamepad button, but the Gamepad API is `getGamepads()`
   returning a fresh snapshot — so an init script replacing it is *genuinely
@@ -763,7 +763,7 @@ the ways a *side* breaks things a free-for-all could not.
 - **The on-screen gamepad is DOM, so tap it.** Emitting its EventBus messages
   from a probe proves the wiring and nothing else; a probe that taps the actual
   control proves the geometry, the pointer capture and the layout too — the same
-  argument as `controls-probe.mjs` pressing real keys rather than calling
+  argument as `controls-probe.ts` pressing real keys rather than calling
   `Input`.
 - **On a phone, the layout is the feature.** A 4:3 canvas and a control deck have
   to both fit a portrait screen with no horizontal scroll, and the canvas has to

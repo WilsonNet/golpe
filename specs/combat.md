@@ -48,7 +48,7 @@ produced a second sprite nothing simulated — it froze on screen forever.
 - **Left-click** fires toward the cursor, in gun stance only. The bullet's
   heading is fixed at spawn from the aim angle the client sent, so a shot goes
   exactly where the cursor was — see the cursor→world conversion in
-  [movement.md](movement.md), and `scripts/aim-probe.mjs`, which measures the
+  [movement.md](movement.md), and `scripts/aim-probe.ts`, which measures the
   angle a bullet actually left with against the angle the cursor asked for.
 - Bullet speed **600 px/s**, damage **10** per hit, and a **12-round
   magazine** that auto-reloads in **800ms** — see the reload section below.

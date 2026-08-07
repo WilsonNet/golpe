@@ -3,7 +3,7 @@ import {
 	ROUND_RESET_DELAY_MS,
 	TDM_MIN_SCREENS,
 	TDM_SCORE_LIMIT,
-} from "../../../tweakables/match.js";
+} from "../../tweakables/match.js";
 
 export {
 	ROUND_FREEZE_MS,

@@ -2,12 +2,12 @@
 /**
  * Controller-mode feedback-loop harness.
  *
- * Nothing else in the loop can see any of this. `diagnose.mjs` runs AI vs AI and
+ * Nothing else in the loop can see any of this. `diagnose.ts` runs AI vs AI and
  * the brains hand the simulation an angle directly — no stick is ever touched —
- * and `aim-probe.mjs` measures the *cursor*, which controller mode does not use.
+ * and `aim-probe.ts` measures the *cursor*, which controller mode does not use.
  * Playwright cannot press a physical gamepad button at all. So this probe stubs
  * `navigator.getGamepads` before the page loads and drives the game the way a
- * controller would, exactly as `controls-probe.mjs` presses real keys.
+ * controller would, exactly as `controls-probe.ts` presses real keys.
  *
  * It measures the claims the scheme is made of:
  *
@@ -24,11 +24,13 @@
  * simulation through the ordinary bindings, and switching back to Mouse gives
  * the cursor its say again.
  *
- *   node scripts/pad-probe.mjs
- *   VENTO_URL=http://localhost:8084 node scripts/pad-probe.mjs
+ *   tsx scripts/pad-probe.ts
+ *   VENTO_URL=http://localhost:8084 tsx scripts/pad-probe.ts
  */
 import { randomUUID } from "node:crypto";
+import type { Browser, Page } from "playwright";
 import { chromium } from "playwright";
+import type { GameStateSnapshot } from "../src/types/global";
 
 const BASE_URL = process.env.VENTO_URL ?? "http://localhost:8084";
 
@@ -38,10 +40,10 @@ const ANGLE_TOLERANCE_DEG = 3;
 const JUMP_RISE_PX = 60;
 
 const DEG = 180 / Math.PI;
-const deg = (rad) => Math.round(rad * DEG * 10) / 10;
+const deg = (rad: number): number => Math.round(rad * DEG * 10) / 10;
 
 /** Signed smallest difference between two angles, in degrees. */
-function angleGap(a, b) {
+function angleGap(a: number, b: number): number {
 	let d = ((a - b) * DEG) % 360;
 	if (d > 180) d -= 360;
 	if (d < -180) d += 360;
@@ -67,15 +69,15 @@ function gameUrl() {
  * same snapshot shape it would get from hardware, on the same schedule.
  */
 const PAD_STUB = () => {
-	const state = { buttons: new Set(), axes: [0, 0, 0, 0] };
+	const state = { buttons: new Set<number>(), axes: [0, 0, 0, 0] };
 	window.__pad = {
-		press: (i) => state.buttons.add(i),
-		release: (i) => state.buttons.delete(i),
+		press: (i: number) => state.buttons.add(i),
+		release: (i: number) => state.buttons.delete(i),
 		clear: () => state.buttons.clear(),
-		axis: (i, v) => {
+		axis: (i: number, v: number) => {
 			state.axes[i] = v;
 		},
-		axes: (values) => {
+		axes: (values: number[]) => {
 			state.axes = values;
 		},
 	};
@@ -83,8 +85,9 @@ const PAD_STUB = () => {
 		id: "probe pad (STANDARD GAMEPAD)",
 		index: 0,
 		connected: true,
-		mapping: "standard",
+		mapping: "standard" as const,
 		timestamp: performance.now(),
+		vibrationActuator: null,
 		axes: [...state.axes],
 		buttons: Array.from({ length: 17 }, (_, i) => ({
 			pressed: state.buttons.has(i),
@@ -92,27 +95,35 @@ const PAD_STUB = () => {
 			value: state.buttons.has(i) ? 1 : 0,
 		})),
 	});
-	navigator.getGamepads = () => [snapshot(), null, null, null];
+	navigator.getGamepads = () => [
+		snapshot() as unknown as Gamepad,
+		null,
+		null,
+		null,
+	];
 };
 
-const inputState = (page) => page.evaluate(() => window.__inputState());
-const gameState = (page) => page.evaluate(() => window.__gameState());
+const inputState = (page: Page) => page.evaluate(() => window.__inputState!());
+const gameState = (page: Page) => page.evaluate(() => window.__gameState!());
 
-async function waitForGame(page) {
+async function waitForGame(page: Page) {
 	await page.waitForFunction(() => typeof window.__inputState === "function", {
 		timeout: 20000,
 	});
 	// The same event the name modal fires — the path a player takes rather than a
 	// bypass nobody plays.
 	await page.evaluate(() => window.__setPlayerName?.("PadProbe"));
-	await page.waitForFunction(() => window.__matchState?.().connected === true, {
-		timeout: 20000,
-	});
+	await page.waitForFunction(
+		() => window.__matchState?.()?.connected === true,
+		{
+			timeout: 20000,
+		},
+	);
 	await settle(page);
 }
 
 /** Wait until the fighter is alive and standing still on the floor. */
-async function settle(page) {
+async function settle(page: Page) {
 	for (let i = 0; i < 80; i++) {
 		const s = await gameState(page);
 		if (s.playerHP > 0 && s.playerPhys.grounded) return s;
@@ -122,30 +133,30 @@ async function settle(page) {
 }
 
 /** Hold a set of pad buttons, sample, and release them. */
-async function holdPad(page, buttons, ms = 220) {
+async function holdPad(page: Page, buttons: number[], ms = 220) {
 	await page.evaluate((b) => {
-		for (const i of b) window.__pad.press(i);
+		for (const i of b) window.__pad!.press(i);
 	}, buttons);
 	await page.waitForTimeout(ms);
 	const during = { input: await inputState(page), game: await gameState(page) };
-	await page.evaluate(() => window.__pad.clear());
+	await page.evaluate(() => window.__pad!.clear());
 	await page.waitForTimeout(150);
 	return during;
 }
 
 /** Push the right stick to an angle and report where the game ended up aiming. */
-async function fineAimAt(page, angleDeg, ms = 400) {
+async function fineAimAt(page: Page, angleDeg: number, ms = 400) {
 	const rad = angleDeg / DEG;
 	await page.evaluate(
-		([x, y]) => window.__pad.axes([0, 0, x, y]),
+		([x, y]: number[]) => window.__pad!.axes([0, 0, x!, y!]),
 		[Math.cos(rad), Math.sin(rad)],
 	);
 	await page.waitForTimeout(ms);
 	return inputState(page);
 }
 
-async function recentreStick(page) {
-	await page.evaluate(() => window.__pad.axes([0, 0, 0, 0]));
+async function recentreStick(page: Page) {
+	await page.evaluate(() => window.__pad!.axes([0, 0, 0, 0]));
 }
 
 /**
@@ -156,15 +167,15 @@ async function recentreStick(page) {
  * Sampling this is the only way to separate that from a stick that is just a
  * d-pad with extra steps.
  */
-async function contraAimAt(page, angleDeg, ms = 400) {
+async function contraAimAt(page: Page, angleDeg: number, ms = 400) {
 	const rad = angleDeg / DEG;
 	await page.evaluate(
-		([x, y]) => window.__pad.axes([x, y, 0, 0]),
+		([x, y]: number[]) => window.__pad!.axes([x!, y!, 0, 0]),
 		[Math.cos(rad), Math.sin(rad)],
 	);
 	await page.waitForTimeout(ms);
 	const input = await inputState(page);
-	await page.evaluate(() => window.__pad.axes([0, 0, 0, 0]));
+	await page.evaluate(() => window.__pad!.axes([0, 0, 0, 0]));
 	await page.waitForTimeout(150);
 	return input;
 }
@@ -177,10 +188,10 @@ async function contraAimAt(page, angleDeg, ms = 400) {
  * query the way a phone does, and it cannot be changed on a live page.
  *
  * The deck's controls are ordinary DOM, so this taps them the way a thumb does
- * and reads the simulation back. It is the same argument as `controls-probe.mjs`
+ * and reads the simulation back. It is the same argument as `controls-probe.ts`
  * pressing real keys: an emitted event proves the wiring, a tap proves the game.
  */
-async function runTouchDeck(browser, check) {
+async function runTouchDeck(browser: Browser, check: Check) {
 	const ctx = await browser.newContext({
 		// A portrait phone: the whole reason the deck exists is the empty half of
 		// the screen a 4:3 game leaves below itself here.
@@ -190,7 +201,7 @@ async function runTouchDeck(browser, check) {
 		hasTouch: true,
 	});
 	const page = await ctx.newPage();
-	const errors = [];
+	const errors: string[] = [];
 	page.on("pageerror", (e) => errors.push(e.message));
 
 	/**
@@ -204,12 +215,12 @@ async function runTouchDeck(browser, check) {
 	 */
 	const cdp = await ctx.newCDPSession(page);
 	const touch = {
-		start: (x, y) =>
+		start: (x: number, y: number) =>
 			cdp.send("Input.dispatchTouchEvent", {
 				type: "touchStart",
 				touchPoints: [{ x, y }],
 			}),
-		move: (x, y) =>
+		move: (x: number, y: number) =>
 			cdp.send("Input.dispatchTouchEvent", {
 				type: "touchMove",
 				touchPoints: [{ x, y }],
@@ -221,7 +232,7 @@ async function runTouchDeck(browser, check) {
 			}),
 	};
 	/** Hold a point for `ms`, sample, and lift. */
-	const holdTouch = async (x, y, ms = 500) => {
+	const holdTouch = async (x: number, y: number, ms = 500) => {
 		await touch.start(x, y);
 		await page.waitForTimeout(ms);
 		const sample = {
@@ -255,6 +266,7 @@ async function runTouchDeck(browser, check) {
 	// off it, which is the failure this layout exists to avoid.
 	const canvas = await page.locator("canvas").boundingBox();
 	const deckBox = await deck.boundingBox();
+	if (!canvas || !deckBox) throw new Error("deck or canvas not laid out");
 	check(
 		"the game and the deck both fit on the screen",
 		canvas.y + canvas.height <= deckBox.y + 1 &&
@@ -277,6 +289,7 @@ async function runTouchDeck(browser, check) {
 	// A thumb on the right arm of the cross. One control, eight sectors — so the
 	// touch point decides the direction, not which of four buttons was hit.
 	const cross = await page.locator(".vg-cross").boundingBox();
+	if (!cross) throw new Error("cross not laid out");
 	const before = await gameState(page);
 	const walking = await holdTouch(
 		cross.x + cross.width * 0.88,
@@ -347,6 +360,7 @@ async function runTouchDeck(browser, check) {
 	 * where a spurious second action hides.
 	 */
 	const jump = await page.locator(".vg-btn.jump").boundingBox();
+	if (!jump) throw new Error("jump button not laid out");
 	await settle(page);
 	const jumping = await holdTouch(
 		jump.x + jump.width / 2,
@@ -390,6 +404,7 @@ async function runTouchDeck(browser, check) {
 	// layer: absolute, full 360, and it recentres. The deck is in sword stance by
 	// default, so a thumb on the pad must aim without slashing.
 	const stick = await page.locator(".vg-stick").boundingBox();
+	if (!stick) throw new Error("thumb pad not laid out");
 	await touch.start(stick.x + stick.width / 2, stick.y + stick.height / 2);
 	await touch.move(stick.x + stick.width / 2, stick.y - 40);
 	await page.waitForTimeout(500);
@@ -505,6 +520,9 @@ async function runTouchDeck(browser, check) {
 	await ctx.close();
 }
 
+/** One named pass/fail assertion. */
+type Check = (name: string, ok: boolean, detail: string) => void;
+
 async function run() {
 	const browser = await chromium.launch();
 	const ctx = await browser.newContext({
@@ -512,15 +530,20 @@ async function run() {
 	});
 	await ctx.addInitScript(PAD_STUB);
 	const page = await ctx.newPage();
-	const errors = [];
+	const errors: string[] = [];
 	page.on("pageerror", (e) => errors.push(e.message));
 
 	await page.goto(gameUrl());
 	await waitForGame(page);
 
-	const checks = [];
-	const check = (name, ok, detail) => checks.push({ name, ok, detail });
-	const checkAngle = (name, got, wantDeg, extra = "") => {
+	const checks: { name: string; ok: boolean; detail: string }[] = [];
+	const check: Check = (name, ok, detail) => checks.push({ name, ok, detail });
+	const checkAngle = (
+		name: string,
+		got: number,
+		wantDeg: number,
+		extra = "",
+	) => {
 		const gap = Math.abs(angleGap(got, wantDeg / DEG));
 		check(
 			name,
@@ -542,7 +565,7 @@ async function run() {
 		`deckVisible=${initial.deckVisible}`,
 	);
 
-	await page.evaluate(() => window.__setInputScheme("controller"));
+	await page.evaluate(() => window.__setInputScheme?.("controller"));
 	await page.waitForTimeout(120);
 	check(
 		"the scheme switches",
@@ -618,13 +641,13 @@ async function run() {
 	// Walk away from the right wall first. The point of this block is that the
 	// fighter keeps *running* while it aims elsewhere, and a fighter pressed into
 	// a wall has vx 0 for a reason that has nothing to do with aiming.
-	await page.evaluate(() => window.__pad.press(14));
+	await page.evaluate(() => window.__pad!.press(14));
 	await page.waitForTimeout(900);
-	await page.evaluate(() => window.__pad.clear());
+	await page.evaluate(() => window.__pad!.clear());
 	await page.waitForTimeout(200);
 
-	await page.evaluate(() => window.__pad.press(15)); // run right
-	let running = null;
+	await page.evaluate(() => window.__pad!.press(15)); // run right
+	let running: GameStateSnapshot | null = null;
 	for (const want of [-90, -135, 180, 22.5, 67]) {
 		const s = await fineAimAt(page, want);
 		checkAngle(
@@ -639,8 +662,8 @@ async function run() {
 	}
 	check(
 		"the fighter is still running the other way while it aims",
-		running.playerPhys.vx > 0,
-		`vx=${Math.round(running.playerPhys.vx)}`,
+		running!.playerPhys.vx > 0,
+		`vx=${Math.round(running!.playerPhys.vx)}`,
 	);
 
 	// ---- 3. letting go falls back to the d-pad ----
@@ -659,11 +682,12 @@ async function run() {
 		back.aim.overriding === false,
 		`blend=${back.aim.blend.toFixed(2)}`,
 	);
-	await page.evaluate(() => window.__pad.clear());
+	await page.evaluate(() => window.__pad!.clear());
 	await settle(page);
 
 	// ---- 4. the mouse as a right stick, for a trackpad ----
 	const canvas = await page.locator("canvas").boundingBox();
+	if (!canvas) throw new Error("no canvas to slide on");
 	const cx = canvas.x + canvas.width / 2;
 	const cy = canvas.y + canvas.height / 2;
 
@@ -678,7 +702,7 @@ async function run() {
 	 */
 	let px = cx;
 	let py = cy;
-	const slide = async (dx, dy, steps = 12) => {
+	const slide = async (dx: number, dy: number, steps = 12) => {
 		for (let i = 1; i <= steps; i++) {
 			await page.mouse.move(px + (dx * i) / steps, py + (dy * i) / steps);
 			await page.waitForTimeout(12);
@@ -695,9 +719,9 @@ async function run() {
 	await page.waitForTimeout(1400);
 
 	// Aim right first, from the d-pad, so the arc has somewhere to start.
-	await page.evaluate(() => window.__pad.press(15));
+	await page.evaluate(() => window.__pad!.press(15));
 	await page.waitForTimeout(200);
-	await page.evaluate(() => window.__pad.clear());
+	await page.evaluate(() => window.__pad!.clear());
 
 	await slide(160, 0);
 	const slidRight = await inputState(page);
@@ -723,7 +747,7 @@ async function run() {
 	);
 
 	// ---- the mouse has no spring, so a hold window decides when it lets go ----
-	await page.evaluate(() => window.__pad.press(15)); // Contra says right
+	await page.evaluate(() => window.__pad!.press(15)); // Contra says right
 	await page.waitForTimeout(200);
 	const holding = await inputState(page);
 	check(
@@ -738,7 +762,7 @@ async function run() {
 		decayed.aim.angle,
 		0,
 	);
-	await page.evaluate(() => window.__pad.clear());
+	await page.evaluate(() => window.__pad!.clear());
 	await settle(page);
 
 	// ---- pad buttons reach the simulation through the ordinary bindings ----
@@ -751,13 +775,13 @@ async function run() {
 
 	await settle(page);
 	const before = await gameState(page);
-	await page.evaluate(() => window.__pad.press(0)); // A
+	await page.evaluate(() => window.__pad!.press(0)); // A
 	let peak = before.playerPhys.y;
 	for (let i = 0; i < 8; i++) {
 		await page.waitForTimeout(60);
 		peak = Math.min(peak, (await gameState(page)).playerPhys.y);
 	}
-	await page.evaluate(() => window.__pad.clear());
+	await page.evaluate(() => window.__pad!.clear());
 	const rise = Math.round(before.playerPhys.y - peak);
 	check(
 		"the pad's bottom face button jumps",
@@ -775,15 +799,15 @@ async function run() {
 	await holdPad(page, [4]);
 
 	// ---- and the mouse gets its say back ----
-	await page.evaluate(() => window.__setInputScheme("mouse"));
+	await page.evaluate(() => window.__setInputScheme?.("mouse"));
 	await page.waitForTimeout(150);
-	const aim = await page.evaluate(() => window.__aimState());
+	const aim = await page.evaluate(() => window.__aimState!());
 	await page.mouse.move(
 		canvas.x + (aim.centreX / 800) * canvas.width,
 		canvas.y + ((aim.centreY - 200) / 600) * canvas.height,
 	);
 	await page.waitForTimeout(200);
-	const backToMouse = await page.evaluate(() => window.__aimState());
+	const backToMouse = await page.evaluate(() => window.__aimState!());
 	checkAngle(
 		"switching back to Mouse gives the cursor its say again",
 		backToMouse.aimAngle,
@@ -791,7 +815,7 @@ async function run() {
 	);
 
 	// ---- it survives a reload, like every other preference ----
-	await page.evaluate(() => window.__setInputScheme("controller"));
+	await page.evaluate(() => window.__setInputScheme?.("controller"));
 	await page.waitForTimeout(120);
 	await page.goto(gameUrl());
 	await waitForGame(page);

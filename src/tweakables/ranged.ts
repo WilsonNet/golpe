@@ -4,7 +4,6 @@
  * shotgun's pellet fan, and the magazine + reload every gun now carries.
  */
 
-
 export type RangedWeaponId = "rifle" | "machinegun" | "shotgun";
 
 /**

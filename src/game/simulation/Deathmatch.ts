@@ -22,7 +22,7 @@ import {
 	TIME_LIMIT_MS,
 	VICTORY_BREATHING_MS,
 	VICTORY_HOLD_MS,
-} from "../../../tweakables/match.js";
+} from "../../tweakables/match.js";
 import type { TeamId } from "./Teams.js";
 
 export {

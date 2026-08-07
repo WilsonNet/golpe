@@ -6,7 +6,7 @@
  * count as wiped" is a condition that only shows up in a room somebody joins
  * mid-match. The *behaviour* — do rounds actually end, does the score reach the
  * limit, does a bot ever hit a teammate — is measured by
- * `scripts/tdm-probe.mjs` against a real server.
+ * `scripts/tdm-probe.ts` against a real server.
  */
 
 import { describe, expect, it } from "vitest";

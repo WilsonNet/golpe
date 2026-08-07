@@ -10,7 +10,7 @@ It exists for two reasons beyond practice.
    watching two brains fight, which is indirect and noisy. A dummy that does
    exactly one thing on command turns *"does RMB actually guard a slash coming
    from the left?"* into a deterministic, repeatable observation.
-2. **It gives the feedback loop a scalpel.** `scripts/diagnose.mjs` measures a
+2. **It gives the feedback loop a scalpel.** `scripts/diagnose.ts` measures a
    whole chaotic match; the training room measures **one interaction**. Neither
    replaces the other.
 
@@ -220,8 +220,8 @@ the canvas blurs the panel. A menu that swallows WASD makes the mode useless.
 ## Verification
 
 ```bash
-node scripts/training-probe.mjs        # the battery, one interaction at a time
-node scripts/diagnose.mjs --mode=online --runs=3   # still the canonical run
+node scripts/training-probe.ts        # the battery, one interaction at a time
+node scripts/diagnose.ts --mode=online --runs=3   # still the canonical run
 ```
 
 Every row's expectation is derivable from [melee.md](melee.md): a slash on an

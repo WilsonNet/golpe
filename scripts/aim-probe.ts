@@ -1,8 +1,9 @@
 #!/usr/bin/env node
+import type { Browser, Page } from "playwright";
 /**
  * Aim feedback-loop harness.
  *
- * `diagnose.mjs` cannot see aim at all: AI vs AI is the canonical run, and the
+ * `diagnose.ts` cannot see aim at all: AI vs AI is the canonical run, and the
  * brains hand the simulation an angle directly — no cursor is ever involved. So
  * a broken screen→world conversion, or a facing that refuses to follow the
  * pointer, shows up nowhere in that report and only as "the game struggles to
@@ -17,9 +18,9 @@
  * `--dpr` is load-bearing: the conversion has to divide by the *logical* size,
  * and every backing-store bug hides at devicePixelRatio 1. Run it at 2.
  *
- *   node scripts/aim-probe.mjs                 # dpr 1 and 2
- *   node scripts/aim-probe.mjs --dpr=2
- *   node scripts/aim-probe.mjs --mode=offline
+ *   tsx scripts/aim-probe.ts                 # dpr 1 and 2
+ *   tsx scripts/aim-probe.ts --dpr=2
+ *   tsx scripts/aim-probe.ts --mode=offline
  */
 import { chromium } from "playwright";
 
@@ -43,34 +44,46 @@ const FACING_DEADZONE_PX = 6;
  */
 const TURN_TOLERANCE_MS = 260;
 
-function arg(name, fallback) {
+function arg(name: string, fallback?: string): string | undefined {
 	const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
-	return hit ? hit.split("=")[1] : fallback;
+	return hit ? (hit.split("=")[1] ?? fallback) : fallback;
 }
 
-const MODE = arg("mode", "online");
+const MODE = arg("mode", "online") ?? "online";
 const DPRS = arg("dpr") ? [Number(arg("dpr"))] : [1, 2];
 
 /** Signed smallest difference between two angles. */
-function angleDelta(a, b) {
+function angleDelta(a: number, b: number): number {
 	let d = a - b;
 	while (d > Math.PI) d -= 2 * Math.PI;
 	while (d < -Math.PI) d += 2 * Math.PI;
 	return d;
 }
 
-const deg = (rad) => Math.round(((rad * 180) / Math.PI) * 10) / 10;
+const deg = (rad: number): number =>
+	Math.round(((rad * 180) / Math.PI) * 10) / 10;
 
-async function waitForGame(page) {
+async function waitForGame(page: Page) {
 	await page.waitForFunction(() => typeof window.__aimState === "function", {
 		timeout: 20000,
 	});
 }
 
+/** The canvas rect the cursor is moved against. */
+interface CanvasRect {
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+	innerWidth: number;
+	innerHeight: number;
+}
+
 /** Canvas rect in CSS pixels — the only frame Playwright's mouse speaks. */
-async function canvasRect(page) {
+async function canvasRect(page: Page): Promise<CanvasRect> {
 	const r = await page.evaluate(() => {
 		const c = document.querySelector("canvas");
+		if (!c) throw new Error("no canvas in the page");
 		const b = c.getBoundingClientRect();
 		return {
 			x: b.x,
@@ -98,14 +111,19 @@ async function canvasRect(page) {
  * authored world size — deliberately independent of the code under test, so the
  * probe cannot agree with a bug by sharing its arithmetic.
  */
-async function sampleAt(page, rect, worldX, worldY) {
+async function sampleAt(
+	page: Page,
+	rect: CanvasRect,
+	worldX: number,
+	worldY: number,
+) {
 	const clientX = rect.x + (worldX / GAME_WIDTH) * rect.width;
 	const clientY = rect.y + (worldY / GAME_HEIGHT) * rect.height;
 	await page.mouse.move(clientX, clientY);
 	// One frame for the intent to be built and one physics step to consume it.
 	await page.waitForTimeout(120);
 
-	const state = await page.evaluate(() => window.__aimState());
+	const state = await page.evaluate(() => window.__aimState!());
 	const gap = worldX + state.cameraX - state.centreX;
 	const wantAngle = Math.atan2(worldY + state.cameraY - state.centreY, gap);
 	// Directly above or below the fighter there is no side to face, and demanding
@@ -131,7 +149,13 @@ async function sampleAt(page, rect, worldX, worldY) {
  * cannot shoot, and a run that happened to sample during the 1.5s respawn wait
  * reported "no shot" as though aim were broken.
  */
-async function shootAt(page, rect, worldX, worldY, attempts = 3) {
+async function shootAt(
+	page: Page,
+	rect: CanvasRect,
+	worldX: number,
+	worldY: number,
+	attempts = 3,
+): Promise<ShotResult> {
 	for (let i = 0; i < attempts; i++) {
 		const shot = await tryShoot(page, rect, worldX, worldY);
 		if (shot.fired) return shot;
@@ -140,11 +164,26 @@ async function shootAt(page, rect, worldX, worldY, attempts = 3) {
 	return tryShoot(page, rect, worldX, worldY);
 }
 
-async function tryShoot(page, rect, worldX, worldY) {
+type ShotResult =
+	| { fired: false; hp: number; stance: "sword" | "gun" }
+	| {
+			fired: true;
+			bullets: number;
+			angleErrRad: number;
+			want: number;
+			got: number;
+	  };
+
+async function tryShoot(
+	page: Page,
+	rect: CanvasRect,
+	worldX: number,
+	worldY: number,
+): Promise<ShotResult> {
 	// A dead fighter cannot fire. Wait out the server's respawn rather than
 	// recording the corpse as an aim failure.
 	for (let i = 0; i < 60; i++) {
-		const s = await page.evaluate(() => window.__aimState());
+		const s = await page.evaluate(() => window.__aimState!());
 		if (s.hp > 0) break;
 		await page.waitForTimeout(100);
 	}
@@ -157,10 +196,10 @@ async function tryShoot(page, rect, worldX, worldY) {
 	await page.mouse.up();
 
 	// Server-owned bullets arrive on the next 20Hz snapshot.
-	let fresh = [];
+	let fresh: { id: number; x: number; y: number; angle: number }[] = [];
 	for (let i = 0; i < 12 && fresh.length === 0; i++) {
 		await page.waitForTimeout(60);
-		const now = await page.evaluate(() => window.__aimState());
+		const now = await page.evaluate(() => window.__aimState!());
 		fresh = now.bullets.filter((b) => !known.has(b.id));
 	}
 	await page.keyboard.press("KeyQ"); // back to sword
@@ -176,7 +215,7 @@ async function tryShoot(page, rect, worldX, worldY) {
 		bullets: fresh.length,
 		angleErrRad: Math.min(...errs),
 		want: before.want.angle,
-		got: fresh[0].angle,
+		got: fresh[0]!.angle,
 	};
 }
 
@@ -187,10 +226,10 @@ async function tryShoot(page, rect, worldX, worldY) {
  * less than the 20Hz snapshot interval — so the bullet was never observed and
  * the leftward half of projectile aim went untested while reporting "no shot".
  */
-async function walkToCentre(page) {
+async function walkToCentre(page: Page) {
 	await page.keyboard.down("KeyD");
 	for (let i = 0; i < 40; i++) {
-		const s = await page.evaluate(() => window.__aimState());
+		const s = await page.evaluate(() => window.__aimState!());
 		if (s.centreX > 360) break;
 		await page.waitForTimeout(100);
 	}
@@ -207,11 +246,15 @@ async function walkToCentre(page) {
  * for the whole of a move the pointer is simply not obeyed for as long as the
  * player keeps attacking.
  */
-async function attackTurnLatency(page, rect, centre) {
+async function attackTurnLatency(
+	page: Page,
+	rect: CanvasRect,
+	centre: { x: number; y: number },
+) {
 	await page.keyboard.press("KeyQ"); // sword
 	const left = { x: Math.max(8, centre.x - 200), y: centre.y };
 	const right = { x: Math.min(GAME_WIDTH - 8, centre.x + 200), y: centre.y };
-	const toClient = (p) => [
+	const toClient = (p: { x: number; y: number }): [number, number] => [
 		rect.x + (p.x / GAME_WIDTH) * rect.width,
 		rect.y + (p.y / GAME_HEIGHT) * rect.height,
 	];
@@ -219,15 +262,15 @@ async function attackTurnLatency(page, rect, centre) {
 	await page.mouse.move(...toClient(right));
 	await page.waitForTimeout(200);
 	await page.mouse.down(); // hold: chain slashes for the whole measurement
-	const results = [];
+	const results: { want: number; ms: number | null }[] = [];
 
 	for (let i = 0; i < 6; i++) {
 		const want = i % 2 === 0 ? -1 : 1;
 		await page.mouse.move(...toClient(want < 0 ? left : right));
 		const t0 = Date.now();
-		let ms = null;
+		let ms: number | null = null;
 		while (Date.now() - t0 < 1500) {
-			const s = await page.evaluate(() => window.__aimState());
+			const s = await page.evaluate(() => window.__aimState!());
 			// A fighter the bot has stunned is not refusing to turn; it is stunned.
 			if (s.hp <= 0) break;
 			if (s.facing === want) {
@@ -245,9 +288,9 @@ async function attackTurnLatency(page, rect, centre) {
 }
 
 /** A ring of cursor positions around the fighter, plus the four quadrants. */
-function probePoints(centre) {
+function probePoints(centre: { x: number; y: number }) {
 	const r = 220;
-	const ring = [];
+	const ring: { x: number; y: number }[] = [];
 	for (let i = 0; i < 8; i++) {
 		const a = (i / 8) * 2 * Math.PI;
 		ring.push({
@@ -258,7 +301,7 @@ function probePoints(centre) {
 	return ring;
 }
 
-async function runOne(browser, dpr) {
+async function runOne(browser: Browser, dpr: number) {
 	// The window must be tall enough to show the whole canvas: Playwright clamps
 	// a mouse move to the viewport, so any part of the canvas below the fold
 	// silently returns the *previous* cursor position and every sample there
@@ -268,7 +311,7 @@ async function runOne(browser, dpr) {
 		viewport: { width: 900, height: 900 },
 	});
 	const page = await ctx.newPage();
-	const errors = [];
+	const errors: string[] = [];
 	page.on("pageerror", (e) => errors.push(e.message));
 
 	// No `ai=true`: the local fighter must be human-controlled, or the brain
@@ -293,14 +336,14 @@ async function runOne(browser, dpr) {
 
 	const rect = await canvasRect(page);
 	await walkToCentre(page);
-	const first = await page.evaluate(() => window.__aimState());
+	const first = await page.evaluate(() => window.__aimState!());
 
 	// Shoot before the ring samples, and shoot *upward*. The opponent is a live
 	// server bot that closes to melee range within seconds; a shot fired into a
 	// fighter standing on top of you is destroyed by the server in the same tick
 	// and never reaches a 20Hz snapshot, which the probe can only report as "no
 	// shot fired".
-	const shots = [];
+	const shots: ShotResult[] = [];
 	for (const p of [
 		{ x: first.centreX + 240, y: first.centreY - 220 },
 		{ x: first.centreX - 240, y: first.centreY - 220 },
@@ -349,14 +392,14 @@ async function runOne(browser, dpr) {
 	}
 	if (firedShots.length === 0) {
 		failures.push("no shot was observed — projectile aim untested");
-	} else if (worstShot > ANGLE_TOLERANCE_RAD) {
-		failures.push(`bullet heading off by up to ${deg(worstShot)}°`);
+	} else if (worstShot! > ANGLE_TOLERANCE_RAD) {
+		failures.push(`bullet heading off by up to ${deg(worstShot!)}°`);
 	}
 	const turnMs = turns.map((t) => t.ms).filter((m) => m !== null);
 	const worstTurn = turnMs.length ? Math.max(...turnMs) : null;
 	if (turnMs.length < turns.length / 2) {
 		failures.push("fighter never turned to the cursor while attacking");
-	} else if (worstTurn > TURN_TOLERANCE_MS) {
+	} else if (worstTurn! > TURN_TOLERANCE_MS) {
 		failures.push(`took ${worstTurn}ms to face the cursor while attacking`);
 	}
 	if (errors.length) failures.push(`page errors: ${errors.length}`);

@@ -10,8 +10,8 @@
  * simulation (`dashTimer` set), which is exactly the thing that used to be
  * dropped. 8ms frames at 60Hz physics = 52% zero-step frames.
  *
- *   node scripts/dash-probe.mjs               # current build
- *   node scripts/dash-probe.mjs --trials=40
+ *   tsx scripts/dash-probe.ts               # current build
+ *   tsx scripts/dash-probe.ts --trials=40
  */
 import { chromium } from "playwright";
 
@@ -51,7 +51,7 @@ const browser = await chromium.launch();
 const ctx = await browser.newContext();
 await ctx.addInitScript(FAKE_FRAME);
 const page = await ctx.newPage();
-const lines = [];
+const lines: string[] = [];
 page.on("console", (m) => lines.push(m.text()));
 page.on("pageerror", (e) => lines.push(`[PAGEERROR] ${e.message}`));
 
@@ -66,10 +66,10 @@ for (
 }
 await page.evaluate(() => window.__setPlayerName?.("DashProbe"));
 
-const pump = (dtMs, n) =>
+const pump = (dtMs: number, n: number) =>
 	page.evaluate(
 		({ dt: d, n: k }) => {
-			for (let i = 0; i < k; i++) window.__frame(d);
+			for (let i = 0; i < k; i++) window.__frame!(d);
 		},
 		{ dt: dtMs, n },
 	);
@@ -77,19 +77,22 @@ const pump = (dtMs, n) =>
 await pump(8, 40); // settle into a standing, alive fighter
 
 // Report the actual frame/step split, so the exposure is a measured fact.
-await page.evaluate(() => window.__physicsDiagnostic(2000));
+await page.evaluate(() => window.__physicsDiagnostic!(2000));
 await pump(8, 250);
 await page.waitForTimeout(2300);
 const hit = lines.find((l) => l.includes("__DIAGNOSTIC_RESULT__"));
 let zeroPct = "n/a";
 if (hit) {
-	const rep = JSON.parse(
-		hit.match(/__DIAGNOSTIC_RESULT__(\{.*?\})__END__/s)[1],
-	);
-	zeroPct = rep.physicsStepDistribution?.pctZeroStep;
+	const json = hit.match(/__DIAGNOSTIC_RESULT__(\{.*?\})__END__/s)?.[1];
+	if (json) {
+		const rep = JSON.parse(json) as {
+			physicsStepDistribution?: { pctZeroStep: number };
+		};
+		zeroPct = String(rep.physicsStepDistribution?.pctZeroStep ?? "n/a");
+	}
 }
 
-const doubleTap = async (key) => {
+const doubleTap = async (key: string) => {
 	// Two taps with nothing pumped between them: the fake clock does not move,
 	// so both land well inside the double-tap window.
 	await page.keyboard.down(key);
@@ -100,7 +103,7 @@ const doubleTap = async (key) => {
 
 const dashApplied = () =>
 	page.evaluate(() => {
-		const p = window.__gameState().playerPhys;
+		const p = window.__gameState!().playerPhys;
 		// `dashTimer` is set whenever the simulation accepted a dash impulse,
 		// even one the arena wall immediately eats — it is the delivery signal.
 		return p.dashTimer > 0;

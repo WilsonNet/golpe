@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { DRAGON_SPEED } from "../../../tweakables/ultimate.js";
+import { DRAGON_SPEED } from "../../tweakables/ultimate.js";
 import { DEFAULT_WORLD, PLAYER_HEIGHT, PLAYER_WIDTH } from "./Arena.js";
 import { type HeroKit, kitFor } from "./Heroes.js";
 import {

@@ -1,7 +1,7 @@
 /**
  * The cursor→world conversion, in isolation.
  *
- * `scripts/aim-probe.mjs` proves this end to end in a real browser, which is the
+ * `scripts/aim-probe.ts` proves this end to end in a real browser, which is the
  * only place device pixel ratio exists. These tests pin the arithmetic itself so
  * the regression that started it all — dividing by the canvas backing store,
  * which is the logical size times the pixel ratio — cannot come back silently.

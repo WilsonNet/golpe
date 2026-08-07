@@ -286,7 +286,7 @@ often as you like.
 
 ## Measuring it
 
-`node scripts/ultimate-probe.mjs`. Nothing else in the harness can see this
+`node scripts/ultimate-probe.ts`. Nothing else in the harness can see this
 feature: AI vs AI never presses the button, so the ordinary diagnostic and the
 deathmatch probe both run whole matches in which the ultimate does not exist.
 

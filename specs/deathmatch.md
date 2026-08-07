@@ -210,8 +210,8 @@ everybody else is already playing.
 ## Verification
 
 ```bash
-node scripts/deathmatch-probe.mjs                       # 16 bots, to a winner
-node scripts/deathmatch-probe.mjs --scoreLimit=999 --timeLimit=20   # the clock
+node scripts/deathmatch-probe.ts                       # 16 bots, to a winner
+node scripts/deathmatch-probe.ts --scoreLimit=999 --timeLimit=20   # the clock
 ```
 
 The probe asserts the room filled, the match ended, a winner exists and is ranked

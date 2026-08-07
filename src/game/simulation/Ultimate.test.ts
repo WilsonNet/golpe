@@ -4,7 +4,7 @@
  * These are the checks a probe cannot make cheaply: exact grip boundaries,
  * determinism under replay, and the friendly-fire predicate. The *behaviour* —
  * does a cast freeze both clients, does the hole catch anybody — is measured
- * online by `scripts/ultimate-probe.mjs`, because a unit test of a networked
+ * online by `scripts/ultimate-probe.ts`, because a unit test of a networked
  * feature proves only that the unit is fine.
  */
 

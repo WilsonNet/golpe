@@ -54,7 +54,7 @@ import {
 	PLUNGE_STUN_BASE_MS,
 	PLUNGE_STUN_MAX_MS,
 	PLUNGE_STUN_PER_PX_MS,
-} from "../../../tweakables/melee.js";
+} from "../../tweakables/melee.js";
 import {
 	PLAYER_HEIGHT,
 	PLAYER_WIDTH,
@@ -99,7 +99,7 @@ export {
 	PLUNGE_STUN_MAX_MS,
 };
 
-import type { MeleeMove, MeleeWeaponDef } from "../../../tweakables/melee.js";
+import type { MeleeMove, MeleeWeaponDef } from "../../tweakables/melee.js";
 
 export type { MeleeMove, MeleeWeaponDef };
 

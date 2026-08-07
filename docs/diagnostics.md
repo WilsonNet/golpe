@@ -21,31 +21,31 @@ the full workflow** — this file is the reference for the tool itself.
 
 ```bash
 npm run dev:herdr                               # both servers in visible panes
-node scripts/diagnose.mjs                       # offline + online, 8s each
-node scripts/diagnose.mjs --mode=online --runs=3  # the canonical duel
-node scripts/diagnose.mjs --mode=online --ultCharge=100  # bots cast their ultimates
-node scripts/deathmatch-probe.mjs               # sixteen AI fighters, played to a winner
-node scripts/tdm-probe.mjs                      # two sides, wipe-out rounds, no friendly fire
-node scripts/tdm-probe.mjs --ultCharge=100      # ... and the teams throw black holes
-node scripts/probe-online.mjs                   # dump one online client's console
-node scripts/verify-modes.mjs                   # smoke-check every launch mode
-node scripts/aim-probe.mjs                      # cursor, facing and shot direction, at dpr 1 and 2
-node scripts/training-probe.mjs                 # one interaction at a time, against a scripted dummy
-node scripts/controls-probe.mjs                 # key bindings, the Esc menu and a rebind
-node scripts/pad-probe.mjs                      # controller aim, a gamepad, and the phone deck
+node scripts/diagnose.ts                       # offline + online, 8s each
+node scripts/diagnose.ts --mode=online --runs=3  # the canonical duel
+node scripts/diagnose.ts --mode=online --ultCharge=100  # bots cast their ultimates
+node scripts/deathmatch-probe.ts               # sixteen AI fighters, played to a winner
+node scripts/tdm-probe.ts                      # two sides, wipe-out rounds, no friendly fire
+node scripts/tdm-probe.ts --ultCharge=100      # ... and the teams throw black holes
+node scripts/probe-online.ts                   # dump one online client's console
+node scripts/verify-modes.ts                   # smoke-check every launch mode
+node scripts/aim-probe.ts                      # cursor, facing and shot direction, at dpr 1 and 2
+node scripts/training-probe.ts                 # one interaction at a time, against a scripted dummy
+node scripts/controls-probe.ts                 # key bindings, the Esc menu and a rebind
+node scripts/pad-probe.ts                      # controller aim, a gamepad, and the phone deck
 ```
 
 ## The deathmatch probe
 
-`diagnose.mjs` runs a duel. `deathmatch-probe.mjs` runs **a room full of AI, to a
+`diagnose.ts` runs a duel. `deathmatch-probe.ts` runs **a room full of AI, to a
 winner** — and it exists because a duel cannot ask the questions that only have
 answers at scale:
 
 | Question | Tool |
 |---|---|
-| Is prediction, reconciliation, projectile flight clean? | `diagnose.mjs --mode=online` |
-| Does a sixteen-fighter room stay consistent, score honestly, and end? | `deathmatch-probe.mjs` |
-| Do sides hold: even split, no friendly fire, rounds that end by wipe-out? | `tdm-probe.mjs` |
+| Is prediction, reconciliation, projectile flight clean? | `diagnose.ts --mode=online` |
+| Does a sixteen-fighter room stay consistent, score honestly, and end? | `deathmatch-probe.ts` |
+| Do sides hold: even split, no friendly fire, rounds that end by wipe-out? | `tdm-probe.ts` |
 
 It shortens the rules so a win condition is observable in seconds rather than five
 minutes — `--scoreLimit`, `--timeLimit` — and everything else is the real path:
@@ -54,9 +54,9 @@ to the client that *creates* the room, so nobody can end a match already in
 progress.
 
 ```bash
-node scripts/deathmatch-probe.mjs                                   # to the frag limit
-node scripts/deathmatch-probe.mjs --scoreLimit=999 --timeLimit=20   # to the clock
-node scripts/deathmatch-probe.mjs --fighters=8                      # a smaller room
+node scripts/deathmatch-probe.ts                                   # to the frag limit
+node scripts/deathmatch-probe.ts --scoreLimit=999 --timeLimit=20   # to the clock
+node scripts/deathmatch-probe.ts --fighters=8                      # a smaller room
 ```
 
 It fails on: a room that did not fill, a match that never ended, a winner who is
@@ -65,12 +65,12 @@ name, frags exceeding deaths, no snapshots, no rollbacks — **and nobody scorin
 
 ## The team deathmatch probe
 
-`tdm-probe.mjs` is the same shape against `?mode=tdm`, and it asks the questions
+`tdm-probe.ts` is the same shape against `?mode=tdm`, and it asks the questions
 that only exist once fighters have sides.
 
 ```bash
-node scripts/tdm-probe.mjs                                # 8 bots, two sides, to a winner
-node scripts/tdm-probe.mjs --fighters=16 --scoreLimit=2   # a full room
+node scripts/tdm-probe.ts                                # 8 bots, two sides, to a winner
+node scripts/tdm-probe.ts --fighters=16 --scoreLimit=2   # a full room
 ```
 
 **It watches the match rather than reading the end of it.** A wipe-out is a
@@ -138,8 +138,8 @@ is hidden by smoothing them.
 
 ## The aim probe
 
-`diagnose.mjs` is blind to aim: AI vs AI is the canonical run and the brains hand
-the simulation an angle directly, so no cursor is ever involved. `aim-probe.mjs`
+`diagnose.ts` is blind to aim: AI vs AI is the canonical run and the brains hand
+the simulation an angle directly, so no cursor is ever involved. `aim-probe.ts`
 drives a real mouse instead and reports:
 
 | Field | Meaning |
@@ -156,10 +156,10 @@ ratio 1, which is the only ratio a default headless browser has.
 
 ## The controls probe
 
-`diagnose.mjs` is blind to bindings for the same reason it is blind to aim: the
+`diagnose.ts` is blind to bindings for the same reason it is blind to aim: the
 brains hand the simulation an *intent*, so no key is ever pressed. Every button
 in the game could be bound to nothing and the canonical run would still report
-PASS. `controls-probe.mjs` presses real keys at a real browser and reads the
+PASS. `controls-probe.ts` presses real keys at a real browser and reads the
 simulation state back:
 
 | Check | Why it is there |
@@ -174,7 +174,7 @@ line that expected a guard says which half of the chain broke.
 
 ## The controller probe
 
-`pad-probe.mjs` covers the third blind spot. `aim-probe.mjs` measures the
+`pad-probe.ts` covers the third blind spot. `aim-probe.ts` measures the
 *cursor*, which controller mode does not use at all, and Playwright cannot press
 a physical gamepad button — so the probe **stubs `navigator.getGamepads`** before
 the page loads. That is legitimate rather than a shortcut: the Gamepad API is
@@ -231,14 +231,14 @@ them.
 
 ## The training probe
 
-`diagnose.mjs` measures a whole chaotic match; `training-probe.mjs` measures
+`diagnose.ts` measures a whole chaotic match; `training-probe.ts` measures
 **one interaction**. Neither replaces the other, and the choice is not about
 which is stricter:
 
 | Question | Tool |
 |---|---|
-| Is the game healthy end to end? | `diagnose.mjs --mode=online --runs=3` |
-| Does a block actually stop a slash from the left? | `training-probe.mjs` |
+| Is the game healthy end to end? | `diagnose.ts --mode=online --runs=3` |
+| Does a block actually stop a slash from the left? | `training-probe.ts` |
 | Did the fix change the thing I aimed at? | usually both |
 
 A brain never does the same thing twice, so the canonical run can only tell you
@@ -272,13 +272,13 @@ invincibility.
 
 ## The ultimate probe
 
-`node scripts/ultimate-probe.mjs`. It presses the button deliberately — a real
+`node scripts/ultimate-probe.ts`. It presses the button deliberately — a real
 human keypress, not a brain — because the probe's questions are about the
 netcode and the capture, and the answers must not depend on a bot's timing.
-(The brains *do* cast now — `diagnose.mjs --ultCharge=100` and
-`tdm-probe.mjs --ultCharge=100` measure that — but they are not the probe's
+(The brains *do* cast now — `diagnose.ts --ultCharge=100` and
+`tdm-probe.ts --ultCharge=100` measure that — but they are not the probe's
 subject.) Without this probe the black hole was invisible to the harness:
-`diagnose.mjs` and `deathmatch-probe.mjs` would run whole matches in which the
+`diagnose.ts` and `deathmatch-probe.ts` would run whole matches in which the
 ability does not exist, and would report a room that froze on one client and
 not the other as excellent jitter numbers.
 
@@ -319,7 +319,7 @@ where a human practising the throw wants it.
 
 ## The play-of-the-game probe
 
-`node scripts/potg-probe.mjs`. It is the only thing in the suite that reads
+`node scripts/potg-probe.ts`. It is the only thing in the suite that reads
 **past the final whistle**.
 
 That is the whole argument for it existing. Every other probe polls
@@ -375,7 +375,7 @@ than from the live match, and without an armed room that path is never taken.
 
 ## A known flake: "combo links thrown airborne"
 
-`diagnose.mjs --mode=online` fails roughly one run in ten with
+`diagnose.ts --mode=online` fails roughly one run in ten with
 `FAIL: 1 combo links thrown airborne`, and **it is not caused by whatever you
 just changed**. Measured over 29 runs across two builds: 1 failure in 14 on
 `main`, 3 in 15 with a large feature on top — the same message both times, and
@@ -466,13 +466,13 @@ correct behaviour trains you to ignore it**:
 - **A canvas taller than the browser window silently fakes an aim bug.**
   Playwright clamps a mouse move to the viewport, so every sample below the fold
   returns the *previous* cursor position — which reads exactly like a broken
-  conversion. `aim-probe.mjs` now throws if the canvas does not fit.
+  conversion. `aim-probe.ts` now throws if the canvas does not fit.
 - **A shot fired into a fighter standing on top of you is never observed.** The
   server destroys it in the same tick, so it never reaches a 20Hz snapshot and
   the probe can only report "no shot fired". Shoot upward, early, before the bot
   closes.
 - **A dead game server reads as PASS.** No snapshots means no reconciliation and
-  no jitter. `scripts/diagnose.mjs` preflights `:9208` and marks a run
+  no jitter. `scripts/diagnose.ts` preflights `:9208` and marks a run
   `INVALID: no server snapshots received`. Never trust an online run without a
   `reconciliationSummary`.
 - **A *stale* server also reads as healthy.** A tsx process killed out from under
@@ -528,7 +528,7 @@ Healthy for the canonical 14s online AI-vs-AI run:
 | `meleeSummary` move counters | all non-zero across a few runs |
 | every violation counter | **0, every run** |
 
-Healthy for a wide-arena run (`diagnose.mjs --screens=2` — the follow camera
+Healthy for a wide-arena run (`diagnose.ts --screens=2` — the follow camera
 moves the whole time, so this proves scroll never reads as jitter):
 
 | Metric | Healthy |

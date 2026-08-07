@@ -3,7 +3,7 @@
  *
  * Nothing else in the feedback loop can see a pad: AI vs AI hands the simulation
  * an intent directly and Playwright cannot press a physical button, so this and
- * `scripts/pad-probe.mjs` (which stubs `navigator.getGamepads`) are the only two
+ * `scripts/pad-probe.ts` (which stubs `navigator.getGamepads`) are the only two
  * things that ever exercise it.
  */
 

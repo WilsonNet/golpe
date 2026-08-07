@@ -15,9 +15,9 @@
  * is the hero's business, so the wire format never changes when a hero does.
  */
 
-import type { ItemDef } from "../../../tweakables/items.js";
-import type { RangedWeaponDef } from "../../../tweakables/ranged.js";
-import { RANGED_WEAPONS } from "../../../tweakables/ranged.js";
+import type { ItemDef } from "../../tweakables/items.js";
+import type { RangedWeaponDef } from "../../tweakables/ranged.js";
+import { RANGED_WEAPONS } from "../../tweakables/ranged.js";
 import { ITEMS } from "./Items.js";
 import { MELEE_WEAPONS, type MeleeWeaponDef } from "./Melee.js";
 

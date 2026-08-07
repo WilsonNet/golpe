@@ -613,7 +613,7 @@ export class Input {
 		return this.pad.available;
 	}
 
-	/** What the two aim layers are doing, for the HUD and for `scripts/pad-probe.mjs`. */
+	/** What the two aim layers are doing, for the HUD and for `scripts/pad-probe.ts`. */
 	aimReport(): AimReport {
 		return this.aim.report();
 	}

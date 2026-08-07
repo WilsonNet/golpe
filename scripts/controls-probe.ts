@@ -2,11 +2,11 @@
 /**
  * Controls feedback-loop harness.
  *
- * Nothing else in the loop can see a binding. `diagnose.mjs` runs AI vs AI and
+ * Nothing else in the loop can see a binding. `diagnose.ts` runs AI vs AI and
  * the brains hand the simulation an intent directly — no key is ever pressed —
  * so "block is on Shift now" and "the Esc menu stops the keyboard reaching the
  * fighter" are both invisible to every existing probe, exactly the way aim was
- * before `aim-probe.mjs`.
+ * before `aim-probe.ts`.
  *
  * It presses real keys at a real browser and reads the simulation state back:
  *
@@ -16,10 +16,11 @@
  *   3. a rebind made by *pressing a key at the dialog* reaches the simulation,
  *      survives a reload, and is undone by Reset to defaults.
  *
- *   node scripts/controls-probe.mjs
- *   VENTO_URL=http://localhost:8084 node scripts/controls-probe.mjs
+ *   tsx scripts/controls-probe.ts
+ *   VENTO_URL=http://localhost:8084 tsx scripts/controls-probe.ts
  */
 import { randomUUID } from "node:crypto";
+import type { Page } from "playwright";
 import { chromium } from "playwright";
 
 const BASE_URL = process.env.VENTO_URL ?? "http://localhost:8084";
@@ -41,9 +42,9 @@ function gameUrl() {
 	return `${BASE_URL}/?bots=0&room=${randomUUID()}`;
 }
 
-const state = (page) => page.evaluate(() => window.__gameState());
+const state = (page: Page) => page.evaluate(() => window.__gameState!());
 
-async function waitForGame(page) {
+async function waitForGame(page: Page) {
 	await page.waitForFunction(() => typeof window.__gameState === "function", {
 		timeout: 20000,
 	});
@@ -51,14 +52,17 @@ async function waitForGame(page) {
 	// DOM modal over the canvas. This is the event the modal fires, so it is the
 	// path a player takes rather than a bypass nobody plays.
 	await page.evaluate(() => window.__setPlayerName?.("KeyProbe"));
-	await page.waitForFunction(() => window.__matchState?.().connected === true, {
-		timeout: 20000,
-	});
+	await page.waitForFunction(
+		() => window.__matchState?.()?.connected === true,
+		{
+			timeout: 20000,
+		},
+	);
 	await settle(page);
 }
 
 /** Wait until the fighter is alive and standing still on the floor. */
-async function settle(page) {
+async function settle(page: Page) {
 	for (let i = 0; i < 80; i++) {
 		const s = await state(page);
 		if (s.playerHP > 0 && s.playerPhys.grounded) return s;
@@ -68,7 +72,7 @@ async function settle(page) {
 }
 
 /** Hold a key, sample while it is down, and release it. */
-async function hold(page, code, ms = 200) {
+async function hold(page: Page, code: string, ms = 200) {
 	await page.keyboard.down(code);
 	await page.waitForTimeout(ms);
 	const during = await state(page);
@@ -78,7 +82,7 @@ async function hold(page, code, ms = 200) {
 }
 
 /** Hold a key and report the highest the fighter got. Y grows downward. */
-async function jumpRise(page, code) {
+async function jumpRise(page: Page, code: string) {
 	const before = await settle(page);
 	await page.keyboard.down(code);
 	let peak = before.playerPhys.y;
@@ -92,7 +96,7 @@ async function jumpRise(page, code) {
 	return Math.round(before.playerPhys.y - peak);
 }
 
-async function openControls(page) {
+async function openControls(page: Page) {
 	await page.keyboard.press("Escape");
 	await page.locator(".vd-menu-card").waitFor({ timeout: 3000 });
 	await page.getByRole("button", { name: "Controls" }).click();
@@ -100,14 +104,14 @@ async function openControls(page) {
 }
 
 /** The slot buttons for one action row, as a player sees them. */
-function slots(page, label) {
+function slots(page: Page, label: string) {
 	return page
 		.locator(".vd-bind-table tr")
 		.filter({ has: page.locator("th", { hasText: new RegExp(`^${label}$`) }) })
 		.locator(".vd-slot");
 }
 
-async function closeMenu(page) {
+async function closeMenu(page: Page) {
 	await page.keyboard.press("Escape");
 	await page.locator(".vd-menu-card").waitFor({ state: "detached" });
 	await page.waitForTimeout(120);
@@ -119,15 +123,16 @@ async function run() {
 		viewport: { width: 900, height: 900 },
 	});
 	const page = await ctx.newPage();
-	const errors = [];
+	const errors: string[] = [];
 	page.on("pageerror", (e) => errors.push(e.message));
 
 	const url = gameUrl();
 	await page.goto(url);
 	await waitForGame(page);
 
-	const checks = [];
-	const check = (name, ok, detail) => checks.push({ name, ok, detail });
+	const checks: { name: string; ok: boolean; detail: string }[] = [];
+	const check = (name: string, ok: boolean, detail: string) =>
+		checks.push({ name, ok, detail });
 
 	// ---- the defaults ----
 	const shift = await hold(page, "ShiftLeft");
@@ -145,6 +150,7 @@ async function run() {
 	// Right-click used to be block. It is now unbound, and a binding that quietly
 	// still works is the same bug as one that quietly does not.
 	const canvas = await page.locator("canvas").boundingBox();
+	if (!canvas) throw new Error("no canvas to aim at");
 	await page.mouse.move(
 		canvas.x + canvas.width / 2,
 		canvas.y + canvas.height / 2,
@@ -208,7 +214,8 @@ async function run() {
 	await page.waitForTimeout(80);
 	await page.keyboard.press("KeyC");
 	await page.waitForTimeout(80);
-	const shown = (await slots(page, "Block").first().textContent()).trim();
+	const shown =
+		(await slots(page, "Block").first().textContent())?.trim() ?? "";
 	check("the dialog captures the key that was pressed", shown === "C", shown);
 	await closeMenu(page);
 
@@ -240,7 +247,8 @@ async function run() {
 	await openControls(page);
 	await page.getByRole("button", { name: "Reset to defaults" }).click();
 	await page.waitForTimeout(120);
-	const resetLabel = (await slots(page, "Block").first().textContent()).trim();
+	const resetLabel =
+		(await slots(page, "Block").first().textContent())?.trim() ?? "";
 	check(
 		"reset restores the default label",
 		resetLabel === "Left Shift",

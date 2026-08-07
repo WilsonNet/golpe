@@ -1,10 +1,11 @@
 #!/usr/bin/env node
+import type { Page } from "playwright";
 /**
  * The ultimate — the black hole grenade — measured online.
  *
  * Nothing else in the harness can see any of it. AI vs AI never presses the
- * button (a brain has no charge meter to reason about), so `diagnose.mjs` and
- * `deathmatch-probe.mjs` run whole matches in which the ability does not exist.
+ * button (a brain has no charge meter to reason about), so `diagnose.ts` and
+ * `deathmatch-probe.ts` run whole matches in which the ability does not exist.
  * The physics diagnostic reads positions, and would happily report a room that
  * froze on one client and not the other as excellent jitter numbers.
  *
@@ -49,7 +50,7 @@
  * with an exact aim angle. It is still a real online room, still predicted and
  * still reconciled, so nothing about the measurement is weakened by staging it.
  *
- * Run: `node scripts/ultimate-probe.mjs` with both dev servers up.
+ * Run: `tsx scripts/ultimate-probe.ts` with both dev servers up.
  *
  * `--no-cast` runs scenario A with the button never pressed. That is the
  * control, and it is not decoration — it is how the first version of this probe
@@ -62,6 +63,7 @@
  * discriminated, so it was replaced with one that can.
  */
 import { chromium } from "playwright";
+import type { UltSnapshot } from "../src/types/global";
 
 /** `--no-cast`: the control. Scenario A, same room, no button pressed. */
 const CAST = !process.argv.includes("--no-cast");
@@ -74,7 +76,7 @@ const GAME_HEIGHT = 600;
 /**
  * The ability's numbers, restated from `simulation/Ultimate.ts`.
  *
- * Deliberately copied rather than imported — the same reason `aim-probe.mjs`
+ * Deliberately copied rather than imported — the same reason `aim-probe.ts`
  * restates the world size. A probe that shares arithmetic with the code under
  * test cannot disagree with it. If these drift from the simulation the probe
  * stops landing throws, which is the failure you want: loud, and about the thing
@@ -105,43 +107,60 @@ const MAX_AVG_ERROR_PX = 3;
 
 const RESULT_RE = /__DIAGNOSTIC_RESULT__(\{.*?\})__END__/s;
 
-const fail = [];
-const round = (n) => Math.round(n * 100) / 100;
+const fail: string[] = [];
+const round = (n: number): number => Math.round(n * 100) / 100;
 
-function sink(page) {
-	const errors = [];
+function sink(page: Page): string[] {
+	const errors: string[] = [];
 	page.on("pageerror", (e) => errors.push(e.message));
 	return errors;
 }
 
 /** Collect a page's console, so `__physicsDiagnostic`'s report can be read back. */
-function consoleSink(page) {
-	const lines = [];
+function consoleSink(page: Page): string[] {
+	const lines: string[] = [];
 	page.on("console", (m) => lines.push(m.text()));
 	return lines;
 }
 
-async function readDiagnostic(page, lines) {
+async function readDiagnostic(page: Page, lines: string[]) {
 	// The report is printed when the run ends, not returned — give it a beat.
 	await page.waitForTimeout(1200);
 	const hit = lines.find((l) => RESULT_RE.test(l));
-	return hit ? JSON.parse(hit.match(RESULT_RE)[1]) : null;
+	const json = hit?.match(RESULT_RE)?.[1];
+	return json
+		? (JSON.parse(json) as {
+				verdict?: string;
+				reconciliationSummary?: {
+					totalCorrections?: number;
+					avgErrorPx?: number;
+					maxErrorPx?: number;
+				} | null;
+			})
+		: null;
 }
 
-async function ultState(page) {
+async function ultState(page: Page): Promise<UltSnapshot | null> {
 	return page.evaluate(() => window.__ultState?.() ?? null);
 }
 
 /** Canvas rect in CSS pixels — the only frame Playwright's mouse speaks. */
-async function canvasRect(page) {
+async function canvasRect(page: Page) {
 	return page.evaluate(() => {
-		const b = document.querySelector("canvas").getBoundingClientRect();
+		const canvas = document.querySelector("canvas");
+		if (!canvas) throw new Error("no canvas in the page");
+		const b = canvas.getBoundingClientRect();
 		return { x: b.x, y: b.y, width: b.width, height: b.height };
 	});
 }
 
-/** Point the real cursor at a world coordinate, the way `aim-probe.mjs` does. */
-async function aimAt(page, rect, worldX, worldY) {
+/** Point the real cursor at a world coordinate, the way `aim-probe.ts` does. */
+async function aimAt(
+	page: Page,
+	rect: { x: number; y: number; width: number; height: number },
+	worldX: number,
+	worldY: number,
+) {
 	await page.mouse.move(
 		rect.x + (worldX / GAME_WIDTH) * rect.width,
 		rect.y + (worldY / GAME_HEIGHT) * rect.height,
@@ -166,13 +185,13 @@ async function aimAt(page, rect, worldX, worldY) {
  * tuning rather than found a bug.
  */
 function ballisticAngle(
-	fromX,
-	fromY,
-	toX,
-	toY,
+	fromX: number,
+	fromY: number,
+	toX: number,
+	toY: number,
 	v = GRENADE_SPEED,
 	g = GRENADE_GRAVITY,
-) {
+): number | null {
 	const dx = toX - fromX;
 	const dyUp = fromY - toY;
 	if (Math.abs(dx) < 1) return null;
@@ -192,15 +211,15 @@ function ballisticAngle(
  * milliseconds even when it is thrown well — a slower sampler reported "no
  * grenade was ever in flight" for a cast that worked perfectly.
  */
-async function watch(pages, ms, stepMs = 25) {
-	const frames = [];
+async function watch(pages: Page[], ms: number, stepMs = 25) {
+	const frames: { t: number; states: (UltSnapshot | null)[] }[] = [];
 	const until = Date.now() + ms;
 	while (Date.now() < until) {
 		frames.push({
 			t: Date.now(),
 			states: await Promise.all(pages.map(ultState)),
 		});
-		await pages[0].waitForTimeout(stepMs);
+		await pages[0]!.waitForTimeout(stepMs);
 	}
 	return frames;
 }
@@ -315,7 +334,8 @@ const casterId = armed[0]?.myId ?? "";
 
 const frozenCaster = frames.filter((f) => f.states[0]?.frozen);
 const frozenWitness = frames.filter((f) => f.states[1]?.frozen);
-const span = (l) => (l.length === 0 ? 0 : l[l.length - 1].t - l[0].t);
+const span = (l: typeof frozenCaster): number =>
+	l.length === 0 ? 0 : l[l.length - 1]!.t - l[0]!.t;
 
 const freeze = {
 	casterFrames: frozenCaster.length,
@@ -379,7 +399,7 @@ if (!CAST) {
 	for (const [who, ms] of [
 		["caster", freeze.casterSpanMs],
 		["witness", freeze.witnessSpanMs],
-	]) {
+	] as const) {
 		// Generous both ways: the sampler runs at 25ms and the freeze is announced
 		// on a 50ms snapshot, so a span within a couple of hundred ms of the
 		// declared length is the best this can resolve.
@@ -403,8 +423,8 @@ if (!freeze.casterUnfroze || !freeze.witnessUnfroze) {
 const grenadeSeen = frames.some((f) =>
 	f.states.some((s) => s?.grenades?.length),
 );
-const holes = frames.flatMap((f) =>
-	f.states.map((s) => s?.singularity).filter(Boolean),
+const holes = frames.flatMap((f): NonNullable<UltSnapshot["singularity"]>[] =>
+	f.states.flatMap((s) => (s?.singularity ? [s.singularity] : [])),
 );
 const holeIds = [...new Set(holes.map((h) => h.id))];
 const holeOnBoth = frames.some(
@@ -417,7 +437,7 @@ const holePosSpread = Math.max(
 	...holeIds.map((id) => {
 		const same = holes.filter((h) => h.id === id);
 		return Math.max(
-			...same.map((h) => Math.hypot(h.x - same[0].x, h.y - same[0].y)),
+			...same.map((h) => Math.hypot(h.x - same[0]!.x, h.y - same[0]!.y)),
 		);
 	}),
 );
@@ -433,7 +453,7 @@ const detonation = {
 	holeOnBoth,
 	holePosSpread: round(holePosSpread),
 	holesAt: holeIds.map((id) => {
-		const h = holes.find((x) => x.id === id);
+		const h = holes.find((x) => x.id === id)!;
 		return { id, x: Math.round(h.x), y: Math.round(h.y) };
 	}),
 	holeOwners: [...new Set(holes.map((h) => h.ownerId))],
@@ -496,7 +516,23 @@ await witness.close();
 //  B — the capture, staged in a training room
 // =========================================================
 
-let capture = { skipped: true };
+interface CaptureResult {
+	skipped: false;
+	chargeBefore: number;
+	castDeg: number;
+	gapPx: number;
+	holeAt: { x: number; y: number } | null;
+	heldEver: string[];
+	dummyHeld: boolean;
+	casterHeld: boolean;
+	dummyHp: string;
+	playerHp: string;
+	dummyDamage: number;
+	playerDamage: number;
+	errors: string[];
+}
+
+let capture: { skipped: true } | CaptureResult = { skipped: true };
 if (CAST) {
 	const room = await ctx.newPage();
 	const errorsB = sink(room);
@@ -505,29 +541,29 @@ if (CAST) {
 	// reason this scenario exists: nothing to walk around and nothing overhead.
 	await room.goto(`${BASE}/?training=true&ultCharge=100`);
 	await room.waitForFunction(() => typeof window.__training === "object");
-	await room.evaluate(() => window.__training.ready(15000));
+	await room.evaluate(() => window.__training!.ready(15000));
 	// Both mortal: an invincible dummy would make the damage check vacuous, and an
 	// invincible player would make the friendly-fire check vacuous in the other
 	// direction.
 	await room.evaluate(() =>
-		window.__training.set({
+		window.__training!.set({
 			behaviour: "idle",
 			dummyInvincible: false,
 			playerInvincible: false,
 		}),
 	);
-	await room.evaluate(() => window.__training.reset());
+	await room.evaluate(() => window.__training!.reset());
 	await room.waitForTimeout(1200);
 
 	const before = await room.evaluate(() => {
-		const t = window.__training.state();
-		const u = window.__ultState();
+		const t = window.__training!.state();
+		const u = window.__ultState!();
 		return {
 			dummyId: t.dummy.id,
 			dummyHp: t.dummy.hp,
 			dummyX: t.dummy.x,
 			dummyY: t.dummy.y,
-			playerHp: window.__gameState().playerHP,
+			playerHp: window.__gameState!().playerHP,
 			playerX: u.playerPhys.x,
 			playerY: u.playerPhys.y,
 			charge: u.charge,
@@ -551,7 +587,7 @@ if (CAST) {
 	// the keyboard through `Input.hold`, so what it drives is exactly what a key
 	// drives — and unlike a key it can state an exact aim angle.
 	await room.evaluate(
-		(a) => window.__training.input({ ultimate: true }, 200, a),
+		(a) => window.__training!.input({ ultimate: true }, 200, a),
 		castAngle,
 	);
 
@@ -564,10 +600,12 @@ if (CAST) {
 			capFrames.flatMap((f) => f.states.flatMap((s) => s?.held ?? [])),
 		),
 	];
-	const capHole = capFrames.map((f) => f.states[0]?.singularity).find(Boolean);
+	const capHole = capFrames
+		.map((f) => f.states[0]?.singularity)
+		.find(Boolean) as NonNullable<UltSnapshot["singularity"]> | undefined;
 	const after = await room.evaluate(() => ({
-		dummyHp: window.__training.state().dummy.hp,
-		playerHp: window.__gameState().playerHP,
+		dummyHp: window.__training!.state().dummy.hp,
+		playerHp: window.__gameState!().playerHP,
 	}));
 
 	capture = {

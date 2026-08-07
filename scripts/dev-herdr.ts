@@ -9,10 +9,10 @@
  * server once produced a passing physics diagnostic. Herdr keeps both processes
  * in named panes you can watch, and `logs` can read them back non-interactively.
  *
- *   node scripts/dev-herdr.mjs up       # create the dev tab and start both
- *   node scripts/dev-herdr.mjs status   # panes + port health
- *   node scripts/dev-herdr.mjs logs vite [--lines=80]
- *   node scripts/dev-herdr.mjs down     # stop both and close the tab
+ *   tsx scripts/dev-herdr.ts up       # create the dev tab and start both
+ *   tsx scripts/dev-herdr.ts status   # panes + port health
+ *   tsx scripts/dev-herdr.ts logs vite [--lines=80]
+ *   tsx scripts/dev-herdr.ts down     # stop both and close the tab
  */
 import { execFileSync } from "node:child_process";
 import {
@@ -32,8 +32,43 @@ const STATE_FILE = resolve(STATE_DIR, "dev.json");
 const WORKSPACE_LABEL = "vento-aureo";
 const TAB_LABEL = "dev";
 
-/** The processes the tab supervises. Order defines the pane layout, top to bottom. */
-const SERVICES = [
+/** A herdr workspace, as the CLI's JSON envelope reports it. */
+interface HerdrWorkspace {
+	workspace_id: string;
+	label: string;
+}
+
+/** A herdr tab. */
+interface HerdrTab {
+	tab_id: string;
+	label: string;
+	root_pane: { pane_id: string };
+}
+
+/** A herdr pane. */
+interface HerdrPane {
+	pane_id: string;
+}
+
+/** A dev tab we created and wrote to `.herdr/dev.json`. */
+interface DevState {
+	workspaceId: string;
+	tabId: string;
+	panes: { name: string; paneId: string; label: string }[];
+	startedAt: string;
+}
+
+/** One supervised process. Order defines the pane layout, top to bottom. */
+interface Service {
+	name: string;
+	label: string;
+	command: string[];
+	port: number;
+	ready: RegExp;
+}
+
+/** The processes the tab supervises. */
+const SERVICES: Service[] = [
 	{
 		name: "vite",
 		label: "vite :8084",
@@ -51,24 +86,24 @@ const SERVICES = [
 ];
 
 /** Run a herdr CLI command and parse its JSON envelope. */
-function herdr(args) {
+function herdr<T>(args: string[]): T {
 	const out = execFileSync("herdr", args, { encoding: "utf8" });
 	const trimmed = out.trim();
-	if (!trimmed.startsWith("{")) return trimmed;
-	const parsed = JSON.parse(trimmed);
+	if (!trimmed.startsWith("{")) return trimmed as T;
+	const parsed: { error?: unknown; result?: T } = JSON.parse(trimmed);
 	if (parsed.error) {
 		throw new Error(`herdr ${args.join(" ")}: ${JSON.stringify(parsed.error)}`);
 	}
-	return parsed.result;
+	return parsed.result as T;
 }
 
 /** Raw text output (pane read uses text, not JSON). */
-function herdrText(args) {
+function herdrText(args: string[]): string {
 	return execFileSync("herdr", args, { encoding: "utf8" });
 }
 
 function assertServer() {
-	let status;
+	let status: string;
 	try {
 		status = execFileSync("herdr", ["status", "server"], { encoding: "utf8" });
 	} catch {
@@ -81,32 +116,40 @@ function assertServer() {
 	}
 }
 
-function readState() {
+function readState(): DevState | null {
 	if (!existsSync(STATE_FILE)) return null;
 	try {
-		return JSON.parse(readFileSync(STATE_FILE, "utf8"));
+		return JSON.parse(readFileSync(STATE_FILE, "utf8")) as DevState;
 	} catch {
 		return null;
 	}
 }
 
-function writeState(state) {
+function writeState(state: DevState) {
 	mkdirSync(STATE_DIR, { recursive: true });
 	writeFileSync(STATE_FILE, `${JSON.stringify(state, null, 2)}\n`);
 }
 
-function findWorkspace(label) {
-	const { workspaces } = herdr(["workspace", "list"]);
+function findWorkspace(label: string): HerdrWorkspace | null {
+	const { workspaces } = herdr<{ workspaces: HerdrWorkspace[] }>([
+		"workspace",
+		"list",
+	]);
 	return workspaces.find((w) => w.label === label) ?? null;
 }
 
-function findTab(workspaceId, label) {
-	const { tabs } = herdr(["tab", "list", "--workspace", workspaceId]);
+function findTab(workspaceId: string, label: string): HerdrTab | null {
+	const { tabs } = herdr<{ tabs: HerdrTab[] }>([
+		"tab",
+		"list",
+		"--workspace",
+		workspaceId,
+	]);
 	return tabs.find((t) => t.label === label) ?? null;
 }
 
 /** Is something already listening on the port? */
-async function portOpen(port) {
+async function portOpen(port: number): Promise<boolean> {
 	const url =
 		port === 9208
 			? "http://localhost:9208/.wrtc/v2/connections"
@@ -124,7 +167,9 @@ async function up() {
 	// agents already working in it.
 	let workspace = findWorkspace(WORKSPACE_LABEL);
 	if (!workspace) {
-		const created = herdr([
+		const created = herdr<
+			{ workspace?: HerdrWorkspace } & Partial<HerdrWorkspace>
+		>([
 			"workspace",
 			"create",
 			"--cwd",
@@ -133,7 +178,7 @@ async function up() {
 			WORKSPACE_LABEL,
 			"--no-focus",
 		]);
-		workspace = created.workspace ?? created;
+		workspace = created.workspace ?? (created as HerdrWorkspace);
 		console.log(
 			`created workspace ${workspace.workspace_id} (${WORKSPACE_LABEL})`,
 		);
@@ -147,7 +192,7 @@ async function up() {
 		herdr(["tab", "close", existing.tab_id]);
 	}
 
-	const tab = herdr([
+	const tab = herdr<{ tab: HerdrTab }>([
 		"tab",
 		"create",
 		"--workspace",
@@ -161,12 +206,12 @@ async function up() {
 	const tabId = tab.tab.tab_id;
 
 	// First service takes the tab's root pane; each later one splits downward.
-	const panes = [];
-	let previous = tab.root_pane.pane_id;
+	const panes: { name: string; paneId: string; label: string }[] = [];
+	let previous = tab.tab.root_pane.pane_id;
 	for (const [i, service] of SERVICES.entries()) {
 		let paneId = previous;
 		if (i > 0) {
-			const split = herdr([
+			const split = herdr<{ pane: HerdrPane }>([
 				"pane",
 				"split",
 				previous,
@@ -205,12 +250,12 @@ async function up() {
 		);
 		if (!ok) {
 			const pane = panes.find((p) => p.name === service.name);
-			console.log(tailPane(pane.paneId, 15));
+			if (pane) console.log(tailPane(pane.paneId, 15));
 		}
 	}
 }
 
-async function waitForPort(port, timeoutMs) {
+async function waitForPort(port: number, timeoutMs: number): Promise<boolean> {
 	const deadline = Date.now() + timeoutMs;
 	while (Date.now() < deadline) {
 		if (await portOpen(port)) return true;
@@ -225,7 +270,7 @@ async function waitForPort(port, timeoutMs) {
  * `--source visible` is the reliable one: the default `recent` source returns
  * nothing for a long-running process that is just sitting there logging.
  */
-function tailPane(paneId, lines) {
+function tailPane(paneId: string, lines: number): string {
 	try {
 		const text = herdrText([
 			"pane",
@@ -238,11 +283,12 @@ function tailPane(paneId, lines) {
 		]);
 		return text.split("\n").slice(-lines).join("\n").trimEnd();
 	} catch (err) {
-		return `(could not read pane ${paneId}: ${err.message})`;
+		const message = err instanceof Error ? err.message : String(err);
+		return `(could not read pane ${paneId}: ${message})`;
 	}
 }
 
-function logs(which, lines) {
+function logs(which: string | undefined, lines: number) {
 	const state = readState();
 	if (!state) throw new Error("no dev tab recorded — run `up` first");
 	const wanted = which
@@ -265,7 +311,9 @@ async function status() {
 		console.log("no dev tab recorded — run `up` first");
 	} else {
 		console.log(`workspace ${state.workspaceId}  tab ${state.tabId}`);
-		const live = herdr(["pane", "list"]).panes.map((p) => p.pane_id);
+		const live = herdr<{ panes: HerdrPane[] }>(["pane", "list"]).panes.map(
+			(p) => p.pane_id,
+		);
 		for (const p of state.panes) {
 			console.log(
 				`  ${p.name.padEnd(7)} ${p.paneId}  ${live.includes(p.paneId) ? "pane alive" : "pane GONE"}`,
@@ -319,6 +367,6 @@ try {
 		process.exit(1);
 	}
 } catch (err) {
-	console.error(`error: ${err.message}`);
+	console.error(`error: ${err instanceof Error ? err.message : String(err)}`);
 	process.exit(1);
 }

@@ -2,12 +2,11 @@
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "target": "ES2022",
-    "useDefineForClassFields": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "jsx": "react-jsx"
+    "types": ["node"],
+    "noPropertyAccessFromIndexSignature": false
   },
-  "include": ["src"]
+  "include": ["scripts", "vite"]
 }

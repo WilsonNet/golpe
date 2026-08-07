@@ -90,18 +90,18 @@ server/           Geckos.io authoritative server
   TrainingDummy.ts  the scriptable practice dummy: an input source, like EnemyBrain
   index.ts          matchmaking, room sizing and deferred placement
 
-scripts/          diagnose.mjs (Playwright harness), deathmatch-probe.mjs (sixteen
-                  AI fighters played to a winner), tdm-probe.mjs (two sides,
-                  wipe-out rounds, and friendly fire caught from the scoreboard), aim-probe.mjs (drives a real
-                  cursor — the only thing that can test mouse aim), pad-probe.mjs
+scripts/          diagnose.ts (Playwright harness), deathmatch-probe.ts (sixteen
+                  AI fighters played to a winner), tdm-probe.ts (two sides,
+                  wipe-out rounds, and friendly fire caught from the scoreboard), aim-probe.ts (drives a real
+                  cursor — the only thing that can test mouse aim), pad-probe.ts
                   (stubs the Gamepad API — the only thing that can test controller
-                  aim and the phone deck), training-probe.mjs (one interaction at
-                  a time), potg-probe.mjs (the end-of-match ceremony — the only
+                  aim and the phone deck), training-probe.ts (one interaction at
+                  a time), potg-probe.ts (the end-of-match ceremony — the only
                   thing that reads past the final whistle), make-anands-art.py
                   (composes the second hero's hand-drawn art into the shipped
                   sheets), make-potg-art.py
                   (generates the ceremony's sunburst and medal),
-                  dev-herdr.mjs, probe-online.mjs, verify-modes.mjs
+                  dev-herdr.ts, probe-online.ts, verify-modes.ts
 specs/            the source of truth for intended behaviour
 docs/             how to work in this repo
 public/assets/

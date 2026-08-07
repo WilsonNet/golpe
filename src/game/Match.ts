@@ -1105,13 +1105,13 @@ export class Match {
 		});
 		// The deathmatch's own contract. `__gameState` describes two fighters
 		// because that is what a duel is; a sixteen-player match is a scoreboard and
-		// a clock, and `scripts/deathmatch-probe.mjs` reads exactly this.
+		// a clock, and `scripts/deathmatch-probe.ts` reads exactly this.
 		window.__matchState = () => {
 			const status = this.online?.matchStatus;
 			const standings = this.online?.standings() ?? [];
 			const winnerId = status?.winnerId ?? null;
 			return {
-				// The mode and the round scoreboard, for `scripts/tdm-probe.mjs`.
+				// The mode and the round scoreboard, for `scripts/tdm-probe.ts`.
 				// Everything else here describes a free-for-all, which a team match
 				// is not: sixteen individual frag counts say nothing about whether a
 				// side was ever wiped out.
@@ -1146,7 +1146,7 @@ export class Match {
 		// presses the button (a brain has no charge meter to reason about), the
 		// deathmatch probe reads scores, and the physics diagnostic reads positions
 		// — so the freeze, the throw and the capture are invisible to all three.
-		// `scripts/ultimate-probe.mjs` reads exactly this.
+		// `scripts/ultimate-probe.ts` reads exactly this.
 		window.__ultState = () => {
 			const session = this.online;
 			const field = session?.singularity ?? null;
@@ -1193,7 +1193,7 @@ export class Match {
 		};
 		// Play of the Game is invisible to every other probe, and in a way that
 		// would not fail anything: the deathmatch probe stops reading the moment
-		// the match ends, which is the frame this begins. `scripts/potg-probe.mjs`
+		// the match ends, which is the frame this begins. `scripts/potg-probe.ts`
 		// reads exactly this — including `track`, because the pre-roll's entire job
 		// is to move a camera nothing else in the game measures.
 		window.__potgState = () => {
@@ -1234,7 +1234,7 @@ export class Match {
 			EventBus.emit("player-name", name);
 		};
 		// Aim is the one system AI vs AI cannot exercise — the brains hand the
-		// simulation an angle and never touch a cursor. `scripts/aim-probe.mjs`
+		// simulation an angle and never touch a cursor. `scripts/aim-probe.ts`
 		// drives a real mouse and reads this.
 		window.__aimState = () => {
 			const c = bodyCentre(this.local.body.x, this.local.body.y);
@@ -1259,7 +1259,7 @@ export class Match {
 		};
 		// Controller mode is invisible to every other probe for exactly the reason
 		// aim was: the brains hand the simulation an angle and never touch a stick,
-		// and Playwright cannot press a physical button. `scripts/pad-probe.mjs`
+		// and Playwright cannot press a physical button. `scripts/pad-probe.ts`
 		// stubs the Gamepad API and reads this.
 		window.__inputState = () => ({
 			scheme: inputSettings.scheme,
@@ -1671,7 +1671,7 @@ export class Match {
 	 * asks. The black hole's friendly-fire rule compares against `field.ownerId`,
 	 * which is a server id — so `fieldFor(field, "local")` never matched the
 	 * caster, and the caster's *own* client drew them being torn apart inside
-	 * their own hole. Found by `scripts/ultimate-probe.mjs`, which reported the
+	 * their own hole. Found by `scripts/ultimate-probe.ts`, which reported the
 	 * held fighter as `"local"` on a client where that was the caster.
 	 *
 	 * The simulation was never wrong: `OnlineSession` looks the field up by
@@ -1775,7 +1775,7 @@ export class Match {
 	private potgProjectiles: Container | undefined;
 	private potgBulletPool: SpritePool | undefined;
 	/**
-	 * Where the camera went, sampled per phase, for `scripts/potg-probe.mjs`.
+	 * Where the camera went, sampled per phase, for `scripts/potg-probe.ts`.
 	 *
 	 * The pre-roll's entire job is to move the camera, and nothing else in the
 	 * game can see that it did: no metric reads zoom, and a cinematic that
@@ -1983,7 +1983,7 @@ export class Match {
 	}
 
 	/**
-	 * Summarise each camera movement as it runs, for `scripts/potg-probe.mjs`.
+	 * Summarise each camera movement as it runs, for `scripts/potg-probe.ts`.
 	 *
 	 * Ranges rather than a final sample, and that is the whole value of it: a whip
 	 * pan *ends* back on its subject, so the last position of the movement says

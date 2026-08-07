@@ -85,7 +85,7 @@ opened the game landed in the same match whether they meant to or not.
 default, because bots are opt-in. It is still fully served, predicted and
 reconciled, and it is the only way to measure something about the local fighter —
 aim, facing, a shot's heading — without a bot closing to melee range and turning
-the measurement into noise. `aim-probe.mjs` relies on it, and half its runs used to
+the measurement into noise. `aim-probe.ts` relies on it, and half its runs used to
 fail for reasons that had nothing to do with aim.
 
 **`?online=true` is vestigial**, along with the `solo` flag it sets. Rooms are
@@ -370,8 +370,8 @@ Online AI vs AI is the canonical test — an offline PASS proves nothing about a
 of the above:
 
 ```bash
-node scripts/diagnose.mjs --mode=online --runs=3     # a duel: prediction, projectiles
-node scripts/deathmatch-probe.mjs                    # sixteen fighters, to a winner
+node scripts/diagnose.ts --mode=online --runs=3     # a duel: prediction, projectiles
+node scripts/deathmatch-probe.ts                    # sixteen fighters, to a winner
 ```
 
 **Both, because they fail differently.** The duel is where prediction,

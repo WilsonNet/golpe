@@ -25,7 +25,7 @@ here; the folder is pure data, so changing a number can never desync a match.
    full test suite, build, dead-code). The tests assert the invariants the
    numbers are allowed to break — e.g. the shotgun's shell reload must stay
    slower than its blast, the dagger's dash must stay quicker than the sword's.
-3. **Measure the change online:** `node scripts/diagnose.mjs --mode=online
+3. **Measure the change online:** `tsx scripts/diagnose.ts --mode=online
    --runs=3` and the mode probes — a number that typechecks but breaks the
    feel shows up as a probe failure, not a compile error.
 4. **Update the spec that names the number** (specs/melee.md, specs/combat.md,
@@ -43,6 +43,6 @@ here; the folder is pure data, so changing a number can never desync a match.
   and gravity) are the docs' derived children — tune the raw numbers here and
   the derived ones follow. They are re-exported through the simulation, so
   nothing else has to change.
-- **The folder imports nothing but types** (and `units.js` for the match
+- **The folder imports nothing but types** (and `units.ts` for the match
   timers) — it must never grow an import from the simulation, or the tuning
   folder would stop being safe to read.

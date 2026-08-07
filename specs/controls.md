@@ -349,22 +349,22 @@ it is answered.
   reading keys meant for a field. See [`docs/invariants.md`].
 - **Nothing in the AI vs AI loop presses anything.** The brains hand the
   simulation an intent and an angle directly, so a broken binding, a broken pad
-  mapping and a broken aim layer are all invisible to `diagnose.mjs`.
+  mapping and a broken aim layer are all invisible to `diagnose.ts`.
 
 ## Measuring it
 
 ```bash
-node scripts/controls-probe.mjs   # keys, the Esc menu, and a rebind that sticks
-node scripts/pad-probe.mjs        # the two aim layers, the pad, and the deck
+node scripts/controls-probe.ts   # keys, the Esc menu, and a rebind that sticks
+node scripts/pad-probe.ts        # the two aim layers, the pad, and the deck
 ```
 
-`controls-probe.mjs` presses real keys at a real browser: that Shift blocks and
+`controls-probe.ts` presses real keys at a real browser: that Shift blocks and
 right-click does not, that Space and W both clear a jump, that the Esc menu stops
 a held key moving the fighter, and that a rebind made by pressing a key at the
 dialog reaches the simulation, survives a reload, and is undone by *Reset to
 defaults*.
 
-`pad-probe.mjs` stubs `navigator.getGamepads` — a polled API, so a stub is
+`pad-probe.ts` stubs `navigator.getGamepads` — a polled API, so a stub is
 genuinely equivalent from the game's point of view — and measures the claims
 controller mode is made of: that the d-pad aims in eight directions and moves you
 with the same input while the **left stick aims continuously** (a push at 30° must
@@ -373,7 +373,7 @@ angle, that letting go falls back, and that a mouse stroke **runs up the arc**
 past 45° instead of crawling at it.
 
 It then runs the deck on a phone-shaped context and taps it, the same way
-`controls-probe.mjs` presses real keys — using **CDP touch events, never
+`controls-probe.ts` presses real keys — using **CDP touch events, never
 `page.mouse`**. The two are not interchangeable here: `page.mouse` reports
 `pointerType: "mouse"` even inside a touch context, which is the exact field the
 relative-mouse filter reads, so a probe driven by it is blind to every bug in

@@ -181,7 +181,7 @@ netcode path. The menu's **Quick match** is exactly this URL.
 
 **`?bots=1` is required, not decoration.** Bots are opt-in, so `?bots=0` gives
 you an empty room — a legitimate mode of its own (fully served, predicted and
-reconciled, with nobody else in it) and what `aim-probe.mjs` measures in,
+reconciled, with nobody else in it) and what `aim-probe.ts` measures in,
 because a bot closing to melee range eats the measurement.
 
 ### 2. AI vs AI
@@ -416,14 +416,14 @@ The feedback-loop harness drives real browsers, handles two-tab matchmaking and
 prints a digest:
 
 ```bash
-node scripts/diagnose.mjs --mode=online --runs=3  # the canonical duel
-node scripts/deathmatch-probe.mjs                 # 16 AI fighters, played to a winner
-node scripts/tdm-probe.mjs                       # two sides, wipe-out rounds, no friendly fire
-node scripts/menu-probe.mjs                       # the root menu: every click a URL, boots a match
-node scripts/potg-probe.mjs                      # play of the game — the only probe that reads past the final whistle
+node scripts/diagnose.ts --mode=online --runs=3  # the canonical duel
+node scripts/deathmatch-probe.ts                 # 16 AI fighters, played to a winner
+node scripts/tdm-probe.ts                       # two sides, wipe-out rounds, no friendly fire
+node scripts/menu-probe.ts                       # the root menu: every click a URL, boots a match
+node scripts/potg-probe.ts                      # play of the game — the only probe that reads past the final whistle
 npm run diagnose                                  # offline + online, 8s each
-node scripts/verify-modes.mjs                     # smoke-check every launch mode
-node scripts/probe-online.mjs                     # raw console from one online client
+node scripts/verify-modes.ts                     # smoke-check every launch mode
+node scripts/probe-online.ts                     # raw console from one online client
 ```
 
 Diagnose **online**. An offline PASS skips prediction, reconciliation and

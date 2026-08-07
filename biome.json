@@ -14,12 +14,7 @@
 	},
 	"overrides": [
 		{
-			"includes": [
-				"**/*.test.ts",
-				"**/*.test.tsx",
-				"scripts/**/*.mjs",
-				"vite/**/*.mjs"
-			],
+			"includes": ["**/*.test.ts", "**/*.test.tsx"],
 			"linter": {
 				"rules": {
 					"style": {
@@ -29,11 +24,20 @@
 			}
 		},
 		{
-			// Art, measurement and device wiring: a pixel coordinate, a colour
-			// channel or an axis threshold is data the drawing code was written
-			// around, not a tuning value — naming each one would double the file
-			// for zero tuning benefit. The rule stays on where a number is a game
-			// rule: server/, simulation/, characters/, combat/, online/.
+			"includes": ["scripts/**/*.ts", "vite/**/*.ts"],
+			"linter": {
+				"rules": {
+					"style": {
+						"noMagicNumbers": "off",
+						"noNonNullAssertion": "off"
+					},
+					"suspicious": {
+						"noExplicitAny": "off"
+					}
+				}
+			}
+		},
+		{
 			"includes": [
 				"src/game/render/**",
 				"src/ui/**",
@@ -52,9 +56,6 @@
 			}
 		},
 		{
-			// The UUID fallback re-implements RFC 4122 — every number there is the
-			// spec (byte offsets, version/variant nibbles, hyphenation), not a
-			// tuning value.
 			"includes": ["src/game/online/room.ts"],
 			"linter": {
 				"rules": {

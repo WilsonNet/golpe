@@ -9,7 +9,6 @@
   },
   "include": [
     "server",
-    "tweakables",
     "src/game/simulation",
     "src/game/characters",
     "src/game/online/wire.ts",

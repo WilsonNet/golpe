@@ -1,8 +1,8 @@
 /**
  * The debug hooks the game installs on `window`.
  *
- * These are a real contract, not a convenience: `scripts/diagnose.mjs`,
- * `scripts/verify-modes.mjs` and `scripts/probe-online.mjs` all drive the game
+ * These are a real contract, not a convenience: `scripts/diagnose.ts`,
+ * `scripts/verify-modes.ts` and `scripts/probe-online.ts` all drive the game
  * through them, and the whole feedback loop reads their output. Declaring them
  * here means the harness and the game agree on the shape, and renaming one
  * breaks the build rather than the measurement.
@@ -52,6 +52,16 @@ export interface GameStateSnapshot {
 	/** Fighters in the room, the local one included. */
 	fighterCount: number;
 	bulletCount: number;
+	/** How many 800px screens wide the arena is (`?screen=N`). */
+	worldScreens: number;
+	/** The world's width in px. */
+	worldWidth: number;
+	/** The follow camera's top-left, world px. */
+	cameraX: number;
+	cameraY: number;
+	/** Item charges left in the local fighter's life, and the life's maximum. */
+	itemCharges: number;
+	itemMaxCharges: number;
 }
 
 /**
@@ -59,7 +69,7 @@ export interface GameStateSnapshot {
  *
  * `__gameState` describes two fighters, because that is what a duel is. A
  * sixteen-player match is a scoreboard and a clock, and those need saying
- * separately — `scripts/deathmatch-probe.mjs` asserts on exactly this.
+ * separately — `scripts/deathmatch-probe.ts` asserts on exactly this.
  */
 export interface MatchStateSnapshot {
 	connected: boolean;
@@ -95,7 +105,7 @@ export interface MatchStateSnapshot {
 	 * Its own object because a team match is not answerable from the individual
 	 * standings: sixteen frag counts say nothing about whether a side was ever
 	 * wiped out, which is the only thing that scores in this mode.
-	 * `scripts/tdm-probe.mjs` reads exactly this.
+	 * `scripts/tdm-probe.ts` reads exactly this.
 	 */
 	teams: TeamStatus | null;
 	/** The local fighter's side, so a probe can check its own friendly fire. */
@@ -115,6 +125,10 @@ export interface MatchStateSnapshot {
 		estBytesPerSec: number;
 		rollback: RollbackSummary;
 	} | null;
+	/** How many 800px screens wide the arena is (`?screen=N`). */
+	worldScreens: number;
+	/** The world's width in px. */
+	worldWidth: number;
 }
 
 export interface RollbackSummary {
@@ -136,8 +150,8 @@ export interface RollbackSummary {
  *
  * Aim is the one system the AI-vs-AI loop cannot exercise: the bots hand the
  * simulation an angle directly and never touch a cursor, so a broken
- * screen→world conversion is invisible to `diagnose.mjs` and shows up only as
- * "the game struggles to follow the mouse". `scripts/aim-probe.mjs` drives a
+ * screen→world conversion is invisible to `diagnose.ts` and shows up only as
+ * "the game struggles to follow the mouse". `scripts/aim-probe.ts` drives a
  * real cursor and reads this.
  */
 export interface AimSnapshot {
@@ -172,7 +186,7 @@ export interface AimSnapshot {
  *
  * Controller mode is invisible to every other probe for exactly the reason aim
  * was: the AI brains hand the simulation an angle and never touch a stick, and
- * Playwright cannot press a physical gamepad button. `scripts/pad-probe.mjs`
+ * Playwright cannot press a physical gamepad button. `scripts/pad-probe.ts`
  * stubs `navigator.getGamepads` and reads this.
  */
 export interface InputSnapshot {
@@ -196,7 +210,7 @@ export interface InputSnapshot {
  * Its own snapshot because no existing probe can see any of it: AI vs AI never
  * presses the button (a brain has no charge meter to reason about), the
  * deathmatch probe reads scores, and the physics diagnostic reads positions.
- * `scripts/ultimate-probe.mjs` reads exactly this, on two clients at once —
+ * `scripts/ultimate-probe.ts` reads exactly this, on two clients at once —
  * which is the only way to check that the cinematic froze *both* of them.
  */
 export interface UltSnapshot {
@@ -204,6 +218,8 @@ export interface UltSnapshot {
 	/** Local fighter's charge, 0..100. Server-owned. */
 	charge: number;
 	ready: boolean;
+	/** True while the ultimate button is held and a cast is legal. */
+	aiming: boolean;
 	/** True while this client is running no fixed steps at all. */
 	frozen: boolean;
 	cinematic: {
@@ -240,7 +256,7 @@ export interface UltSnapshot {
  * Nothing else can see any of it. Every other probe stops reading at the frame
  * the match ends, which is the frame this starts — so a cinematic that
  * degraded into a static shot, or a clip that never downloaded, would leave the
- * whole suite green. `scripts/potg-probe.mjs` reads exactly this.
+ * whole suite green. `scripts/potg-probe.ts` reads exactly this.
  */
 export interface PotgSnapshot {
 	/** The reliable announcement, or null before one arrives. */

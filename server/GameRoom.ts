@@ -366,7 +366,7 @@ const ROSTER_HEARTBEAT_MS = 2000;
  * **Ten, and raising it is a regression.** A deep queue is not free storage: it
  * is *latency*, because the server executes inputs in order, so a ten-deep queue
  * means acting on what the player pressed 166ms ago. This was briefly raised to
- * 24 to make room for the cinematic freeze, and `diagnose.mjs` started failing
+ * 24 to make room for the cinematic freeze, and `diagnose.ts` started failing
  * with "combo links thrown airborne" — an AI vs AI client's brain decides "slash,
  * I am on the ground", and 400ms later the server applies it to a fighter that
  * has since jumped. The cap belongs where it was; the freeze gets its own.
@@ -3261,7 +3261,7 @@ export class GameRoom {
 			// A grenade that leaves through a side wall is detonated by `grenadeEnd`
 			// at the point it was last seen, which is outside the world — and a hole
 			// centred at x=-40 is half a hole, drawn off-screen, that still reaches
-			// 128px into the room. Found by `scripts/ultimate-probe.mjs`, which threw
+			// 128px into the room. Found by `scripts/ultimate-probe.ts`, which threw
 			// one into the left wall and reported a singularity outside its own arena.
 			// The wall *is* where it hit, so the boundary is the honest place for it.
 			x: Math.max(this.world.left, Math.min(g.x, this.world.right)),

@@ -321,9 +321,9 @@ and the way out.
 ## Measuring it
 
 ```bash
-node scripts/potg-probe.mjs
-node scripts/potg-probe.mjs --ultCharge=100     # ...with a black hole in the reel
-node scripts/potg-probe.mjs --mode=tdm --scoreLimit=2
+node scripts/potg-probe.ts
+node scripts/potg-probe.ts --ultCharge=100     # ...with a black hole in the reel
+node scripts/potg-probe.ts --mode=tdm --scoreLimit=2
 ```
 
 **No other probe can see any of this.** Every one of them stops reading at

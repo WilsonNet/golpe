@@ -8,7 +8,7 @@ const ctx = await browser.newContext();
 // `fill` — bots are opt-in, so two clients in one room are two fighters.
 const room = `probe-${Date.now().toString(36)}`;
 const url = `http://localhost:8084/?online=true&ai=true&room=${room}`;
-const lines = [];
+const lines: string[] = [];
 
 const a = await ctx.newPage();
 a.on("console", (m) => lines.push(`A: ${m.text()}`));
@@ -24,7 +24,7 @@ await a.waitForTimeout(6000);
 console.log(lines.slice(0, 40).join("\n"));
 console.log("--- __gameState() ---");
 console.log(
-	JSON.stringify(await a.evaluate(() => window.__gameState()), null, 2),
+	JSON.stringify(await a.evaluate(() => window.__gameState!()), null, 2),
 );
 
 await browser.close();

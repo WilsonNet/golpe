@@ -3,7 +3,6 @@
  * HE grenade, the trap and the smoke grenade.
  */
 
-
 export type ItemId = "he-grenade" | "trap" | "smoke-grenade";
 
 /** One item's stat card: what it is and how many uses a round grants. */

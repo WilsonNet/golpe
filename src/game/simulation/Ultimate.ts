@@ -51,7 +51,7 @@ import {
 	ULT_CINEMATIC_MS,
 	ULT_MAX_CHARGE,
 	ULT_PASSIVE_PER_SEC,
-} from "../../../tweakables/ultimate.js";
+} from "../../tweakables/ultimate.js";
 import {
 	hasLineOfSight,
 	PLAYER_HEIGHT,
@@ -106,7 +106,7 @@ export function addCharge(charge: number, amount: number): number {
  * **This is a balance constant disguised as arithmetic**, and it is the reason
  * the two above are the numbers they are. The first tuning (620 px/s at 900)
  * gave 427px — barely half a screen — and it made the ability quietly
- * unusable: `scripts/ultimate-probe.mjs` aimed at a fighter 660px away, got a
+ * unusable: `scripts/ultimate-probe.ts` aimed at a fighter 660px away, got a
  * perfectly obedient 3° throw, and watched the grenade hit the floor a third of
  * the way there. Nothing was broken; the arc simply could not reach, and no
  * amount of aiming would have helped.

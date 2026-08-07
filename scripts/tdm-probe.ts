@@ -1,8 +1,9 @@
 #!/usr/bin/env node
+import type { Page } from "playwright";
 /**
  * Team deathmatch feedback loop: two sides of AI, played to a winning team.
  *
- * `deathmatch-probe.mjs` answers "does a sixteen-fighter free-for-all hold
+ * `deathmatch-probe.ts` answers "does a sixteen-fighter free-for-all hold
  * together?". This answers the questions that only exist once fighters have
  * sides, and every one of them is invisible to that probe:
  *
@@ -21,30 +22,32 @@
  * The rules are shortened so a win condition is observable in seconds. Everything
  * else is the real path: real server, real snapshots, real prediction, real bots.
  *
- *   node scripts/tdm-probe.mjs
- *   node scripts/tdm-probe.mjs --fighters=8 --scoreLimit=2 --timeLimit=120
+ *   tsx scripts/tdm-probe.ts
+ *   tsx scripts/tdm-probe.ts --fighters=8 --scoreLimit=2 --timeLimit=120
  */
 import { chromium } from "playwright";
+import type { TeamId } from "../src/game/simulation/Teams";
+import type { MatchStateSnapshot } from "../src/types/global";
 
 const BASE_URL = process.env.VENTO_URL ?? "http://localhost:8084";
 const RESULT_RE = /__DIAGNOSTIC_RESULT__(\{.*?\})__END__/s;
 
-function arg(name, fallback) {
+function arg(name: string, fallback: string): string {
 	const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
-	return hit ? hit.split("=")[1] : fallback;
+	return hit ? (hit.split("=")[1] ?? fallback) : fallback;
 }
 
-const FIGHTERS = Number(arg("fighters", 8));
+const FIGHTERS = Number(arg("fighters", "8"));
 /** Rounds to win. Three is enough to prove the wipe-reset-score loop repeats. */
-const SCORE_LIMIT = Number(arg("scoreLimit", 3));
-const TIME_LIMIT_SEC = Number(arg("timeLimit", 180));
-const DIAG_MS = Number(arg("diagnostic", 12000));
+const SCORE_LIMIT = Number(arg("scoreLimit", "3"));
+const TIME_LIMIT_SEC = Number(arg("timeLimit", "180"));
+const DIAG_MS = Number(arg("diagnostic", "12000"));
 /**
  * `?ultCharge=N` arms everybody from the start. A round lasts seconds and the
  * passive charge takes ~285s, so the bots' ultimate use — the team probe's other
  * new question — is only observable with `--ultCharge=100`.
  */
-const ULT_CHARGE = Math.max(0, Number(arg("ultCharge", 0)) || 0);
+const ULT_CHARGE = Math.max(0, Number(arg("ultCharge", "0")) || 0);
 /** `--botHero=jeffs` pins every bot to the executioner — the smoke support. */
 const BOT_HERO = arg("botHero", "");
 /**
@@ -55,7 +58,7 @@ const BOT_HERO = arg("botHero", "");
  * actually get rather than a stand-in for it. `--freeze=` overrides it, and
  * `--freeze=0` is a legitimate "no countdown" run.
  */
-const FREEZE_SEC = Number(arg("freeze", 4));
+const FREEZE_SEC = Number(arg("freeze", "4"));
 /**
  * Wall-clock budget. The match clock counts *live* time, so freezetime and
  * round cooldowns (4s + 5s per round) and the ultimate's cinematics (1.1s per
@@ -69,7 +72,7 @@ const WALL_CLOCK_MS = (TIME_LIMIT_SEC + 60 + CINEMATIC_OVERHEAD_S) * 1000;
 /** What the server imposes on a team room. Asserted, not requested. */
 const MIN_SCREENS = 3;
 
-function sinkConsole(page, lines = []) {
+function sinkConsole(page: Page, lines: string[] = []): string[] {
 	page.on("console", (msg) => lines.push(msg.text()));
 	page.on("pageerror", (err) => lines.push(`[PAGEERROR] ${err.message}`));
 	return lines;
@@ -86,16 +89,27 @@ async function assertServerUp() {
 	}
 }
 
-async function waitForMatch(page, done, timeoutMs, onSample) {
+/** Match state plus where the local fighter actually is, for the movement checks. */
+type TdmState = MatchStateSnapshot & { playerX: number | null };
+
+async function waitForMatch(
+	page: Page,
+	done: (s: TdmState) => boolean,
+	timeoutMs: number,
+	onSample?: (s: TdmState) => void,
+): Promise<TdmState | null> {
 	const deadline = Date.now() + timeoutMs;
-	let last = null;
+	let last: TdmState | null = null;
 	while (Date.now() < deadline) {
 		// The match state plus where the local fighter actually is: freezetime is a
 		// claim about *movement*, and only the simulation state can answer it.
 		last = await page.evaluate(() => {
 			const m = window.__matchState?.() ?? null;
 			if (!m) return null;
-			return { ...m, playerX: window.__gameState?.().playerPhys.x ?? null };
+			return {
+				...m,
+				playerX: window.__gameState?.()?.playerPhys.x ?? null,
+			};
 		});
 		if (last) onSample?.(last);
 		if (last && done(last)) return last;
@@ -105,15 +119,54 @@ async function waitForMatch(page, done, timeoutMs, onSample) {
 }
 
 /**
+ * The fields of the diagnostic report this probe reads.
+ */
+interface DiagnosticReport {
+	verdict?: string;
+	fpsStats?: { avgFps?: number };
+	jitterSummary?: unknown;
+	reconciliationSummary?: unknown;
+	collisionSummary?: unknown;
+	meleeSummary?: { blocksByFighter?: Record<string, number> };
+	movementSummary?: { doubleJumps?: number };
+	ultimateSummary?: { localCasts?: number };
+	teamSummary?: {
+		team: TeamId;
+		role: "support" | "vanguard" | null;
+		swordFrames: number;
+		gunFrames: number;
+		allyDistancePx: number;
+		ultimate?: { aimStarts?: number };
+	} | null;
+}
+
+/** What the probe watched happen across rounds. */
+interface RoundsObservation {
+	wipes: number;
+	resets: number;
+	cooldowns: number;
+	maxAlive: number;
+	freezes: number;
+	freezeDriftPx: number;
+	seen: Set<number>;
+	frozenRounds: Set<number>;
+}
+
+/**
  * Every check, as data.
  *
  * Split into "must hold" and "must not be zero" for the same reason the melee
  * counters are: a room where nobody fought satisfies every correctness check
  * trivially, and a probe that only reports correctness would call it a pass.
  */
-function assess(state, rounds, lines, diagnostic) {
-	const failures = [];
-	const notes = [];
+function assess(
+	state: TdmState | null,
+	rounds: RoundsObservation,
+	lines: string[],
+	diagnostic: DiagnosticReport | null,
+) {
+	const failures: string[] = [];
+	const notes: string[] = [];
 	if (!state) {
 		return { failures: ["no __matchState() — the client never booted"], notes };
 	}
@@ -146,9 +199,9 @@ function assess(state, rounds, lines, diagnostic) {
 	if (sideless.length > 0) {
 		failures.push(`${sideless.length} fighter(s) have no side`);
 	}
-	if (Math.abs(bySide[0].length - bySide[1].length) > 1) {
+	if (Math.abs(bySide[0]!.length - bySide[1]!.length) > 1) {
 		failures.push(
-			`teams are ${bySide[0].length}v${bySide[1].length} — not balanced`,
+			`teams are ${bySide[0]!.length}v${bySide[1]!.length} — not balanced`,
 		);
 	}
 
@@ -158,9 +211,9 @@ function assess(state, rounds, lines, diagnostic) {
 	// is somebody's frag, and with no friendly fire a side's deaths can only have
 	// been scored by the *other* side — so a side that died more often than its
 	// opponents have frags is a side that killed itself.
-	for (const t of [0, 1]) {
-		const died = bySide[t].reduce((a, s) => a + s.deaths, 0);
-		const scoredAgainst = bySide[1 - t].reduce((a, s) => a + s.kills, 0);
+	for (const t of [0, 1] as const) {
+		const died = bySide[t]!.reduce((a, s) => a + s.deaths, 0);
+		const scoredAgainst = bySide[1 - t]!.reduce((a, s) => a + s.kills, 0);
 		if (died > scoredAgainst) {
 			// Unattributed deaths are legitimate (a hole opened by somebody who left,
 			// a fall), so the failure is only for the surplus that *cannot* be one.
@@ -354,7 +407,7 @@ async function main() {
 
 	// What the probe *watches*, rather than what it is told at the end: a wipe is
 	// a one-tick event and the final scoreboard cannot prove one ever happened.
-	const rounds = {
+	const rounds: RoundsObservation = {
 		wipes: 0,
 		resets: 0,
 		cooldowns: 0,
@@ -368,7 +421,7 @@ async function main() {
 	let wasResetting = false;
 	// The previous sample taken inside a countdown, so movement is measured
 	// between two frozen frames rather than from the reset that started them.
-	let frozenAt = null;
+	let frozenAt: { round: number; freezeMs: number; x: number } | null = null;
 	const final = await waitForMatch(
 		page,
 		(s) => s.phase === "over",
@@ -376,7 +429,7 @@ async function main() {
 		(s) => {
 			const t = s.teams;
 			if (!t) return;
-			rounds.maxAlive = Math.max(rounds.maxAlive, t.alive[0] + t.alive[1]);
+			rounds.maxAlive = Math.max(rounds.maxAlive, t.alive[0]! + t.alive[1]!);
 			if (t.alive[0] === 0 || t.alive[1] === 0) {
 				if (!rounds.seen.has(t.round)) {
 					rounds.seen.add(t.round);
@@ -410,7 +463,7 @@ async function main() {
 					if (same) {
 						rounds.freezeDriftPx = Math.max(
 							rounds.freezeDriftPx,
-							Math.abs(x - frozenAt.x),
+							Math.abs(x - frozenAt!.x),
 						);
 					}
 					frozenAt = { round: t.round, freezeMs: t.freezeMs, x };
@@ -423,7 +476,8 @@ async function main() {
 	await page.waitForTimeout(2000);
 
 	const hit = lines.find((l) => RESULT_RE.test(l));
-	const diagnostic = hit ? JSON.parse(hit.match(RESULT_RE)[1]) : null;
+	const json = hit?.match(RESULT_RE)?.[1];
+	const diagnostic: DiagnosticReport | null = json ? JSON.parse(json) : null;
 
 	const verdict = assess(final, rounds, lines, diagnostic);
 	console.log("\n===== TEAM DEATHMATCH =====");

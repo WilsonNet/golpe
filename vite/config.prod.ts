@@ -4,7 +4,7 @@ import { defineConfig } from "vite";
 export default defineConfig({
 	base: "./",
 	plugins: [react()],
-	logLevel: "warning",
+	logLevel: "warn",
 	resolve: {
 		// Global module state: Pixi's extension registry and React's hook
 		// dispatcher both require exactly one instance.

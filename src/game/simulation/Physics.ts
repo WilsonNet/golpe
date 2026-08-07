@@ -207,7 +207,7 @@ import {
 	BULLET_OOB_MARGIN_PX,
 	BULLET_SPEED,
 	MAX_HP,
-} from "../../../tweakables/combat.js";
+} from "../../tweakables/combat.js";
 import {
 	AIR_ACCEL,
 	AIR_FRICTION,
@@ -234,7 +234,7 @@ import {
 	WALL_JUMP_LOCKOUT,
 	WALL_JUMP_VERTICAL,
 	WALL_SLIDE_SPEED,
-} from "../../../tweakables/movement.js";
+} from "../../tweakables/movement.js";
 import { MS_PER_SECOND } from "./units.js";
 
 export { MS_PER_SECOND } from "./units.js";

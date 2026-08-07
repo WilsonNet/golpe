@@ -4,7 +4,7 @@
  * Every number in here is a *feel* constant, and the whole reason this module is
  * pure is that feel constants nothing pins get retuned by accident. Nothing in
  * the AI vs AI loop can see any of it — the brains hand the simulation an angle
- * and never touch a stick — so these tests and `scripts/pad-probe.mjs` are the
+ * and never touch a stick — so these tests and `scripts/pad-probe.ts` are the
  * only two things that can.
  */
 

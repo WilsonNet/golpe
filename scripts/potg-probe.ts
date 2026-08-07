@@ -19,24 +19,26 @@
  *   - the replay drew fighters rather than an empty arena;
  *   - the podium waited, and then arrived.
  *
- *   node scripts/potg-probe.mjs
- *   node scripts/potg-probe.mjs --fighters=6 --scoreLimit=4
- *   node scripts/potg-probe.mjs --mode=tdm --scoreLimit=1
+ *   tsx scripts/potg-probe.ts
+ *   tsx scripts/potg-probe.ts --fighters=6 --scoreLimit=4
+ *   tsx scripts/potg-probe.ts --mode=tdm --scoreLimit=1
  */
 import { randomUUID } from "node:crypto";
+import type { Page } from "playwright";
 import { chromium } from "playwright";
+import type { MatchStateSnapshot, PotgSnapshot } from "../src/types/global";
 
 const BASE_URL = process.env.VENTO_URL ?? "http://localhost:8084";
 const SERVER_URL = process.env.VENTO_SERVER_URL ?? "http://localhost:9208";
 
-function arg(name, fallback) {
+function arg(name: string, fallback: string): string {
 	const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
-	return hit ? hit.split("=")[1] : fallback;
+	return hit ? (hit.split("=")[1] ?? fallback) : fallback;
 }
 
-const FIGHTERS = Number(arg("fighters", 4));
-const SCORE_LIMIT = Number(arg("scoreLimit", 3));
-const TIME_LIMIT_SEC = Number(arg("timeLimit", 120));
+const FIGHTERS = Number(arg("fighters", "4"));
+const SCORE_LIMIT = Number(arg("scoreLimit", "3"));
+const TIME_LIMIT_SEC = Number(arg("timeLimit", "120"));
 const MODE = arg("mode", "ffa");
 /**
  * Arm everybody, so the reel has an ultimate in it.
@@ -63,7 +65,7 @@ const MOVEMENTS = [
 	"outro",
 ];
 
-function sinkConsole(page, lines = []) {
+function sinkConsole(page: Page, lines: string[] = []): string[] {
 	page.on("console", (msg) => lines.push(msg.text()));
 	page.on("pageerror", (err) => lines.push(`[PAGEERROR] ${err.message}`));
 	return lines;
@@ -78,9 +80,15 @@ async function assertServerUp() {
 	}
 }
 
-async function poll(page, read, done, timeoutMs, everyMs = 200) {
+async function poll<T>(
+	page: Page,
+	read: () => T,
+	done: (value: T) => boolean,
+	timeoutMs: number,
+	everyMs = 200,
+): Promise<T | null> {
 	const deadline = Date.now() + timeoutMs;
-	let last = null;
+	let last: T | null = null;
 	while (Date.now() < deadline) {
 		last = await page.evaluate(read);
 		if (last && done(last)) return last;
@@ -96,10 +104,10 @@ async function poll(page, read, done, timeoutMs, everyMs = 200) {
  * checked only exists *during* the replay: `phase`, `zoom`, `drawn` and the
  * live camera track are all gone the moment it hands the screen back.
  */
-async function watchCeremony(page) {
+async function watchCeremony(page: Page) {
 	const deadline = Date.now() + CEREMONY_TIMEOUT_MS;
-	const phases = [];
-	let best = null;
+	const phases: string[] = [];
+	let best: PotgSnapshot | null = null;
 	let sawActive = false;
 	let minZoom = Number.POSITIVE_INFINITY;
 	let maxZoom = 0;
@@ -148,6 +156,45 @@ async function watchCeremony(page) {
 	};
 }
 
+/** The richest ceremony state `watchCeremony` kept. */
+interface CeremonySeen {
+	best: PotgSnapshot | null;
+	phases: string[];
+	sawActive: boolean;
+	minZoom: number;
+	maxZoom: number;
+	maxDrawn: number;
+	minRate: number;
+	maxCurtain: number;
+	curtainOpened: boolean;
+}
+
+/** What the DOM showed while the ceremony was up. */
+interface HudDuring {
+	podium: boolean;
+	hud: boolean;
+	overlay: boolean;
+	stats: boolean;
+}
+
+/** When the victory card appeared, and how long it stayed. */
+interface VictorySeen {
+	seen: boolean;
+	atMs: number;
+	duringReplay: boolean;
+}
+
+/** The `/potg/<room>` payload, as the client fetches it. */
+interface PotgClip {
+	frames: unknown[];
+	cast: unknown[];
+	beats: unknown[];
+	durationMs: number;
+	actionAtMs: number;
+	protagonist: { name: string } | null;
+	stats: unknown;
+}
+
 function assess({
 	ceremony,
 	clipOverHttp,
@@ -156,9 +203,26 @@ function assess({
 	lines,
 	hudDuring,
 	victory,
+}: {
+	ceremony: CeremonySeen;
+	clipOverHttp: {
+		bytes: number;
+		frames: number;
+		cast: number;
+		beats: number;
+		durationMs: number;
+		actionAtMs: number;
+		protagonist: string;
+		stats: unknown;
+	} | null;
+	final: MatchStateSnapshot | null;
+	podium: boolean | null;
+	lines: string[];
+	hudDuring: HudDuring;
+	victory: VictorySeen;
 }) {
-	const failures = [];
-	const notes = [];
+	const failures: string[] = [];
+	const notes: string[] = [];
 	const {
 		best,
 		phases,
@@ -314,7 +378,7 @@ function assess({
 	if (!announcedStats || typeof announcedStats !== "object") {
 		failures.push("the announcement carried no stat line");
 	} else {
-		for (const key of ["kills", "damage", "denies", "absorbed"]) {
+		for (const key of ["kills", "damage", "denies", "absorbed"] as const) {
 			if (typeof announcedStats[key] !== "number") {
 				failures.push(`the stat line has no ${key}`);
 			}
@@ -395,7 +459,7 @@ async function main() {
 	const seated = await poll(
 		page,
 		() => window.__matchState?.() ?? null,
-		(s) => s.connected && s.fighterCount >= FIGHTERS,
+		(s) => s?.connected === true && s.fighterCount >= FIGHTERS,
 		20000,
 	);
 	console.log(`[PROBE] seated: ${seated?.fighterCount ?? 0} fighters`);
@@ -403,7 +467,7 @@ async function main() {
 	const over = await poll(
 		page,
 		() => window.__matchState?.() ?? null,
-		(s) => s.phase === "over",
+		(s) => s?.phase === "over",
 		MATCH_TIMEOUT_MS,
 		400,
 	);
@@ -452,7 +516,7 @@ async function main() {
 	// The footage, fetched exactly the way the client fetches it.
 	const roomId = over?.roomId ?? room;
 	const raw = await fetch(`${SERVER_URL}/potg/${roomId}`).catch(() => null);
-	const clip = raw?.ok ? await raw.json() : null;
+	const clip: PotgClip | null = raw?.ok ? await raw.json() : null;
 	const clipOverHttp = clip && {
 		bytes: JSON.stringify(clip).length,
 		frames: clip.frames?.length ?? 0,

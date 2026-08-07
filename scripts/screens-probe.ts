@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import type { Page } from "playwright";
 /**
  * Multi-screen smoke probe: the `?screen=N` arena, online.
  *
@@ -13,7 +14,7 @@
  *    the server's `match` message must rebuild it to the room's world.
  *
  * The camera is the point of measuring here: camera scroll is read as a
- * jitter signal by the diagnostic, so `diagnose.mjs --screens=N` proves the
+ * jitter signal by the diagnostic, so `diagnose.ts --screens=N` proves the
  * follow cam never moves fast enough to read as a defect.
  */
 import { chromium } from "playwright";
@@ -22,15 +23,15 @@ const BASE = "http://localhost:8084";
 const ROOM = `screenprobe-${Date.now().toString(36)}`;
 const WIDE_URL = `${BASE}/?online=true&ai=true&room=${ROOM}&screen=3`;
 
-function sink(page) {
-	const errors = [];
+function sink(page: Page) {
+	const errors: string[] = [];
 	page.on("pageerror", (e) => errors.push(e.message));
 	return errors;
 }
 
-async function gameState(page) {
+async function gameState(page: Page) {
 	return page.evaluate(() => {
-		const g = window.__gameState();
+		const g = window.__gameState!();
 		const m = window.__matchState?.();
 		return {
 			screens: g.worldScreens,
@@ -66,17 +67,19 @@ let cameraMoved = false;
 for (let i = 0; i < 12; i++) {
 	samplesA.push(await gameState(a));
 	samplesB.push(await gameState(b));
-	if (samplesA[samplesA.length - 1].cameraX > 5) cameraMoved = true;
+	if (samplesA[samplesA.length - 1]!.cameraX > 5) cameraMoved = true;
 	await a.waitForTimeout(1000);
 }
 
 const xs = [...samplesA.map((s) => s.x), ...samplesB.map((s) => s.x)];
+const firstA = samplesA[0]!;
+const firstB = samplesB[0]!;
 const wide = {
 	errors: [...errorsA, ...errorsB],
-	screens: samplesA[0].screens,
-	width: samplesA[0].width,
-	roomMatch: samplesA[0].roomId === samplesB[0].roomId,
-	fighters: samplesA[0].fighters,
+	screens: firstA.screens,
+	width: firstA.width,
+	roomMatch: firstA.roomId === firstB.roomId,
+	fighters: firstA.fighters,
 	cameraMoved,
 	cameraMin: Math.min(...samplesA.map((s) => s.cameraX)),
 	cameraMax: Math.max(...samplesA.map((s) => s.cameraX)),

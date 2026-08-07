@@ -23,11 +23,11 @@ not see moon-gravity jumps, players walking through walls, an AI wedged in a
 corner, stuttering projectiles, or a sword system whose blocks and parries never
 once happened. Every metric exists because a bug was invisible without it.
 
-**Test online, in AI vs AI.** `node scripts/diagnose.mjs --mode=online --runs=3`
+**Test online, in AI vs AI.** `tsx scripts/diagnose.ts --mode=online --runs=3`
 is the canonical run. An offline PASS proves nothing about prediction,
 reconciliation or projectiles, which is where the real bugs live.
 
-**And test in a room full of AI.** `node scripts/deathmatch-probe.mjs` plays
+**And test in a room full of AI.** `tsx scripts/deathmatch-probe.ts` plays
 sixteen bots to a winner. A duel cannot see what only breaks at scale — snapshot
 size, a quadratic hitbox pass, fighters joining mid-match, or a metric that
 silently assumed there was exactly one opponent.
@@ -41,7 +41,7 @@ skill({ name: "feedback-loop" })    # the full workflow
 | Question | File |
 |---|---|
 | What should the game *do*? | [`specs/`](specs/README.md) — the source of truth |
-| **Where do the balance numbers live?** | [`tweakables/`](tweakables/README.md) — every tuning constant, one folder |
+| **Where do the balance numbers live?** | [`src/tweakables/`](src/tweakables/README.md) — every tuning constant, one folder |
 | Who are the heroes, and how do kits work? | [`specs/heroes.md`](specs/heroes.md) · [`specs/anands.md`](specs/anands.md) |
 | How do heroes interact with each other? | [`specs/interactions.md`](specs/interactions.md) — attributes, statuses, predicates, and the one rule for matchup exceptions |
 | What are items, and how do charges work? | [`specs/items.md`](specs/items.md) |
@@ -185,8 +185,8 @@ One line each; the war story behind every one is in
   straight to predicted state was erased by the next reconciliation.
 - **AI vs AI cannot test aim.** The brains hand the simulation an angle and never
   touch a cursor or a stick, so the mouse must be measured with
-  `scripts/aim-probe.mjs` at `--dpr=2`, and controller mode with
-  `scripts/pad-probe.mjs`.
+  `scripts/aim-probe.ts` at `--dpr=2`, and controller mode with
+  `scripts/pad-probe.ts`.
 - **Every input device speaks one alphabet.** Keys, `Mouse0`, `Pad0`/`PadUp` and
   the on-screen deck are all code strings in one namespace, so an action asks "is
   any of my codes held" once. A device with its own code path is a device that
@@ -229,27 +229,27 @@ npm run dev:herdr:down
 npm run verify           # typecheck (client AND server) + tests + build + dead-code (knip)
 npm run lint             # biome, across src/ server/ scripts/
 npm run knip             # unused exports/files/dependencies — run before believing the tree is lean
-node scripts/diagnose.mjs --mode=online --runs=3       # the feedback loop, in a duel
-node scripts/diagnose.mjs --mode=online --ultCharge=100 # ...and the bots cast their ultimates
-node scripts/deathmatch-probe.mjs                      # sixteen AI fighters, to a winner
-node scripts/tdm-probe.mjs                             # two sides, wipe-out rounds, no friendly fire
-node scripts/tdm-probe.mjs --ultCharge=100             # ...and the teams throw black holes
-node scripts/verify-modes.mjs                          # smoke-check every mode
-node scripts/aim-probe.mjs                             # cursor, facing and shot direction
-node scripts/pad-probe.mjs                             # controller aim, gamepad and the phone deck
-node scripts/training-probe.mjs                        # one interaction, against a scripted dummy
-node scripts/training-probe.mjs --hero=anands          # ...as the dagger (its rows are dagger-only)
-node scripts/menu-probe.mjs                            # the root menu: every click a URL, boots a match
-node scripts/dash-probe.mjs                            # double-tap dash delivery, at a forced frame rate
-node scripts/screens-probe.mjs                         # ?screen=N room: spawn spread + follow camera
-node scripts/ultimate-probe.mjs                        # the black hole: hold to aim, release to cast, freeze, capture
-node scripts/potg-probe.mjs                            # play of the game: the reel, the camera edit, the podium waiting
+tsx scripts/diagnose.ts --mode=online --runs=3       # the feedback loop, in a duel
+tsx scripts/diagnose.ts --mode=online --ultCharge=100 # ...and the bots cast their ultimates
+tsx scripts/deathmatch-probe.ts                      # sixteen AI fighters, to a winner
+tsx scripts/tdm-probe.ts                             # two sides, wipe-out rounds, no friendly fire
+tsx scripts/tdm-probe.ts --ultCharge=100             # ...and the teams throw black holes
+tsx scripts/verify-modes.ts                          # smoke-check every mode
+tsx scripts/aim-probe.ts                             # cursor, facing and shot direction
+tsx scripts/pad-probe.ts                             # controller aim, gamepad and the phone deck
+tsx scripts/training-probe.ts                        # one interaction, against a scripted dummy
+tsx scripts/training-probe.ts --hero=anands          # ...as the dagger (its rows are dagger-only)
+tsx scripts/menu-probe.ts                            # the root menu: every click a URL, boots a match
+tsx scripts/dash-probe.ts                            # double-tap dash delivery, at a forced frame rate
+tsx scripts/screens-probe.ts                         # ?screen=N room: spawn spread + follow camera
+tsx scripts/ultimate-probe.ts                        # the black hole: hold to aim, release to cast, freeze, capture
+tsx scripts/potg-probe.ts                            # play of the game: the reel, the camera edit, the podium waiting
 python3 scripts/make-potg-art.py                       # regenerate the ceremony's sunburst and medal
 python3 scripts/make-anands-art.py                       # compose the second hero's hand-drawn art into the shipped sheets
 python3 scripts/make-roll-art.py                      # regenerate the tumble strip from a hero sheet
 ```
 
-Both `diagnose.mjs` and `deathmatch-probe.mjs` take `--screens=N` to run their
+Both `diagnose.ts` and `deathmatch-probe.ts` take `--screens=N` to run their
 measurement on a wide arena — the follow camera and the wide-world spawns are
 part of what they must prove.
 
@@ -266,7 +266,7 @@ part of what they must prove.
 - **A dev pane that died still holds the port open.** `dev:herdr` polls the port
   and will report `ready :9208` for a server that exited with `EADDRINUSE` behind
   a zombie process — so the room you connect to is running your *previous* code.
-  Read `node scripts/dev-herdr.mjs logs server` before believing a probe that
+  Read `tsx scripts/dev-herdr.ts logs server` before believing a probe that
   suddenly fails everywhere. And **never `pkill -f "tsx server/index.ts"`**: the
   pattern matches the agent's own shell, kills it mid-chain, and silently skips
   every command after it. The client *does* reload,
@@ -309,7 +309,7 @@ player should not have to guess that. Bindings live in
 `ShiftLeft`. A DOM overlay that takes the keyboard must emit `input-suspended`,
 or the canvas keeps playing the game with keys meant for the dialog. Nothing in
 AI vs AI presses a key, so bindings are measured with
-`scripts/controls-probe.mjs`. See [specs/controls.md](specs/controls.md).
+`scripts/controls-probe.ts`. See [specs/controls.md](specs/controls.md).
 
 **Aiming is a scheme, and there are two.** *Mouse* points at a place. *Controller*
 is two layers: the d-pad or left stick gives Contra directions with the
@@ -473,7 +473,7 @@ caption** — the first version faded words in over a playing replay and read as
 a subtitle. The wordmark and the verdict words are generated PNGs, because
 their condensed uppercase face exists on no platform by default.
 `MATCH_OVER_LINGER_MS` is **44s** because the breathing, the card, the ceremony
-and the podium share it. Measured with `scripts/potg-probe.mjs` — no other
+and the podium share it. Measured with `scripts/potg-probe.ts` — no other
 probe can see any of it, because they all stop reading at the frame it begins.
 See [specs/play-of-the-game.md](specs/play-of-the-game.md).
 
