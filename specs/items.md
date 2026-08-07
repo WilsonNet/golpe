@@ -22,8 +22,8 @@ which is the whole difference from the ultimate's hold-to-release cast.
 
 ## Charges
 
-- A fighter is granted the item's full kit (2 grenades, 3 traps) on respawn and
-  on a round reset.
+- A fighter is granted the item's full kit (2 grenades, 3 traps, 2 smoke
+  grenades) on respawn and on a round reset.
 - A use spends one charge. Spent is spent: there is no partial refill and no
   passive gain.
 - **Dying is the price of the next use.** A respawn grants the full kit again —
@@ -88,6 +88,33 @@ either on the floor and armed or it no longer exists.
   feet leave the radius); walking into it does not.
 - Friendly fire: the owner and their teammates never trigger their own traps.
 
+## The smoke grenade (Jeffs)
+
+A thrown canister that pops into a **vision cloud** — the trap's structural
+cousin: a server-placed world object, single-use, travelling in the snapshot in
+full every frame. Where the trap *locks* and the HE *kills*, the smoke *lies*:
+it changes what the enemy is allowed to know. See [jeffs.md](jeffs.md) for the
+full kit; the rules here are the wire and the general item rules.
+
+- **Two per life**, like the HE. The smoke hides — it does not hurt — so it is
+  scarce, and spending one is a decision.
+- **Thrown, then planted.** The canister arcs (700 px/s, gravity 900, 0.4
+  restitution bounces) and blooms into a 150px cloud where its 900ms fuse runs
+  out. The cloud is anchored there for **6.5s** and then dissipates.
+- **Travels like a trap:** full state in the snapshot, both the canisters in
+  flight (dead-reckoned like bullets) and the clouds themselves. There is
+  nothing for the client to predict into `tickPlayer` — the cloud changes no
+  simulation state — so this is pure world state for the renderer.
+- **Per-side drawing is the whole feature.** Your own and your teammates'
+  clouds are drawn nearly transparent; hostile clouds are full-strength. The
+  side test is the one `sameTeam` predicate the trap's friendly-fade uses.
+- **Ally smoke hides the people inside.** A fighter in a cloud belonging to
+  their own side is not drawn to anyone hostile to them — no sprite, no
+  shadow, no nameplate, no health bar. The local fighter always sees themself.
+- **A dead Jeffs' clouds leave the floor with him**, exactly like traps:
+  removed at respawn and at a round reset.
+- The cloud affects vision only. No damage, no collision, no bullet block.
+
 ## The TRAPPED! caption and burst
 
 When a trap springs, the trap **bursts** (a teal particle pop at the victim's
@@ -103,7 +130,11 @@ because the client feeds them into `tickPlayer` for every fighter it predicts.
 A trap in the list is armed; the server removes one the tick it springs, so
 there is no spent state on the wire. HE grenades travel like bullets (position
 + velocity, dead-reckoned by the client through the same bounce the server
-runs). The `trapped` and `explosions` event lists are one-shot effects, drained
+runs). Smoke canisters travel like HE grenades; smoke **clouds** travel in full
+every snapshot too — they are not fed into `tickPlayer` (they change no
+simulation state), but the concealment is re-derived from the list every
+snapshot, so a lost datagram costs a puff at most and never a false clear.
+The `trapped` and `explosions` event lists are one-shot effects, drained
 every snapshot.
 
 ## Bots
@@ -114,10 +145,10 @@ so the finite resource is not dumped in one exchange.
 
 ## Not implemented
 
-- More than two items. The registry (`ITEMS` in `simulation/Items.ts`) is the
-  single place a third is added.
+- More than three items. The registry (`ITEMS` in `simulation/Items.ts`) is the
+  single place a fourth is added.
 - Items in the Play of the Game replay. The recorded frames do not carry the item
-  world state, so a replay draws no traps or grenades — the same scope boundary
-  the black hole's replay used to have.
+  world state, so a replay draws no traps, grenades or smoke — the same scope
+  boundary the black hole's replay used to have.
 - Items in the `?offline=true` escape hatch. There is no server to own the
   charges, so there are no items.

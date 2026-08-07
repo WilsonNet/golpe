@@ -30,7 +30,15 @@ export const HERO_SPRITE_CSS = `
 }
 .hp-sprite-lia { background-image: url("assets/dude.png"); }
 .hp-sprite-anands { background-image: url("assets/anands.png"); }
+.hp-sprite-jeffs { background-image: url("assets/jeffs.png"); }
 `;
+
+/** The ultimate's name per hero, so the card never invents one. */
+const ULT_NAMES: Record<string, string> = {
+	"black-hole": "Black Hole",
+	"dragon-thrust": "Dragon Thrust",
+	"death-blossom": "Death Blossom",
+};
 
 const HERO_CSS = `
 ${HERO_SPRITE_CSS}
@@ -107,7 +115,7 @@ function HeroCard({
 			<div className="hp-kit">
 				<b>{def.melee.label}</b> · <b>{def.ranged.label}</b>
 				<br />
-				Ult — {def.ultimate === "black-hole" ? "Black Hole" : "Dragon Thrust"}
+				Ult — {ULT_NAMES[def.ultimate] ?? "?"}
 			</div>
 			<div className="hp-blurb">{def.blurb}</div>
 		</button>
@@ -143,7 +151,9 @@ export function HeroSelect({
 			<div className="hp-note">
 				{current === "lia"
 					? "The duelist: a guard to read with, a chain to walk, a black hole to earn."
-					: "The storm: no guard at all — stabs, a lunge that knocks down, a dragon."}
+					: current === "anands"
+						? "The storm: no guard at all — stabs, a lunge that knocks down, a dragon."
+						: "The executioner: a one-blast kill at point blank, a smoke to vanish in, a storm."}
 			</div>
 		</>
 	);

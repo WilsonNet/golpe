@@ -28,7 +28,7 @@ interface CastEvent {
 	casterId: string;
 	casterName: string;
 	/** The caster's hero — the portrait card draws their own sheet. */
-	hero: "lia" | "anands";
+	hero: "lia" | "anands" | "jeffs";
 	/** True when this client is the one casting, for the "YOU" marker. */
 	mine: boolean;
 	/** The freeze length the server declared. Drives the timer bar. */
@@ -84,7 +84,8 @@ export function UltimateCinematic() {
 			// streak that can be over in a blink, and a card that lingered a
 			// hundred milliseconds past the freeze would cover the whole payoff.
 			// The black hole keeps a beat of margin — its lob is slow enough to
-			// watch.
+			// watch. The storm keeps a margin too: its 2s channel is worth
+			// seeing land.
 			timer.current = window.setTimeout(
 				clear,
 				Math.max(200, e.durationMs) + (e.hero === "anands" ? 0 : 120),
@@ -150,12 +151,18 @@ export function UltimateCinematic() {
 
 				<div className="vu-ability">
 					<div className="vu-ability-name">
-						{cast.hero === "anands" ? "Dragon Thrust" : "Black Hole"}
+						{cast.hero === "anands"
+							? "Dragon Thrust"
+							: cast.hero === "jeffs"
+								? "Death Blossom"
+								: "Black Hole"}
 					</div>
 					<div className="vu-ability-sub">
 						{cast.hero === "anands"
 							? "Nothing stops a line"
-							: "Gravity has a winner"}
+							: cast.hero === "jeffs"
+								? "The storm is coming"
+								: "Gravity has a winner"}
 					</div>
 				</div>
 

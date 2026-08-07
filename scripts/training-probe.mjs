@@ -811,6 +811,9 @@ const BATTERY = [
 		 * and the deny is recorded. This is the whole "sword defend denies
 		 * ultimates" rule, measured as one interaction.
 		 */
+		// The player casts the *black hole* at a blocking dummy. Jeffs' storm is
+		// not a throw, so a jeffs run cannot measure this row — Lia-only.
+		lia: true,
 		name: "a block denies an ultimate",
 		async run(page) {
 			const running = page.evaluate(() =>
@@ -1210,6 +1213,9 @@ const BATTERY = [
 	// prove nothing.
 
 	{
+		// The player throws the *HE* grenade. Jeffs' item is the smoke, so a
+		// jeffs run cannot measure this row — Lia-only.
+		lia: true,
 		name: "an HE grenade lands and blasts the dummy",
 		scenario: {
 			name: "HE grenade",
@@ -1329,8 +1335,15 @@ async function main() {
 		// The sword rows press buttons that mean different things to the
 		// dagger (attack = stab, not slash), so a dagger run keeps only the
 		// rows that are actually about the dagger, and a sword run drops
-		// those — pressing attack as Lia is a slash, not a stab.
-		(r) => (HERO === "anands" ? r.dagger : !r.dagger),
+		// those — pressing attack as Lia is a slash, not a stab. Jeffs rows
+		// also drop the Lia-only rows (the deny and the HE grenade are her
+		// own ult and item, which a jeffs player cannot perform).
+		(r) =>
+			HERO === "anands"
+				? r.dagger
+				: HERO === "jeffs"
+					? !r.dagger && !r.lia
+					: !r.dagger,
 	);
 	const results = [];
 

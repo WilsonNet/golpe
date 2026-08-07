@@ -63,6 +63,7 @@ import { AimLine } from "./render/AimLine";
 import { bodyCentre, drawArena } from "./render/ArenaRenderer";
 import { heroFrames, TEX, tex } from "./render/assets";
 import { BlackHoleFx } from "./render/BlackHoleFx";
+import { BlossomFx } from "./render/BlossomFx";
 import { DenyFx } from "./render/DenyFx";
 import { DragonFx } from "./render/DragonFx";
 import { ItemFx } from "./render/ItemFx";
@@ -93,6 +94,7 @@ import {
 	isHeroId,
 	kitFor,
 } from "./simulation/Heroes";
+import { smokeHidesFrom } from "./simulation/Items";
 import {
 	applyHitToDefender,
 	applyMeleeResult,
@@ -285,6 +287,7 @@ export class Match {
 	private online: OnlineSession | undefined;
 	private training: TrainingRoom | undefined;
 	private dragonFx!: DragonFx;
+	private blossomFx!: BlossomFx;
 
 	private localBrain: EnemyBrain | undefined;
 	private remoteBrain: EnemyBrain | undefined;
@@ -352,6 +355,10 @@ export class Match {
 		// The dragon rides in the effects layer too: it is a wake that follows
 		// the rider, never a field the arena has to make room for.
 		this.dragonFx = new DragonFx(stage.field, stage.effects);
+		// The Death Blossom: a ring and an area under the fighters (the same
+		// reason the hole's core sits behind them) and the heaviest particle
+		// budget in the game in front of them.
+		this.blossomFx = new BlossomFx(stage.field, stage.effects, stage);
 		this.plates = new Nameplates(stage.nameplates, this.arena);
 		// Between the arena and the fighters: a shadow falls on the ledge below and
 		// is never drawn over the feet that cast it. See `Stage.shadows`.
@@ -850,6 +857,13 @@ export class Match {
 					// it as jitter would report a working ultimate as broken physics.
 					this.diagnostics.markTeleport(TELEPORT_GRACE_FRAMES);
 				},
+				onBlossomOpened: (field) => {
+					// The storm's one-shot: the shockwave and the shake that announce
+					// the freeze's payload. The damage and the ring are full state and
+					// arrive with every snapshot; this is only the loud first beat.
+					this.blossomFx.open(field.x, field.y, field.ownerTeam);
+					this.diagnostics.markTeleport(TELEPORT_GRACE_FRAMES);
+				},
 				onMatch: (status, standings) => {
 					// The clock, the frags and the standings all live in this event;
 					// the React HUD reads them from it. Nothing else needs them.
@@ -1285,6 +1299,12 @@ export class Match {
 		// recorded state, and the systems below draw whichever one wrote last.
 		const shot = this.stepReplay(dtMs);
 
+		// Who the smoke hides, from this viewer's seat — decided before the
+		// presentation systems so they only ever *read* the answer. A replay
+		// draws the clip it recorded and the clip records no smoke, so a
+		// replay never conceals anyone.
+		this.updateSmokeOcclusion();
+
 		// Presentation, in dependency order: animation picks the frame, sync moves
 		// the sprites, effects read the same state, then the camera settles.
 		animationSystem(this.queries, dtMs);
@@ -1357,12 +1377,20 @@ export class Match {
 			// rule the black hole's replay follows, minus the recorded field.
 			this.items.syncHeGrenades([], this.itemClock);
 			this.items.syncTraps([], "", null);
+			this.items.syncSmokeGrenades([], this.itemClock);
+			this.items.syncSmokeClouds([], "", null);
 			this.items.update(dtMs);
 			return;
 		}
 
 		this.items.syncHeGrenades(session.heGrenades, session.renderClock);
 		this.items.syncTraps(session.traps, session.manager.myId, session.myTeam);
+		this.items.syncSmokeGrenades(session.smokeGrenades, session.renderClock);
+		this.items.syncSmokeClouds(
+			session.smokeClouds,
+			session.manager.myId,
+			session.myTeam,
+		);
 		this.items.update(dtMs);
 
 		// The deck's item button carries the charge count, so it is told on the
@@ -1376,6 +1404,52 @@ export class Match {
 
 	/** Last value pushed over `item-charge`, so the deck is told only on a change. */
 	private lastItemCharges = -1;
+
+	/**
+	 * Recompute which fighters this viewer must not see, because they are
+	 * standing in their own side's smoke.
+	 *
+	 * The rule is the simulation's (`smokeHidesFrom` — the fighter must be in
+	 * a cloud that belongs to *their* side, and the viewer must be hostile to
+	 * them) and the answer is presentation only, written onto each fighter
+	 * entity for the systems to read. The local fighter is never hidden, by
+	 * the predicate itself — you always know where you are standing.
+	 *
+	 * Asked against the *drawn* position: the render smoother deliberately
+	 * offsets a sprite from its body, and a concealment that followed the body
+	 * would leave a ghost of the fighter the enemy is not supposed to know is
+	 * there.
+	 */
+	private updateSmokeOcclusion() {
+		const session = this.online;
+		for (const e of this.queries.drawnFighters) {
+			e.fighter.smokeHidden = false;
+		}
+		if (!session || this.potgSample) return;
+		const clouds = session.smokeClouds;
+		if (clouds.length === 0) return;
+		const myId = session.manager.myId;
+		const myTeam = session.myTeam;
+		for (const e of this.queries.drawnFighters) {
+			const at = e.renderPos ?? e.body;
+			for (const cloud of clouds) {
+				if (
+					smokeHidesFrom(
+						cloud,
+						e.fighter.id,
+						e.fighter.team,
+						myId,
+						myTeam,
+						at.x,
+						at.y,
+					)
+				) {
+					e.fighter.smokeHidden = true;
+					break;
+				}
+			}
+		}
+	}
 
 	/** A render clock for the item effects in a replay, where there is no server. */
 	private itemClock = 0;
@@ -1427,9 +1501,17 @@ export class Match {
 
 		// The aim phase: while the ultimate button is held and a cast is legal,
 		// show where the ultimate will go. Lia's is the grenade's arc; Anands'
-		// is the dragon's straight line — the same preview rule, two geometries.
+		// is the dragon's straight line; Jeffs' is the storm's radius — the
+		// same preview rule, three geometries.
 		const at = this.local.renderPos ?? this.local.body;
 		const centre = bodyCentre(at.x, at.y);
+		const ultKind = kitFor(this.hero).ultimate;
+		const aimMode: "arc" | "beam" | "radial" =
+			ultKind === "dragon-thrust"
+				? "beam"
+				: ultKind === "death-blossom"
+					? "radial"
+					: "arc";
 		this.ultAim.update(
 			dtMs,
 			this.ultAimVisible(),
@@ -1437,7 +1519,7 @@ export class Match {
 			centre.y,
 			this.aimAngle,
 			this.arena,
-			kitFor(this.hero).ultimate === "dragon-thrust" ? "beam" : "arc",
+			aimMode,
 		);
 
 		const field: Singularity | null = session.singularity;
@@ -1457,6 +1539,11 @@ export class Match {
 
 		this.blackHole.syncGrenades(session.grenades, dtMs);
 		this.blackHole.update(field, victims, dtMs);
+
+		// The storm: a spinning field of gunfire around whoever is channelling.
+		// The field is the *area* — the caster's own spin is already on their
+		// sprite, drawn by the animation system from `blossomTimer`.
+		this.blossomFx.update(session.blossom, dtMs);
 
 		// The dragon: a serpent behind whoever is riding. The rider's drawn
 		// position is what the trail chases — the same smoothing rule as the
@@ -1496,10 +1583,15 @@ export class Match {
 		// Lia's cast is refused while a hole is open — one black hole per room.
 		// Anands' is not: the hole is the *counter* to the dragon, and a dragon
 		// thrown into one is a dragon about to be caught, which is a real
-		// decision the aim has to be able to show.
+		// decision the aim has to be able to show. The blossom is refused while
+		// a storm is open, exactly like the hole — two storms would argue
+		// about whose radius a fighter inside both is being shredded by.
 		if (kitFor(this.hero).ultimate === "black-hole") {
 			if (session.singularity) return false;
 			if (session.grenades.length > 0) return false;
+		}
+		if (kitFor(this.hero).ultimate === "death-blossom") {
+			if (session.blossom) return false;
 		}
 		if (session.matchStatus?.phase !== "live") return false;
 		if (!this.input.actionDown("ultimate")) return false;
@@ -2420,10 +2512,17 @@ export class Match {
 
 	/**
 	 * The offline foe's hero: the mirror of the local fighter's, so the escape
-	 * hatch exercises both kits without needing a server.
+	 * hatch always pairs two different kits without needing a server. Jeffs'
+	 * mirror is the dagger — a blade against the dagger, a shotgun against
+	 * the stream.
 	 */
 	private foeHero(): HeroId {
-		return this.hero === "anands" ? "lia" : "anands";
+		const mirror: Record<HeroId, HeroId> = {
+			lia: "anands",
+			anands: "lia",
+			jeffs: "anands",
+		};
+		return mirror[this.hero];
 	}
 
 	private handleOfflineAttacks(foe: FighterEntity) {
@@ -2433,7 +2532,8 @@ export class Match {
 
 		// A fighter holds a melee weapon or a ranged one, never both. The rate
 		// and the round are the hero's weapon's, exactly as the server decides
-		// them.
+		// them — a shotgun fans its pellets here the same way the server fans
+		// them, so the escape hatch never becomes a second set of combat rules.
 		if (
 			this.local.body.stance === "gun" &&
 			this.localIntent.attack &&
@@ -2441,7 +2541,7 @@ export class Match {
 		) {
 			this.localAttackAt = now;
 			const c = bodyCentre(this.local.body.x, this.local.body.y);
-			this.bullets.fire(c.x, c.y, this.aimAngle, "player");
+			this.bullets.fireFan(c.x, c.y, this.aimAngle, "player", localKit.ranged);
 			EventBus.emit("bullet-fired");
 		}
 
@@ -2453,7 +2553,13 @@ export class Match {
 		) {
 			this.remoteAttackAt = now;
 			const c = bodyCentre(foe.body.x, foe.body.y);
-			this.bullets.fire(c.x, c.y, this.remoteBrainAim, "enemy");
+			this.bullets.fireFan(
+				c.x,
+				c.y,
+				this.remoteBrainAim,
+				"enemy",
+				foeKit.ranged,
+			);
 			EventBus.emit("bullet-fired");
 		}
 
@@ -2601,6 +2707,7 @@ export class Match {
 		this.bullets.clear();
 		this.fx.reset();
 		this.blackHole.reset();
+		this.blossomFx.reset();
 		this.denyFx.reset();
 		this.trappedFx.reset();
 		this.items.reset();

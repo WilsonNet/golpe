@@ -10,18 +10,19 @@ ultimate is the one thing that is always unique.
 Lia is the first hero and the reference kit: sword + gun + black hole + HE
 grenade. Anands is the second: dagger + machine gun + dragon thrust + trap — see
 [anands.md](anands.md) for her full kit and [items.md](items.md) for the item
-half of the kit.
+half of the kit. Jeffs is the third: sword + shotgun + death blossom + smoke
+grenade — see [jeffs.md](jeffs.md).
 
 ## What a hero is
 
 A hero is defined by four things, and nothing else:
 
-| | Lia | Anands |
-|---|---|---|
-| **Melee weapon** (sword stance) | Sword | Dagger |
-| **Ranged weapon** (gun stance) | Gun | Machine gun |
-| **Ultimate** | Black Hole | Dragon Thrust |
-| **Item** | HE Grenade | Trap |
+| | Lia | Anands | Jeffs |
+|---|---|---|---|
+| **Melee weapon** (sword stance) | Sword | Dagger | Sword |
+| **Ranged weapon** (gun stance) | Gun | Machine gun | Shotgun |
+| **Ultimate** | Black Hole | Dragon Thrust | Death Blossom |
+| **Item** | HE Grenade | Trap | Smoke Grenade |
 
 Everything else a fighter has — movement, jumps, dashes, the stance system,
 the meter economy, hitpoints — is shared code that a hero does not get to
@@ -41,7 +42,7 @@ fighter (like their name), so nothing about it ever has to be replayed.
   for every fighter it predicts and replays. The roster is on a 2s heartbeat;
   a hero that arrived there could not be rolled back with the state that
   depends on it.
-- `?hero=lia|anands` in the URL picks the hero a client boots with. **Per-client,
+- `?hero=lia|anands|jeffs` in the URL picks the hero a client boots with. **Per-client,
   never creator-only** — it is the answer to "who do you want to be", and the
   last person through the door still gets to pick.
 - The Esc menu's *Heroes* item changes the hero mid-match. The request is a
@@ -69,9 +70,9 @@ A kit is:
 interface HeroKit {
   hero: HeroId;
   melee: MeleeWeaponDef;   // which moves, whether block/charge/chain exist
-  ranged: RangedWeaponDef; // cooldown, damage, speed
-  ultimate: UltimateId;    // black-hole | dragon-thrust
-  item: ItemDef;           // he-grenade | trap, and its charge count
+  ranged: RangedWeaponDef; // cooldown, damage, speed, and the shotgun's pellets
+  ultimate: UltimateId;    // black-hole | dragon-thrust | death-blossom
+  item: ItemDef;           // he-grenade | trap | smoke-grenade, and its charge count
 }
 ```
 
@@ -87,7 +88,7 @@ unique (`slash` is the sword's, `stab` is the dagger's), which is what keeps
 - **The root menu** has a *Heroes* row showing the current pick. The choice is
   remembered in `localStorage` (`vento.hero`) and written into every launch URL
   the menu commits, so a menu commit and a boot can never disagree.
-- **The Esc menu** has a *Heroes* item with the same two cards. It changes the
+- **The Esc menu** has a *Heroes* item with the same three cards. It changes the
   fighter mid-match (see above) and updates the remembered preference.
 - A shared room link (`?room=…`) deliberately does **not** carry a hero: a
   joiner plays whoever the menu last picked. Only a boot URL the menu wrote
@@ -99,26 +100,28 @@ unique (`slash` is the sword's, `stab` is the dagger's), which is what keeps
 ## The HUD
 
 The stance badge names the actual weapon — SWORD/GUN for Lia, DAGGER/MACHINE
-GUN for Anands — because the stance is the slot and the hero is the weapon in
-it. The foe panel's plaque adds the foe's hero. The health bar is never tinted,
-whatever the hero. The item's charge pips sit in the bottom-right corner above
-the ultimate meter, so a player reads "how much item do I have left" at a glance.
+GUN for Anands, SWORD/SHOTGUN for Jeffs — because the stance is the slot and
+the hero is the weapon in it. The foe panel's plaque adds the foe's hero. The
+health bar is never tinted, whatever the hero. The item's charge pips sit in
+the bottom-right corner above the ultimate meter, so a player reads "how much
+item do I have left" at a glance.
 
 ## Bots
 
 A bot's hero is **random per bot** by default, so a busy room exercises every
-kit and the AI-vs-AI loop covers both heroes' brains. `?botHero=` (creator-only)
-pins the room's bots to one hero — how a probe measures the dagger at sixteen
-fighters. The bot brain is constructed with its hero, and `EnemyBrain` picks
-its melee module (`MeleeBrain` for the sword, `DaggerBrain` for the dagger),
-its ultimate module (`UltimateBrain` for the hole, `DragonBrain` for the
-thrust) and its item behaviour from it — see [anands.md](anands.md) for the
-dagger's strategies.
+kit and the AI-vs-AI loop covers all three heroes' brains. `?botHero=`
+(creator-only) pins the room's bots to one hero — how a probe measures the
+dagger or the shotgun at sixteen fighters. The bot brain is constructed with
+its hero, and `EnemyBrain` picks its melee module (`MeleeBrain` for the sword,
+`DaggerBrain` for the dagger), its ultimate module (`UltimateBrain` for the
+hole, `DragonBrain` for the thrust, `BlossomBrain` for the storm) and its item
+behaviour from it — see [anands.md](anands.md) for the dagger's strategies and
+[jeffs.md](jeffs.md) for the executioner's.
 
 ## Not implemented
 
-- More than two heroes. The registry (`HEROES` in `simulation/Heroes.ts`) is
-  the single place a third one is added.
+- More than three heroes. The registry (`HEROES` in `simulation/Heroes.ts`) is
+  the single place a fourth is added.
 - Shared heroes with the same ultimate. Ultimates are unique by design.
 - Per-hero body sizes. Every hero collides as 32x48; a different collider is a
   wire and arena change, deliberately out of scope.

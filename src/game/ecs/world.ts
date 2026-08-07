@@ -70,6 +70,14 @@ interface Entity {
 		 * a hero change mid-match swaps the sheet on the next snapshot.
 		 */
 		hero: HeroId;
+		/**
+		 * Is this fighter concealed inside an ally's smoke cloud, as this
+		 * viewer sees it? Presentation-only, recomputed every frame by the
+		 * match from the smoke list: while set, the fighter is not drawn, not
+		 * shadowed and not named — the enemy is not allowed to know who is in
+		 * the smoke. The local fighter is never set.
+		 */
+		smokeHidden?: boolean;
 	};
 
 	/** A server-owned projectile, keyed by the id the server assigned. */

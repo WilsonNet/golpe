@@ -179,6 +179,10 @@ export const ULTIMATE_CSS = `
 .vu-sprite-anands {
 	background-image: url("assets/anands.png");
 }
+/* Jeffs' own sheet, same layout: the executioner's portrait is his own coat. */
+.vu-sprite-jeffs {
+	background-image: url("assets/jeffs.png");
+}
 
 /* The floor the figure stands on: an ellipse of light under the feet. It costs
    one element and it is what stops the character reading as a sticker pasted

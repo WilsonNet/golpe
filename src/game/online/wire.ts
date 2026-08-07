@@ -162,6 +162,8 @@ const NUMBER_FIELDS = [
 	"dragonVY",
 	// The trap's mobility lock, appended for the same reason.
 	"trapTimer",
+	// The Death Blossom channel, appended for the same reason.
+	"blossomTimer",
 ] as const;
 
 const ENUM_FIELDS = ["wallTouch", "stance", "meleeAction"] as const;

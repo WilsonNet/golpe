@@ -110,6 +110,30 @@ describe("hero registry", () => {
 		expect(kit.item.id).toBe("trap");
 	});
 
+	it("Jeffs carries the sword and the shotgun, the storm and the smoke", () => {
+		const kit = kitFor("jeffs");
+		// The blade is the blade: the exact same table Lia's sword stance uses.
+		expect(kit.melee).toBe(MELEE_WEAPONS.sword);
+		expect(kit.ranged).toBe(RANGED_WEAPONS.shotgun);
+		expect(kit.ultimate).toBe("death-blossom");
+		expect(kit.item.id).toBe("smoke-grenade");
+	});
+
+	it("the shotgun is slow, lethal and fanned: a deterministic spread", () => {
+		const shotgun = RANGED_WEAPONS.shotgun;
+		// The delay is the weapon: nearly four pistol shots between blasts.
+		expect(shotgun.cooldownMs).toBeGreaterThan(
+			RANGED_WEAPONS.gun.cooldownMs * 3,
+		);
+		// Point blank is lethal: all six pellets at 17 land 102 — a full bar.
+		expect(shotgun.pellets).toBe(6);
+		expect((shotgun.pellets ?? 1) * shotgun.damage).toBeGreaterThanOrEqual(100);
+		// A pellet is a fast round — the fan must arrive before it drifts off.
+		expect(shotgun.speed).toBeGreaterThan(RANGED_WEAPONS.gun.speed);
+		// The cone is fixed at the muzzle: no randomness to desync over.
+		expect(shotgun.spreadDeg).toBeGreaterThan(0);
+	});
+
 	it("the machine gun fires faster than the pistol and hits weaker", () => {
 		expect(RANGED_WEAPONS.machinegun.cooldownMs).toBeLessThan(
 			RANGED_WEAPONS.gun.cooldownMs,

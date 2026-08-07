@@ -77,16 +77,22 @@ import {
 	addCharge,
 	applyHitToDefender,
 	applyMeleeResult,
+	BLOSSOM_DURATION_MS,
+	BLOSSOM_TICK_DAMAGE,
+	BLOSSOM_TICK_MS,
+	type Blossom,
 	BULLET_DAMAGE,
 	type BulletState,
 	blocksBullet,
 	blocksUltimate,
+	blossomSweeps,
 	bodyRect,
 	bombBlastFor,
 	bombFallHeight,
 	bulletHitsPlatform,
 	bulletHitsPlayer,
 	canFire,
+	clampSmokePoint,
 	createPlayerState,
 	DEFAULT_HERO,
 	DRAGON_DAMAGE,
@@ -117,6 +123,7 @@ import {
 	kitFor,
 	launchGrenade,
 	launchHeGrenade,
+	launchSmokeGrenade,
 	MASSIVE_BLAST_DAMAGE,
 	MASSIVE_BLAST_KNOCKBACK_PX_S,
 	MASSIVE_BLAST_RADIUS_PX,
@@ -138,7 +145,11 @@ import {
 	SINGULARITY_DURATION_MS,
 	SINGULARITY_TICK_DAMAGE,
 	type Singularity,
+	SMOKE_DURATION_MS,
+	type SmokeCloud,
+	type SmokeGrenadeState,
 	singularityGrip,
+	smokeGrenadeEnd,
 	sweptThrustBox,
 	TRAP_DAMAGE,
 	type Trap,
@@ -146,6 +157,7 @@ import {
 	tickGrenade,
 	tickHeGrenade,
 	tickPlayer,
+	tickSmokeGrenade,
 	trapCatches,
 	trapFor,
 	ULT_CHARGE_MELEE_MULTIPLIER,
@@ -504,10 +516,29 @@ export class GameRoom {
 	 * dragon is coming, and only then does the rider become cargo on the line.
 	 */
 	private pendingDragon: { ownerId: string; angle: number } | null = null;
+	/**
+	 * The storm waiting on the far side of the cinematic, exactly like the
+	 * other two. The blossom is launched when the freeze *ends*: the room is
+	 * told a Death Blossom is coming, and only then does the caster start
+	 * spinning. There is no angle — the storm is radial, so only the caster
+	 * rides the pending state.
+	 */
+	private pendingBlossom: { ownerId: string } | null = null;
 	private grenades: GrenadeState[] = [];
 	private singularity: Singularity | null = null;
 	/** ms since the open singularity last dealt damage. */
 	private singularityDamageAcc = 0;
+	/**
+	 * The open Death Blossom, or null. One storm at a time, like one hole.
+	 *
+	 * The caster's own channel lives in their `PlayerPosition.blossomTimer`
+	 * (both sides tick it); this is the *area* — what the server damages
+	 * against and what the clients draw. It ends when its timer runs out, or
+	 * the instant the caster dies or is knocked down.
+	 */
+	private blossom: Blossom | null = null;
+	/** ms since the open storm last dealt damage. */
+	private blossomDamageAcc = 0;
 	private nextUltId = 0;
 
 	// ---- items ----
@@ -515,11 +546,16 @@ export class GameRoom {
 	// Owned here for the same reason the ultimate is: only the server may decide
 	// that an item was used, and only the server may decide when a trap has
 	// caught somebody. Traps are world state (like the singularity) because the
-	// client predicts their effect through `tickPlayer`; HE grenades are
-	// server-owned projectiles (like bullets) because a throw is a one-shot the
-	// client can never see coming before the snapshot does.
+	// client predicts their effect through `tickPlayer`; HE grenades and smoke
+	// canisters are server-owned projectiles (like bullets) because a throw is a
+	// one-shot the client can never see coming before the snapshot does. Smoke
+	// clouds are world state like traps — not fed into `tickPlayer` (they change
+	// no simulation state), but the concealment is re-derived from the list
+	// every snapshot.
 	private traps: Trap[] = [];
 	private heGrenades: HeGrenadeState[] = [];
+	private smokeGrenades: SmokeGrenadeState[] = [];
+	private smokeClouds: SmokeCloud[] = [];
 	private nextItemId = 0;
 	/** HE blasts since the last broadcast, for the client's explosion effects. */
 	private explosions: ExplosionMsg[] = [];
@@ -1606,6 +1642,13 @@ export class GameRoom {
 		player.itemCharges = kitFor(player.hero).item.maxCharges;
 		player.itemHeld = false;
 		this.traps = this.traps.filter((t) => t.ownerId !== player.id);
+		// The dead fighter's clouds leave the floor with them, exactly like
+		// their traps: a respawn is a new life, and a new life does not stack
+		// yesterday's concealment on top of today's two charges.
+		this.smokeClouds = this.smokeClouds.filter((c) => c.ownerId !== player.id);
+		// A dead blossom caster is not a spinning one: the storm leaves with
+		// whoever was spinning, whether they respawn or stay dead.
+		if (this.blossom?.ownerId === player.id) this.blossom = null;
 		// The reel's burst buckets, though, are a life's worth of pressure: a
 		// play is a run of moments, and the moment ended at death.
 		player.potgBurst = { damage: 0, absorbed: 0 };
@@ -1908,6 +1951,7 @@ export class GameRoom {
 				y: b.y,
 				vx: b.vx,
 				vy: b.vy,
+				pellet: b.pellet ?? false,
 			})),
 			melee: this.meleeEvents.slice(),
 			denies: this.denies.slice(),
@@ -1925,6 +1969,10 @@ export class GameRoom {
 			// client feeds into `tickPlayer`, so a lost datagram must never be able to
 			// leave one pulling fighters into a hole that has closed.
 			singularity: this.singularity ? { ...this.singularity } : null,
+			// The storm, in full for the same reason: the renderer draws the ring
+			// from this and the channel (which the client already predicts) agrees
+			// with it.
+			blossom: this.blossom ? { ...this.blossom } : null,
 			cinematic,
 			// Traps are fed into `tickPlayer` the same way the singularity is, so
 			// they travel in full every snapshot too.
@@ -1938,6 +1986,18 @@ export class GameRoom {
 				vx: g.vx,
 				vy: g.vy,
 			})),
+			// Smoke canisters dead-reckon like bullets; the clouds travel in full
+			// every snapshot because the concealment is re-derived from the list.
+			smokeGrenades: this.smokeGrenades.map((g) => ({
+				id: g.id,
+				ownerId: g.ownerId,
+				ownerTeam: g.ownerTeam,
+				x: g.x,
+				y: g.y,
+				vx: g.vx,
+				vy: g.vy,
+			})),
+			smokeClouds: this.smokeClouds.map((c) => ({ ...c })),
 			// One-shot effects, drained every snapshot like `melee` and `denies`.
 			explosions: this.explosions.slice(),
 			trapped: this.trappedEvents.slice(),
@@ -2110,15 +2170,30 @@ export class GameRoom {
 				canFire(player.lastAttackTime, now, kit.ranged.cooldownMs)
 			) {
 				player.lastAttackTime = now;
-				player.stats.bulletsFired++;
-				this.bullets.push({
-					id: this.nextBulletId++,
-					ownerId: player.id,
-					x: player.state.x + PLAYER_WIDTH / 2,
-					y: player.state.y + PLAYER_HEIGHT / 2,
-					vx: Math.cos(input.aimAngle) * kit.ranged.speed,
-					vy: Math.sin(input.aimAngle) * kit.ranged.speed,
-				});
+				const muzzleX = player.state.x + PLAYER_WIDTH / 2;
+				const muzzleY = player.state.y + PLAYER_HEIGHT / 2;
+				// A shotgun fires a deterministic fan of pellets: fixed angles at
+				// even steps across the cone, so both sides always spawn the same
+				// pattern from the same aim. The fan is what makes the weapon's
+				// range — the cone is fixed at the muzzle, so distance *is* the
+				// miss. A weapon with no fan fires one ordinary shot.
+				const pellets = kit.ranged.pellets ?? 1;
+				const halfSpread = ((kit.ranged.spreadDeg ?? 0) * Math.PI) / 180;
+				const step = pellets > 1 ? (halfSpread * 2) / (pellets - 1) : 0;
+				for (let i = 0; i < pellets; i++) {
+					const angle =
+						input.aimAngle + (pellets > 1 ? -halfSpread + step * i : 0);
+					this.bullets.push({
+						id: this.nextBulletId++,
+						ownerId: player.id,
+						x: muzzleX,
+						y: muzzleY,
+						vx: Math.cos(angle) * kit.ranged.speed,
+						vy: Math.sin(angle) * kit.ranged.speed,
+						pellet: pellets > 1,
+					});
+				}
+				player.stats.bulletsFired += pellets;
 			}
 		}
 
@@ -2136,6 +2211,7 @@ export class GameRoom {
 		this.resolveDragonHits();
 		this.tickBullets(dt);
 		this.tickUltimate(dt);
+		this.tickBlossom(dt);
 		this.tickItems(dt);
 		this.applyTrainingRules(dt);
 
@@ -2595,6 +2671,7 @@ export class GameRoom {
 		this.cinematic = null;
 		this.releasePendingThrow();
 		this.releasePendingDragon();
+		this.releasePendingBlossom();
 		return true;
 	}
 
@@ -2625,8 +2702,19 @@ export class GameRoom {
 		// The dragon is a fast streak, not a field — a dragon can be cast into
 		// an open hole (the hole is its one counter), so the singularity check
 		// belongs to the black hole only.
-		if (this.cinematic || this.pendingThrow || this.pendingDragon) return;
+		if (
+			this.cinematic ||
+			this.pendingThrow ||
+			this.pendingDragon ||
+			this.pendingBlossom
+		)
+			return;
 		if (kitFor(player.hero).ultimate === "black-hole" && this.singularity) {
+			return;
+		}
+		// One storm at a time, like one hole: two blossoms would argue about
+		// whose radius a fighter inside both is being shredded by.
+		if (kitFor(player.hero).ultimate === "death-blossom" && this.blossom) {
 			return;
 		}
 
@@ -2659,6 +2747,16 @@ export class GameRoom {
 				angle: player.ultAimAngle,
 			};
 			console.log(`[ULT] ${player.name} casts Dragon Thrust`);
+			return;
+		}
+
+		if (kitFor(player.hero).ultimate === "death-blossom") {
+			// Jeffs' ultimate: the same freeze, then the release *is* the
+			// storm. The caster's channel (`blossomTimer`) is set on release in
+			// shared state both sides tick; the area field the server damages
+			// against is opened here and closed in `tickBlossom`.
+			this.pendingBlossom = { ownerId: player.id };
+			console.log(`[ULT] ${player.name} casts Death Blossom`);
 			return;
 		}
 
@@ -2712,6 +2810,35 @@ export class GameRoom {
 	}
 
 	/**
+	 * The freeze is over: start the storm the caster paid for.
+	 *
+	 * The channel is shared state — `blossomTimer` in the caster's
+	 * `PlayerPosition`, ticked identically by every client — and this field is
+	 * the area the server damages against and the clients draw. The caster's
+	 * position at release is the storm's centre for its whole life.
+	 */
+	private releasePendingBlossom() {
+		const b = this.pendingBlossom;
+		this.pendingBlossom = null;
+		if (!b) return;
+		const caster = this.players.get(b.ownerId);
+		if (!caster?.alive) return;
+		caster.state.blossomTimer = BLOSSOM_DURATION_MS;
+		this.blossom = {
+			id: this.nextUltId++,
+			ownerId: caster.id,
+			ownerTeam: caster.team,
+			x: caster.state.x + PLAYER_WIDTH / 2,
+			y: caster.state.y + PLAYER_HEIGHT / 2,
+			remainingMs: BLOSSOM_DURATION_MS,
+		};
+		this.blossomDamageAcc = 0;
+		console.log(
+			`[ULT] blossom ${this.blossom.id} at ${Math.round(this.blossom.x)},${Math.round(this.blossom.y)}`,
+		);
+	}
+
+	/**
 	 * Try to use the item, on the press of the item button. Silently refused
 	 * when the conditions are not met, exactly like `tryCastUltimate` — every
 	 * refusal is a state the player can already see.
@@ -2745,6 +2872,23 @@ export class GameRoom {
 			return;
 		}
 
+		// The smoke canister arcs like the HE and blooms where its fuse ends.
+		// Unlike the HE it never detonates on a fighter or on geometry — the
+		// throw is a lob, the fuse is the bloom, and the cloud does the work.
+		if (item.id === "smoke-grenade") {
+			this.smokeGrenades.push(
+				launchSmokeGrenade(
+					this.nextItemId++,
+					player.id,
+					player.state.x + PLAYER_WIDTH / 2,
+					player.state.y + PLAYER_HEIGHT / 2,
+					player.lastInput.aimAngle,
+					player.team,
+				),
+			);
+			return;
+		}
+
 		// The trap is left on the floor right in front of the fighter. It needs
 		// a floor under the feet to mean anything, so an airborne placement is
 		// refused (the charge is returned).
@@ -2764,9 +2908,11 @@ export class GameRoom {
 		);
 	}
 
-	/** Advance HE grenades and the traps. */
+	/** Advance HE grenades, smoke canisters, the clouds and the traps. */
 	private tickItems(dt: number) {
 		this.tickHeGrenades(dt);
+		this.tickSmokeGrenades(dt);
+		this.tickSmokeClouds(dt);
 		this.tickTraps();
 	}
 
@@ -2828,6 +2974,109 @@ export class GameRoom {
 			// The HE feeds the meter like a bullet: it is an ordinary weapon, not
 			// an ultimate, and the Overwatch economy pays for participation.
 			this.damage(player, damage, g.ownerId, true, "bullet");
+		}
+	}
+
+	/**
+	 * Advance the smoke canisters in flight. The canister never detonates — it
+	 * bounces until its fuse runs out, and then it **blooms**: a cloud is
+	 * anchored at wherever it is, clamped into the arena.
+	 */
+	private tickSmokeGrenades(dt: number) {
+		if (this.smokeGrenades.length === 0) return;
+
+		let kept = 0;
+		for (const g of this.smokeGrenades) {
+			tickSmokeGrenade(g, dt, this.world);
+			if (!smokeGrenadeEnd(g)) {
+				this.smokeGrenades[kept++] = g;
+				continue;
+			}
+			const point = clampSmokePoint(g.x, g.y, this.world);
+			this.smokeClouds.push({
+				id: g.id,
+				ownerId: g.ownerId,
+				ownerTeam: g.ownerTeam,
+				x: point.x,
+				y: point.y,
+				remainingMs: SMOKE_DURATION_MS,
+			});
+			console.log(
+				`[ITEM] smoke ${g.id} blooms at ${Math.round(point.x)},${Math.round(point.y)}`,
+			);
+		}
+		this.smokeGrenades.length = kept;
+	}
+
+	/**
+	 * Count the clouds down. A cloud affects vision only — nothing here is fed
+	 * into any `tickPlayer` — so its whole server life is a timer and a place.
+	 * A cloud is never consumed by a fighter standing in it; it expires when
+	 * its clock runs out, or when its owner leaves the match.
+	 */
+	private tickSmokeClouds(dt: number) {
+		if (this.smokeClouds.length === 0) return;
+		let kept = 0;
+		for (const c of this.smokeClouds) {
+			c.remainingMs -= dt * MS_PER_SECOND;
+			if (c.remainingMs > 0 && this.players.has(c.ownerId)) {
+				this.smokeClouds[kept++] = c;
+			}
+		}
+		this.smokeClouds.length = kept;
+	}
+
+	/**
+	 * The storm: count it down, and every `BLOSSOM_TICK_MS` deal the interval
+	 * damage to every hostile fighter inside the ring with line of sight.
+	 *
+	 * The caster's own channel lives in their `PlayerPosition.blossomTimer`,
+	 * which both sides tick — so the *area* can trust it: when that timer hits
+	 * zero (a knockdown — the one interrupt), the field is over on the same
+	 * tick every client predicted. Death ends it too: a dead caster is not a
+	 * spinning one, and their storm leaves with them.
+	 */
+	private tickBlossom(dt: number) {
+		const field = this.blossom;
+		if (!field) return;
+
+		const caster = this.players.get(field.ownerId);
+		if (!caster?.alive || caster.state.blossomTimer <= 0) {
+			this.blossom = null;
+			return;
+		}
+
+		field.remainingMs -= dt * MS_PER_SECOND;
+		if (field.remainingMs <= 0) {
+			this.blossom = null;
+			return;
+		}
+
+		this.blossomDamageAcc += dt * MS_PER_SECOND;
+		if (this.blossomDamageAcc < BLOSSOM_TICK_MS) return;
+		this.blossomDamageAcc -= BLOSSOM_TICK_MS;
+
+		for (const player of this.players.values()) {
+			if (!player.alive) continue;
+			// The friendly-fire rule and the "is it in the ring with a
+			// corridor" test both come from the shared module, so the damage
+			// can never disagree with the ring the client predicted.
+			if (
+				!blossomSweeps(
+					field,
+					player.id,
+					player.team,
+					player.state.x,
+					player.state.y,
+					this.world,
+				)
+			) {
+				continue;
+			}
+			// The storm feeds nobody — `paysCharge: false` skips the caster's
+			// charge and marks the kill credit non-paying too, exactly like the
+			// hole.
+			this.damage(player, BLOSSOM_TICK_DAMAGE, field.ownerId, false);
 		}
 	}
 
@@ -3080,6 +3329,8 @@ export class GameRoom {
 		this.denies.length = 0;
 		this.traps = [];
 		this.heGrenades.length = 0;
+		this.smokeGrenades.length = 0;
+		this.smokeClouds.length = 0;
 		this.explosions.length = 0;
 		this.trappedEvents.length = 0;
 		this.resetTimer = -1;
@@ -3091,9 +3342,12 @@ export class GameRoom {
 		// reset should not confiscate an ult somebody spent two minutes earning.
 		this.grenades.length = 0;
 		this.singularity = null;
+		this.blossom = null;
+		this.blossomDamageAcc = 0;
 		this.cinematic = null;
 		this.pendingThrow = null;
 		this.pendingDragon = null;
+		this.pendingBlossom = null;
 		this.cinematicGraceMs = 0;
 
 		// Tell clients explicitly. A respawn is a legitimate discontinuity, and

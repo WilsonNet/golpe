@@ -27,6 +27,7 @@ import {
 	GRENADE_GRAVITY,
 	GRENADE_SPEED,
 } from "../simulation/Physics";
+import { BLOSSOM_RADIUS_PX } from "../simulation/Ultimate";
 
 /**
  * The ability's grenade violet, so the preview is recognisably *its* arc —
@@ -52,7 +53,7 @@ interface TraceKey {
 	x: number;
 	y: number;
 	angle: number;
-	mode: "arc" | "beam";
+	mode: "arc" | "beam" | "radial";
 }
 
 export class UltAimLine {
@@ -78,10 +79,11 @@ export class UltAimLine {
 	 * fighter rather than from the floor.
 	 */
 	/**
-	 * The shape of the preview: the grenade's arc, or the dragon's straight
-	 * line. Same contract, two geometries — the ability being aimed decides
-	 * which, and the preview must show the *actual* path: a dragon aimed like
-	 * a grenade would be a dragon aimed wrong.
+	 * The shape of the preview: the grenade's arc, the dragon's straight
+	 * line, or the blossom's ring. Same contract, three geometries — the
+	 * ability being aimed decides which, and the preview must show the
+	 * *actual* path: a dragon aimed like a grenade would be a dragon aimed
+	 * wrong, and a storm's radius is the one thing worth showing about it.
 	 */
 	update(
 		dtMs: number,
@@ -90,7 +92,7 @@ export class UltAimLine {
 		centreY: number,
 		angle: number,
 		world: World,
-		mode: "arc" | "beam" = "arc",
+		mode: "arc" | "beam" | "radial" = "arc",
 	) {
 		const target = visible ? MAX_ALPHA : 0;
 		// Faded rather than toggled: coming out of the aim hold, or dying and
@@ -115,10 +117,21 @@ export class UltAimLine {
 		const dots =
 			mode === "beam"
 				? traceBeam(centreX, centreY, angle, world)
-				: traceArc(centreX, centreY, angle, world);
+				: mode === "radial"
+					? traceRing(centreX, centreY)
+					: traceArc(centreX, centreY, angle, world);
 		const landing = dots[dots.length - 1];
 
 		this.gfx.clear();
+		if (mode === "radial") {
+			// A ring, not a dot trail: the storm has no landing dot. Drawn as
+			// small dots around the circle so it shares the arc's visual voice
+			// (and the same fade) instead of becoming a second iconography.
+			for (const p of dots) {
+				this.gfx.circle(p.x, p.y, DOT_RADIUS).fill({ color: VIOLET });
+			}
+			return;
+		}
 		for (const p of dots) {
 			this.gfx.circle(p.x, p.y, DOT_RADIUS).fill({ color: VIOLET });
 		}
@@ -179,6 +192,28 @@ function traceArc(
 		if (pointInAnyPlatform(x, y, world)) break;
 	}
 	return points;
+}
+
+/**
+ * The storm's ring: the blast radius as a circle of dots around the caster.
+ *
+ * The radius is the one piece of information a radial ultimate has to give —
+ * "whoever stands in this circle, when the button comes up, is in the storm"
+ * — so this traces exactly `BLOSSOM_RADIUS_PX`, the number the simulation
+ * damages against. The dots are spaced a couple of body-widths apart; dense
+ * enough to read as a circle, sparse enough to see the fighters through.
+ */
+function traceRing(cx: number, cy: number): { x: number; y: number }[] {
+	const dots: { x: number; y: number }[] = [];
+	const count = 40;
+	for (let i = 0; i < count; i++) {
+		const a = (i / count) * Math.PI * 2;
+		dots.push({
+			x: cx + Math.cos(a) * BLOSSOM_RADIUS_PX,
+			y: cy + Math.sin(a) * BLOSSOM_RADIUS_PX,
+		});
+	}
+	return dots;
 }
 
 /**

@@ -15,6 +15,7 @@ import {
 import { type HeroId, kitFor } from "../simulation/Heroes";
 import { type Trap, trapFor } from "../simulation/Items";
 import {
+	type Blossom,
 	fieldFor,
 	isBulletOutOfBounds,
 	MAX_HP,
@@ -54,6 +55,8 @@ import type {
 	SnapshotGrenade,
 	SnapshotHeGrenade,
 	SnapshotPlayer,
+	SnapshotSmokeCloud,
+	SnapshotSmokeGrenade,
 	SnapshotTrap,
 	TrappedMsg,
 } from "./types";
@@ -159,6 +162,8 @@ export interface OnlineCallbacks {
 	onUltimateCast: (casterId: string) => void;
 	/** A grenade collapsed. Position and owner of the new hole, for effects. */
 	onSingularityOpened: (field: Singularity) => void;
+	/** A storm opened. Position and owner of the new blossom, for effects. */
+	onBlossomOpened: (field: Blossom) => void;
 	/** The match clock, scores or phase changed. */
 	onMatch: (status: MatchStatus, standings: Standing[]) => void;
 	/** The match ended. Final standings, sent once. */
@@ -258,6 +263,11 @@ export class OnlineSession {
 	/** The room's traps and HE grenades, as the newest snapshot reports them. */
 	private latestTraps: SnapshotTrap[] = [];
 	private latestHeGrenades: SnapshotHeGrenade[] = [];
+	/** Jeffs' smoke canisters and clouds, as the newest snapshot reports them. */
+	private latestSmokeGrenades: SnapshotSmokeGrenade[] = [];
+	private latestSmokeClouds: SnapshotSmokeCloud[] = [];
+	/** The open Death Blossom, copied from the newest snapshot. */
+	private latestBlossom: Blossom | null = null;
 	private _matchStatus: MatchStatus | undefined;
 	private _matched = false;
 
@@ -276,6 +286,8 @@ export class OnlineSession {
 	private field: Singularity | null = null;
 	/** Ids of holes already announced, so the detonation FX fires exactly once. */
 	private seenSingularities = new Set<number>();
+	/** Ids of storms already announced, so the bloom FX fires exactly once. */
+	private seenBlossoms = new Set<number>();
 	/**
 	 * The cast currently freezing the room, or null.
 	 *
@@ -450,6 +462,21 @@ export class OnlineSession {
 	/** HE grenades in flight, straight off the newest snapshot. */
 	get heGrenades(): readonly SnapshotHeGrenade[] {
 		return this.latestHeGrenades;
+	}
+
+	/** Smoke canisters in flight, straight off the newest snapshot. */
+	get smokeGrenades(): readonly SnapshotSmokeGrenade[] {
+		return this.latestSmokeGrenades;
+	}
+
+	/** Smoke clouds, straight off the newest snapshot. */
+	get smokeClouds(): readonly SnapshotSmokeCloud[] {
+		return this.latestSmokeClouds;
+	}
+
+	/** The open Death Blossom, or null. Read by the renderer; owned by the server. */
+	get blossom(): Blossom | null {
+		return this.latestBlossom;
 	}
 
 	nameOf(id: string): string {
@@ -898,6 +925,12 @@ export class OnlineSession {
 			// information to lose. Set on every frame rather than at acquisition
 			// because the pool hands the same sprite to a different owner's bullet.
 			sprite.tint = teamTint(0xffffff, this.teamOf(b.ownerId), TINT.full);
+			// A shotgun pellet is a smaller, dimmer round — the fan reads as six
+			// distinct shots rather than one blobby bullet, and the size is the
+			// range cue: the farther they drift apart, the smaller each one is.
+			// Set every frame, like the tint, because the pool recycles sprites.
+			sprite.scale.set(b.pellet ? 0.55 : 1);
+			sprite.alpha = b.pellet ? 0.9 : 1;
 			sprite.position.set(x, y);
 			this.renderedBullets.push({ id: b.id, x, y });
 		}
@@ -1064,21 +1097,35 @@ export class OnlineSession {
 		const field = snap.singularity ?? null;
 		if (field === null) {
 			this.field = null;
+		} else {
+			// Copied, never aliased into the snapshot: `fixedStep` decays `remainingMs`
+			// in place between snapshots, and mutating the snapshot object would make
+			// every later read of it disagree with what actually arrived.
+			this.field = { ...field };
+			if (!this.seenSingularities.has(field.id)) {
+				this.seenSingularities.add(field.id);
+				// Bounded: ids only ever grow, and a match that ran for hours would
+				// otherwise keep every one of them.
+				if (this.seenSingularities.size > MAX_SEEN_SINGULARITIES) {
+					const oldest = this.seenSingularities.values().next().value;
+					if (oldest !== undefined) this.seenSingularities.delete(oldest);
+				}
+				this.callbacks.onSingularityOpened(this.field);
+			}
+		}
+
+		// The storm, adopted the same way: full state, edge-detected open. The
+		// caster's channel already travels in their packed state, so this is the
+		// *area* — the one-shot announces it for the effects layer.
+		const blossom = snap.blossom ?? null;
+		if (blossom === null) {
+			this.latestBlossom = null;
 			return;
 		}
-		// Copied, never aliased into the snapshot: `fixedStep` decays `remainingMs`
-		// in place between snapshots, and mutating the snapshot object would make
-		// every later read of it disagree with what actually arrived.
-		this.field = { ...field };
-		if (!this.seenSingularities.has(field.id)) {
-			this.seenSingularities.add(field.id);
-			// Bounded: ids only ever grow, and a match that ran for hours would
-			// otherwise keep every one of them.
-			if (this.seenSingularities.size > MAX_SEEN_SINGULARITIES) {
-				const oldest = this.seenSingularities.values().next().value;
-				if (oldest !== undefined) this.seenSingularities.delete(oldest);
-			}
-			this.callbacks.onSingularityOpened(this.field);
+		this.latestBlossom = { ...blossom };
+		if (!this.seenBlossoms.has(blossom.id)) {
+			this.seenBlossoms.add(blossom.id);
+			this.callbacks.onBlossomOpened(this.latestBlossom);
 		}
 	}
 
@@ -1095,6 +1142,10 @@ export class OnlineSession {
 	private absorbItems(snap: GameSnapshot) {
 		this.latestTraps = (snap.traps ?? []).map((t) => ({ ...t }));
 		this.latestHeGrenades = (snap.heGrenades ?? []).map((g) => ({ ...g }));
+		this.latestSmokeGrenades = (snap.smokeGrenades ?? []).map((g) => ({
+			...g,
+		}));
+		this.latestSmokeClouds = (snap.smokeClouds ?? []).map((c) => ({ ...c }));
 	}
 
 	/** Fold the authoritative local state in, and report how far ahead we are. */

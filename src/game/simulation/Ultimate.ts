@@ -18,6 +18,7 @@
  */
 
 import {
+	hasLineOfSight,
 	PLAYER_HEIGHT,
 	PLAYER_WIDTH,
 	pointInAnyPlatform,
@@ -534,3 +535,114 @@ export function dragonSweptRect(s: {
 		h: Math.abs(travelledY) + PLAYER_HEIGHT,
 	};
 }
+
+// ---------------------------------------------------------------------------
+// The Death Blossom (Jeffs' ultimate)
+//
+// The black hole is a *throw*, the dragon is a *ride*, and the blossom is a
+// *storm*: the caster stands (and walks, slowly) and the world around them
+// takes gunfire. Where the hole pulls and the dragon sweeps, the blossom
+// *holds a circle* — the counterplay is distance and the knockdown, exactly
+// as it is for Reaper. See specs/jeffs.md.
+// ---------------------------------------------------------------------------
+
+/**
+ * How long the caster spins. Two seconds is a commitment you can feel — long
+ * enough that the storm is a room-scale threat, short enough that a fight
+ * that was happening when it started is still the same fight when it ends.
+ */
+export const BLOSSOM_DURATION_MS = 2000;
+
+/**
+ * The storm's reach, from the caster's centre. Reaper's 8 metres scaled to
+ * this arena: a little under a third of a screen, wide enough to swallow a
+ * doorway fight and narrow enough that a dash (1000 px/s) clears it in a
+ * beat.
+ */
+export const BLOSSOM_RADIUS_PX = 260;
+
+/** Damage on each interval. 13 × 8 = 104 over the full channel — a full bar. */
+export const BLOSSOM_TICK_DAMAGE = 13;
+
+/**
+ * How often the storm fires. The same 250ms as the singularity's ticks — the
+ * room's shared pulse for "damage that keeps coming".
+ */
+export const BLOSSOM_TICK_MS = 250;
+
+/**
+ * Walk speed while spinning. Reaper's -50%: the caster is a moving threat,
+ * not a turret — a slow one, so the room can always just leave.
+ */
+export const BLOSSOM_WALK_MULTIPLIER = 0.5;
+
+/**
+ * An open blossom, as both sides see it.
+ *
+ * Position and owner never change once it opens. The caster's own
+ * `blossomTimer` is the authoritative channel state (it travels in
+ * `PlayerPosition`, and both sides tick it — the client predicts its own
+ * spin exactly as it predicts a dash); this field is the *area*, which is
+ * what the server damages against and what the renderer draws.
+ */
+export interface Blossom {
+	id: number;
+	ownerId: string;
+	/** The caster's side, or `null` in a free-for-all. Same rule as the hole. */
+	ownerTeam: TeamId | null;
+	/** Centre, in world coordinates — not a body's top-left. */
+	x: number;
+	y: number;
+	/** ms of storm left. Presentation and expiry only; never scales the storm. */
+	remainingMs: number;
+}
+
+/**
+ * Is this storm hostile to this fighter?
+ *
+ * The same predicate the hole uses, and the one place the blossom's
+ * friendly-fire rule is written: never the caster, never a teammate of the
+ * caster. `null` teams are hostile to each other, so a free-for-all is
+ * "everybody but the caster" with no mode check.
+ */
+export function blossomAffects(
+	blossom: Blossom,
+	fighterId: string,
+	fighterTeam: TeamId | null = null,
+): boolean {
+	if (blossom.ownerId === fighterId) return false;
+	return hostile(blossom.ownerTeam, fighterTeam);
+}
+
+/**
+ * Is this fighter inside the storm and in line of sight of it?
+ *
+ * The storm fires *shots*, and shots need a corridor — Reaper's shots are
+ * blocked by anything the room stands between the caster and the target, and
+ * the one cover this game has is a platform. `hasLineOfSight` is sampled and
+ * cheap, so this is safe to ask per fighter per tick.
+ */
+export function blossomSweeps(
+	blossom: Blossom,
+	fighterId: string,
+	fighterTeam: TeamId | null,
+	bodyX: number,
+	bodyY: number,
+	world: World,
+): boolean {
+	if (!blossomAffects(blossom, fighterId, fighterTeam)) return false;
+	const dx = blossom.x - (bodyX + PLAYER_WIDTH / 2);
+	const dy = blossom.y - (bodyY + PLAYER_HEIGHT / 2);
+	if (dx * dx + dy * dy > BLOSSOM_RADIUS_PX * BLOSSOM_RADIUS_PX) return false;
+	return hasLineOfSight(
+		blossom.x,
+		blossom.y,
+		bodyX + PLAYER_WIDTH / 2,
+		bodyY + PLAYER_HEIGHT / 2,
+		16,
+		world,
+	);
+}
+
+/** Spin speed for the caster's sprite — one revolution every 360ms. */
+export const BLOSSOM_SPIN_RAD_PER_MS = (Math.PI * 2) / 360;

@@ -18,6 +18,7 @@ it.
 |---|---|
 | [heroes.md](heroes.md) | The hero system: kits, the wire, hero select, and who exists |
 | [anands.md](anands.md) | The dagger hero: stab spam, the thrust, the shoryuken, the dragon thrust, the trap |
+| [jeffs.md](jeffs.md) | The executioner: the shotgun, the smoke grenade, and the Death Blossom |
 | [items.md](items.md) | The kit's finite resource: charges, Lia's HE grenade, Anands' trap |
 | [controls.md](controls.md) | Default bindings, rebinding, the Esc menu, and what a binding may never touch |
 | [movement.md](movement.md) | Walking, jumping, dashing, wall jumps, the feel constants and why they hold |

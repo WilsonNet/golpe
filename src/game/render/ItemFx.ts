@@ -23,7 +23,9 @@ import { PLAYER_HEIGHT, PLAYER_WIDTH, type World } from "../simulation/Arena";
 import {
 	HE_GRENADE_FUSE_MS,
 	type HeGrenadeState,
+	SMOKE_GRENADE_FUSE_MS,
 	tickHeGrenade,
+	tickSmokeGrenade,
 } from "../simulation/Items";
 import { sameTeam, type TeamId } from "../simulation/Teams";
 import { TEX, tex } from "./assets";
@@ -38,6 +40,8 @@ const COLOR = {
 	ring: 0xffe0b3,
 	/** The trap's burst: its own teal, so a spring reads as *that* trap going. */
 	trap: 0x7ff0f4,
+	/** The smoke's grey — the cloud's one tint, lightened for the ally haze. */
+	smoke: 0x9aa0ab,
 } as const;
 
 /** A grenade the client is running off its own clock, bounced like the server's. */
@@ -65,10 +69,36 @@ interface HeGrenadeView {
 	vy: number;
 }
 
+/**
+ * One smoke cloud, drawn as a slowly breathing drift of puffs.
+ *
+ * The cloud is anchored where it bloomed; the *puffs* wander inside it on
+ * seeded phases, so a cloud reads as smoke rather than as a disc. `friendly`
+ * is the side answer from the last sync — a cloud does not change sides any
+ * more than it changes position.
+ */
+/** The layered puffs that make one cloud, with their own drift phases. */
+interface CloudPuffs {
+	sprites: Sprite[];
+	/** Per-puff phase offsets, seeded once so the drift is not a single blob. */
+	phases: number[];
+	/** The cloud's anchor — where it bloomed, which never moves. */
+	x: number;
+	y: number;
+	/** Whether the last sync said this cloud is ours — sets the haze level. */
+	friendly: boolean;
+	/** ms the cloud has been alive, for the drift clock and the mote emitter. */
+	ageMs: number;
+	/** ms until the next drift mote, so the emitter does not spray every frame. */
+	moteAccMs: number;
+}
+
 export class ItemFx {
 	private readonly particles: ParticleSystem;
 	private readonly heGrenades = new Map<number, HeFlight>();
 	private readonly trapSprites = new Map<number, Sprite>();
+	private readonly smokeFlights = new Map<number, HeFlight>();
+	private readonly smokeClouds = new Map<number, CloudPuffs>();
 	private readonly rings: BlastRing[] = [];
 
 	constructor(
@@ -225,6 +255,149 @@ export class ItemFx {
 		});
 	}
 
+	/**
+	 * Draw the smoke canisters in flight, dead-reckoned exactly like the HE
+	 * grenades — anchored on first sight, flown through the same deterministic
+	 * `tickSmokeGrenade` the server runs, so a lob bounces in the same places.
+	 */
+	syncSmokeGrenades(live: readonly HeGrenadeView[], nowMs: number) {
+		const seen = new Set<number>();
+		for (const g of live) {
+			seen.add(g.id);
+			let flight = this.smokeFlights.get(g.id);
+			if (!flight) {
+				const sprite = new Sprite(tex(TEX.smokeGrenade));
+				sprite.anchor.set(0.5);
+				this.effectsLayer.addChild(sprite);
+				flight = {
+					state: {
+						id: g.id,
+						ownerId: "",
+						ownerTeam: null,
+						x: g.x,
+						y: g.y,
+						vx: g.vx,
+						vy: g.vy,
+						fuseMs: SMOKE_GRENADE_FUSE_MS,
+					},
+					lastMs: nowMs,
+					sprite,
+				};
+				this.smokeFlights.set(g.id, flight);
+				// A little hiss at the hand, quieter than the HE's puff — the
+				// smoke is thrown to be *un*noticed.
+				this.particles.burst({
+					texture: TEX.smoke,
+					count: 4,
+					x: g.x,
+					y: g.y,
+					tint: COLOR.smoke,
+					speed: [8, 60],
+					lifeMs: 500,
+					scale: [0.4, 1.2],
+					alpha: [0.5, 0],
+				});
+			}
+			const dtSec = Math.max(0, nowMs - flight.lastMs) / 1000;
+			flight.lastMs = nowMs;
+			if (dtSec > 0) tickSmokeGrenade(flight.state, dtSec, this.world);
+			flight.sprite.position.set(flight.state.x, flight.state.y);
+			flight.sprite.rotation += dtSec * 6;
+		}
+
+		for (const [id, flight] of this.smokeFlights) {
+			if (seen.has(id)) continue;
+			flight.sprite.destroy();
+			this.smokeFlights.delete(id);
+		}
+	}
+
+	/**
+	 * Draw the smoke clouds.
+	 *
+	 * **The side a cloud belongs to is the whole feature**: your own and every
+	 * teammate's cloud is a near-transparent haze — you are supposed to see
+	 * through it — while a hostile cloud is a full-strength wall of smoke that
+	 * answers "who is in there" with a shrug. The fade-in and the fade-out
+	 * frame the cloud's life from the server's own `remainingMs`, and the
+	 * puffs wander on seeded phases so a cloud breathes instead of sitting.
+	 */
+	syncSmokeClouds(
+		live: readonly {
+			id: number;
+			x: number;
+			y: number;
+			ownerId: string;
+			ownerTeam: TeamId | null;
+			remainingMs: number;
+		}[],
+		myId: string,
+		myTeam: TeamId | null,
+	) {
+		const seen = new Set<number>();
+		for (const cloud of live) {
+			seen.add(cloud.id);
+			const friendly =
+				cloud.ownerId === myId || sameTeam(cloud.ownerTeam, myTeam);
+			let puffs = this.smokeClouds.get(cloud.id);
+			if (!puffs) {
+				puffs = this.makeCloudPuffs(cloud.id, cloud.x, cloud.y);
+				this.smokeClouds.set(cloud.id, puffs);
+				// The bloom: the canister's pop, a ring of puffs scaling out of
+				// the canister's landing point — the loudest the smoke ever is.
+				this.particles.burst({
+					texture: TEX.smoke,
+					count: 10,
+					x: cloud.x,
+					y: cloud.y,
+					tint: COLOR.smoke,
+					speed: [10, 90],
+					lifeMs: 900,
+					scale: [0.5, 2],
+					alpha: [0.55, 0],
+				});
+			}
+			puffs.x = cloud.x;
+			puffs.y = cloud.y;
+			puffs.friendly = friendly;
+			// The haze is where the cloud's side is read: full for a wall, a
+			// whisper for your own. The last 800ms of the server's life fade
+			// the cloud out so it never pops out of existence.
+			const fadeOut = Math.min(1, cloud.remainingMs / 800);
+			const breathe = 1 + Math.sin(puffs.ageMs / 700 + cloud.id) * 0.06;
+			puffs.sprites.forEach((sprite, i) => {
+				sprite.scale.set(0.9 * breathe, 0.9 * breathe);
+				sprite.alpha = (friendly ? 0.3 : 1) * fadeOut;
+				sprite.rotation = (i * 0.7 + cloud.id * 0.13) % (Math.PI * 2);
+			});
+		}
+
+		for (const [id, puffs] of this.smokeClouds) {
+			if (seen.has(id)) continue;
+			for (const sprite of puffs.sprites) sprite.destroy();
+			this.smokeClouds.delete(id);
+		}
+	}
+
+	/** Build one cloud's puff layers: six blurred blobs on a seeded drift. */
+	private makeCloudPuffs(id: number, x: number, y: number): CloudPuffs {
+		const sprites: Sprite[] = [];
+		const phases: number[] = [];
+		for (let i = 0; i < 6; i++) {
+			const sprite = new Sprite(tex(TEX.smoke));
+			sprite.anchor.set(0.5);
+			// The puffs sit under the fighters — the concealment is drawn by
+			// hiding the fighters, not by painting over them.
+			this.fieldLayer.addChild(sprite);
+			sprite.position.set(x, y);
+			sprites.push(sprite);
+			// Seeded per puff and per cloud, so no two clouds jiggle the same
+			// way and the layers never collapse into one.
+			phases.push((i * 1.7 + id * 0.31) % (Math.PI * 2));
+		}
+		return { sprites, phases, x, y, friendly: false, ageMs: 0, moteAccMs: 0 };
+	}
+
 	/** An HE grenade went off. One-shot, from the server's explosion event. */
 	explode(x: number, y: number, radius: number) {
 		this.particles.burst({
@@ -274,14 +447,60 @@ export class ItemFx {
 				this.rings.splice(i, 1);
 			}
 		}
+
+		// The clouds breathe: each puff wanders its own small circle around
+		// the cloud's anchor, so a cloud reads as slow smoke instead of a
+		// painted disc. Position is set here, on frame time, and never in the
+		// sync — the sync owns scale and opacity, this owns where the layers
+		// sit, and the two never fight.
+		for (const puffs of this.smokeClouds.values()) {
+			puffs.ageMs += dtMs;
+			const t = puffs.ageMs / 1000;
+			puffs.sprites.forEach((sprite, i) => {
+				const phase = puffs.phases[i] ?? 0;
+				const radius = 18 + ((i * 13) % 22);
+				const speed = 0.25 + ((i * 7) % 10) / 40;
+				sprite.position.set(
+					puffs.x + Math.cos(t * speed + phase) * radius,
+					puffs.y - 20 + Math.sin(t * speed * 0.8 + phase) * radius * 0.7,
+				);
+			});
+
+			// Drift motes: the cloud's own slow curl, emitted inside the haze.
+			// Enemy clouds are the wall — they shed motes that linger — and a
+			// friendly cloud's hint is barely there, so it never reads as fog.
+			puffs.moteAccMs += dtMs;
+			const interval = puffs.friendly ? 400 : 160;
+			while (puffs.moteAccMs >= interval) {
+				puffs.moteAccMs -= interval;
+				this.particles.burst({
+					texture: TEX.smoke,
+					count: 1,
+					x: puffs.x + (Math.random() - 0.5) * 120,
+					y: puffs.y - 20 + (Math.random() - 0.5) * 80,
+					tint: COLOR.smoke,
+					speed: [2, 14],
+					lifeMs: 1400,
+					scale: [0.5, 0.9],
+					alpha: puffs.friendly ? [0.16, 0] : [0.34, 0],
+				});
+			}
+		}
+
 		this.particles.update(dtMs);
 	}
 
 	reset() {
 		for (const flight of this.heGrenades.values()) flight.sprite.destroy();
 		this.heGrenades.clear();
+		for (const flight of this.smokeFlights.values()) flight.sprite.destroy();
+		this.smokeFlights.clear();
 		for (const sprite of this.trapSprites.values()) sprite.destroy();
 		this.trapSprites.clear();
+		for (const puffs of this.smokeClouds.values()) {
+			for (const sprite of puffs.sprites) sprite.destroy();
+		}
+		this.smokeClouds.clear();
 		for (const r of this.rings) r.ring.destroy();
 		this.rings.length = 0;
 		this.particles.clear();

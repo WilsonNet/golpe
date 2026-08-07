@@ -175,6 +175,11 @@ export interface SnapshotBullet {
 	/** Carried so the client can dead-reckon between 20Hz snapshots. */
 	vx: number;
 	vy: number;
+	/**
+	 * One round of a shotgun's fan: drawn smaller and dimmer than a full
+	 * shot. Absent (a stale server) means an ordinary bullet.
+	 */
+	pellet?: boolean;
 }
 
 /**
@@ -316,12 +321,18 @@ export interface GameSnapshot {
 	grenades: SnapshotGrenade[];
 	/** The open black hole, or null. At most one per room. */
 	singularity: SnapshotSingularity | null;
+	/** The open Death Blossom, or null. At most one per room. */
+	blossom: SnapshotBlossom | null;
 	/** Set only while the room is frozen for a cast. */
 	cinematic: SnapshotCinematic | null;
 	/** Anands' floor traps, as they stand. Cleared on a round reset. */
 	traps: SnapshotTrap[];
 	/** HE grenades in flight. Server-owned, dead-reckoned like bullets. */
 	heGrenades: SnapshotHeGrenade[];
+	/** Jeffs' smoke canisters in flight. Server-owned, dead-reckoned like bullets. */
+	smokeGrenades: SnapshotSmokeGrenade[];
+	/** Jeffs' smoke clouds, as they stand. Vision only; cleared on a round reset. */
+	smokeClouds: SnapshotSmokeCloud[];
 	/** HE blasts since the previous snapshot. Effects only. */
 	explosions: ExplosionMsg[];
 	/** A trap just caught somebody, for the caption. Effects only. */
@@ -359,6 +370,59 @@ export interface SnapshotHeGrenade {
 	/** Carried so the client can dead-reckon the arc between snapshots. */
 	vx: number;
 	vy: number;
+}
+
+/**
+ * The open Death Blossom, as both sides see it.
+ *
+ * Sent in full every snapshot (like the singularity) even though the renderer
+ * is its only consumer: the caster's channel already travels in their packed
+ * state, and this field is the area — the ring the storm draws and the one
+ * thing the two sides must agree a fighter is standing inside of.
+ */
+interface SnapshotBlossom {
+	id: number;
+	ownerId: string;
+	/** The caster's side, so a client tints the storm and skips its own team. */
+	ownerTeam: TeamId | null;
+	/** Centre, in world coordinates. */
+	x: number;
+	y: number;
+	/** ms of storm left. Presentation only; never scales the storm. */
+	remainingMs: number;
+}
+
+/** A smoke canister in flight. Server-owned, like a bullet. */
+export interface SnapshotSmokeGrenade {
+	id: number;
+	ownerId: string;
+	/** The thrower's side — the bloom inherits it. */
+	ownerTeam: TeamId | null;
+	x: number;
+	y: number;
+	/** Carried so the client can dead-reckon the lob between snapshots. */
+	vx: number;
+	vy: number;
+}
+
+/**
+ * A smoke cloud, as both sides see it.
+ *
+ * Sent in full every snapshot even though no `tickPlayer` ever reads it: the
+ * concealment is re-derived from this list on every frame, so a lost datagram
+ * costs a puff at most and never a false clear. Position and owner never
+ * change once the cloud blooms.
+ */
+export interface SnapshotSmokeCloud {
+	id: number;
+	ownerId: string;
+	/** The owner's side, for the client's per-side drawing. */
+	ownerTeam: TeamId | null;
+	/** Centre, in world coordinates. */
+	x: number;
+	y: number;
+	/** ms of cloud left. Presentation only. */
+	remainingMs: number;
 }
 
 /** An HE grenade just went off. Effects only, exactly like `melee` events. */

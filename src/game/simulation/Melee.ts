@@ -816,6 +816,8 @@ export interface MeleeTickState extends MeleeState {
 	airJumps?: number;
 	/** ms left of a dragon-thrust ride. Only `PlayerPosition` ever sets it. */
 	dragonTimer?: number;
+	/** ms left of a Death Blossom channel. Only `PlayerPosition` ever sets it. */
+	blossomTimer?: number;
 }
 
 /** What `resolveMelee` needs of a fighter: melee state plus a body. */
@@ -825,6 +827,8 @@ export interface MeleeBody extends MeleeState {
 	vx: number;
 	vy: number;
 	grounded: boolean;
+	/** ms left of a Death Blossom channel. Only `PlayerPosition` ever sets it. */
+	blossomTimer?: number;
 }
 
 /** The melee half of a tick's input. `PlayerIntent` extends it. */
@@ -1187,6 +1191,20 @@ export function tickMelee(
 	// thing that ends a ride early is a hostile black hole, which arrives as a
 	// stun and lands in the stun gate above.
 	if ((s.dragonTimer ?? 0) > 0) {
+		s.attackHeld = input.attack;
+		s.blockHeld = input.block;
+		s.uppercutHeld = input.uppercut;
+		return;
+	}
+
+	// ---- the Death Blossom ----
+	//
+	// The storm is the same shape as the ride: a physics state owned by
+	// `tickPlayer` (walk speed halved, no dash, no jump) and a channel that
+	// takes the whole kit away — no sword, no block, no stance switch — for
+	// the 2s it lasts. The one thing that ends it early is a knockdown, which
+	// lands in `applyHitToDefender` below.
+	if ((s.blossomTimer ?? 0) > 0) {
 		s.attackHeld = input.attack;
 		s.blockHeld = input.block;
 		s.uppercutHeld = input.uppercut;
@@ -1621,6 +1639,13 @@ export function applyHitToDefender(
 	if (def.knockdown) {
 		defender.knockdownTimer = def.knockdownMs ?? KNOCKDOWN_MS;
 		defender.vy = Math.max(defender.vy, KNOCKDOWN_SLAM_VY);
+		// The knockdown is the one interrupt of a Death Blossom: the chain's
+		// finisher, the thrust, the shoryuken and the plunge blast all end the
+		// storm on the same tick both sides simulate, which is what keeps the
+		// interrupt from needing a message of its own. Ordinary hitstun never
+		// reaches here, so a slash inside the storm only slows the caster, it
+		// does not stop them — the whole design of the ability, in one `if`.
+		if (defender.blossomTimer !== undefined) defender.blossomTimer = 0;
 	}
 	defender.meleeAction = "none";
 	defender.meleeTimer = 0;

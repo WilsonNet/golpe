@@ -8,6 +8,7 @@ import {
 import type { HeroId } from "../simulation/Heroes.js";
 import { BULLET_SPEED, JUMP_HEIGHT_PX } from "../simulation/Physics.js";
 import type { AIConfig } from "./AIConfig.js";
+import { BlossomBrain } from "./BlossomBrain.js";
 import { DaggerBrain } from "./DaggerBrain.js";
 import { DragonBrain } from "./DragonBrain.js";
 import { JumpBrain } from "./JumpBrain.js";
@@ -23,7 +24,7 @@ import { UltimateBrain } from "./UltimateBrain.js";
 /** The melee module, whichever hero's it is. See `EnemyBrain.constructor`. */
 type MeleeModule = MeleeBrain | DaggerBrain;
 /** The ultimate module, whichever hero's it is. */
-type UltModule = UltimateBrain | DragonBrain;
+type UltModule = UltimateBrain | DragonBrain | BlossomBrain;
 
 export enum AIState {
 	IDLE = "IDLE",
@@ -127,6 +128,13 @@ const COUNTER_HALE_SCALE = 0.5;
 /** Walk-in targets: a little inside sword range, or a gun's kite distance. */
 const SWORD_SETTLE_GRACE_PX = 12;
 const GUN_KITE_RANGE_PX = 80;
+/**
+ * The shotgun's settle range: closer than the gun's kite, because the whole
+ * weapon is the cone. A bot that kited at 80px with a shotgun would fire a
+ * fan whose edge pellets are already off a 32px body — it has to walk in
+ * until the blast actually lands, which is the weapon's whole discipline.
+ */
+const SHOTGUN_KITE_RANGE_PX = 110;
 const STRAFE_HURT_CHANCE = 0.2;
 const STRAFE_HALE_CHANCE = 0.4;
 const STRAFE_DIR_COINFLIP = 0.5;
@@ -231,10 +239,17 @@ export class EnemyBrain {
 		this.team = new TeamBrain(world);
 		// One coordinator, one strategy per hero: the dagger has its own melee
 		// module (no guard, spam, thrusts, the shoryuken's air game) and its
-		// own ultimate module (the dragon is a line, not a lob). A future hero
-		// is a new pair of modules here — never a branch in this file.
+		// own ultimate module (the dragon is a line, not a lob); Jeffs keeps
+		// the sword (the blade is the blade) and aims nothing for the storm (it
+		// is radial — see `BlossomBrain`). A future hero is a new pair of
+		// modules here — never a branch in this file.
 		this.melee = hero === "anands" ? new DaggerBrain() : new MeleeBrain();
-		this.ultimate = hero === "anands" ? new DragonBrain() : new UltimateBrain();
+		this.ultimate =
+			hero === "anands"
+				? new DragonBrain()
+				: hero === "jeffs"
+					? new BlossomBrain()
+					: new UltimateBrain();
 	}
 
 	getConfig(): AIConfig {
@@ -442,13 +457,33 @@ export class EnemyBrain {
 		// close enough to step on it. The brain always faces the nearest foe, so
 		// the trap lands between them; a cooldown and the three-charge cap stop
 		// a brain from littering the floor with them.
-		if (
-			input.distanceToPlayer < 300 &&
-			input.distanceToPlayer > 70 &&
-			input.hasLineOfSight
-		) {
+		if (input.selfHero === "anands") {
+			if (
+				input.distanceToPlayer < 300 &&
+				input.distanceToPlayer > 70 &&
+				input.hasLineOfSight
+			) {
+				output.item = true;
+				this.itemCooldownMs = 6000;
+			}
+			return;
+		}
+
+		// The smoke is a panic button: thrown at the bot's own feet, it turns
+		// the bot invisible to the enemy (the cloud is *ally* smoke — see
+		// specs/jeffs.md) while the bot still sees everything. Hurt, or facing
+		// an outnumbered fight, is when the cloud pays: the enemy cannot see
+		// the retreat, cannot count the fighters behind it, cannot read who
+		// walks back out. The aim is straight down so the canister blooms at
+		// the thrower's feet instead of sailing past them.
+		if (input.selfHero === "jeffs") {
+			const outnumbered = input.foes.length > input.allies.length + 1;
+			const hurt = input.selfHP < 40 && input.distanceToPlayer < 320;
+			if (!hurt && !outnumbered) return;
 			output.item = true;
-			this.itemCooldownMs = 6000;
+			output.aimAngle = Math.PI / 2;
+			this.itemCooldownMs = 8000;
+			return;
 		}
 	}
 
@@ -703,10 +738,14 @@ export class EnemyBrain {
 				} else {
 					// Walk in until a swing can actually reach. The sword is the
 					// primary weapon, so "in position" means sword range, not the
-					// old ranged-duel spacing.
+					// old ranged-duel spacing. The shotgun's range is its own too:
+					// a Jeffs bot walks in closer than a gunner before pulling the
+					// trigger, because the cone decides what lands.
 					const wanted = this.melee.swordDrawn
 						? STRIKE_RANGE_PX - SWORD_SETTLE_GRACE_PX
-						: GUN_KITE_RANGE_PX;
+						: this.hero === "jeffs"
+							? SHOTGUN_KITE_RANGE_PX
+							: GUN_KITE_RANGE_PX;
 					if (input.distanceToPlayer > wanted) {
 						output.moveRight = input.playerX > input.selfX;
 						output.moveLeft = input.playerX <= input.selfX;

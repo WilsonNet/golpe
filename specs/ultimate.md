@@ -235,6 +235,14 @@ The deny is a **one-shot event in the snapshot** (`denies`), exactly like a
 melee impact: the consequence travels in the meter, and a client that loses
 the datagram loses a caption, never a fact.
 
+## The other ultimates
+
+The black hole is Lia's. The **dragon thrust** (Anands) is specified in full in
+[anands.md](anands.md); the **Death Blossom** (Jeffs) in
+[jeffs.md](jeffs.md). All three share the earn economy, the hold-to-release
+cast, the 1100ms cinematic freeze and the "ultimate pays nobody" rule; they
+differ in what the release does — a lob, a ride, or a self-centred storm.
+
 ## No friendly fireThe caster is immune to their own hole: no pull, no stun, no damage, and the
 grenade passes through them. In **team deathmatch the caster's whole side is
 immune** on the same terms; in a free-for-all everybody else is a target.
@@ -333,7 +341,10 @@ The renderer's job, none of it authoritative:
 - **The aim arc**: while the ultimate button is held and a cast is legal, the
   grenade's own trajectory drawn from the caster's chest — the same speed,
   gravity and fuse the simulation will use, stopped where the grenade would
-  stop, with a larger dot where the hole will open. Drawn from the *drawn*
+  stop, with a larger dot where the hole will open. The dragon previews the
+  same way with a straight beam along the ride's line; the blossom previews
+  with a **pulsing ring at the blast radius**, because for a radial ultimate
+  the radius is the information. Drawn from the *drawn*
   position like the nameplates, and a pure preview: nothing about it is read
   back. It appears only when the hold can actually cast, so an arc shown for a
   cast that will be silently refused is never shown.

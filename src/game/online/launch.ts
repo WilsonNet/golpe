@@ -31,7 +31,7 @@ export interface LaunchParams {
 	/** `?training=true` (or `?training-room=true`) — the practice room. */
 	training: boolean;
 	/**
-	 * `?hero=lia|anands` — the hero this client's own fighter plays.
+	 * `?hero=lia|anands|jeffs` — the hero this client's own fighter plays.
 	 *
 	 * Per-client, unlike the room properties: the menu's hero select writes it
 	 * into the boot URL, a shared room link does not carry it, and a joiner who

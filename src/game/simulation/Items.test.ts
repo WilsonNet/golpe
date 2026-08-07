@@ -10,6 +10,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_WORLD } from "./Arena.js";
 import { type HeroKit, kitFor } from "./Heroes.js";
+import type { TeamId } from "./Teams.js";
 import {
 	HE_GRENADE_FUSE_MS,
 	HE_GRENADE_GRAVITY,
@@ -21,11 +22,21 @@ import {
 	heGrenadeTouches,
 	ITEMS,
 	launchHeGrenade,
+	launchSmokeGrenade,
 	placeTrap,
+	SMOKE_DURATION_MS,
+	SMOKE_GRENADE_FUSE_MS,
+	SMOKE_GRENADE_GRAVITY,
+	SMOKE_GRENADE_SPEED,
+	SMOKE_RADIUS,
+	smokeCloudOverlaps,
+	smokeGrenadeEnd,
+	smokeHidesFrom,
 	TRAP_PLACE_OFFSET,
 	TRAP_RADIUS,
 	TRAP_TRIGGER_MS,
 	tickHeGrenade,
+	tickSmokeGrenade,
 	trapCatches,
 	trapFor,
 } from "./Items.js";
@@ -43,9 +54,15 @@ describe("the item registry", () => {
 		expect(kitFor("anands").item.id).toBe("trap");
 	});
 
+	it("gives Jeffs a smoke grenade", () => {
+		expect(kitFor("jeffs").item.id).toBe("smoke-grenade");
+	});
+
 	it("sizes the charges to the item: the grenade is deadlier than the trap", () => {
 		expect(ITEMS["he-grenade"].maxCharges).toBe(2);
 		expect(ITEMS.trap.maxCharges).toBe(3);
+		// The smoke hides — it does not hurt — so it gets the grenade's two.
+		expect(ITEMS["smoke-grenade"].maxCharges).toBe(2);
 	});
 });
 
@@ -208,6 +225,97 @@ describe("the trap", () => {
 		);
 		expect(locked.trapTimer).toBeLessThan(caught.trapTimer);
 		expect(locked.trapTimer).toBeCloseTo(TRAP_TRIGGER_MS - 1000 / 60, 0);
+	});
+});
+
+describe("the smoke grenade", () => {
+	it("flies along the launch angle and blooms on the fuse", () => {
+		const g = launchSmokeGrenade(1, "me", 400, 300, 0);
+		expect(g.vx).toBeCloseTo(SMOKE_GRENADE_SPEED);
+		expect(g.vy).toBeCloseTo(0);
+		expect(g.fuseMs).toBe(SMOKE_GRENADE_FUSE_MS);
+
+		tickSmokeGrenade(g, 0.1);
+		expect(g.x).toBeCloseTo(400 + SMOKE_GRENADE_SPEED * 0.1);
+		// Its own gravity, like the HE's throw.
+		expect(g.vy).toBeCloseTo(SMOKE_GRENADE_GRAVITY * 0.1);
+
+		// The canister never detonates on contact — only the fuse ends it.
+		expect(smokeGrenadeEnd(g)).toBe(false);
+		g.fuseMs = 1;
+		tickSmokeGrenade(g, 0.1);
+		expect(smokeGrenadeEnd(g)).toBe(true);
+	});
+
+	it("hides nobody until the cloud is ally smoke and the viewer is hostile", () => {
+		const cloud = {
+			id: 1,
+			ownerId: "me",
+			ownerTeam: null,
+			x: 400,
+			y: 400,
+			remainingMs: SMOKE_DURATION_MS,
+		};
+
+		// A fighter inside their own cloud vanishes from an enemy's view.
+		expect(
+			smokeHidesFrom(cloud, "me", null, "foe", null, 400 - 16, 400 - 24),
+		).toBe(true);
+		// The local fighter is never hidden from themselves.
+		expect(
+			smokeHidesFrom(cloud, "me", null, "me", null, 400 - 16, 400 - 24),
+		).toBe(false);
+		// Outside the radius is visible.
+		expect(
+			smokeHidesFrom(cloud, "me", null, "foe", null, 400 - 16 - 400, 400 - 24),
+		).toBe(false);
+		// A fighter in a cloud that is not their side's is not hidden at all.
+		expect(
+			smokeHidesFrom(
+				cloud,
+				"foe",
+				null,
+				"enemy-of-foe",
+				null,
+				400 - 16,
+				400 - 24,
+			),
+		).toBe(false);
+	});
+
+	it("a team cloud conceals teammates from the other side only", () => {
+		const cloud = {
+			id: 2,
+			ownerId: "me",
+			ownerTeam: 0 as TeamId,
+			x: 400,
+			y: 400,
+			remainingMs: SMOKE_DURATION_MS,
+		};
+		// A teammate inside the cloud is hidden from the enemy side...
+		expect(
+			smokeHidesFrom(cloud, "teammate", 0, "foe", 1, 400 - 16, 400 - 24),
+		).toBe(true);
+		// ...and visible to their own side.
+		expect(
+			smokeHidesFrom(cloud, "teammate", 0, "other-ally", 0, 400 - 16, 400 - 24),
+		).toBe(false);
+	});
+
+	it("the overlap is centre-to-centre against the cloud's radius", () => {
+		const cloud = {
+			id: 3,
+			ownerId: "me",
+			ownerTeam: null,
+			x: 400,
+			y: 400,
+			remainingMs: SMOKE_DURATION_MS,
+		};
+		expect(smokeCloudOverlaps(cloud, 400 - 16, 400 - 24)).toBe(true);
+		// One radius and a step outside is clear.
+		expect(
+			smokeCloudOverlaps(cloud, 400 - 16 - SMOKE_RADIUS - 40, 400 - 24),
+		).toBe(false);
 	});
 });
 

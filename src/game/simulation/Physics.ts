@@ -41,6 +41,7 @@ import {
 	tickMelee,
 } from "./Melee.js";
 import {
+	BLOSSOM_WALK_MULTIPLIER,
 	SINGULARITY_HOLD_STUN_MS,
 	type Singularity,
 	singularityGrip,
@@ -70,7 +71,12 @@ export {
 	LIA_KIT,
 	RANGED_WEAPONS,
 } from "./Heroes.js";
-export type { HeGrenadeState, Trap } from "./Items.js";
+export type {
+	HeGrenadeState,
+	SmokeCloud,
+	SmokeGrenadeState,
+	Trap,
+} from "./Items.js";
 /**
  * Items, re-exported by name for the same reason melee and the ultimate are:
  * `server/` reaches this module through `server/physics.ts`, and anything
@@ -79,14 +85,19 @@ export type { HeGrenadeState, Trap } from "./Items.js";
  * from here.
  */
 export {
+	clampSmokePoint,
 	HE_GRENADE_RADIUS,
 	heBlastDamage,
 	heGrenadeEnd,
 	heGrenadeTouches,
 	launchHeGrenade,
+	launchSmokeGrenade,
 	placeTrap,
-	TRAP_DAMAGE,
+	SMOKE_DURATION_MS,
+	smokeGrenadeEnd,
 	tickHeGrenade,
+	tickSmokeGrenade,
+	TRAP_DAMAGE,
 	trapCatches,
 	trapFor,
 } from "./Items.js";
@@ -141,7 +152,7 @@ export {
 	sweptThrustBox,
 	zeroMoveCounts,
 } from "./Melee.js";
-export type { GrenadeState, Singularity } from "./Ultimate.js";
+export type { Blossom, GrenadeState, Singularity } from "./Ultimate.js";
 /**
  * The ultimate, re-exported by name for the same reason melee is: `server/`
  * reaches this module through `server/physics.ts`, and anything behind an
@@ -150,6 +161,12 @@ export type { GrenadeState, Singularity } from "./Ultimate.js";
  */
 export {
 	addCharge,
+	// The Death Blossom, re-exported beside the black hole and the dragon it
+	// shares the meter with.
+	BLOSSOM_DURATION_MS,
+	BLOSSOM_TICK_DAMAGE,
+	BLOSSOM_TICK_MS,
+	blossomSweeps,
 	// The dragon thrust, re-exported beside the black hole it shares the meter
 	// with.
 	DRAGON_DAMAGE,
@@ -451,6 +468,19 @@ export interface PlayerPosition extends MeleeState {
 	 * is a different read and a different escape (there is none but the timer).
 	 */
 	trapTimer: number;
+	/**
+	 * ms left of a Death Blossom channel. While non-zero the fighter is
+	 * spinning in place: walk speed halved, no dash, no jump, and the whole
+	 * kit gated — no sword, no block, no stance switch — by the blossom gate
+	 * in `tickMelee`. The one thing that ends it early is a knockdown, which
+	 * zeroes this timer in `applyHitToDefender` on both sides of the wire.
+	 * See specs/jeffs.md.
+	 *
+	 * The whole channel (the slow, the gates, the interrupt) is shared code;
+	 * the interval damage is the server's alone, exactly like the black
+	 * hole's ticks.
+	 */
+	blossomTimer: number;
 }
 
 export function createPlayerState(
@@ -481,6 +511,7 @@ export function createPlayerState(
 		dragonVX: 0,
 		dragonVY: 0,
 		trapTimer: 0,
+		blossomTimer: 0,
 		...createMeleeState(facing),
 	};
 }
@@ -512,6 +543,7 @@ export function copyPlayerState(
 	target.dragonVX = source.dragonVX;
 	target.dragonVY = source.dragonVY;
 	target.trapTimer = source.trapTimer;
+	target.blossomTimer = source.blossomTimer;
 	copyMeleeState(source, target);
 	return target;
 }
@@ -658,8 +690,13 @@ export function tickPlayer(
 	s.jumpBufferTimer = decay(s.jumpBufferTimer, dt);
 	s.wallCoyoteTimer = decay(s.wallCoyoteTimer, dt);
 	s.trapTimer = decay(s.trapTimer, dt);
+	// The blossom channel runs on the same clock as every other timer. It does
+	// not end on a stun — the storm is a commitment, not a reaction — so it is
+	// decayed here, outside the stun handling. Only a knockdown zeroes it, in
+	// `applyHitToDefender`.
+	s.blossomTimer = decay(s.blossomTimer, dt);
 
-	const wantsJump = input.up && !rooted;
+	const wantsJump = input.up && !rooted && s.blossomTimer <= 0;
 	if (wantsJump && !s.jumpHeld) {
 		s.jumpBufferTimer = JUMP_BUFFER_MS;
 	}
@@ -687,7 +724,13 @@ export function tickPlayer(
 	}
 
 	const targetSpeed =
-		PLAYER_WALK_SPEED * (s.blocking ? BLOCK_MOVE_MULTIPLIER : 1);
+		PLAYER_WALK_SPEED *
+		(s.blocking ? BLOCK_MOVE_MULTIPLIER : 1) *
+		// The Death Blossom halves the walk: the storm is a moving threat, not
+		// a turret, and a slow caster is a caster the room can always just
+		// leave. Blocking cannot happen mid-blossom (the melee gate), but the
+		// two multipliers compose rather than assume.
+		(s.blossomTimer > 0 ? BLOSSOM_WALK_MULTIPLIER : 1);
 	const steerable = s.wallJumpTimer <= 0;
 	if (steerable && dir !== 0) {
 		const accel = s.grounded ? GROUND_ACCEL : AIR_ACCEL;
@@ -715,7 +758,13 @@ export function tickPlayer(
 	//
 	// An impulse on the shared simulation, not a separate movement path: it sets
 	// velocity and then ordinary physics and collision carry it.
-	if (!rooted && input.dash !== 0 && s.dashTimer <= 0 && s.tumbleTimer <= 0) {
+	if (
+		!rooted &&
+		s.blossomTimer <= 0 &&
+		input.dash !== 0 &&
+		s.dashTimer <= 0 &&
+		s.tumbleTimer <= 0
+	) {
 		if (s.stance === "gun") {
 			s.vx = input.dash > 0 ? TUMBLE_SPEED : -TUMBLE_SPEED;
 			s.tumbleTimer = TUMBLE_LOCKOUT_MS;
@@ -1009,6 +1058,13 @@ export interface BulletState {
 	y: number;
 	vx: number;
 	vy: number;
+	/**
+	 * One round of a shotgun's fan — drawn smaller and dimmer than a full
+	 * shot, and nothing else about it differs. Absent means an ordinary
+	 * bullet; a stale server running without the field simply draws full
+	 * shots, which is the safe direction for the wire to fail.
+	 */
+	pellet?: boolean;
 }
 
 export function tickBullet(b: BulletState, dt: number): void {

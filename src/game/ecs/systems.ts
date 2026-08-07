@@ -13,9 +13,10 @@ import { heroFrames, heroPose, heroRollFrames } from "../render/assets";
 import type { MeleeFx } from "../render/MeleeFx";
 import type { Nameplates } from "../render/Nameplates";
 import type { Shadows } from "../render/Shadows";
-import type { HeroId } from "../simulation/Heroes";
+import { HEROES, type HeroId } from "../simulation/Heroes";
 import { meleePhase } from "../simulation/Melee";
 import { PLAYER_WIDTH } from "../simulation/Physics";
+import { BLOSSOM_SPIN_RAD_PER_MS } from "../simulation/Ultimate";
 import { TINT, teamTint } from "../teamPalette";
 import type { AnimState, Queries } from "./world";
 
@@ -83,7 +84,7 @@ function stripFor(
 	hero: HeroId,
 	sheet: "dude" | "roll",
 ): ReturnType<typeof heroFrames> {
-	const base = hero === "anands" ? "anands" : "dude";
+	const base = HEROES[hero].sheet;
 	return sheet === "roll" ? heroRollFrames(`${base}-roll`) : heroFrames(base);
 }
 
@@ -107,8 +108,7 @@ export type PoseKey =
  * whatever sheet the hero actually ships with.
  */
 function poseFor(hero: HeroId, pose: PoseKey) {
-	const sheet = hero === "anands" ? "anands" : "dude";
-	return heroPose(sheet, pose);
+	return heroPose(HEROES[hero].sheet, pose);
 }
 
 function playClip(anim: AnimState, clip: ClipName) {
@@ -164,6 +164,17 @@ export function animationSystem(queries: Queries, dtMs: number) {
 			playClip(e.anim, "dragon");
 			const dragonTex = poseFor(hero, "dragonRide");
 			if (e.sprite.texture !== dragonTex) e.sprite.texture = dragonTex;
+			continue;
+		}
+
+		// The Death Blossom: the caster *spins*. The texture keeps its own
+		// sheet (there is no pose for a blur), and the rotation is accumulated
+		// here on frame time and unwound by `spriteSyncSystem` the moment the
+		// channel ends — the storm's spin is the one purely cosmetic motion in
+		// the game, so it is the one that may run on wall-clock time.
+		if (body.blossomTimer > 0) {
+			e.sprite.rotation += dtMs * BLOSSOM_SPIN_RAD_PER_MS;
+			playClip(e.anim, facingLeft ? "left-idle" : "right-idle");
 			continue;
 		}
 
@@ -261,8 +272,15 @@ export function spriteSyncSystem(queries: Queries) {
 		// exists precisely so the sprite does not sit exactly on the body.
 		const at = e.renderPos ?? e.body;
 		syncSpriteToBody(e.sprite, at.x, at.y);
-		// A dead fighter fades rather than vanishing, so a KO reads as a KO.
-		e.sprite.alpha = e.fighter.hp <= 0 ? 0.3 : 1;
+		// A dead fighter fades rather than vanishing, so a KO reads as a KO. A
+		// fighter concealed in an ally's smoke vanishes outright — the enemy is
+		// not allowed to know they are there at all, and a fading silhouette
+		// would be exactly the information the smoke exists to withhold.
+		e.sprite.alpha = e.fighter.hp <= 0 ? 0.3 : e.fighter.smokeHidden ? 0 : 1;
+		// The blossom's spin is accumulated by `animationSystem`; this is the
+		// one place the wind-down can live, because it runs after the
+		// animation step and before anything else reads the sprite.
+		if (e.body.blossomTimer <= 0) e.sprite.rotation = 0;
 		// The fighter themself wears their side, faintly.
 		//
 		// Faintly is the whole trick: the character sprite is one shared strip, so
@@ -301,7 +319,9 @@ export function meleeFxSystem(
 		// fighters who are not in the clip off the screen while the live match
 		// carries on predicting them underneath — and a swing trail from somebody
 		// who is not on screen is the most confusing artefact a replay can have.
-		if (!e.sprite.visible) continue;
+		// The same rule holds for a fighter concealed in smoke: their blade is as
+		// hidden as they are.
+		if (!e.sprite.visible || e.fighter.smokeHidden) continue;
 		fx.updateFighter(
 			e.fighter.id,
 			e.body,
@@ -325,8 +345,10 @@ export function nameplateSystem(queries: Queries, plates: Nameplates) {
 		// Never label a fighter nobody can see. Hiding a sprite used to leave its
 		// plate and health bar floating over empty arena, because the entity is
 		// still in the query — the replay hides fighters the clip does not contain,
-		// and that was the first thing it got visibly wrong.
-		if (!e.sprite.visible) {
+		// and that was the first thing it got visibly wrong. A fighter concealed in
+		// smoke is the same shape: the enemy must not even read *how hurt* the
+		// person in the cloud is, or "is anyone there" answers itself.
+		if (!e.sprite.visible || e.fighter.smokeHidden) {
 			plates.forget(e.fighter.id);
 			continue;
 		}
@@ -354,8 +376,10 @@ export function nameplateSystem(queries: Queries, plates: Nameplates) {
 export function shadowSystem(queries: Queries, shadows: Shadows) {
 	for (const e of queries.drawnFighters) {
 		// Same rule as the nameplates: a shadow with no fighter over it is a stain
-		// on the floor.
-		if (!e.sprite.visible) {
+		// on the floor — and a concealed fighter's shadow would be the single
+		// biggest giveaway the smoke exists to hide, since it is drawn under
+		// everybody and tinted by the team.
+		if (!e.sprite.visible || e.fighter.smokeHidden) {
 			shadows.forget(e.fighter.id);
 			continue;
 		}

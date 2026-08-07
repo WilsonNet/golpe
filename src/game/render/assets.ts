@@ -26,6 +26,10 @@ export const TEX = {
 	anands: "anands",
 	/** Anands' roll strip, derived from her own sheet like the dude's. */
 	"anands-roll": "anands-roll",
+	/** Jeffs' character strip — see `jeffsFrames`. */
+	jeffs: "jeffs",
+	/** Jeffs' roll strip, derived from his own sheet like the others'. */
+	"jeffs-roll": "jeffs-roll",
 	fireball: "fireball",
 	platform: "platform",
 	sky: "sky",
@@ -87,6 +91,13 @@ export const TEX = {
 	trap: "fx_trap",
 	/** Lia's HE grenade — see `createItemTextures`. */
 	heGrenade: "fx_he_grenade",
+	/** Jeffs' smoke canister — see `createItemTextures`. */
+	smokeGrenade: "fx_smoke_grenade",
+	/**
+	 * The smoke cloud's puff: a soft radial haze, baked white so a tint
+	 * controls its colour. See `createSmokePuffTexture`.
+	 */
+	smoke: "fx_smoke",
 	/** The soft ellipse every fighter's team-tinted cast shadow is drawn with. */
 	shadow: "fx_shadow",
 } as const;
@@ -121,6 +132,9 @@ let rollFrames: Texture[] = [];
 let anandsFrames: Texture[] = [];
 /** Anands' roll strip: 0-7 right, 8-15 left, exactly like the dude's. */
 let anandsRollFrames: Texture[] = [];
+/** Jeffs' strip and roll, sliced exactly like the other two heroes'. */
+let jeffsFrames: Texture[] = [];
+let jeffsRollFrames: Texture[] = [];
 
 /** Every hero's nine-frame strip, keyed by the hero's sheet name. */
 const FRAME_SETS: Record<string, Texture[]> = {};
@@ -177,6 +191,8 @@ export async function loadAssets(): Promise<void> {
 		[TEX.roll]: "assets/roll.png",
 		[TEX.anands]: "assets/anands.png",
 		[TEX["anands-roll"]]: "assets/anands-roll.png",
+		[TEX.jeffs]: "assets/jeffs.png",
+		[TEX["jeffs-roll"]]: "assets/jeffs-roll.png",
 		[TEX.fireball]: "assets/fireball.png",
 		[TEX.platform]: "assets/platform.png",
 		[TEX.sky]: "assets/sky.png",
@@ -248,6 +264,33 @@ export async function loadAssets(): Promise<void> {
 		);
 	}
 	ROLL_SETS[TEX["anands-roll"]] = anandsRollFrames;
+
+	// Jeffs' strips, cut from `scripts/make-jeffs-art.py` in the same shared
+	// 9-frame / 16-cell layout — the third hero is another slice, not another
+	// format.
+	const jeffsSheet = Assets.get(TEX.jeffs) as Texture;
+	jeffsFrames = [];
+	for (let i = 0; i < 9; i++) {
+		jeffsFrames.push(
+			new Texture({
+				source: jeffsSheet.source,
+				frame: new Rectangle(i * PLAYER_WIDTH, 0, PLAYER_WIDTH, PLAYER_HEIGHT),
+			}),
+		);
+	}
+	FRAME_SETS[TEX.jeffs] = jeffsFrames;
+
+	const jeffsRollSheet = Assets.get(TEX["jeffs-roll"]) as Texture;
+	jeffsRollFrames = [];
+	for (let i = 0; i < 16; i++) {
+		jeffsRollFrames.push(
+			new Texture({
+				source: jeffsRollSheet.source,
+				frame: new Rectangle(i * ROLL_FRAME_W, 0, ROLL_FRAME_W, PLAYER_HEIGHT),
+			}),
+		);
+	}
+	ROLL_SETS[TEX["jeffs-roll"]] = jeffsRollFrames;
 }
 
 /**
@@ -446,6 +489,7 @@ export function createFxTextures(renderer: Renderer): void {
 
 	createHeroPoses(renderer, "dude", dudeFrames);
 	createHeroPoses(renderer, "anands", anandsFrames);
+	createHeroPoses(renderer, "jeffs", jeffsFrames);
 	createUltimateTextures(renderer);
 }
 
@@ -608,6 +652,47 @@ function createItemTextures(renderer: Renderer): void {
 	he.circle(16, 18, 11).stroke({ width: 1.5, color: 0x2a2f1a, alpha: 0.9 });
 	he.rect(14, 2, 4, 5).fill(0xd9b86a);
 	bake(renderer, TEX.heGrenade, he);
+
+	// ---- the smoke canister ----
+	//
+	// A stubby steel cylinder with a crimped top — a *canister*, not a ball:
+	// the smoke is thrown to land, and the shape says so. White steel so the
+	// body can be team-tinted in flight like the HE.
+	const smokeCan = new Graphics();
+	smokeCan.rect(7, 9, 18, 16).fill({ color: 0xffffff, alpha: 0.25 });
+	smokeCan.rect(8, 10, 16, 14).fill({ color: 0xb8bec6, alpha: 0.95 });
+	smokeCan
+		.rect(8, 10, 16, 14)
+		.stroke({ width: 1.5, color: 0x2a2f33, alpha: 0.9 });
+	smokeCan.rect(10, 5, 12, 5).fill(0x8d959c);
+	smokeCan.rect(10, 5, 12, 2).fill(0x5d646b);
+	bake(renderer, TEX.smokeGrenade, smokeCan);
+
+	// ---- the smoke puff ----
+	//
+	// The cloud's building block: a soft radial haze, white so one tint
+	// controls it. Layers of this puff — scaled, rotated, drifting — are what
+	// make a cloud read as a cloud rather than a disc.
+	bake(renderer, TEX.smoke, createSmokePuffTexture());
+}
+
+/**
+ * A soft radial puff for the smoke clouds, drawn as a stack of blurred ellipses.
+ *
+ * Pure white with an alpha falloff: the cloud's grey is a tint applied per
+ * side, and a texture that shipped its own grey could never be faded for
+ * allies without a second bake.
+ */
+function createSmokePuffTexture(): Container {
+	const puff = new Graphics();
+	for (let i = 0; i < 7; i++) {
+		const s = 1 - i * 0.13;
+		puff
+			.circle(48, 48, 44 * s)
+			.fill({ color: 0xffffff, alpha: 0.16 * (1 - i * 0.11) });
+	}
+	puff.circle(48, 48, 10).fill({ color: 0xffffff, alpha: 0.5 });
+	return puff;
 }
 
 /**

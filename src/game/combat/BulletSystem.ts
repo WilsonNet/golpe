@@ -104,6 +104,41 @@ export class BulletSystem {
 		});
 	}
 
+	/**
+	 * Fire a weapon's fan: one shot for an ordinary weapon, a deterministic
+	 * spread of pellets for a shotgun — the same fixed-angle fan the server
+	 * spawns, so the offline escape hatch never becomes a second set of
+	 * combat rules. Pellets are drawn smaller and dimmer, like the online
+	 * path's.
+	 */
+	fireFan(
+		x: number,
+		y: number,
+		angle: number,
+		owner: BulletOwner,
+		weapon: { pellets?: number; spreadDeg?: number },
+	) {
+		const pellets = weapon.pellets ?? 1;
+		const halfSpread = ((weapon.spreadDeg ?? 0) * Math.PI) / 180;
+		const step = pellets > 1 ? (halfSpread * 2) / (pellets - 1) : 0;
+		for (let i = 0; i < pellets; i++) {
+			const a = angle + (pellets > 1 ? -halfSpread + step * i : 0);
+			const sprite = this.pool.acquire();
+			sprite.position.set(x, y);
+			sprite.scale.set(pellets > 1 ? 0.55 : 1);
+			sprite.alpha = pellets > 1 ? 0.9 : 1;
+			this.bullets.push({
+				id: this.nextId++,
+				ownerId: owner,
+				x,
+				y,
+				vx: Math.cos(a) * BULLET_SPEED,
+				vy: Math.sin(a) * BULLET_SPEED,
+				sprite,
+			});
+		}
+	}
+
 	/** Advance every bullet by one fixed physics step. */
 	step(dt: number) {
 		for (const b of this.bullets) tickBullet(b, dt);

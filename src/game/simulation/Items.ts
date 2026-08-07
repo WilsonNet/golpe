@@ -29,14 +29,14 @@ import {
 	type World,
 } from "./Arena.js";
 import { type MovingBox, moveAndCollide } from "./Collision.js";
-import { hostile, type TeamId } from "./Teams.js";
+import { hostile, sameTeam, type TeamId } from "./Teams.js";
 import { MS_PER_SECOND } from "./units.js";
 
 // ---------------------------------------------------------------------------
 // The registry
 // ---------------------------------------------------------------------------
 
-export type ItemId = "he-grenade" | "trap";
+export type ItemId = "he-grenade" | "trap" | "smoke-grenade";
 
 /** One item's stat card: what it is and how many uses a round grants. */
 export interface ItemDef {
@@ -47,7 +47,8 @@ export interface ItemDef {
 	 * Uses per life. The whole point of charges: the item is a resource, not a
 	 * button, so a player spends each one with intent. Both heroes' items are
 	 * scarce — the HE grenade kills, so it gets two; the trap only ever
-	 * *delays*, so it gets three.
+	 * *delays*, so it gets three; the smoke *lies*, so it gets the grenade's
+	 * two.
 	 */
 	maxCharges: number;
 }
@@ -62,6 +63,11 @@ export const ITEMS: Record<ItemId, ItemDef> = {
 		id: "trap",
 		label: "TRAP",
 		maxCharges: 3,
+	},
+	"smoke-grenade": {
+		id: "smoke-grenade",
+		label: "SMOKE GRENADE",
+		maxCharges: 2,
 	},
 };
 
@@ -327,4 +333,200 @@ export function trapFor(
 	return traps.filter(
 		(t) => t.ownerId !== fighterId && hostile(t.ownerTeam, fighterTeam),
 	);
+}
+
+// ---------------------------------------------------------------------------
+// The smoke grenade
+//
+// A thrown canister that blooms into a **vision cloud**: no damage, no
+// collision, no bullet block — it changes what the enemy is allowed to know.
+// The cloud is pure world state for the renderer (nothing about it is fed
+// into `tickPlayer`), so this module owns the flight physics both sides must
+// dead-reckon and the overlap predicates the renderer asks per fighter.
+// ---------------------------------------------------------------------------
+
+/** Launch speed along the aim angle. A committed toss, lighter than the HE's. */
+export const SMOKE_GRENADE_SPEED = 700;
+/**
+ * The canister's own gravity — the same as the HE grenade's, so the two
+ * throws read as the same gesture with a lighter payload.
+ */
+export const SMOKE_GRENADE_GRAVITY = 900;
+/**
+ * How long the canister flies before it blooms, wherever it happens to be.
+ *
+ * Short enough that a throw is a lob, not a wait: at 900ms a canister that
+ * bounced once or twice has settled near where it was aimed, and one that is
+ * still rolling when the fuse ends blooms where it is — smoking mid-air is a
+ * real throw.
+ */
+export const SMOKE_GRENADE_FUSE_MS = 900;
+/**
+ * How much of its speed the canister keeps per bounce. Lower than the HE's
+ * 0.55 on purpose: the smoke is meant to *plant*, and a canister that rolled
+ * half an arena would cloud a doorway nobody is near.
+ */
+const SMOKE_RESTITUTION = 0.4;
+/** The canister's collision radius, as a box — a small object, not a body. */
+const SMOKE_COLLIDE_R = 6;
+/** Below this a ground bounce is a stop: the canister settles and blooms. */
+const SMOKE_REST_VY = 80;
+
+/**
+ * The cloud's radius. A sixth of a screen, a patch you can cross in a dash
+ * and hide a whole team behind — the smoke's job is to answer "how many are
+ * in there" with a wall.
+ */
+export const SMOKE_RADIUS = 150;
+/**
+ * How long a cloud stands. Long enough to cross an arena with (a walk covers
+ * 220 px/s, so ~1.4s edge to edge), short enough that a popped smoke is a
+ * resource spent, not a permanent feature of the map.
+ */
+export const SMOKE_DURATION_MS = 6500;
+
+/** A smoke canister in flight. Server-owned, dead-reckoned like a bullet. */
+export interface SmokeGrenadeState {
+	id: number;
+	ownerId: string;
+	/** The thrower's side — the bloom inherits it. */
+	ownerTeam: TeamId | null;
+	x: number;
+	y: number;
+	vx: number;
+	vy: number;
+	/** ms of fuse remaining. */
+	fuseMs: number;
+}
+
+export function launchSmokeGrenade(
+	id: number,
+	ownerId: string,
+	x: number,
+	y: number,
+	angle: number,
+	ownerTeam: TeamId | null = null,
+): SmokeGrenadeState {
+	return {
+		id,
+		ownerId,
+		ownerTeam,
+		x,
+		y,
+		vx: Math.cos(angle) * SMOKE_GRENADE_SPEED,
+		vy: Math.sin(angle) * SMOKE_GRENADE_SPEED,
+		fuseMs: SMOKE_GRENADE_FUSE_MS,
+	};
+}
+
+/**
+ * Advance one canister, resolving it against the world. Mutates in place,
+ * like `tickHeGrenade` — the same bounce, with the smoke's own restitution,
+ * so the client's dead-reckon lands in exactly the same places.
+ */
+export function tickSmokeGrenade(
+	g: SmokeGrenadeState,
+	dt: number,
+	world: World = DEFAULT_WORLD,
+): void {
+	g.vy += SMOKE_GRENADE_GRAVITY * dt;
+	const r = SMOKE_COLLIDE_R;
+	const box: MovingBox = { x: g.x - r, y: g.y - r, w: r * 2, h: r * 2 };
+	const contacts = moveAndCollide(box, g.vx * dt, g.vy * dt, world);
+	g.x = box.x + r;
+	g.y = box.y + r;
+	if (contacts.wall !== "none") g.vx = -g.vx * SMOKE_RESTITUTION;
+	if (contacts.grounded || contacts.ceiling) {
+		g.vy = -g.vy * SMOKE_RESTITUTION;
+		if (contacts.grounded) g.vx *= 0.9;
+		if (contacts.grounded && Math.abs(g.vy) < SMOKE_REST_VY) g.vy = 0;
+	}
+	g.fuseMs -= dt * MS_PER_SECOND;
+}
+
+/**
+ * Has this canister's flight ended (bloom) or not? The smoke never detonates
+ * on a fighter and never on geometry — it bounces, and the fuse is the bloom.
+ */
+export function smokeGrenadeEnd(g: SmokeGrenadeState): boolean {
+	return g.fuseMs <= 0;
+}
+
+/**
+ * An anchored vision cloud. World state, like the trap: it travels in the
+ * snapshot in full every frame, and the client's renderer re-derives the
+ * concealment from the list — a lost datagram costs a puff, never a false
+ * clear. Position and owner never change once it blooms.
+ */
+export interface SmokeCloud {
+	id: number;
+	ownerId: string;
+	/**
+	 * The thrower's side, or `null` in a free-for-all. Carried on the cloud
+	 * rather than looked up per fighter, for the same reason the singularity
+	 * carries it: the renderer draws every cloud from its owner's side, and a
+	 * lookup would depend on a roster that arrives on a different message.
+	 */
+	ownerTeam: TeamId | null;
+	/** Centre, in world coordinates — not a body's top-left. */
+	x: number;
+	y: number;
+	/** ms of cloud left. Presentation only; never scales the concealment. */
+	remainingMs: number;
+}
+
+/** Clamp a bloom point into the world, so a cloud is never half off-screen. */
+export function clampSmokePoint(
+	x: number,
+	y: number,
+	world: World = DEFAULT_WORLD,
+): { x: number; y: number } {
+	return {
+		x: Math.max(world.left, Math.min(x, world.right)),
+		y: Math.max(world.top, Math.min(y, world.bottom)),
+	};
+}
+
+/**
+ * Is this fighter's body inside the cloud? Centre-to-centre, like the
+ * singularity's grip — a fighter fully swallowed is hidden, a fighter at the
+ * rim is not.
+ */
+export function smokeCloudOverlaps(
+	c: SmokeCloud,
+	bodyX: number,
+	bodyY: number,
+): boolean {
+	const dx = c.x - (bodyX + PLAYER_WIDTH / 2);
+	const dy = c.y - (bodyY + PLAYER_HEIGHT / 2);
+	return dx * dx + dy * dy <= SMOKE_RADIUS * SMOKE_RADIUS;
+}
+
+/**
+ * Is this fighter concealed from this viewer by this cloud?
+ *
+ * **Ally smoke hides the people inside.** The fighter must be inside the
+ * cloud, the cloud must be *their own side's* (the owner's own, or a
+ * teammate's — the same `sameTeam` the trap's friendly-fade uses), and the
+ * viewer must be hostile to them. A fighter in the *enemy's* smoke is not
+ * hidden — the concealment belongs to the smoke's owner.
+ *
+ * The viewer is never concealed from themselves, even in a free-for-all where
+ * `hostile(null, null)` is true: you always know where you are standing.
+ */
+export function smokeHidesFrom(
+	c: SmokeCloud,
+	fighterId: string,
+	fighterTeam: TeamId | null,
+	viewerId: string,
+	viewerTeam: TeamId | null,
+	bodyX: number,
+	bodyY: number,
+): boolean {
+	if (viewerId === fighterId) return false;
+	if (c.ownerId !== fighterId && !sameTeam(c.ownerTeam, fighterTeam)) {
+		return false;
+	}
+	if (!hostile(fighterTeam, viewerTeam)) return false;
+	return smokeCloudOverlaps(c, bodyX, bodyY);
 }

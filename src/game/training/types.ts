@@ -153,7 +153,7 @@ export interface TrainingConfig {
 	 * a dagger, which is a different drill: the thrust cannot be blocked, and
 	 * learning that against a sword dummy teaches the wrong lesson.
 	 */
-	hero: "lia" | "anands";
+	hero: "lia" | "anands" | "jeffs";
 	facing: DummyFacing;
 	timing: TrainingTiming;
 }

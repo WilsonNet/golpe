@@ -10,9 +10,12 @@
 
 import { describe, expect, it } from "vitest";
 import { buildWorld } from "./Arena.js";
+import { kitFor } from "./Heroes.js";
+import { applyHitToDefender, type MeleeResult } from "./Melee.js";
 import {
 	createPlayerState,
 	NEUTRAL_INTENT,
+	PLAYER_WALK_SPEED,
 	type PlayerIntent,
 	type PlayerPosition,
 	tickPlayer,
@@ -20,6 +23,11 @@ import {
 import type { TeamId } from "./Teams.js";
 import {
 	addCharge,
+	BLOSSOM_DURATION_MS,
+	BLOSSOM_RADIUS_PX,
+	BLOSSOM_TICK_DAMAGE,
+	blossomAffects,
+	blossomSweeps,
 	fieldAffects,
 	fieldFor,
 	GRENADE_FUSE_MS,
@@ -61,6 +69,138 @@ function bodyAtCentre(x: number, y: number): PlayerPosition {
 }
 
 const IDLE: PlayerIntent = { ...NEUTRAL_INTENT };
+
+describe("the Death Blossom", () => {
+	const blossom = () => ({
+		id: 1,
+		ownerId: "caster",
+		ownerTeam: null,
+		x: 400,
+		y: 300,
+		remainingMs: BLOSSOM_DURATION_MS,
+	});
+
+	it("hostility is the caster's team's: never the caster, never a teammate", () => {
+		const b = blossom();
+		expect(blossomAffects(b, "caster", null)).toBe(false);
+		expect(blossomAffects(b, "foe", null)).toBe(true);
+
+		const team = { ...b, ownerTeam: 0 as TeamId };
+		expect(blossomAffects(team, "teammate", 0)).toBe(false);
+		expect(blossomAffects(team, "foe", 1)).toBe(true);
+		// In a free-for-all every fighter is null, so everyone but the caster.
+		expect(blossomAffects(team, "other", null)).toBe(true);
+	});
+
+	it("sweeps only what is inside the radius with a corridor", () => {
+		const b = blossom();
+		// Inside the ring, same floor: swept.
+		expect(blossomSweeps(b, "foe", null, 400 - 16, 300 - 24, WORLD)).toBe(true);
+		// Beyond the radius: clear.
+		expect(
+			blossomSweeps(
+				b,
+				"foe",
+				null,
+				400 - 16 - BLOSSOM_RADIUS_PX - 60,
+				300 - 24,
+				WORLD,
+			),
+		).toBe(false);
+		// A platform between the storm and the fighter blocks the shots.
+		// The default arena has a platform above the floor; put the foe up
+		// there with a solid between and the sweep refuses.
+		expect(blossomSweeps(b, "foe", null, 400 - 16, 60, WORLD)).toBe(false);
+	});
+
+	it("the channel lives in PlayerPosition: walk halved, no dash, no jump", () => {
+		const kit = kitFor("jeffs");
+		let s = createPlayerState(400, 480);
+		s = tickPlayer(s, NEUTRAL_INTENT, DT, WORLD, null, kit);
+		s.grounded = true;
+		s.blossomTimer = BLOSSOM_DURATION_MS;
+		s.vx = 0;
+
+		// Walk speed is halved while the storm runs: the fighter accelerates
+		// toward the slowed target, not the full walk.
+		const walking = tickPlayer(
+			s,
+			{ ...NEUTRAL_INTENT, right: true },
+			DT,
+			WORLD,
+			null,
+			kit,
+		);
+		expect(walking.vx).toBeGreaterThan(0);
+		expect(walking.vx).toBeLessThan(PLAYER_WALK_SPEED * DT * 2600);
+
+		// No jump: the buffer never arms.
+		const jumping = tickPlayer(
+			s,
+			{ ...NEUTRAL_INTENT, up: true },
+			DT,
+			WORLD,
+			null,
+			kit,
+		);
+		expect(jumping.jumpBufferTimer).toBe(0);
+
+		// No dash: the impulse is refused.
+		const dashing = tickPlayer(
+			s,
+			{ ...NEUTRAL_INTENT, dash: 1 },
+			DT,
+			WORLD,
+			null,
+			kit,
+		);
+		expect(dashing.dashActiveTimer).toBe(0);
+	});
+
+	it("a knockdown ends the channel; a plain hitstun does not", () => {
+		const kit = kitFor("jeffs");
+		let s = createPlayerState(400, 480);
+		s = tickPlayer(s, NEUTRAL_INTENT, DT, WORLD, null, kit);
+		s.blossomTimer = BLOSSOM_DURATION_MS;
+
+		// The finisher's knockdown (the move with `knockdown: true`) zeroes it.
+		const finisher: MeleeResult = {
+			move: "slash3",
+			outcome: "hit",
+			damage: 11,
+			x: 400,
+			y: 480,
+			dir: 1,
+		};
+		applyHitToDefender(s, finisher);
+		expect(s.blossomTimer).toBe(0);
+
+		// The opener's ordinary hitstun leaves the storm running.
+		s.blossomTimer = BLOSSOM_DURATION_MS;
+		const slash: MeleeResult = {
+			move: "slash",
+			outcome: "hit",
+			damage: 7,
+			x: 400,
+			y: 480,
+			dir: -1,
+		};
+		applyHitToDefender(s, slash);
+		expect(s.blossomTimer).toBe(BLOSSOM_DURATION_MS);
+	});
+
+	it("the channel decays on both sides and feeds no meter", () => {
+		const kit = kitFor("jeffs");
+		let s = createPlayerState(400, 480);
+		s = tickPlayer(s, NEUTRAL_INTENT, DT, WORLD, null, kit);
+		s.blossomTimer = BLOSSOM_DURATION_MS;
+		const next = tickPlayer(s, NEUTRAL_INTENT, DT, WORLD, null, kit);
+		expect(next.blossomTimer).toBeLessThan(s.blossomTimer);
+		// The damage stat is the server's — the shared state only carries the
+		// channel, and the constant it damages against exists for the server.
+		expect(BLOSSOM_TICK_DAMAGE).toBeGreaterThan(0);
+	});
+});
 
 describe("charge", () => {
 	it("clamps to the meter at both ends", () => {

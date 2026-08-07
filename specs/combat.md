@@ -11,10 +11,12 @@ lifecycle.
 
 Since the arrival of heroes the game is a **hero shooter**: which melee weapon
 and which ranged weapon a fighter carries is decided by their hero (see
-[heroes.md](heroes.md) and [anands.md](anands.md)). The stance system below is
-the *slot* system — melee weapon out or ranged weapon out — and what fires is
-the hero's weapon. Lia's gun is the pistol described here; Anands' is the
-machine gun, faster and weaker per round.
+[heroes.md](heroes.md), [anands.md](anands.md) and [jeffs.md](jeffs.md)). The
+stance system below is the *slot* system — melee weapon out or ranged weapon
+out — and what fires is the hero's weapon. Lia's gun is the pistol described
+here; Anands' is the machine gun, faster and weaker per round; Jeffs' is the
+shotgun — six pellets in a fixed cone, slow, lethal at point blank (see
+[jeffs.md](jeffs.md)).
 
 ## Authority
 
@@ -74,6 +76,11 @@ produced a second sprite nothing simulated — it froze on screen forever.
   - *Not implemented:* an impact effect for an absorbed shot. The effect path
     carries a `MeleeMove`, which a bullet is not.
 - Bullets spawn at the **centre** of the firing body, not its top-left corner.
+- **A shotgun fires a deterministic fan of pellets.** A pellet is an ordinary
+  bullet; the cone is six fixed angles spread ±10° around the aim, fired at
+  once. The weapon's cooldown, pellet damage and pellet speed are its stat
+  card (`RANGED_WEAPONS.shotgun`), and the fan is fixed so client and server
+  always spawn the same pattern from the same aim.
 - Sprites come from a recycled pool; a bullet sprite is bound to a bullet **id**,
   never to a position in an array.
 - `EventBus` emits `bullet-fired` per shot, for the React UI.
