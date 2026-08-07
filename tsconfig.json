@@ -9,5 +9,5 @@
     "allowImportingTsExtensions": true,
     "jsx": "react-jsx"
   },
-  "include": ["src"]
+  "include": ["src", "tweakables"]
 }

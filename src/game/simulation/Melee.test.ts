@@ -254,7 +254,7 @@ describe("the charge", () => {
 		// Accumulation roots the walk. The intent keeps attack held — a tick
 		// without it would drop the charge, which is the rule, not a test bug.
 		let s = fighter({ grounded: true });
-		s = melee(s, { attack: true }, 100);
+		s = melee(s, { attack: true }, 60);
 		expect(isCharging(s)).toBe(true);
 		const rooted = tickPlayer(s, intent({ right: true, attack: true }), DT);
 		expect(rooted.x).toBe(100);
@@ -273,7 +273,7 @@ describe("the charge", () => {
 
 	it("keeps dash and jump as charge delivery tools", () => {
 		let s = fighter({ grounded: true });
-		s = melee(s, { attack: true }, 100);
+		s = melee(s, { attack: true }, 60);
 		expect(isCharging(s)).toBe(true);
 
 		// Dash while charging: the burst is how the charge closes distance.
@@ -290,7 +290,7 @@ describe("the charge", () => {
 
 	it("dashes once armed too — the charge is carried, not endured", () => {
 		let s = fighter({ grounded: true });
-		s = melee(s, { attack: true }, 100);
+		s = melee(s, { attack: true }, 60);
 		const charged = tickUntil(s, { attack: true }, (x) => x.massiveReady, 6000);
 		const dashed = tickPlayer(
 			charged.state,
@@ -351,7 +351,7 @@ describe("the charge", () => {
 
 	it("loses everything when released early", () => {
 		let s = fighter({ grounded: true });
-		s = melee(s, { attack: true }, 100);
+		s = melee(s, { attack: true }, 60);
 		expect(s.chargeTimer).toBeGreaterThan(0);
 		s = melee(s, { attack: false });
 		expect(s.chargeTimer).toBe(0);
@@ -361,7 +361,7 @@ describe("the charge", () => {
 
 	it("is cancelled by a stance switch", () => {
 		let s = fighter({ grounded: true });
-		s = melee(s, { attack: true }, 100);
+		s = melee(s, { attack: true }, 60);
 		expect(s.chargeTimer).toBeGreaterThan(0);
 		s = melee(s, { swordStance: false });
 		expect(s.chargeTimer).toBe(0);
@@ -369,7 +369,7 @@ describe("the charge", () => {
 
 	it("is spent by a stun", () => {
 		let s = fighter({ grounded: true });
-		s = melee(s, { attack: true }, 100);
+		s = melee(s, { attack: true }, 60);
 		expect(s.chargeTimer).toBeGreaterThan(0);
 		s = melee({ ...s, stunTimer: 100 }, {});
 		expect(s.chargeTimer).toBe(0);

@@ -53,7 +53,7 @@ function perception(overrides: Partial<AIInput> = {}): AIInput {
 		selfPlunging: false,
 		selfStuck: false,
 		selfMassiveReady: false,
-			selfCharging: false,
+		selfCharging: false,
 		selfId: "dummy",
 		selfHero: "lia",
 		enemyHero: "lia",

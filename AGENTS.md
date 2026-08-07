@@ -41,6 +41,7 @@ skill({ name: "feedback-loop" })    # the full workflow
 | Question | File |
 |---|---|
 | What should the game *do*? | [`specs/`](specs/README.md) — the source of truth |
+| **Where do the balance numbers live?** | [`tweakables/`](tweakables/README.md) — every tuning constant, one folder |
 | Who are the heroes, and how do kits work? | [`specs/heroes.md`](specs/heroes.md) · [`specs/anands.md`](specs/anands.md) |
 | What are items, and how do charges work? | [`specs/items.md`](specs/items.md) |
 | What should the menu do? | [`specs/menu.md`](specs/menu.md) — when it shows, and how choices become URLs |
@@ -265,7 +266,7 @@ part of what they must prove.
 
 **WASD/Space** move/jump (**jump again in the air** = double jump) ·
 **double-tap A/D** dash (melee stance) or tumble (gun stance) · **LMB** the
-melee weapon's attack (hold 2.5s then release = Massive Strike for Lia — a
+melee weapon's attack (hold 1.6s then release = Massive Strike for Lia — a
 floor slam, or the plunge bomb if airborne) · **Shift** block (Lia) — or the
 **thrust**, a knockdown lunge (Anands: the dagger has no block) · **Space**
 uppercut (Lia) — or the **shoryuken** anti-air (Anands) · **F** the item —
@@ -338,13 +339,13 @@ a cancel always drops the chain** — so the butterfly is an endless opener loop
 walking the chain is a separate decision. It ends in neutral by construction.
 Every landed sword hit disables its target and is drawn that way. See [specs/melee.md](specs/melee.md).
 
-**The guard is strong, and the Massive is a 2.5-second commitment.** Every block
+**The guard is strong, and the Massive is a 1.6-second commitment.** Every block
 that stops a sword attack guard-breaks the attacker — a full second of the
 helpless pose — and grants the defender a free Massive (fires on click, cyan,
 4s to spend). The charge roots your walk while it fills (after 250ms) but keeps
 dash and double-jump even then — and once it completes, walking returns: the
 armed massive is carried, not endured, and delivery is the strategy. It dies to
-a release before 2.5s, a hit, a stance switch or an ult. Released on the ground it
+a release before 1.6s, a hit, a stance switch or an ult. Released on the ground it
 slams 56px in front and blasts 100px front *and back* of the slam point (the
 **back massive**: turn away from a turtle and the blast stuns through their
 guard); released in the air it becomes the **plunge bomb** — a 1500 px/s dive

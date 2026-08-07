@@ -99,7 +99,7 @@ Three rhythms have numbers that are not free:
 
 - **A jump beat must hold ~240ms and then release ~60ms.** Jump height is
   analogue and edge-triggered; scattered single-frame presses can only hop.
-- **A Massive beat must hold past `MASSIVE_CHARGE_MS` (2500ms)** and then
+- **A Massive beat must hold past `MASSIVE_CHARGE_MS` (1600ms)** and then
   release, because the release is what fires it. The default holds 2550ms.
 - **The butterfly's block must land at `SLASH_CANCELLED_MS` (160ms).** Earlier
   than the end of startup and the cancel is illegal; during the active frames it

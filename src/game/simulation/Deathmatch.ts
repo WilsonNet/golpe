@@ -10,54 +10,32 @@
  * No wall-clock reads in here. Elapsed time arrives as a number.
  */
 
+import {
+	MATCH_OVER_LINGER_MS,
+	MVP_BLOCKED_PER_BURST,
+	MVP_DAMAGE_PER_BURST,
+	MVP_DENY_WEIGHT,
+	MVP_KILL_WEIGHT,
+	MVP_STAT_BURST,
+	RESPAWN_DELAY_MS,
+	SCORE_LIMIT,
+	TIME_LIMIT_MS,
+	VICTORY_BREATHING_MS,
+	VICTORY_HOLD_MS,
+} from "../../../tweakables/match.js";
 import type { TeamId } from "./Teams.js";
-import { MS_PER_SECOND, SECONDS_PER_MINUTE } from "./units.js";
 
-/** Frags that end the match. */
-export const SCORE_LIMIT = 21;
-
-/** Wall-clock length of a match, when nobody reaches the score limit. */
-/** A deathmatch runs for this many minutes, unless somebody hits the score limit. */
-const DEFAULT_MATCH_MINUTES = 5;
-export const TIME_LIMIT_MS =
-	DEFAULT_MATCH_MINUTES * SECONDS_PER_MINUTE * MS_PER_SECOND;
-
-/** How long a fighter stays down before returning to the arena. */
-export const RESPAWN_DELAY_MS = 2000;
-
-/**
- * How long the end of a match lasts before the next one starts.
- *
- * **Forty-four seconds, and it is not all podium.** The end of a match is a
- * four-beat ceremony now, and every beat gets its time: a few seconds of the
- * arena holding the last moment, a victory card, Play of the Game — a title
- * card, ten seconds of pre-roll camera work, the footage itself and a card at
- * the end, up to about twenty-seven seconds — and only then the podium. It
- * was fifteen seconds when the podium was the whole of it, and leaving it
- * there would have meant a new match starting underneath a replay of the last
- * one.
- *
- * See specs/play-of-the-game.md for where the time goes.
- */
-export const MATCH_OVER_LINGER_MS = 44000;
-
-/**
- * How long the arena is left alone after the last frag, before the victory
- * card lands.
- *
- * This is the *breathing*: the fight is over, the winner is standing, and for
- * three seconds the game does not say anything about it. A cut straight from
- * the winning blow to a full-screen card reads as an interruption; the silence
- * is what makes the card an answer instead of a shout. Pacing is
- * presentation, which is why these two live beside the linger budget rather
- * than in a component: the ceremony's parts have to fit the whole, and a
- * card that quietly doubled would push the next match's first seconds under
- * a replay of the last one.
- */
-export const VICTORY_BREATHING_MS = 3000;
-
-/** How long the victory card owns the screen, from its slam to the curtain. */
-export const VICTORY_HOLD_MS = 3500;
+export {
+	MATCH_OVER_LINGER_MS,
+	MVP_BLOCKED_PER_BURST,
+	MVP_DAMAGE_PER_BURST,
+	MVP_STAT_BURST,
+	RESPAWN_DELAY_MS,
+	SCORE_LIMIT,
+	TIME_LIMIT_MS,
+	VICTORY_BREATHING_MS,
+	VICTORY_HOLD_MS,
+};
 
 export type MatchPhase = "live" | "over";
 
@@ -125,25 +103,6 @@ export function rankScores(entries: readonly ScoreEntry[]): Standing[] {
 		)
 		.map((entry, i) => ({ ...entry, place: i + 1 }));
 }
-
-/**
- * MVP weights: the Play-of-the-Game table applied to a whole match.
- *
- * The two honours must agree about what is worth remembering. A frag is the
- * unit; a **deny** outscores it outright because taking somebody's ultimate
- * away is the rarest thing in the game; damage and blocked damage are
- * burst-priced and cheap, because they *colour* a performance — a fighter who
- * merely farmed a health bar of damage should never out-score one who closed
- * a kill. Kills stay the largest part of the score; these numbers decide the
- * order behind the frag leader, and are the whole reason a TDM support with
- * three denies can be the MVP over their side's cleanest fragger.
- */
-const MVP_KILL_WEIGHT = 100;
-const MVP_DENY_WEIGHT = 140;
-export const MVP_DAMAGE_PER_BURST = 20;
-export const MVP_BLOCKED_PER_BURST = 10;
-/** Damage points per burst for the two burst rows, like `POTG_DAMAGE_BURST`. */
-export const MVP_STAT_BURST = 100;
 
 /**
  * One fighter's whole-match worth. Integer arithmetic only — damage runs to

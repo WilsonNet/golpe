@@ -70,7 +70,7 @@ A fighter holds either a **sword** or a **gun**, never both.
 | Input | Sword stance | Gun stance |
 |---|---|---|
 | **LMB** tap | Slash — and, on the ground, the next link of the chain | Fire |
-| **LMB** hold ≥ 2500ms, then release | **Massive Strike** (a floor slam — or the plunge bomb, airborne) | Fire (charge ignored) |
+| **LMB** hold ≥ 1600ms, then release | **Massive Strike** (a floor slam — or the plunge bomb, airborne) | Fire (charge ignored) |
 | **Shift** hold | **Block** | — |
 | **F** | **Uppercut** | — |
 
@@ -148,7 +148,7 @@ it is an area event judged by the server when the swing reaches the floor. See
 - **Massive damage (24) is a bit over three slashes** but takes more than twice
   as long and cannot be cancelled or protected. The trade is deliberate.
 - **The swing's startup is short (90ms) because the charge already was the
-  wind-up**: the sword is raised for the whole 2.5s hold, so the swing itself only
+  wind-up**: the sword is raised for the whole 1.6s hold, so the swing itself only
   has to come down.
 - **The swing is blockable, and that is the point.** The old Massive ignored the
   guard; the new one loses to it — a defender standing in the blade's path stops
@@ -371,7 +371,7 @@ the worst case at a slash's startup plus active frames, measured at 154ms.
 
 A Massive Strike is armed (`massiveReady`) two ways:
 
-1. **Charging** — hold LMB for **2500ms**. The sword is held up overhead for
+1. **Charging** — hold LMB for **1600ms**. The sword is held up overhead for
    the whole hold, with energy motes streaming in — more of them the longer the
    hold, so the threat accumulates exactly as the charge does. Releasing fires
    it.
@@ -389,7 +389,7 @@ A Massive Strike is armed (`massiveReady`) two ways:
 - **once the charge completes, everything returns.** An armed fighter walks the
   massive into range, dashes, jumps, blocks — the charge is a weapon being
   carried, not a cast being endured, and *delivering* it (walk it in, hop it
-  into a bomb, guard up while approaching) is the strategy the 2.5s commitment is
+  into a bomb, guard up while approaching) is the strategy the 1.6s commitment is
   paid for.
 
 The charge is lost by anything that is not a delivery: releasing early, being

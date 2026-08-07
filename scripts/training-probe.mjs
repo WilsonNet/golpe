@@ -200,7 +200,7 @@ const UPPERCUT = {
 	aimAngle: AIM_RIGHT,
 };
 /**
- * Charge past MASSIVE_CHARGE_MS (2500ms), then let go — the release is what fires.
+ * Charge past MASSIVE_CHARGE_MS (1600ms), then let go — the release is what fires.
  */
 const MASSIVE = { intent: { attack: true }, holdMs: 2550, aimAngle: AIM_RIGHT };
 /** A move's full duration, so the next step is not swallowed by its recovery. */
@@ -397,7 +397,7 @@ const BATTERY = [
 	},
 	{
 		/**
-		 * The back-massive, end to end: a 2.5s charge *away* from a turtling
+		 * The back-massive, end to end: a 1.6s charge *away* from a turtling
 		 * opponent, then a release that slams the floor in front of the player.
 		 * The turtle is behind the player — outside the swing, inside the
 		 * blast's back reach — and the blast stuns straight through the guard.
@@ -472,7 +472,7 @@ const BATTERY = [
 					},
 				},
 				// The guard has to outlast the first bomb's detonation (~3s in
-				// with the 2.5s charge) but end before the dummy's second
+				// with the 1.6s charge) but end before the dummy's second
 				// cycle — the cycle is ~3.7s, so the second bomb lands ~6.5s
 				// in. A hold of 4s clears the first bomb with a second of
 				// margin on either side; the original 5s sat knife-edge against
@@ -986,7 +986,7 @@ const BATTERY = [
 		 * grenade on the wall-pinned player, the hole opens on them, and its
 		 * 7-per-250ms holds them down through ~3.8s to death — the only weapon
 		 * fast enough to kill inside a 9s button hold, now that a sword hit
-		 * charges for 2.5 seconds. The player holds R and does nothing else.
+		 * charges for 1.6 seconds. The player holds R and does nothing else.
 		 */
 		name: "killed while holding loses the ultimate",
 		async run(page) {

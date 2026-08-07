@@ -201,86 +201,68 @@ export {
 	ultReady,
 } from "./Ultimate.js";
 
-// ---------------------------------------------------------------------------
-// Movement tuning
-//
-// The curve is built jump-first: pick the height a jump must clear, then solve
-// for the velocity. Every ledge in Arena.ts sits within JUMP_HEIGHT_PX of the
-// surface below it, so changing these constants changes level reachability —
-// re-check Arena.ts if you touch them.
-// ---------------------------------------------------------------------------
-
-export const GRAVITY = 1800;
-/** Falling is heavier than rising: the classic platformer "snap". */
-export const FALL_GRAVITY_MULTIPLIER = 1.35;
-export const MAX_FALL_SPEED = 950;
-
+import {
+	ATTACK_COOLDOWN,
+	BULLET_DAMAGE,
+	BULLET_OOB_MARGIN_PX,
+	BULLET_SPEED,
+	MAX_HP,
+} from "../../../tweakables/combat.js";
+import {
+	AIR_ACCEL,
+	AIR_FRICTION,
+	AIR_JUMP_VELOCITY,
+	AIR_JUMPS,
+	BLOCK_MOVE_MULTIPLIER,
+	COYOTE_TIME_MS,
+	FALL_GRAVITY_MULTIPLIER,
+	GRAVITY,
+	GROUND_ACCEL,
+	GROUND_FRICTION,
+	JUMP_BUFFER_MS,
+	JUMP_CUT_MULTIPLIER,
+	JUMP_VELOCITY,
+	MAX_FALL_SPEED,
+	PLAYER_WALK_SPEED,
+	STUN_GROUND_FRICTION,
+	TUMBLE_DURATION_MS,
+	TUMBLE_HEIGHT,
+	TUMBLE_LOCKOUT_MS,
+	TUMBLE_SPEED,
+	WALL_COYOTE_MS,
+	WALL_JUMP_HORIZONTAL,
+	WALL_JUMP_LOCKOUT,
+	WALL_JUMP_VERTICAL,
+	WALL_SLIDE_SPEED,
+} from "../../../tweakables/movement.js";
 import { MS_PER_SECOND } from "./units.js";
 
 export { MS_PER_SECOND } from "./units.js";
-
-/** A fighter's full health. The bar's denominator, and every spawn's starting HP. */
-export const MAX_HP = 100;
-
-export const JUMP_VELOCITY = -700;
+export {
+	AIR_JUMP_VELOCITY,
+	AIR_JUMPS,
+	BULLET_DAMAGE,
+	BULLET_SPEED,
+	COYOTE_TIME_MS,
+	FALL_GRAVITY_MULTIPLIER,
+	GRAVITY,
+	JUMP_BUFFER_MS,
+	JUMP_CUT_MULTIPLIER,
+	JUMP_VELOCITY,
+	MAX_FALL_SPEED,
+	MAX_HP,
+	PLAYER_WALK_SPEED,
+	TUMBLE_DURATION_MS,
+	TUMBLE_HEIGHT,
+	TUMBLE_LOCKOUT_MS,
+	TUMBLE_SPEED,
+	WALL_JUMP_HORIZONTAL,
+	WALL_JUMP_LOCKOUT,
+	WALL_JUMP_VERTICAL,
+	WALL_SLIDE_SPEED,
+};
 /** Peak rise of a full jump: v² / 2g = 136px. */
 export const JUMP_HEIGHT_PX = (JUMP_VELOCITY * JUMP_VELOCITY) / (2 * GRAVITY);
-/** Releasing jump mid-rise cuts the arc, giving analogue jump height. */
-export const JUMP_CUT_MULTIPLIER = 0.45;
-/** Grace period to still jump just after walking off a ledge. */
-export const COYOTE_TIME_MS = 100;
-
-/**
- * Jumps available *after* leaving the ground. One, so a double jump.
- *
- * Refilled by landing and by nothing else — in particular **not by a wall jump**,
- * or a fighter could alternate the two up a single wall forever.
- */
-export const AIR_JUMPS = 1;
-/**
- * The second jump is deliberately weaker than the first (89% of the launch, so
- * ~108px against 136px).
- *
- * Equal jumps would make the ground jump pointless to time — you would simply
- * always have two of them. Making the airborne one shorter keeps the decision
- * interesting: spend it to reach, or save it to recover.
- */
-export const AIR_JUMP_VELOCITY = -620;
-/** Grace period for a jump pressed just before landing. */
-export const JUMP_BUFFER_MS = 120;
-
-export const PLAYER_WALK_SPEED = 220;
-const GROUND_ACCEL = 2600;
-const AIR_ACCEL = 1800;
-const GROUND_FRICTION = 2600;
-const AIR_FRICTION = 500;
-/**
- * Ground friction while stunned. Normal friction kills a knockback impulse in
- * two frames, so no shove would ever be visible: a Massive Strike's 420 px/s
- * would move the target 34px at 2600, versus 73px here. Being hit hard should
- * look like being hit hard.
- */
-const STUN_GROUND_FRICTION = 1200;
-
-export const WALL_SLIDE_SPEED = 160;
-export const WALL_JUMP_HORIZONTAL = 230;
-export const WALL_JUMP_VERTICAL = -640;
-/**
- * Steering is ignored for this long after a wall jump so the launch actually
- * carries you off the wall. Long lockouts feel like losing the controller, and
- * too much horizontal push makes a wall unclimbable — keep both modest so
- * repeated wall jumps can gain height on a single flat wall.
- */
-export const WALL_JUMP_LOCKOUT = 140;
-/** Wall contact lingers briefly so a wall jump does not need frame-perfect timing. */
-const WALL_COYOTE_MS = 100;
-
-/**
- * Walking while blocking. A guard you can carry at full speed is a guard with no
- * cost, and it would make circling behind a blocker — the intended answer to a
- * turtle — impossible to actually perform.
- */
-const BLOCK_MOVE_MULTIPLIER = 0.55;
 
 /**
  * The sword's double-tap dash — owned by the sword weapon in `Melee.ts`, where
@@ -288,47 +270,6 @@ const BLOCK_MOVE_MULTIPLIER = 0.55;
  * importers keep one home to import from.
  */
 export { DASH_DURATION_MS, DASH_LOCKOUT_MS, DASH_SPEED } from "./Melee.js";
-
-/**
- * Tumble impulse — the gun's answer to the dash, deliberately slower.
- *
- * The double-tap gesture is the *same* in both stances; the stance already on
- * the simulation decides whether it is a dash or a tumble. GunZ's own
- * asymmetry: the sword's dash is faster, so a sword fighter can always close
- * the gap a rolling gunner opens. 720 against the dash's 1000 is ~76% — a
- * burst, not a cruise, but one a chaser can run down.
- */
-export const TUMBLE_SPEED = 720;
-/**
- * A tumble is harder to chain than a dash. The roll is a repositioning tool —
- * it buys the gunner a beat to shoot, and the bigger cooldown is the beat the
- * sword gets to close. Longer than `DASH_LOCKOUT_MS` on purpose.
- */
-export const TUMBLE_LOCKOUT_MS = 450;
-/**
- * How long the roll travels. Shorter than its lockout (like the dash), and
- * longer than the dash's line so the two bursts cover similar ground at very
- * different speeds and rhythms.
- *
- * Also the length of one full spin of the roll animation: the `roll` strip is
- * eight frames at 25fps (see `CLIPS` in `ecs/systems.ts`), so a roll that
- * ended sooner would pop the fighter upright mid-somersault.
- */
-export const TUMBLE_DURATION_MS = 320;
-/**
- * Collision height while rolling — GunZ's "sprawled almost parallel to the
- * ground". The box is pinned to the feet, so a rolling fighter is a shorter
- * target and shots aimed at a standing fighter's upper body pass overhead.
- *
- * It is a strict *subset* of the standing box: every solid the roll box
- * touches, the standing box touches too, so a roll can never open a path
- * through solids a standing fighter would collide with.
- */
-export const TUMBLE_HEIGHT = 20;
-
-export const BULLET_SPEED = 600;
-export const BULLET_DAMAGE = 10;
-const ATTACK_COOLDOWN = 250;
 
 // ---------------------------------------------------------------------------
 // Player state
@@ -1182,9 +1123,6 @@ export function isBulletOutOfBounds(
 		b.y > world.bottom + BULLET_OOB_MARGIN_PX
 	);
 }
-
-/** A bullet past the world edge by this much is gone. */
-const BULLET_OOB_MARGIN_PX = 50;
 
 export type BodyBoxSource = Pick<
 	PlayerPosition,
