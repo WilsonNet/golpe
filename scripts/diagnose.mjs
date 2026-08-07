@@ -133,10 +133,12 @@ function activitySummary(lines, states = []) {
 async function offlineRun(browser, durationMs) {
 	const page = await browser.newPage();
 	const lines = sinkConsole(page);
-	await page.goto(BASE_URL);
+	// `?offline=true` is the escape hatch's launch key — the root URL shows the
+	// menu and never boots a match, so the probe must ask for one. `ai=true`
+	// starts the AI-vs-AI brains at boot (the `__toggleAIVsAI` call below would
+	// toggle them back off, so it is not made here).
+	await page.goto(`${BASE_URL}/?offline=true&ai=true`);
 	await waitForGame(page);
-	await page.evaluate(() => window.__toggleAIVsAI());
-	await page.waitForTimeout(2000);
 
 	const report = await runDiagnostic(page, lines, durationMs);
 	report.activity = activitySummary(lines, report.states);
