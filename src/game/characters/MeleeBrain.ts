@@ -68,6 +68,18 @@ const CHARGE_CHANCE_PER_SKILL = 0.25;
 const BUTTERFLY_LOOPS_MIN = 2;
 const BUTTERFLY_LOOPS_RANGE = 3;
 
+// The shotgun pull: how the brain gambles on the finisher blast. Rolled once
+// per approach, like the guard decision.
+/** A foe a single blast will finish is worth the gamble. */
+const KILLSHOT_HP = 60;
+const KILLSHOT_BONUS_CHANCE = 0.3;
+/** The blast's base odds as the approach closes to point blank. */
+const BLAST_BASE_CHANCE = 0.12;
+const BLAST_CLOSENESS_WEIGHT = 0.3;
+const BLAST_AGGRO_WEIGHT = 0.2;
+/** The roll never clears this ceiling — a blast is not the default answer. */
+const BLAST_CHANCE_CAP = 0.92;
+
 /** One phase of a scripted melee rhythm: which buttons, for how long. */
 interface MeleeBeat {
 	ms: number;
@@ -330,9 +342,13 @@ export class MeleeBrain {
 			const closeness = 1 - distance / SHOTGUN_BLAST_RANGE_PX;
 			// A foe a single blast will finish is worth the gamble; a foe at
 			// full health gets the sword until they are not.
-			const killshot = input.enemyHP <= 60 ? 0.3 : 0;
-			const p = 0.12 + closeness * 0.3 + killshot + this.aggressiveness * 0.2;
-			this.blastDecision = Math.random() < Math.min(0.92, p);
+			const killshot = input.enemyHP <= KILLSHOT_HP ? KILLSHOT_BONUS_CHANCE : 0;
+			const p =
+				BLAST_BASE_CHANCE +
+				closeness * BLAST_CLOSENESS_WEIGHT +
+				killshot +
+				this.aggressiveness * BLAST_AGGRO_WEIGHT;
+			this.blastDecision = Math.random() < Math.min(BLAST_CHANCE_CAP, p);
 		}
 		return this.blastDecision;
 	}

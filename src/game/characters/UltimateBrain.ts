@@ -63,6 +63,10 @@ const PATIENCE_RANGE_PX = 520;
  * be refused anyway by the interruption — measured 13 aborted holds in a row.
  */
 const MELEE_SAFETY_PX = 150;
+/** The quadratic's discriminant coefficient: b² − 4ac for a=½g·dx²/v². */
+const DISCRIMINANT_FACTOR = 4;
+/** The maximum-lob fallback: 45° when the target is past the grenade's range. */
+const MAX_LOB_ANGLE = Math.atan(1);
 
 /** The cluster to throw into: the enemy with the most neighbours, centroid and all. */
 interface Cluster {
@@ -114,8 +118,8 @@ export function lobAngle(dx: number, dy: number): number {
 	const v2 = GRENADE_SPEED * GRENADE_SPEED;
 	const a = (GRENADE_GRAVITY * dx * dx) / (2 * v2);
 	const c = dy + a;
-	const disc = dx * dx - 4 * a * c;
-	if (disc < 0) return Math.PI / 4;
+	const disc = dx * dx - DISCRIMINANT_FACTOR * a * c;
+	if (disc < 0) return MAX_LOB_ANGLE;
 	const u = (dx - Math.sqrt(disc)) / (2 * a);
 	return Math.atan(u);
 }

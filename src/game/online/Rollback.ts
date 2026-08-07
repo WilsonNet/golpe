@@ -90,6 +90,8 @@ export function legaliseDrawn(
 const REMOTE_SMOOTH_FACTOR = 0.06;
 
 const MAX_ROLLBACK_TICKS = 9;
+/** Two decimal places: the report's own precision, not a physics number. */
+const ROUNDING_SCALE = 100;
 
 /** Above this, a remote correction is a respawn or a teleport, not a mistake. */
 const REMOTE_TELEPORT_PX = 100;
@@ -348,7 +350,8 @@ export class RollbackStats {
 
 	summary() {
 		// Two decimal places is the report's own precision, not a physics number.
-		const round = (n: number) => Math.round(n * 100) / 100;
+		const round = (n: number) =>
+			Math.round(n * ROUNDING_SCALE) / ROUNDING_SCALE;
 		return {
 			/** Authoritative states folded into a predicted fighter. Zero means no netcode ran. */
 			rollbacks: this.rollbacks,

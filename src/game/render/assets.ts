@@ -759,15 +759,13 @@ function createHeroPoses(
 			.fill({ color: 0x000000, alpha: 0 });
 
 	const pose = (name: HeroPose, node: Container) => {
-		poseTextures.set(`${sheet}:${name}`, renderer.generateTexture(node));
+		const texture = renderer.generateTexture(node);
+		poseTextures.set(`${sheet}:${name}`, texture);
 		node.destroy({ children: true });
 		// The dude's poses keep their old TEX keys, so the pre-hero callers
 		// (the ultimate cinematic's CSS aside) keep working unchanged.
 		if (sheet === "dude") {
-			generated.set(
-				TEX[name] ?? `dude_${name}`,
-				poseTextures.get(`${sheet}:${name}`)!,
-			);
+			generated.set(TEX[name] ?? `dude_${name}`, texture);
 		}
 	};
 

@@ -192,7 +192,8 @@ describe("the dagger stab", () => {
 		);
 		const result = resolveMelee(attacker, defender);
 		expect(result?.outcome).toBe("parried");
-		const damage = applyMeleeResult(attacker, defender, result!);
+		if (!result) throw new Error("expected a parry result");
+		const damage = applyMeleeResult(attacker, defender, result);
 		expect(damage).toBe(0);
 		// The sword's guard breaks the dagger for a full second and arms the
 		// defender a Massive: the spam has an answer.
@@ -224,7 +225,7 @@ describe("the thrust", () => {
 		const start = s.x;
 		s = ticks(s, {}, Math.floor(MOVES.thrust.activeMs / (1000 * DT)));
 		expect(s.x - start).toBeGreaterThan(120);
-		expect(s.vx).toBeCloseTo(MOVES.thrust.selfVx!);
+		expect(s.vx).toBeCloseTo(MOVES.thrust.selfVx ?? 0);
 	});
 
 	it("an airborne thrust does not fall — it is a flat line, like a dash", () => {
@@ -315,7 +316,7 @@ describe("the shoryuken", () => {
 	it("is the dagger's F move and gives a weaker knockdown", () => {
 		const def = MOVES.shoryuken;
 		expect(def.knockdownMs).toBe(900);
-		expect(def.knockdownMs).toBeLessThan(MOVES.thrust.knockdownMs!);
+		expect(def.knockdownMs).toBeLessThan(MOVES.thrust.knockdownMs ?? 0);
 	});
 
 	it("is blockable, unlike the sword's uppercut", () => {

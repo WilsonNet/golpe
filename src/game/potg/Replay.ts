@@ -28,6 +28,10 @@ import {
 	type Singularity,
 } from "../simulation/Physics";
 import { PotgDirector, type PotgShot, type Subject } from "./Director";
+
+/** A bullet packs as an (id, x, y) triplet — the stride of `a.b`. */
+const BULLET_STRIDE = 3;
+
 import type { PotgCastMember, PotgClip } from "./types";
 
 /** The replay's singularity is not the room's, so it gets an id nothing else uses. */
@@ -116,7 +120,7 @@ export class PotgReplay {
 		}
 
 		const bullets: { id: number; x: number; y: number }[] = [];
-		for (let i = 0; i + 2 < a.b.length; i += 3) {
+		for (let i = 0; i + BULLET_STRIDE - 1 < a.b.length; i += BULLET_STRIDE) {
 			bullets.push({
 				id: a.b[i] ?? 0,
 				x: a.b[i + 1] ?? 0,

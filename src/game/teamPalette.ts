@@ -47,7 +47,7 @@ const TEAM_COLORS: readonly number[] = [
 const TEAM_CSS: readonly string[] = ["#4ea8ff", "#ff8a4c"];
 
 /** Untinted white, for a fighter with no team. */
-const NEUTRAL = 0xffffff;
+export const NEUTRAL = 0xffffff;
 
 /**
  * Tint strengths, named so the whole scheme can be retuned in one place.

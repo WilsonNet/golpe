@@ -218,10 +218,11 @@ export class DragonFx {
 			// The wave: two wide, slow curves along the whole length, growing
 			// toward the tail — the body sweeps, it does not wiggle.
 			const wave = Math.sin(i * 0.4 + this.wavePhase) * (24 + i * 4);
-			const p = this.chain[i]!;
+			const p = this.chain[i];
+			const segment = this.segments[i];
+			if (!p || !segment) continue;
 			p.x = prevX - nx * lag - ny * wave;
 			p.y = prevY - ny * lag + nx * wave;
-			const segment = this.segments[i]!;
 			segment.position.set(p.x, p.y);
 			segment.rotation = Math.atan2(p.y - prevY, p.x - prevX);
 			const t = (SEGMENTS - i) / SEGMENTS;
@@ -238,7 +239,8 @@ export class DragonFx {
 		this.sparkAccMs += dtMs;
 		while (this.sparkAccMs >= SPARK_EVERY_MS) {
 			this.sparkAccMs -= SPARK_EVERY_MS;
-			const tail = this.chain[SEGMENTS - 1]!;
+			const tail = this.chain[SEGMENTS - 1];
+			if (!tail) break;
 			this.particles.burst({
 				texture: TEX.spark,
 				count: 2,
@@ -280,7 +282,8 @@ export class DragonFx {
 			// Two motes per beat, one near the head and one halfway down the
 			// body, so the stream reads along the whole length.
 			for (const i of [0, Math.floor(SEGMENTS / 2)]) {
-				const p = this.chain[i]!;
+				const p = this.chain[i];
+				if (!p) continue;
 				this.particles.burst({
 					texture: TEX.shard,
 					count: 2,

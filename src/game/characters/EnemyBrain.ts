@@ -148,6 +148,31 @@ const DASH_ESCAPE_CHANCE = 0.14;
 const ZONE_JUMP_HURT_CHANCE = 0.6;
 const ZONE_JUMP_HALE_CHANCE = 0.3;
 
+// ---- item decisions ----
+/** A grenade is a ranged option, not a point-blank one: the throw's far band. */
+const GRENADE_MIN_RANGE_PX = 120;
+const GRENADE_MAX_RANGE_PX = 520;
+/** The grenade's cooldown after a throw. */
+const GRENADE_COOLDOWN_MS = 4200;
+/** The trap's band: close enough to step on, far enough to be in the rush's path. */
+const TRAP_MIN_RANGE_PX = 70;
+const TRAP_MAX_RANGE_PX = 300;
+/** The trap's cooldown after a lay. */
+const TRAP_COOLDOWN_MS = 6000;
+/** The self-smoke (blossom combo, panic button) cooldown. */
+const SELF_SMOKE_COOLDOWN_MS = 3000;
+/** The team smoke (a rushed ally) cooldown — the rarest, most expensive play. */
+const TEAM_SMOKE_COOLDOWN_MS = 9000;
+/** The panic smoke: hurt and pressed by a foe. */
+const PANIC_SMOKE_HP = 40;
+const PANIC_SMOKE_RANGE_PX = 320;
+/** The panic smoke cooldown, between the self and team plays. */
+const PANIC_SMOKE_COOLDOWN_MS = 8000;
+/** A foe this close to an ally is a rush worth smoking. */
+const RUSHED_ALLY_RANGE_PX = 200;
+/** A thrust winding up nearby means leave the floor: the designed dodge. */
+const THRUST_JUMP_RANGE_PX = 300;
+
 /**
  * The nearest ledge that is above the fighter and within a jump or two.
  *
@@ -407,7 +432,7 @@ export class EnemyBrain {
 		if (
 			input.enemyAction === "thrust" &&
 			input.enemyPhase === "startup" &&
-			input.distanceToPlayer < 300
+			input.distanceToPlayer < THRUST_JUMP_RANGE_PX
 		) {
 			output.jump = true;
 			output.attack = false;
@@ -447,10 +472,11 @@ export class EnemyBrain {
 		// melee range would hurt the bot's own exchange).
 		if (input.selfHero === "lia") {
 			const canReach =
-				input.distanceToPlayer > 120 && input.distanceToPlayer < 520;
+				input.distanceToPlayer > GRENADE_MIN_RANGE_PX &&
+				input.distanceToPlayer < GRENADE_MAX_RANGE_PX;
 			if (!canReach || !input.hasLineOfSight) return;
 			output.item = true;
-			this.itemCooldownMs = 4200;
+			this.itemCooldownMs = GRENADE_COOLDOWN_MS;
 			return;
 		}
 
@@ -460,12 +486,12 @@ export class EnemyBrain {
 		// a brain from littering the floor with them.
 		if (input.selfHero === "anands") {
 			if (
-				input.distanceToPlayer < 300 &&
-				input.distanceToPlayer > 70 &&
+				input.distanceToPlayer < TRAP_MAX_RANGE_PX &&
+				input.distanceToPlayer > TRAP_MIN_RANGE_PX &&
 				input.hasLineOfSight
 			) {
 				output.item = true;
-				this.itemCooldownMs = 6000;
+				this.itemCooldownMs = TRAP_COOLDOWN_MS;
 			}
 			return;
 		}
@@ -489,7 +515,7 @@ export class EnemyBrain {
 			if (this.ultimate.hold && input.selfItemCharges > 0) {
 				output.item = true;
 				output.aimAngle = Math.PI / 2;
-				this.itemCooldownMs = 3000;
+				this.itemCooldownMs = SELF_SMOKE_COOLDOWN_MS;
 				return;
 			}
 
@@ -500,16 +526,18 @@ export class EnemyBrain {
 					rushed.x - input.selfX,
 					rushed.y - input.selfY,
 				);
-				this.itemCooldownMs = 9000;
+				this.itemCooldownMs = TEAM_SMOKE_COOLDOWN_MS;
 				return;
 			}
 
 			const outnumbered = input.foes.length > input.allies.length + 1;
-			const hurt = input.selfHP < 40 && input.distanceToPlayer < 320;
+			const hurt =
+				input.selfHP < PANIC_SMOKE_HP &&
+				input.distanceToPlayer < PANIC_SMOKE_RANGE_PX;
 			if (!hurt && !outnumbered) return;
 			output.item = true;
 			output.aimAngle = Math.PI / 2;
-			this.itemCooldownMs = 8000;
+			this.itemCooldownMs = PANIC_SMOKE_COOLDOWN_MS;
 			return;
 		}
 	}
@@ -525,7 +553,7 @@ export class EnemyBrain {
 			if (!ally.alive) continue;
 			for (const foe of input.foes) {
 				const d = Math.hypot(foe.x - ally.x, foe.y - ally.y);
-				if (d < 200 && (!best || d < best.d)) {
+				if (d < RUSHED_ALLY_RANGE_PX && (!best || d < best.d)) {
 					best = { x: ally.x, y: ally.y, d };
 				}
 			}

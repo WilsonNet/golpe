@@ -123,8 +123,9 @@ interface MeleeSummaryView {
 	frameDataViolations: number;
 	stuckActionFrames: number;
 	meleeDesyncFrames: number;
-	movesByFighter: Record<string, MoveCount>;
-	blocksByFighter: Record<string, number>;
+	/** Per fighter: the room has a "local" side and a "remote" dummy side. */
+	movesByFighter: Partial<Record<"local" | "remote", MoveCount>>;
+	blocksByFighter: Partial<Record<"local" | "remote", number>>;
 	violations: unknown[];
 }
 

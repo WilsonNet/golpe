@@ -1,4 +1,9 @@
 import type { Container, Sprite, Texture } from "pixi.js";
+import {
+	DEGREES_PER_PI_RADIANS,
+	PELLET_ALPHA,
+	PELLET_SCALE,
+} from "../../tweakables/ranged.js";
 import type { BulletSample } from "../diagnostics/PhysicsDiagnostics";
 import { SpritePool } from "../render/SpritePool";
 import {
@@ -119,14 +124,15 @@ export class BulletSystem {
 		weapon: { pellets?: number; spreadDeg?: number },
 	) {
 		const pellets = weapon.pellets ?? 1;
-		const halfSpread = ((weapon.spreadDeg ?? 0) * Math.PI) / 180;
+		const halfSpread =
+			((weapon.spreadDeg ?? 0) * Math.PI) / DEGREES_PER_PI_RADIANS;
 		const step = pellets > 1 ? (halfSpread * 2) / (pellets - 1) : 0;
 		for (let i = 0; i < pellets; i++) {
 			const a = angle + (pellets > 1 ? -halfSpread + step * i : 0);
 			const sprite = this.pool.acquire();
 			sprite.position.set(x, y);
-			sprite.scale.set(pellets > 1 ? 0.55 : 1);
-			sprite.alpha = pellets > 1 ? 0.9 : 1;
+			sprite.scale.set(pellets > 1 ? PELLET_SCALE : 1);
+			sprite.alpha = pellets > 1 ? PELLET_ALPHA : 1;
 			this.bullets.push({
 				id: this.nextId++,
 				ownerId: owner,

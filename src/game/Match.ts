@@ -23,6 +23,7 @@ import { EnemyBrain } from "./characters/EnemyBrain";
 import type { AIInput, AIOutput, AllyInfo, FoeInfo } from "./characters/types";
 import { BulletSystem, type BulletTarget } from "./combat/BulletSystem";
 import {
+	DRAGON_DROP_SUPPRESSION_FRAMES,
 	PhysicsDiagnostics,
 	RESPAWN_CORRECTION_PX,
 } from "./diagnostics/PhysicsDiagnostics";
@@ -139,6 +140,10 @@ const RESET_DELAY_MS = 2000;
 
 /** Longest a single rendered frame may simulate — a stall must not rubber-band the world. */
 const MAX_FRAME_DT_S = 0.05;
+/** ms per second, for converting a wall-clock difference into dt. */
+const MILLIS_PER_SECOND = 1000;
+/** The offline reload's dt clamp: a stall cannot reload the whole magazine at once. */
+const MAX_RELOAD_STEP_SECONDS = 0.25;
 /** HUD state is throttled to this cadence; the snapshot itself is the truth. */
 const HUD_MIN_INTERVAL_MS = 50;
 /** Frames of jitter measurement skipped after an announced teleport (the ultimate's pull). */
@@ -751,7 +756,7 @@ export class Match {
 					// glide takes longer than a hit's: the ride can end 75px from
 					// where the prediction was when the wall stopped it.
 					if (result.dragonDropped) {
-						this.diagnostics.markTeleport(8);
+						this.diagnostics.markTeleport(DRAGON_DROP_SUPPRESSION_FRAMES);
 					}
 					// A correction this large is a respawn, not a misprediction. The
 					// server replaces the whole state, so the sword state changes too;
@@ -2654,7 +2659,10 @@ export class Match {
 		now: number,
 	) {
 		const state = { ammo, reloadTimer: reload };
-		const dt = Math.min(0.25, (now - this.offlineReloadLastAt) / 1000);
+		const dt = Math.min(
+			MAX_RELOAD_STEP_SECONDS,
+			(now - this.offlineReloadLastAt) / MILLIS_PER_SECOND,
+		);
 		this.offlineReloadLastAt = now;
 		tickReload(state, { attack }, kit, dt);
 		setAmmo(state.ammo);

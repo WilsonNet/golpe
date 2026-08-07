@@ -25,8 +25,13 @@ const HOLD_MIN_MS = 160;
 const HOLD_MAX_MS = 260;
 /** Grace after a cast (or a refused one) before the brain will aim again. */
 const POST_CAST_COOLDOWN_MS = 1500;
+/**
+ * How much of the storm's radius counts as "in the ring": a foe right on the
+ * edge is too easy to dash out of before the first beat lands.
+ */
+const CLUSTER_RADIUS_FACTOR = 0.92;
 /** A storm is worth it when two or more foes are inside the ring. */
-const CLUSTER_RADIUS_PX = BLOSSOM_RADIUS_PX * 0.92;
+const CLUSTER_RADIUS_PX = BLOSSOM_RADIUS_PX * CLUSTER_RADIUS_FACTOR;
 /** A killshot: the enemy is one storm beat from dead. */
 const FINISHER_HP = 25;
 /**

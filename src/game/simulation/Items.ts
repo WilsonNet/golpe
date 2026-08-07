@@ -23,6 +23,7 @@
  */
 
 import {
+	GROUND_SLIDE_FRICTION,
 	HE_COLLIDE_R,
 	HE_GRENADE_FUSE_MS,
 	HE_GRENADE_GRAVITY,
@@ -55,6 +56,11 @@ import {
 import { type MovingBox, moveAndCollide } from "./Collision.js";
 import { hostile, sameTeam, type TeamId } from "./Teams.js";
 import { MS_PER_SECOND } from "./units.js";
+
+/** The quadratic's discriminant coefficient: b² − 4ac for a=½g·dx²/v². */
+const DISCRIMINANT_FACTOR = 4;
+/** The maximum-lob fallback: 45° when the target is past the canister's range. */
+const MAX_LOB_ANGLE = Math.atan(1);
 
 export {
 	HE_GRENADE_FUSE_MS,
@@ -139,7 +145,7 @@ export function tickHeGrenade(
 		g.vy = -g.vy * HE_RESTITUTION;
 		// A ground hit scrubs horizontal speed, like a grenade rolling after a
 		// bounce, so a long fuse does not slide it across the arena.
-		if (contacts.grounded) g.vx *= 0.9;
+		if (contacts.grounded) g.vx *= GROUND_SLIDE_FRICTION;
 		// A bounce too small to matter is a stop: settle on the floor and let
 		// the fuse do the rest.
 		if (contacts.grounded && Math.abs(g.vy) < HE_REST_VY) g.vy = 0;
@@ -310,7 +316,7 @@ export function tickSmokeGrenade(
 	if (contacts.wall !== "none") g.vx = -g.vx * SMOKE_RESTITUTION;
 	if (contacts.grounded || contacts.ceiling) {
 		g.vy = -g.vy * SMOKE_RESTITUTION;
-		if (contacts.grounded) g.vx *= 0.9;
+		if (contacts.grounded) g.vx *= GROUND_SLIDE_FRICTION;
 		if (contacts.grounded && Math.abs(g.vy) < SMOKE_REST_VY) g.vy = 0;
 	}
 	g.fuseMs -= dt * MS_PER_SECOND;
@@ -373,8 +379,8 @@ export function smokeLobAngle(dx: number, dy: number): number {
 	const v2 = SMOKE_GRENADE_SPEED * SMOKE_GRENADE_SPEED;
 	const a = (SMOKE_GRENADE_GRAVITY * dx * dx) / (2 * v2);
 	const c = dy + a;
-	const disc = dx * dx - 4 * a * c;
-	if (disc < 0) return Math.PI / 4;
+	const disc = dx * dx - DISCRIMINANT_FACTOR * a * c;
+	if (disc < 0) return MAX_LOB_ANGLE;
 	const u = (dx - Math.sqrt(disc)) / (2 * a);
 	return Math.atan(u);
 }

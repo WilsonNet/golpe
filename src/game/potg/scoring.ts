@@ -127,6 +127,9 @@ export const POTG_DAMAGE_BURST = 100;
 /** The same for a guard: a burst of blocked damage is one health bar's worth. */
 export const POTG_ABSORB_BURST = 100;
 
+/** A play worth a headline of its own: four hundred points of one-sided work. */
+const HEADLINE_STATS = 400;
+
 /** Kinds that are a frag in their own right, rather than a modifier on one. */
 const KILL_KINDS: ReadonlySet<HighlightKind> = new Set<HighlightKind>(["kill"]);
 
@@ -277,10 +280,13 @@ export function describePlay(play: PotgPlay): {
 	// last of the two, and only when it actually beat the damage dealt — a
 	// fighter who blocked four hundred points *and* dished them out gets the
 	// more flattering name, because the damage is what the camera can show.
-	if (play.stats.absorbed >= 400 && play.stats.absorbed > play.stats.damage) {
+	if (
+		play.stats.absorbed >= HEADLINE_STATS &&
+		play.stats.absorbed > play.stats.damage
+	) {
 		return { headline: "THE WALL", subtitle: "Took it all, gave nothing." };
 	}
-	if (play.stats.damage >= 400) {
+	if (play.stats.damage >= HEADLINE_STATS) {
 		return { headline: "BARRAGE", subtitle: "Poured it on." };
 	}
 	return {

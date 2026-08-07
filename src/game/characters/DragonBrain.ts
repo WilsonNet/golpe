@@ -25,6 +25,10 @@ const POST_CAST_COOLDOWN_MS = 1200;
 /** A meter held ready this long is spent on the nearest foe it can reach. */
 const ARMED_PATIENCE_MS = 10000;
 const PATIENCE_RANGE_PX = 560;
+/** The support's self-defence: a rushed support blasts the dragon point-blank. */
+const POINT_BLANK_RANGE_PX = 200;
+/** A full ultimate meter. */
+const FULL_ULT_CHARGE = 100;
 
 export class DragonBrain {
 	private holdMs = 0;
@@ -76,7 +80,7 @@ export class DragonBrain {
 			return;
 		}
 
-		if (input.selfUltCharge < 100) {
+		if (input.selfUltCharge < FULL_ULT_CHARGE) {
 			this.armedTimer = 0;
 			return;
 		}
@@ -141,7 +145,7 @@ export class DragonBrain {
 		//    the rush and knocks the whole push back.
 		if (role === "support") {
 			const player = input.foes[0];
-			if (player && player.distance < 200) return player;
+			if (player && player.distance < POINT_BLANK_RANGE_PX) return player;
 		}
 
 		// 4. Outnumbered: a line through the nearest foe of a larger pack.

@@ -114,6 +114,18 @@ const PENETRATION_TOLERANCE_PX = 0.5;
 const TELEPORT_SUPPRESSION_FRAMES = 4;
 
 /**
+ * A dropped dragon ride's suppression window: the glide back to where the ride
+ * ended spans several frames, so the skip must cover the glide, not just the snap.
+ */
+export const DRAGON_DROP_SUPPRESSION_FRAMES = 8;
+
+/**
+ * A cinematic lift's suppression window: whatever was waiting on the far side
+ * of the freeze just launched, and the dragon's launch snaps the rider forward.
+ */
+export const CINEMATIC_LAUNCH_SUPPRESSION_FRAMES = 6;
+
+/**
  * A correction this large is a respawn, not a misprediction.
  *
  * The same threshold `RenderSmoother` snaps at, and the same one `Match` uses to

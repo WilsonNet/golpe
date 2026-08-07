@@ -96,6 +96,11 @@ export function ultReady(charge: number): boolean {
 	return charge >= ULT_MAX_CHARGE;
 }
 
+/** Samples the blossom's line-of-sight check — cheaper than the AI's default. */
+const BLOSSOM_LOS_SAMPLES = 16;
+/** The caster's sprite does one revolution every this many ms. */
+const BLOSSOM_SPIN_MS = 360;
+
 export function addCharge(charge: number, amount: number): number {
 	return Math.max(0, Math.min(ULT_MAX_CHARGE, charge + amount));
 }
@@ -393,8 +398,10 @@ export function dragonSweptRect(s: {
 	dragonVY: number;
 }): Rect | null {
 	if (s.dragonTimer <= 0) return null;
-	const travelledX = (s.dragonVX * (DRAGON_RIDE_MS - s.dragonTimer)) / 1000;
-	const travelledY = (s.dragonVY * (DRAGON_RIDE_MS - s.dragonTimer)) / 1000;
+	const travelledX =
+		(s.dragonVX * (DRAGON_RIDE_MS - s.dragonTimer)) / MS_PER_SECOND;
+	const travelledY =
+		(s.dragonVY * (DRAGON_RIDE_MS - s.dragonTimer)) / MS_PER_SECOND;
 	const startX = s.x - travelledX;
 	const startY = s.y - travelledY;
 	return {
@@ -468,10 +475,10 @@ export function blossomSweeps(
 		blossom.y,
 		bodyX + PLAYER_WIDTH / 2,
 		bodyY + PLAYER_HEIGHT / 2,
-		16,
+		BLOSSOM_LOS_SAMPLES,
 		world,
 	);
 }
 
 /** Spin speed for the caster's sprite — one revolution every 360ms. */
-export const BLOSSOM_SPIN_RAD_PER_MS = (Math.PI * 2) / 360;
+export const BLOSSOM_SPIN_RAD_PER_MS = (Math.PI * 2) / BLOSSOM_SPIN_MS;

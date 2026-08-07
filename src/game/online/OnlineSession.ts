@@ -1,5 +1,10 @@
 import type { Container, Sprite, Texture } from "pixi.js";
+import { PELLET_ALPHA, PELLET_SCALE } from "../../tweakables/ranged.js";
 import type { BulletSample } from "../diagnostics/PhysicsDiagnostics";
+import {
+	CINEMATIC_LAUNCH_SUPPRESSION_FRAMES,
+	DRAGON_DROP_SUPPRESSION_FRAMES,
+} from "../diagnostics/PhysicsDiagnostics";
 import type { PotgAnnounce } from "../potg/types";
 import { SpritePool } from "../render/SpritePool";
 import {
@@ -25,7 +30,7 @@ import {
 	type Singularity,
 } from "../simulation/Physics";
 import { hostile, type MatchMode, type TeamId } from "../simulation/Teams";
-import { TINT, teamTint } from "../teamPalette";
+import { NEUTRAL, TINT, teamTint } from "../teamPalette";
 import type { TrainingConfigMsg, TrainingStateMsg } from "../training/types";
 import { ServerClock } from "./Interpolation";
 import { type JoinOptions, OnlineManager } from "./OnlineManager";
@@ -924,13 +929,13 @@ export class OnlineSession {
 			// tinted at full strength — the fireball's own colour carries no combat
 			// information to lose. Set on every frame rather than at acquisition
 			// because the pool hands the same sprite to a different owner's bullet.
-			sprite.tint = teamTint(0xffffff, this.teamOf(b.ownerId), TINT.full);
+			sprite.tint = teamTint(NEUTRAL, this.teamOf(b.ownerId), TINT.full);
 			// A shotgun pellet is a smaller, dimmer round — the fan reads as six
 			// distinct shots rather than one blobby bullet, and the size is the
 			// range cue: the farther they drift apart, the smaller each one is.
 			// Set every frame, like the tint, because the pool recycles sprites.
-			sprite.scale.set(b.pellet ? 0.55 : 1);
-			sprite.alpha = b.pellet ? 0.9 : 1;
+			sprite.scale.set(b.pellet ? PELLET_SCALE : 1);
+			sprite.alpha = b.pellet ? PELLET_ALPHA : 1;
 			sprite.position.set(x, y);
 			this.renderedBullets.push({ id: b.id, x, y });
 		}
@@ -1084,7 +1089,7 @@ export class OnlineSession {
 		// frames — a legitimate discontinuity, like a respawn, and the jitter
 		// metric must not count the glide that hides it.
 		if (this._cinematic !== null && cine === null) {
-			this.callbacks.onTeleport(6);
+			this.callbacks.onTeleport(CINEMATIC_LAUNCH_SUPPRESSION_FRAMES);
 		}
 		this._cinematic = cine;
 		if (cine === null) {
@@ -1212,7 +1217,7 @@ export class OnlineSession {
 			// The dropped ride glides back over several frames — the smoother
 			// is not reset for it, unlike a respawn — so the suppression
 			// window has to cover the glide, not just the snap.
-			this.callbacks.onTeleport(8);
+			this.callbacks.onTeleport(DRAGON_DROP_SUPPRESSION_FRAMES);
 		}
 		this.rollbackStats.record(result);
 		// A jump this large is a respawn the announcement lost the race to, or a

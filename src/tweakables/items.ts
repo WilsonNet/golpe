@@ -76,6 +76,13 @@ export const HE_COLLIDE_R = 6;
 export const HE_REST_VY = 60;
 
 /**
+ * A ground hit scrubs horizontal speed to this fraction, like a grenade rolling
+ * after a bounce — so a long fuse does not slide the grenade across the arena.
+ * Shared with the smoke canister, which must plant where it was aimed.
+ */
+export const GROUND_SLIDE_FRICTION = 0.9;
+
+/**
  * The blast radius. The CS HE's effective radius is roughly the size of a
  * doorway fight; at this scale, a sixth of a screen is a patch you can throw
  * past or clear with a dash.

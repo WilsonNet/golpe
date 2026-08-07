@@ -150,6 +150,15 @@ const ROLL_ZOOM = 1.15;
 /** Where the outro pulls back to. */
 const OUTRO_ZOOM = 0.95;
 
+/** ms per second, for converting a wall-clock difference into a fraction. */
+const MILLIS_PER_SECOND = 1000;
+/**
+ * The zoom's breathing room: each movement eases between the shared zooms by
+ * this much off either side, so consecutive shots read as *moves*, not a jump.
+ */
+const ESTABLISH_PUSH_ZOOM_DELTA = 0.06;
+const ORBIT_ZOOM_DELTA = 0.05;
+
 /** How far the establish shot starts off the protagonist, in world px. */
 const ESTABLISH_OFFSET_X = 170;
 const ESTABLISH_OFFSET_Y = -70;
@@ -171,7 +180,11 @@ const WHIP_OVERSHOOT_PX = 150;
 const ORBIT_R = 170;
 const ORBIT_Y_FACTOR = 0.6;
 const ORBIT_Y_BIAS = -40;
-const ORBIT_SWEEP = (130 * Math.PI) / 180;
+/** The orbit's arc: 130° of sweep — deliberately less than a full circle. */
+const ORBIT_SWEEP_DEGREES = 130;
+/** Degrees per π radians — the sweep's conversion to radians. */
+const DEGREES_PER_PI_RADIANS = 180;
+const ORBIT_SWEEP = (ORBIT_SWEEP_DEGREES * Math.PI) / DEGREES_PER_PI_RADIANS;
 
 /** Footage speed while the camera is doing its own work, before the play. */
 const PREROLL_RATE = 0.35;
@@ -256,7 +269,13 @@ function easeOut(t: number): number {
 /** Ease-in-out, for the push: a camera that starts and stops with weight. */
 function easeInOut(t: number): number {
 	const u = clamp(t, 0, 1);
-	return u < 0.5 ? 4 * u * u * u : 1 - (-2 * u + 2) ** 3 / 2;
+	// The standard cubic ease-in-out curve, written out so the shape is visible.
+	const MIDPOINT = 0.5;
+	const CUBE_COEFF = 4;
+	const REVERSED_COEFF = 2;
+	const CUBE = 3;
+	if (u < MIDPOINT) return CUBE_COEFF * u ** CUBE;
+	return 1 - (-REVERSED_COEFF * u + REVERSED_COEFF) ** CUBE / REVERSED_COEFF;
 }
 
 /** Where the protagonist is, and how fast, at a given moment of footage. */
@@ -330,7 +349,7 @@ export class PotgDirector {
 			this.camY = target.y;
 			this.camReady = true;
 		} else {
-			const t = clamp((FOCUS_SMOOTHING * dtMs) / 1000, 0, 1);
+			const t = clamp((FOCUS_SMOOTHING * dtMs) / MILLIS_PER_SECOND, 0, 1);
 			this.camX = lerp(this.camX, target.x, t);
 			this.camY = lerp(this.camY, target.y, t);
 		}
@@ -468,7 +487,11 @@ export class PotgDirector {
 						subject.x +
 						ESTABLISH_OFFSET_X * (1 - easeOut(t)) * this.facingDir(subject),
 					y: subject.y + ESTABLISH_OFFSET_Y * (1 - easeOut(t)),
-					zoom: lerp(ESTABLISH_ZOOM, ESTABLISH_ZOOM + 0.06, easeOut(t)),
+					zoom: lerp(
+						ESTABLISH_ZOOM,
+						ESTABLISH_ZOOM + ESTABLISH_PUSH_ZOOM_DELTA,
+						easeOut(t),
+					),
 				};
 			case "orbit": {
 				// The hero shot: an arc around the fighter, from high on one side
@@ -483,14 +506,18 @@ export class PotgDirector {
 						subject.y +
 						ORBIT_R * Math.sin(theta) * ORBIT_Y_FACTOR +
 						ORBIT_Y_BIAS,
-					zoom: lerp(ORBIT_ZOOM - 0.05, ORBIT_ZOOM + 0.05, easeInOut(t)),
+					zoom: lerp(
+						ORBIT_ZOOM - ORBIT_ZOOM_DELTA,
+						ORBIT_ZOOM + ORBIT_ZOOM_DELTA,
+						easeInOut(t),
+					),
 				};
 			}
 			case "push":
 				return {
 					x: subject.x,
 					y: subject.y,
-					zoom: lerp(ORBIT_ZOOM + 0.05, PUSH_ZOOM, easeInOut(t)),
+					zoom: lerp(ORBIT_ZOOM + ORBIT_ZOOM_DELTA, PUSH_ZOOM, easeInOut(t)),
 				};
 			case "whip": {
 				// One overshoot and back: a half sine, so the camera is exactly on the

@@ -484,14 +484,14 @@ export class TrainingRoom {
 		return {
 			durationMs: Math.round(this.elapsedMs),
 			player: {
-				moves: moveCount(melee?.movesByFighter["local"]),
-				blocks: melee?.blocksByFighter["local"] ?? 0,
+				moves: moveCount(melee?.movesByFighter.local),
+				blocks: melee?.blocksByFighter.local ?? 0,
 				damageDealt: stats.player.damageDealt,
 				damageTaken: stats.player.damageTaken,
 			},
 			dummy: {
-				moves: moveCount(melee?.movesByFighter["remote"]),
-				blocks: melee?.blocksByFighter["remote"] ?? 0,
+				moves: moveCount(melee?.movesByFighter.remote),
+				blocks: melee?.blocksByFighter.remote ?? 0,
 				parries: parriedByDummy,
 				damageDealt: stats.dummy.damageDealt,
 				damageTaken: stats.dummy.damageTaken,

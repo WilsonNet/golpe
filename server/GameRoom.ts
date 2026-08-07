@@ -71,6 +71,7 @@ import type {
 	TrainingFighterStats,
 	TrainingStateMsg,
 } from "../src/game/training/types.js";
+import { DEGREES_PER_PI_RADIANS } from "../src/tweakables/ranged.js";
 import { botName, sanitiseName, uniqueName } from "./BotNames.js";
 import { PotgRecorder } from "./PlayOfTheGame.js";
 import {
@@ -2192,7 +2193,8 @@ export class GameRoom {
 				// range — the cone is fixed at the muzzle, so distance *is* the
 				// miss. A weapon with no fan fires one ordinary shot.
 				const pellets = kit.ranged.pellets ?? 1;
-				const halfSpread = ((kit.ranged.spreadDeg ?? 0) * Math.PI) / 180;
+				const halfSpread =
+					((kit.ranged.spreadDeg ?? 0) * Math.PI) / DEGREES_PER_PI_RADIANS;
 				const step = pellets > 1 ? (halfSpread * 2) / (pellets - 1) : 0;
 				for (let i = 0; i < pellets; i++) {
 					const angle =

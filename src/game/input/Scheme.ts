@@ -64,9 +64,9 @@ function defaultSettings(): InputSettings {
 function sanitiseSettings(raw: unknown): InputSettings {
 	const out = defaultSettings();
 	if (!raw || typeof raw !== "object") return out;
-	const source = raw as Record<string, unknown>;
-	const scheme = source["scheme"];
-	const deck = source["deck"];
+	const source = raw as Partial<Record<"scheme" | "deck", unknown>>;
+	const scheme = source.scheme;
+	const deck = source.deck;
 	if (scheme === "mouse" || scheme === "controller") out.scheme = scheme;
 	if (deck === "auto" || deck === "on" || deck === "off") out.deck = deck;
 	return out;

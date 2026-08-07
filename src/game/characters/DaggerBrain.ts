@@ -18,6 +18,8 @@ import type { AIInput, AIOutput, TeamRole } from "./types.js";
 /** The machine gun's comfortable band: outside stab range, inside a screen. */
 const GUN_ENGAGE_PX = 120;
 const GUN_DISENGAGE_PX = 320;
+/** How far the machine gun will actually fire. */
+const GUN_FIRE_RANGE_PX = 520;
 /** The thrust's closing band: far enough to lunge through, near enough to land. */
 const THRUST_RANGE_PX = 190;
 /** The shoryuken's anti-air: how close and how high the foe must be. */
@@ -25,6 +27,22 @@ const SHORYUKEN_RANGE_PX = 110;
 const SHORYUKEN_MIN_RISE_PX = 40;
 /** A foe turtling behind a sword guard is a thrust target, not a stab target. */
 const TURTLE_THRUST_RANGE_PX = 120;
+/** The spacing read is a mid-band move: not point-blank, inside the lunge. */
+const SPACING_THRUST_MIN_PX = 70;
+const SPACING_THRUST_MAX_PX = THRUST_RANGE_PX;
+/** The stab is a read on a committed foe: inside it the lunge beats the stab. */
+const STAB_READ_RANGE_PX = 150;
+/** Chance the brain commits to the turtle-breaking thrust, at full aggression. */
+const TURTLE_THRUST_BASE_CHANCE = 0.55;
+const TURTLE_THRUST_AGGRO_STEP = 0.4;
+/** Chance the brain punishes a whiffed heavy with a thrust, at full aggression. */
+const PUNISH_THRUST_BASE_CHANCE = 0.35;
+const PUNISH_THRUST_AGGRO_STEP = 0.5;
+/** The spacing read rolls lower, and scales with aggression *and* chance. */
+const SPACING_THRUST_BASE_CHANCE = 0.14;
+const SPACING_THRUST_CHANCE_SCALE = 0.6;
+/** The stab-catch read is a small, flat roll. */
+const STAB_READ_CHANCE = 0.22;
 
 interface MeleeBeat {
 	ms: number;
@@ -101,7 +119,7 @@ export class DaggerBrain {
 		// The one thing that stops it is melee range — the stream is the
 		// answer to distance, not to pressure.
 		if (!this.drawn) {
-			output.attack = input.hasLineOfSight && distance < 520;
+			output.attack = input.hasLineOfSight && distance < GUN_FIRE_RANGE_PX;
 			this.beats = null;
 			return;
 		}
@@ -143,7 +161,9 @@ export class DaggerBrain {
 			input.enemyBlocking &&
 			input.enemyGrounded &&
 			distance < TURTLE_THRUST_RANGE_PX &&
-			Math.random() < 0.55 + 0.4 * ctx.aggressiveness
+			Math.random() <
+				TURTLE_THRUST_BASE_CHANCE +
+					TURTLE_THRUST_AGGRO_STEP * ctx.aggressiveness
 		) {
 			return THRUST_BEATS;
 		}
@@ -174,7 +194,9 @@ export class DaggerBrain {
 			punishable &&
 			distance < THRUST_RANGE_PX &&
 			input.enemyGrounded &&
-			Math.random() < 0.35 + 0.5 * ctx.aggressiveness
+			Math.random() <
+				PUNISH_THRUST_BASE_CHANCE +
+					PUNISH_THRUST_AGGRO_STEP * ctx.aggressiveness
 		) {
 			return THRUST_BEATS;
 		}
@@ -185,11 +207,13 @@ export class DaggerBrain {
 		// of recovery — so this is rolled, never held. Without it, dagger-vs-
 		// dagger duels are all stabs and the thrust never exists at all.
 		if (
-			distance >= 70 &&
-			distance < THRUST_RANGE_PX &&
+			distance >= SPACING_THRUST_MIN_PX &&
+			distance < SPACING_THRUST_MAX_PX &&
 			input.enemyGrounded &&
 			input.enemyAction === "none" &&
-			Math.random() < 0.14 * (0.6 + ctx.aggressiveness)
+			Math.random() <
+				SPACING_THRUST_BASE_CHANCE *
+					(SPACING_THRUST_CHANCE_SCALE + ctx.aggressiveness)
 		) {
 			return THRUST_BEATS;
 		}
@@ -201,8 +225,8 @@ export class DaggerBrain {
 		if (
 			input.enemyAction === "stab" &&
 			input.enemyGrounded &&
-			distance < 150 &&
-			Math.random() < 0.22
+			distance < STAB_READ_RANGE_PX &&
+			Math.random() < STAB_READ_CHANCE
 		) {
 			return THRUST_BEATS;
 		}

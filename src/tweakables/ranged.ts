@@ -6,6 +6,13 @@
 
 export type RangedWeaponId = "rifle" | "machinegun" | "shotgun";
 
+/** Degrees per π radians: `deg * Math.PI / DEGREES_PER_PI_RADIANS` → radians. */
+export const DEGREES_PER_PI_RADIANS = 180;
+/** A pellet is drawn at this fraction of a full bullet's size. */
+export const PELLET_SCALE = 0.55;
+/** And at this opacity — the fan reads as distinct shots, not one blob. */
+export const PELLET_ALPHA = 0.9;
+
 /**
  * The ranged half of a kit: one fire-rate/damage/speed stat card, plus the
  * magazine and the reload that every weapon now carries.
