@@ -279,8 +279,8 @@ no manual key (R is the ultimate). The reload starts when the trigger is
 released (or instantly on an empty magazine, even while held), firing cancels
 it (loaded rounds stay, the round being loaded is lost), and a stance switch,
 stun or death cancels it too. Lia's rifle: 12 rounds, 800ms. Anands' machine
-gun: 30 rounds, 1800ms. Jeffs' shotgun: 5 shells, one at a time — 900ms for
-the rack from empty, 700ms per shell after (TF2's "Single" reload). The ammo
+gun: 30 rounds, 1800ms. Jeffs' shotgun: 5 shells, one at a time — 1300ms for
+the rack from empty, 1200ms per shell after (TF2's "Single" reload). The ammo
 count and reload bar live in the HUD's bottom-right corner, and `ammo` /
 `reloadTimer` ride the wire **server-ticked only** — the client draws them,
 never simulates them, exactly like the ultimate meter.

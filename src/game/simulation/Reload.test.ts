@@ -44,11 +44,13 @@ describe("the reload", () => {
 
 	it("the shotgun loads one shell at a time, the first from empty slowest", () => {
 		const shotgun = state(0);
+		const firstMs = RANGED_WEAPONS.shotgun.reloadFirstShellMs ?? 0;
+		const shellMs = RANGED_WEAPONS.shotgun.reloadShellMs ?? 0;
 		tickReload(
 			shotgun,
 			{ attack: false },
 			{ ranged: RANGED_WEAPONS.shotgun } as never,
-			0.5,
+			firstMs / 2000,
 		);
 		// The rack from empty is the slow shell; it has not landed yet.
 		expect(shotgun.ammo).toBe(0);
@@ -56,17 +58,28 @@ describe("the reload", () => {
 			shotgun,
 			{ attack: false },
 			{ ranged: RANGED_WEAPONS.shotgun } as never,
-			0.5,
+			firstMs / 1000,
 		);
 		expect(shotgun.ammo).toBe(1);
-		// The next shell is the fast one.
+		// The next shell is the faster one — but still slower than a blast.
 		tickReload(
 			shotgun,
 			{ attack: false },
 			{ ranged: RANGED_WEAPONS.shotgun } as never,
-			0.8,
+			shellMs / 2000,
+		);
+		expect(shotgun.ammo).toBe(1);
+		tickReload(
+			shotgun,
+			{ attack: false },
+			{ ranged: RANGED_WEAPONS.shotgun } as never,
+			shellMs / 1000,
 		);
 		expect(shotgun.ammo).toBe(2);
+		// The reload must never outpace the trigger: each shell takes longer
+		// than the 900ms between blasts, or the gun would reload as fast as
+		// it fires and the magazine would be a formality.
+		expect(shellMs).toBeGreaterThan(RANGED_WEAPONS.shotgun.cooldownMs);
 	});
 
 	it("holding fire with rounds in the mag delays the reload", () => {

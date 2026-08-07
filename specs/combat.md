@@ -95,7 +95,7 @@ fighter is not firing — TF2's reload types, both of them:
 |---|---|---|
 | Lia's rifle | 12 | 800ms for the whole magazine — the fastest in the game |
 | Anands' machine gun | 30 | 1800ms for the whole magazine — a decent burst, a decent pause |
-| Jeffs' shotgun | 5 | **Shell-by-shell** — 900ms for the rack from empty, 700ms per shell after it |
+| Jeffs' shotgun | 5 | **Shell-by-shell** — 1300ms for the rack from empty, 1200ms per shell after it |
 
 The rules, in the order a player meets them:
 

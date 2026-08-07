@@ -121,11 +121,12 @@ export const RANGED_WEAPONS: Record<RangedWeaponId, RangedWeaponDef> = {
 		pellets: 6,
 		spreadDeg: 10,
 		// Five shells, TF2's slow shell-by-shell reload: a blast is precious,
-		// the rack from empty is the long one, and a shell loaded mid-fight
-		// is a shell that can be fired the moment it lands.
+		// and each shell takes *longer* than the 900ms between blasts — the
+		// gun can never keep up with its own trigger, so an emptied shotgun
+		// is a long silence. The rack from empty is the slowest shell.
 		magazine: 5,
-		reloadShellMs: 700,
-		reloadFirstShellMs: 900,
+		reloadShellMs: 1200,
+		reloadFirstShellMs: 1300,
 	},
 };
 

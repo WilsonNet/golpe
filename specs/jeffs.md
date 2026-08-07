@@ -35,7 +35,7 @@ cone-spread burst.
 | Pellet speed | 900 px/s |
 | Spread | ±10°, six fixed angles |
 | Magazine | 5 shells |
-| Reload | shell-by-shell — 900ms for the rack from empty, 700ms per shell after |
+| Reload | shell-by-shell — 1300ms for the rack from empty, 1200ms per shell after |
 
 - **The delay is the whole weapon.** Nine hundred milliseconds between shots
   is nearly four pistol shots and over eight machine-gun rounds — a missed
@@ -58,9 +58,11 @@ cone-spread burst.
   aim and the client's prediction never disagrees with the server's.
 - **Five shells, TF2's reload.** The shotgun loads one shell at a time, the
   rack from empty the slow one, and firing mid-reload keeps the loaded shells
-  and loses only the shell being loaded — the blast is always one shell away
-  from ready. See [combat.md](combat.md) for the reload rules every weapon
-  shares.
+  and loses only the shell being loaded. Each shell takes **longer than the
+  900ms between blasts**, so the gun can never keep up with its own trigger:
+  an emptied shotgun is a long silence, and a shell loaded mid-fight is a
+  shell that can be fired the moment it lands. See [combat.md](combat.md) for
+  the reload rules every weapon shares.
 - **Feeds the meter like any bullet.** The shotgun is an ordinary weapon; a
   point-blank kill pays the ultimate.
 
