@@ -245,7 +245,7 @@ node scripts/screens-probe.mjs                         # ?screen=N room: spawn s
 node scripts/ultimate-probe.mjs                        # the black hole: hold to aim, release to cast, freeze, capture
 node scripts/potg-probe.mjs                            # play of the game: the reel, the camera edit, the podium waiting
 python3 scripts/make-potg-art.py                       # regenerate the ceremony's sunburst and medal
-python3 scripts/make-hero-art.py                      # regenerate the second hero's pixel-art sheets
+python3 scripts/make-anands-art.py                       # compose the second hero's hand-drawn art into the shipped sheets
 python3 scripts/make-roll-art.py                      # regenerate the tumble strip from a hero sheet
 ```
 
@@ -297,7 +297,9 @@ gun: 30 rounds, 1800ms. Jeffs' shotgun: 5 shells, one at a time — 1300ms for
 the rack from empty, 1200ms per shell after (TF2's "Single" reload). The ammo
 count and reload bar live in the HUD's bottom-right corner, and `ammo` /
 `reloadTimer` ride the wire **server-ticked only** — the client draws them,
-never simulates them, exactly like the ultimate meter.
+never simulates them, exactly like the ultimate meter. (The offline escape
+hatch mirrors its own counters onto the body so the firing animation — an
+ammo drop — reads the same in both modes.)
 
 **Every button is rebindable, and these are only the defaults.** Esc → Controls
 captures the key, mouse button *or gamepad button* you press — and the root

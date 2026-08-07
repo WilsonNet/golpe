@@ -17,6 +17,11 @@ import { HUD_CSS } from "./hudStyles";
  * compact fighter picker. One source of truth for how a hero's sprite is
  * rendered: the face-on frame (cell 4 of every nine-cell strip) from the
  * hero's own sheet, blown up pixel-perfect.
+ *
+ * Anands is the exception that proves the rule: her sheets are hand-drawn
+ * (see `scripts/make-anands-art.py`) with their own cell geometry, so her
+ * portrait is a dedicated crop — `anands-portrait.png` — instead of a cell
+ * index into a shared layout.
  */
 export const HERO_SPRITE_CSS = `
 .hp-sprite {
@@ -29,7 +34,11 @@ export const HERO_SPRITE_CSS = `
 	background-position: -256px 0;
 }
 .hp-sprite-lia { background-image: url("assets/dude.png"); }
-.hp-sprite-anands { background-image: url("assets/anands.png"); }
+.hp-sprite-anands {
+	background-image: url("assets/anands-portrait.png");
+	background-size: 64px 96px;
+	background-position: 0 0;
+}
 .hp-sprite-jeffs { background-image: url("assets/jeffs.png"); }
 `;
 

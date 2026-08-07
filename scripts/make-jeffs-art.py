@@ -12,7 +12,7 @@ The layout is fixed by the game, not by this script:
   1:1, the same scale as Chrono Trigger's battle sprites.
 - `jeffs-roll.png` — 640x48, sixteen 40x48 cells: 0-7 roll right, 8-15 roll
   left (mirrors). Derived from the face-on frame by rotation and a curled
-  "ball" pose, exactly like `make-hero-art.py` does for Anands.
+  "ball" pose, exactly like `make-roll-art.py` does for the dude.
 
 Jeffs is a middle-aged man in a fancy trench coat: greying slicked-back hair
 with grey temples, heavy brows over narrowed eyes, a small nose with shadow

@@ -10,7 +10,7 @@
  */
 
 import { type Container, Sprite } from "pixi.js";
-import type { HeroId } from "../simulation/Heroes";
+import { HEROES, type HeroId } from "../simulation/Heroes";
 import {
 	MASSIVE_BLAST_RADIUS_PX,
 	MASSIVE_CHARGE_MS,
@@ -25,7 +25,7 @@ import {
 } from "../simulation/Physics";
 import type { TeamId } from "../simulation/Teams";
 import { TINT, teamTint } from "../teamPalette";
-import { TEX, tex } from "./assets";
+import { sheetScale, TEX, tex } from "./assets";
 import { ParticleSystem } from "./Particles";
 import type { Stage } from "./Stage";
 import { VIOLET } from "./UltAimLine";
@@ -227,6 +227,12 @@ interface FighterFx {
 	emitAccMs: number;
 	/** Sprite the fighter is drawn with, for the impact scale punch. */
 	body?: Sprite;
+	/**
+	 * The fighter's resting draw scale — the hero's sheet scale (1 for the
+	 * generated heroes, ~0.32 for Anands' hand-drawn art). The punch is an
+	 * overshoot *of* it, never an absolute scale.
+	 */
+	baseScale: number;
 	punch: number;
 	/** Cadence for the dash wind streaks. */
 	dashEmitMs: number;
@@ -275,8 +281,10 @@ export class MeleeFx {
 	}
 
 	/** Bind a fighter's sprite so impacts can punch its scale. */
-	registerBody(key: string, sprite: Sprite) {
-		this.fx(key).body = sprite;
+	registerBody(key: string, sprite: Sprite, baseScale: number) {
+		const f = this.fx(key);
+		f.body = sprite;
+		f.baseScale = baseScale;
 	}
 
 	/**
@@ -317,6 +325,7 @@ export class MeleeFx {
 			guard: mk(TEX.guard, true),
 			hero: "lia",
 			emitAccMs: 0,
+			baseScale: 1,
 			punch: 0,
 			dashEmitMs: 0,
 			wasDashing: false,
@@ -376,11 +385,15 @@ export class MeleeFx {
 		f.team = team;
 		// The weapon's own silhouette: a dagger fighter swings a dagger, and the
 		// swap is a one-line texture change when the hero changes (the Esc menu's
-		// hero select lands here on the next frame).
+		// hero select lands here on the next frame). The punch's resting scale
+		// follows the same latch — a fighter that *spawned* as one hero but is
+		// really another (a bot before its first snapshot names it) must punch
+		// at the right size the moment its hero is known.
 		if (f.hero !== hero) {
 			f.hero = hero;
 			f.blade.texture = tex(hero === "anands" ? TEX.dagger : TEX.blade);
 			f.blade.anchor.set(hero === "anands" ? 0.25 : 0.12, 0.5);
+			f.baseScale = sheetScale(HEROES[hero].sheet);
 		}
 		const cx = s.x + PLAYER_WIDTH / 2;
 		const cy = s.y + PLAYER_HEIGHT / 2;
@@ -401,7 +414,10 @@ export class MeleeFx {
 			this.drawStun(f, s, cx, s.y);
 		}
 
-		this.applyPunch(f, dtMs);
+		// A dragon rider is drawn by the ride's own art at its own scale — the
+		// punch's resting scale would clobber it. The wobble simply does not
+		// apply to cargo on a line.
+		if (s.dragonTimer <= 0) this.applyPunch(f, dtMs);
 	}
 
 	private drawSwing(
@@ -1013,11 +1029,14 @@ export class MeleeFx {
 	private applyPunch(f: FighterFx, dtMs: number) {
 		if (!f.body) return;
 		if (f.punch <= 0) {
-			f.body.scale.set(1);
+			f.body.scale.set(f.baseScale, f.baseScale);
 			return;
 		}
 		f.punch = Math.max(0, f.punch - dtMs / 180);
-		f.body.scale.set(1 + 0.35 * f.punch, 1 + 0.18 * f.punch);
+		f.body.scale.set(
+			f.baseScale * (1 + 0.35 * f.punch),
+			f.baseScale * (1 + 0.18 * f.punch),
+		);
 	}
 
 	/**

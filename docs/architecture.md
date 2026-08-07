@@ -97,8 +97,9 @@ scripts/          diagnose.mjs (Playwright harness), deathmatch-probe.mjs (sixte
                   (stubs the Gamepad API — the only thing that can test controller
                   aim and the phone deck), training-probe.mjs (one interaction at
                   a time), potg-probe.mjs (the end-of-match ceremony — the only
-                  thing that reads past the final whistle), make-hero-art.py
-                  (generates the second hero's pixel-art sheets), make-potg-art.py
+                  thing that reads past the final whistle), make-anands-art.py
+                  (composes the second hero's hand-drawn art into the shipped
+                  sheets), make-potg-art.py
                   (generates the ceremony's sunburst and medal),
                   dev-herdr.mjs, probe-online.mjs, verify-modes.mjs
 specs/            the source of truth for intended behaviour

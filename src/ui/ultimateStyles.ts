@@ -174,10 +174,14 @@ export const ULTIMATE_CSS = `
 		hue-rotate(var(--vu-hue, 0deg));
 	animation: vu-sprite-in 380ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
-/* Anands' own sheet, same layout: her portrait is her, not a hue-shifted
-   stranger. The hue rotation still applies for a *second* Anands. */
+/* Anands' own portrait, cut from her hand-drawn art by
+   scripts/make-anands-art.py: her face-on frame at the card's native size,
+   so the cell-index maths of the generated strips does not apply to her. The
+   hue rotation still applies for a *second* Anands. */
 .vu-sprite-anands {
-	background-image: url("assets/anands.png");
+	background-image: url("assets/anands-portrait.png");
+	background-size: 128px 192px;
+	background-position: 0 0;
 }
 /* Jeffs' own sheet, same layout: the executioner's portrait is his own coat. */
 .vu-sprite-jeffs {
@@ -317,6 +321,7 @@ export const ULTIMATE_CSS = `
 @media (max-width: 640px), (max-height: 520px) {
 	.vu-frame { width: 152px; height: 168px; }
 	.vu-sprite { width: 88px; height: 132px; margin-bottom: 10px; background-size: 792px 132px; background-position: -352px 0; }
+	.vu-sprite-anands { background-size: 88px 132px; background-position: 0 0; }
 	.vu-sprite::after { width: 80px; height: 16px; bottom: -8px; }
 	.vu-ability-name { font-size: 22px; }
 	.vu-name { font-size: 15px; }

@@ -116,6 +116,14 @@ were simply worse. `npm run typecheck` now covers both projects.
 - **Never freeze frames on impact.** Hitstop is the standard way to sell a heavy
   hit and it is unavailable here — pausing one side desyncs it. `MeleeFx` fakes
   it with camera shake and a sprite scale punch, purely in the renderer.
+- **A fighter sprite's scale is per-hero, and every writer of it must know.**
+  Sheets stopped being one size the day Anands' hand-drawn art landed
+  (`SHEET_CELLS` in `render/assets.ts`, drawn at `sheetScale`), and the impact
+  punch found the trap: it latched its resting scale from the hero the fighter
+  *spawned* as, so a bot that spawned as the host's hero but was really another
+  rendered at the wrong size until the end of the match. The resting scale must
+  follow the hero latch (see `MeleeFx.updateFighter`), and the dragon ride's
+  own scale must not be clobbered by the punch either.
 - **The ultimate's cinematic is the one legal freeze, and it is legal because it
   is the opposite of hitstop.** Hitstop is a *local* decision one client makes
   about an impact it drew. The cinematic is the **server** declaring a range of

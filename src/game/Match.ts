@@ -30,7 +30,7 @@ import { EventBus } from "./EventBus";
 import {
 	animationSystem,
 	bindFxBodies,
-	CLIPS,
+	idleTexture,
 	meleeFxSystem,
 	nameplateSystem,
 	shadowSystem,
@@ -61,7 +61,7 @@ import type {
 } from "./potg/types";
 import { AimLine } from "./render/AimLine";
 import { bodyCentre, drawArena } from "./render/ArenaRenderer";
-import { heroFrames, TEX, tex } from "./render/assets";
+import { heroFrames, sheetScale, TEX, tex } from "./render/assets";
 import { BlackHoleFx } from "./render/BlackHoleFx";
 import { BlossomFx } from "./render/BlossomFx";
 import { DenyFx } from "./render/DenyFx";
@@ -513,15 +513,15 @@ export class Match {
 		facing: number,
 		hero: HeroId = this.hero,
 	): FighterEntity {
-		// The strip's idle frames are the strip's own table — see `CLIPS` in
-		// ecs/systems.ts, where `left-idle` and `right-idle` name these indices.
-		// The *sheet* the indices cut from is the hero's own: every character
-		// strip shares the nine-frame layout.
-		const idleClip = facing < 0 ? CLIPS["left-idle"] : CLIPS["right-idle"];
-		const [idleFrame] = idleClip.frames;
-		const frames = heroFrames(HEROES[hero].sheet);
-		const sprite = new Sprite(frames[idleFrame]);
+		// The strip's idle frame comes from the hero's own clip table — see
+		// `HERO_CLIPS` in ecs/systems.ts, where `left-idle` and `right-idle`
+		// name each hero's own frames. The scale comes from the sheet's own
+		// cells, so Anands' hand-drawn 168x152 art draws at the same size the
+		// collider has always been.
+		const idleTex = idleTexture(hero, facing);
+		const sprite = new Sprite(idleTex ?? heroFrames(HEROES[hero].sheet)[4]);
 		sprite.anchor.set(SPRITE_ANCHOR_CENTRE);
+		sprite.scale.set(sheetScale(HEROES[hero].sheet));
 		this.stage.actors.addChild(sprite);
 
 		const entity = this.world.add({
@@ -739,11 +739,9 @@ export class Match {
 					this.hero = hero;
 					this.local.fighter.hero = hero;
 					this.local.anim = { clip: "right-idle", frame: 0, elapsedMs: 0 };
-					const frames = heroFrames(HEROES[hero].sheet);
-					const idle =
-						CLIPS[this.local.body.facing < 0 ? "left-idle" : "right-idle"];
-					this.local.sprite.texture =
-						frames[idle.frames[0] ?? 4] ?? this.local.sprite.texture;
+					const idleTex = idleTexture(hero, this.local.body.facing);
+					if (idleTex) this.local.sprite.texture = idleTex;
+					this.local.sprite.scale.set(sheetScale(HEROES[hero].sheet));
 					this.emitHud(true);
 				},
 				onReconcile: (result) => {
@@ -1572,10 +1570,12 @@ export class Match {
 
 		// The dragon: a serpent behind whoever is riding. The rider's drawn
 		// position is what the trail chases — the same smoothing rule as the
-		// nameplates and the shadows.
+		// nameplates and the shadows. Anands' ride is her own art now (see
+		// `HERO_CLIPS` in ecs/systems.ts), so the generated serpent has no
+		// rider left.
 		let rider: { x: number; y: number; vx: number; vy: number } | null = null;
 		for (const e of this.queries.fighters) {
-			if (e.body.dragonTimer <= 0) continue;
+			if (e.body.dragonTimer <= 0 || e.fighter.hero === "anands") continue;
 			const pos = e.renderPos ?? e.body;
 			rider = {
 				x: pos.x + PLAYER_WIDTH / 2,
@@ -2443,12 +2443,11 @@ export class Match {
 			const hero = session.heroOf(id);
 			if (hero !== entity.fighter.hero) {
 				entity.fighter.hero = hero;
-				// The remote's own sheet, from the animation system's strip table —
-				// the idle frame is the same index in every hero's layout.
-				const frames = heroFrames(HEROES[hero].sheet);
-				const idle = CLIPS[entity.body.facing < 0 ? "left-idle" : "right-idle"];
-				entity.sprite.texture =
-					frames[idle.frames[0] ?? 4] ?? entity.sprite.texture;
+				// The remote's own sheet, resolved through the animation
+				// system's clip table — the idle frame is the hero's own.
+				const idleTex = idleTexture(hero, entity.body.facing);
+				if (idleTex) entity.sprite.texture = idleTex;
+				entity.sprite.scale.set(sheetScale(HEROES[hero].sheet));
 				entity.anim = { clip: "right-idle", frame: 0, elapsedMs: 0 };
 			}
 		}
@@ -2620,6 +2619,15 @@ export class Match {
 
 		this.resolveOfflineMelee(foe);
 		this.bullets.resolve(this.bulletTargets(foe));
+
+		// Mirror the escape hatch's magazines onto the bodies, so the
+		// animation system's firing detection (an ammo drop) works offline
+		// exactly as it does online. The sim never touches `ammo` — the wire
+		// and the offline counters are its only writers.
+		this.local.body.ammo = this.localAmmo;
+		this.local.body.reloadTimer = this.localReload;
+		foe.body.ammo = this.remoteAmmo;
+		foe.body.reloadTimer = this.remoteReload;
 	}
 
 	private localAttackAt = 0;
