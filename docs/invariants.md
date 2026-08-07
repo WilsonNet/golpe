@@ -182,6 +182,33 @@ Full rules in [`specs/items.md`](../specs/items.md).
   takes the dead fighter's traps off the floor with them — otherwise a player
   would stack a fresh three on top of the three that just got them killed.
 
+## Hero interactions
+
+Full rules in [`specs/interactions.md`](../specs/interactions.md).
+
+- **The hero is data; an interaction is a predicate over declared attributes —
+  never a hero-id branch.** The simulation and `GameRoom` contain no
+  `hero === "anands"`, no `case "jeffs"`, and the guard
+  (`simulation/Interactions.test.ts`) greps for exactly that and fails naming
+  the file and line. The near-miss was the trap fix: "the trap counters the
+  thrust but not the dragon" reads as two hero cases, and the pair that almost
+  shipped was `if (hero === "anands")`. It shipped as a predicate instead —
+  `startMove` refuses moves whose def carries the body while `trapTimer` runs,
+  and the ride is exempt because a ride is not a move. The exemption falling
+  out of the classification is the whole system: a pairwise matrix is the
+  O(n²) trap where adding a hero means editing every hero already in the game.
+- **A matchup exception is data on the participants, never a second `if`.** If a
+  rule genuinely applies to one pair only, it is a declared tag on the move or
+  ultimate (or the one tagged exception table `specs/interactions.md` names) —
+  so the rule reads generically even when one combination sets it. The shipped
+  games agree: Dota 2's abilities declare behaviors and modifiers declare
+  states, and interactions are comparisons of those declarations at runtime.
+- **Per-hero branches belong to presentation, not to truth.** The HUD, the
+  menu, the cinematic and the AI's animation choices may switch on hero; the
+  deterministic simulation and the server's authority layer may not — those
+  are the two places a branch would be the first cell of the matrix and the
+  first thing to drift across the wire.
+
 ## Sword combat
 
 Full frame data and rationale in [`specs/melee.md`](../specs/melee.md); the table

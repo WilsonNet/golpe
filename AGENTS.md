@@ -43,6 +43,7 @@ skill({ name: "feedback-loop" })    # the full workflow
 | What should the game *do*? | [`specs/`](specs/README.md) — the source of truth |
 | **Where do the balance numbers live?** | [`tweakables/`](tweakables/README.md) — every tuning constant, one folder |
 | Who are the heroes, and how do kits work? | [`specs/heroes.md`](specs/heroes.md) · [`specs/anands.md`](specs/anands.md) |
+| How do heroes interact with each other? | [`specs/interactions.md`](specs/interactions.md) — attributes, statuses, predicates, and the one rule for matchup exceptions |
 | What are items, and how do charges work? | [`specs/items.md`](specs/items.md) |
 | What should the menu do? | [`specs/menu.md`](specs/menu.md) — when it shows, and how choices become URLs |
 | What happens when a match ends? | [`specs/play-of-the-game.md`](specs/play-of-the-game.md) — the reel, the camera edit, then the podium |
@@ -91,6 +92,13 @@ One line each; the war story behind every one is in
   beside `team`, and both sides pass `kitFor(hero)` into every tick and every
   replay. A kit applied on top of predicted state would be erased by the next
   reconciliation.
+- **The hero is data; an interaction is a predicate over state and declared
+  attributes.** No `hero === "anands"` anywhere in `simulation/` or `GameRoom`
+  — a pairwise matrix is the O(n²) trap, and `Interactions.test.ts` greps for
+  the first cell. A matchup exception is a tag on the move or ultimate (see
+  [specs/interactions.md](specs/interactions.md)); presentation (HUD, menu,
+  cinematic, the AI's animation picks) is the only place a per-hero branch
+  belongs.
 - **The stance enum is the slot, not the weapon.** `"sword" | "gun"` means
   melee weapon out or ranged weapon out; which weapon that slot means is the
   hero's business. The wire format never changes when a hero does.
