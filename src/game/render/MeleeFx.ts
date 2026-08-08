@@ -383,17 +383,21 @@ export class MeleeFx {
 		// Latched here so `impact` — which is fired from a server event and knows
 		// only ids — can tint an attacker's sparks without being handed a team.
 		f.team = team;
+		// The punch's resting scale follows the fighter's hero **every frame**,
+		// not just on the blade latch: the resting scale and the sprite's own
+		// scale must agree by construction, or a fighter whose fx was registered
+		// under a different hero than the one it is really playing (a remote
+		// that spawned before its first snapshot named it) would be punched at
+		// the wrong size forever. The sheet lookup is a table read — the same
+		// cost the latch paid, every frame, for nobody to notice.
+		f.baseScale = sheetScale(HEROES[hero].sheet);
 		// The weapon's own silhouette: a dagger fighter swings a dagger, and the
 		// swap is a one-line texture change when the hero changes (the Esc menu's
-		// hero select lands here on the next frame). The punch's resting scale
-		// follows the same latch — a fighter that *spawned* as one hero but is
-		// really another (a bot before its first snapshot names it) must punch
-		// at the right size the moment its hero is known.
+		// hero select lands here on the next frame).
 		if (f.hero !== hero) {
 			f.hero = hero;
 			f.blade.texture = tex(hero === "anands" ? TEX.dagger : TEX.blade);
 			f.blade.anchor.set(hero === "anands" ? 0.25 : 0.12, 0.5);
-			f.baseScale = sheetScale(HEROES[hero].sheet);
 		}
 		const cx = s.x + PLAYER_WIDTH / 2;
 		const cy = s.y + PLAYER_HEIGHT / 2;

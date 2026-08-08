@@ -106,6 +106,7 @@ import {
 	fieldAffects,
 	fieldFor,
 	hasLineOfSight,
+	isFrozen,
 	isKnockedDown,
 	isStunned,
 	MAX_HP,
@@ -499,6 +500,17 @@ export class Match {
 			// No server, so no roster to be named by.
 			this.offlineFoe.fighter.name = "Rival";
 			this.local.fighter.name = "You";
+			// A new life is a new magazine — and a match that has not started
+			// is a life that just began. The online bodies spawn with a full
+			// mag because `createPlayerState` fills them from the kit; the
+			// escape hatch's own counters are only filled by `resetFight`, so
+			// without this a fresh offline match opened at 0/30 and the gun
+			// could not fire until somebody died. (The reload used to mask it
+			// by silently refilling an empty mag in sword stance.)
+			this.localAmmo = kitFor(this.hero).ranged.magazine;
+			this.remoteAmmo = kitFor(this.foeHero()).ranged.magazine;
+			this.localReload = 0;
+			this.remoteReload = 0;
 			if (this.aiMode) this.startOfflineAi();
 		}
 
@@ -1030,12 +1042,19 @@ export class Match {
 	private addRemoteFighter(id: string) {
 		if (this.remotes.has(id)) return;
 		const state = this.online?.remotes.get(id)?.state;
+		// The snapshot that announced the fighter also named its hero — spawn
+		// with that, never with the local fighter's. A remote born as the host's
+		// hero rendered with the wrong sheet *and* the wrong punch scale until
+		// the next snapshot corrected it, and one of the two (the fx latch)
+		// never corrected at all.
+		const hero = this.online?.heroOf(id) ?? this.hero;
 		const entity = this.spawnFighter(
 			id,
 			false,
 			state?.x ?? START_ENEMY_X,
 			state?.y ?? START_ENEMY_Y,
 			state?.facing ?? -1,
+			hero,
 		);
 		this.remotes.set(id, entity);
 		console.log(`[ONLINE] fighter joined: ${this.online?.nameOf(id) ?? id}`);
@@ -2602,7 +2621,10 @@ export class Match {
 
 		// The offline reload, mirrored from the server's: the same shared
 		// `tickReload` against the same intents, so the escape hatch's guns
-		// obey the same magazine as the online ones.
+		// obey the same magazine as the online ones. The same gates the server
+		// applies before calling it apply here too — a dead, frozen or stunned
+		// fighter reloads nothing — so the offline magazine never becomes a
+		// second set of reload rules.
 		this.tickOfflineReload(
 			this.localAmmo,
 			(ammo) => (this.localAmmo = ammo),
@@ -2611,6 +2633,8 @@ export class Match {
 			this.localIntent.attack,
 			localKit,
 			now,
+			this.local.fighter.hp,
+			this.local.body,
 		);
 		this.tickOfflineReload(
 			this.remoteAmmo,
@@ -2620,6 +2644,8 @@ export class Match {
 			this.remoteIntent.attack,
 			foeKit,
 			now,
+			foe.fighter.hp,
+			foe.body,
 		);
 
 		this.resolveOfflineMelee(foe);
@@ -2648,6 +2674,9 @@ export class Match {
 	 * Drive the offline reload for one fighter: a small mutable wrapper around
 	 * the shared `tickReload`, since the offline path has no `PlayerPosition`
 	 * to mutate in place.
+	 *
+	 * Gates exactly like the server's own wrapper: a dead, frozen or stunned
+	 * fighter reloads nothing and drops any reload in progress.
 	 */
 	private tickOfflineReload(
 		ammo: number,
@@ -2657,8 +2686,14 @@ export class Match {
 		attack: boolean,
 		kit: HeroKit,
 		now: number,
+		hp: number,
+		body: PlayerPosition,
 	) {
-		const state = { ammo, reloadTimer: reload };
+		if (hp <= 0 || isFrozen(body) || isStunned(body) || isKnockedDown(body)) {
+			setReload(0);
+			return;
+		}
+		const state = { ammo, reloadTimer: reload, stance: body.stance };
 		const dt = Math.min(
 			MAX_RELOAD_STEP_SECONDS,
 			(now - this.offlineReloadLastAt) / MILLIS_PER_SECOND,

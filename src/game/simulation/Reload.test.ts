@@ -1,9 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { RANGED_WEAPONS } from "./Heroes.js";
-import { tickReload } from "./Physics.js";
+import { type PlayerPosition, tickReload } from "./Physics.js";
 
-/** A fighter with `ammo` rounds left, not reloading. */
-const state = (ammo: number) => ({ ammo, reloadTimer: 0 });
+/** The slice of a fighter's state `tickReload` mutates. */
+type ReloadState = Pick<PlayerPosition, "ammo" | "reloadTimer" | "stance">;
+
+/** A fighter with `ammo` rounds left, the gun out, not reloading. */
+const state = (ammo: number): ReloadState => ({
+	ammo,
+	reloadTimer: 0,
+	stance: "gun",
+});
 
 describe("the reload", () => {
 	it("the rifle and the machine gun refill the whole magazine at once", () => {
@@ -123,5 +130,61 @@ describe("the reload", () => {
 		);
 		expect(s.reloadTimer).toBe(0);
 		expect(s.ammo).toBe(2);
+	});
+
+	it("a sword-stance fighter reloads nothing and drops any reload in progress", () => {
+		const s = state(4);
+		tickReload(
+			s,
+			{ attack: false },
+			{ ranged: RANGED_WEAPONS.rifle } as never,
+			0.4,
+		);
+		expect(s.reloadTimer).toBeGreaterThan(0);
+		// The gun is holstered: the load is dropped where it stands.
+		s.stance = "sword";
+		tickReload(
+			s,
+			{ attack: false },
+			{ ranged: RANGED_WEAPONS.rifle } as never,
+			1.5,
+		);
+		expect(s.reloadTimer).toBe(0);
+		expect(s.ammo).toBe(4);
+	});
+
+	it("a stance switch keeps the shotgun's loaded shells, only the shell being loaded is lost", () => {
+		const s = state(0);
+		const firstMs = RANGED_WEAPONS.shotgun.reloadFirstShellMs ?? 0;
+		// One shell lands, the next is mid-load.
+		tickReload(
+			s,
+			{ attack: false },
+			{ ranged: RANGED_WEAPONS.shotgun } as never,
+			firstMs / 1000 + 0.05,
+		);
+		expect(s.ammo).toBe(1);
+		expect(s.reloadTimer).toBeGreaterThan(0);
+		// The gun is holstered mid-load.
+		s.stance = "sword";
+		tickReload(
+			s,
+			{ attack: false },
+			{ ranged: RANGED_WEAPONS.shotgun } as never,
+			0.2,
+		);
+		expect(s.reloadTimer).toBe(0);
+		expect(s.ammo).toBe(1);
+		// Back on the gun, the reload restarts from the shell that was being
+		// loaded — the one that already landed stays loaded.
+		s.stance = "gun";
+		tickReload(
+			s,
+			{ attack: false },
+			{ ranged: RANGED_WEAPONS.shotgun } as never,
+			0.2,
+		);
+		expect(s.reloadTimer).toBeGreaterThan(0);
+		expect(s.ammo).toBe(1);
 	});
 });

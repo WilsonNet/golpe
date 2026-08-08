@@ -1052,8 +1052,14 @@ export function canFire(
  *
  * Rules, in the order they matter:
  *
- * - Dead, frozen, stunned or not holding the gun: no reload, and any reload
- *   in progress is cancelled — a stance switch *is* dropping the weapon.
+ * - Dead, frozen or stunned: no reload, and any reload in progress is
+ *   cancelled — those gates live at the callers, which reset the timer
+ *   without calling here.
+ * - **Not holding the gun: no reload, and any reload in progress is
+ *   cancelled — a stance switch *is* dropping the weapon.** The loaded
+ *   rounds stay (a shotgun's shells are already in `ammo`); only the
+ *   in-progress load is lost, and the reload restarts from the shells that
+ *   are left when the gun comes back out.
  * - A full magazine never reloads.
  * - **Holding fire with rounds in the mag delays the reload.** The fighter
  *   shoots until the button is released — CS and TF2 both wait for the
@@ -1070,7 +1076,7 @@ export function canFire(
  *   ones. The rifle and the machine gun refill everything in `reloadMs`.
  */
 export function tickReload(
-	s: Pick<PlayerPosition, "ammo" | "reloadTimer">,
+	s: Pick<PlayerPosition, "ammo" | "reloadTimer" | "stance">,
 	input: Pick<PlayerIntent, "attack">,
 	kit: HeroKit,
 	dt: number,
@@ -1079,6 +1085,10 @@ export function tickReload(
 	const dtMs = dt * MS_PER_SECOND;
 
 	if (s.ammo >= r.magazine) {
+		s.reloadTimer = 0;
+		return;
+	}
+	if (s.stance !== "gun") {
 		s.reloadTimer = 0;
 		return;
 	}

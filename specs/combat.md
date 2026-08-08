@@ -112,9 +112,13 @@ The rules, in the order a player meets them:
 - **The shotgun reloads one shell at a time** (TF2's "Single" type), the rack
   from empty the slow shell. The rifle and the machine gun refill everything
   in one animation.
-- **Death, stun and a stance switch cancel the reload.** The gun left the
-  hand; the magazine waits for a new life. A respawn, a round reset and a
-  hero change refill the magazine.
+- **The reload only runs while the gun is out, and a stance switch cancels
+  it.** The gun left the hand, so the in-progress load is dropped where it
+  stands — and the rounds that already landed stay: the shotgun's loaded
+  shells survive a stance switch exactly as they survive a shot, and the
+  reload restarts from the shells that are left when the gun comes back out.
+  Death and stun cancel the reload the same way. A respawn, a round reset and
+  a hero change refill the magazine.
 - The state (`ammo`, `reloadTimer`) rides the wire so every client draws the
   HUD's ammo count and reload bar, but **only the server ticks it** — the
   fire that spends a round is the server's decision, so the reload is too,
