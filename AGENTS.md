@@ -67,8 +67,30 @@ spec before implementing: [movement](specs/movement.md) ·
 ## Tech Stack
 
 PixiJS 8 (rendering) · miniplex (ECS, entity + render layer only) · React 19 (UI
-overlay) · Vite 6 · TypeScript 5.7 strict · Geckos.io (WebRTC) authoritative
-server · Vitest · Playwright.
+overlay, **auto-memoised by the React Compiler**) · Vite 8 · TypeScript 7 strict
+· Geckos.io (WebRTC) authoritative server · Vitest · Playwright.
+
+**The React overlay is compiled, not hand-optimised.** `babel-plugin-react-compiler`
+runs in both vite configs through `@vitejs/plugin-react`'s `reactCompilerPreset`
+plus `@rolldown/plugin-babel`, so components and hooks in `src/ui/` are memoised
+automatically. Do not hand-write `useCallback`/`useMemo` for performance — write
+plain components and let the compiler earn its keep; the pre-existing ones stay
+until they are touched, not because they are wanted.
+
+- **A compiled component must not read an external store mid-render.** The
+  compiler memoises on the values a render reads; a `bindings.codesFor`-style
+  read off a module singleton is invisible to it and freezes at first render,
+  and a change event arriving at an *unread* `[, bump]` state changes nothing
+  the JSX depends on. Snapshot the store into state
+  (`useState(() => store.snapshot())` + resubscribe) and ask the snapshot with
+  a pure predicate (`isDefaultBindings`, `deckVisibleFor`) — never the live
+  store. War story: docs/invariants.md.
+- **If the compiler memoises a closure an effect depends on, Biome still
+  fires** — `useExhaustiveDependencies` cannot see the compiler. Suppress with
+  a *single-line* parameterised comment directly above the deps line
+  (`// biome-ignore lint/correctness/useExhaustiveDependencies(fn): closes
+  over setters only — the compiler memoises it stably.`); a multi-line block
+  or any other placement is reported as unused.
 
 **Custom AABB physics in `src/game/simulation/`.** Pixi draws; it does not
 simulate. Input, the game loop and the camera are ours too — see the `pixi-*`

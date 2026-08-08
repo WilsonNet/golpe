@@ -1,9 +1,19 @@
-import react from "@vitejs/plugin-react";
+import react, { reactCompilerPreset } from "@vitejs/plugin-react";
+import babel from "@rolldown/plugin-babel";
 import { defineConfig } from "vite";
 
 export default defineConfig({
 	base: "./",
-	plugins: [react()],
+	plugins: [
+		react(),
+		/**
+		 * The React Compiler auto-memoises every component and hook, so
+		 * hand-written useCallback/useMemo are redundant. Same preset and
+		 * plugin version as the dev config; the preset only compiles client
+		 * files whose source looks like a component.
+		 */
+		babel({ presets: [reactCompilerPreset()] }),
+	],
 	logLevel: "warn",
 	resolve: {
 		// Global module state: Pixi's extension registry and React's hook

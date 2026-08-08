@@ -1,9 +1,23 @@
-import react from "@vitejs/plugin-react";
+import react, { reactCompilerPreset } from "@vitejs/plugin-react";
+import babel from "@rolldown/plugin-babel";
 import { defineConfig } from "vite";
 
 export default defineConfig({
 	base: "./",
-	plugins: [react()],
+	plugins: [
+		react(),
+		/**
+		 * The React Compiler auto-memoises every component and hook, which
+		 * makes the hand-written useCallback/useMemo in src/ui/ redundant —
+		 * and lets new components skip them entirely. It runs through
+		 * @rolldown/plugin-babel in both dev and prod (the preset pins
+		 * `applyToEnvironmentHook` to the client consumer, so the server
+		 * build never sees it), and its rolldown filter only touches files
+		 * that look like components — the exact same `babel-plugin-react-compiler`
+		 * version the optional peer of @vitejs/plugin-react demands.
+		 */
+		babel({ presets: [reactCompilerPreset()] }),
+	],
 	server: {
 		port: 8084,
 		/**

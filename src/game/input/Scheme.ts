@@ -107,14 +107,12 @@ class InputSettingsStore {
 	/**
 	 * Whether the on-screen gamepad should be drawn right now.
 	 *
-	 * `auto` is not "is this a phone" but "is this player using a finger *and*
+	 * `auto` is not "is this phone" but "is this player using a finger *and*
 	 * aiming like a controller" — a touch device switched to mouse aim has
 	 * something else pointing at the screen, and the deck would only be in the way.
 	 */
 	deckVisible(touchPrimary = isTouchPrimary()): boolean {
-		if (this.settings.deck === "on") return true;
-		if (this.settings.deck === "off") return false;
-		return touchPrimary && this.settings.scheme === "controller";
+		return deckVisibleFor(this.settings, touchPrimary);
 	}
 
 	subscribe(listener: () => void): () => void {
@@ -127,6 +125,24 @@ class InputSettingsStore {
 	private changed() {
 		for (const listener of [...this.listeners]) listener();
 	}
+}
+
+/**
+ * The `deck` setting applied to a *snapshot*, for a component that renders one.
+ *
+ * Pure, so the deck can ask the same question about a snapshot it holds as
+ * React state as the live store answers for `Input` — a component that renders
+ * a snapshot must not ask the live store, or the React Compiler's memoisation
+ * (which only sees values a render reads) would freeze the deck's visibility
+ * at mount.
+ */
+export function deckVisibleFor(
+	settings: InputSettings,
+	touchPrimary = isTouchPrimary(),
+): boolean {
+	if (settings.deck === "on") return true;
+	if (settings.deck === "off") return false;
+	return touchPrimary && settings.scheme === "controller";
 }
 
 function load(): InputSettings {

@@ -12,13 +12,15 @@
  * finger goes, not what the DOM calls the key underneath it.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
 	ACTION_LABELS,
 	ACTIONS,
 	type Action,
+	type BindingMap,
 	bindings,
 	codeLabel,
+	isDefaultBindings,
 	mouseCode,
 	RESERVED_CODES,
 	SLOT_NAMES,
@@ -60,17 +62,29 @@ interface Capture {
 export function ControlsDialog({ onClose }: { onClose: () => void }) {
 	const [capture, setCapture] = useState<Capture | null>(null);
 	const [note, setNote] = useState("");
-	// Re-render on every change to the stores. They are deliberately not React
-	// state — `Input` reads them every frame from outside React entirely — so
-	// the dialog subscribes to them the same way anything else would.
-	const [, bump] = useState(0);
+	// The stores are deliberately not React state — `Input` reads them every
+	// frame from outside React entirely — so the dialog snapshots them into
+	// state and resubscribes on every change. That indirection is what the
+	// React Compiler needs: it memoises JSX on the values a render actually
+	// reads, and a render that read `bindings.codesFor` straight off the store
+	// would freeze the table at what it was when the dialog opened — with the
+	// store's change events arriving at a bump state nothing in the JSX read.
+	const [bindingsMap, setBindingsMap] = useState(() => bindings.snapshot());
+	const [settings, setSettings] = useState(() => inputSettings.snapshot());
+	useEffect(() => {
+		const offBindings = bindings.subscribe(() =>
+			setBindingsMap(bindings.snapshot()),
+		);
+		const offSettings = inputSettings.subscribe(() =>
+			setSettings(inputSettings.snapshot()),
+		);
+		return () => {
+			offBindings();
+			offSettings();
+		};
+	}, []);
 
-	useEffect(() => bindings.subscribe(() => bump((n) => n + 1)), []);
-	// The scheme store is not React state either — `Input` reads it every frame
-	// from outside React entirely — so it is subscribed to the same way.
-	useEffect(() => inputSettings.subscribe(() => bump((n) => n + 1)), []);
-
-	const assign = useCallback((action: Action, slot: number, code: string) => {
+	const assign = (action: Action, slot: number, code: string) => {
 		if (RESERVED_CODES.has(code)) {
 			setNote(`${codeLabel(code)} is reserved by the menu.`);
 			setCapture(null);
@@ -83,7 +97,7 @@ export function ControlsDialog({ onClose }: { onClose: () => void }) {
 				: "",
 		);
 		setCapture(null);
-	}, []);
+	};
 
 	// Listening for the next button. Both listeners are in the capture phase and
 	// swallow the event, so the press that rebinds a key never also performs the
@@ -137,6 +151,7 @@ export function ControlsDialog({ onClose }: { onClose: () => void }) {
 			window.removeEventListener("pointerdown", onPointer, true);
 			window.removeEventListener("contextmenu", onContext, true);
 		};
+		// biome-ignore lint/correctness/useExhaustiveDependencies(assign): closes over setters only — the React Compiler memoises it with a stable identity.
 	}, [capture, assign]);
 
 	return (
@@ -149,7 +164,7 @@ export function ControlsDialog({ onClose }: { onClose: () => void }) {
 							<button
 								key={s.value}
 								type="button"
-								className={`vd-chip${inputSettings.scheme === s.value ? " vd-chip-on" : ""}`}
+								className={`vd-chip${settings.scheme === s.value ? " vd-chip-on" : ""}`}
 								onClick={() => inputSettings.setScheme(s.value)}
 							>
 								{s.label}
@@ -158,9 +173,9 @@ export function ControlsDialog({ onClose }: { onClose: () => void }) {
 					</div>
 				</div>
 				<p className="vd-setting-hint">
-					{SCHEMES.find((s) => s.value === inputSettings.scheme)?.hint}{" "}
-					Switching is safe mid-match — the simulation is handed an angle and
-					never learns which device made it.
+					{SCHEMES.find((s) => s.value === settings.scheme)?.hint} Switching is
+					safe mid-match — the simulation is handed an angle and never learns
+					which device made it.
 				</p>
 			</div>
 
@@ -172,7 +187,7 @@ export function ControlsDialog({ onClose }: { onClose: () => void }) {
 							<button
 								key={d.value}
 								type="button"
-								className={`vd-chip${inputSettings.deck === d.value ? " vd-chip-on" : ""}`}
+								className={`vd-chip${settings.deck === d.value ? " vd-chip-on" : ""}`}
 								onClick={() => inputSettings.setDeck(d.value)}
 							>
 								{d.label}
@@ -190,9 +205,9 @@ export function ControlsDialog({ onClose }: { onClose: () => void }) {
 			<p className="vd-sub">
 				Click a slot, then press the key, mouse button or gamepad button you
 				want. <strong>Esc</strong> cancels. Double-tapping{" "}
-				<strong>{firstLabel("left")}</strong> or{" "}
-				<strong>{firstLabel("right")}</strong> dashes, so the dash follows
-				whatever those two are bound to. <strong>Aim up</strong> and{" "}
+				<strong>{firstLabel(bindingsMap, "left")}</strong> or{" "}
+				<strong>{firstLabel(bindingsMap, "right")}</strong> dashes, so the dash
+				follows whatever those two are bound to. <strong>Aim up</strong> and{" "}
 				<strong>aim down</strong> do nothing in Mouse aiming — the cursor
 				answers both axes there.
 			</p>
@@ -202,7 +217,7 @@ export function ControlsDialog({ onClose }: { onClose: () => void }) {
 						<tr key={action}>
 							<th>{ACTION_LABELS[action]}</th>
 							{SLOT_NAMES.map((name, slot) => {
-								const code = bindings.codesFor(action)[slot];
+								const code = bindingsMap[action][slot];
 								const listening =
 									capture?.action === action && capture.slot === slot;
 								return (
@@ -239,7 +254,7 @@ export function ControlsDialog({ onClose }: { onClose: () => void }) {
 				<button
 					className="vd-btn"
 					type="button"
-					disabled={bindings.isDefault}
+					disabled={isDefaultBindings(bindingsMap)}
 					onClick={() => {
 						bindings.reset();
 						setNote("Defaults restored.");
@@ -262,7 +277,7 @@ function readPadCodes(): string[] {
 }
 
 /** How a hint should name an action: its primary binding, or that it has none. */
-function firstLabel(action: Action): string {
-	const code = bindings.codesFor(action)[0];
+function firstLabel(map: BindingMap, action: Action): string {
+	const code = map[action][0];
 	return code ? codeLabel(code) : "nothing";
 }

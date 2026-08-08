@@ -94,3 +94,15 @@ counter accelerates with every event. And **keep the bus engine-free**: using th
 renderer's own emitter makes the React layer depend on the rendering engine for
 nothing more than a callback list, and every renderer swap drags the UI along
 with it.
+
+The overlay is **auto-memoised by the React Compiler** (enabled in both vite
+configs via `reactCompilerPreset` + `@rolldown/plugin-babel`) — write plain
+components and hooks, skip `useCallback`/`useMemo`/`memo()`. Existing hand-tuned
+memoisation in `src/ui/` is legacy and can be dropped when the component is
+touched. The compiler's cost: a Rules-of-Hooks violation becomes a build error,
+and the compiled output's `useMemoCache` calls are the marker that it is actually
+running (grep `dist/` for `useMemoCache` to prove it). One pattern breaks under
+it: **reading an external store mid-render** (e.g. `bindings.codesFor` off a
+module singleton) freezes at first render, because the compiler only memoises
+on values a render reads — snapshot the store into state instead, and ask the
+snapshot with the store's pure predicate.

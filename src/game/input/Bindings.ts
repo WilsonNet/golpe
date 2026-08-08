@@ -135,6 +135,21 @@ export const DEFAULT_BINDINGS: Readonly<Record<Action, readonly string[]>> = {
 	toggleAi: ["KeyP"],
 };
 
+/**
+ * True while a snapshot binds every action exactly as it ships.
+ *
+ * Pure, so a dialog can ask it about a *snapshot* it holds as React state —
+ * the imperative `isDefault` getter is the live store's version of the same
+ * question, and a component that renders a snapshot must ask the snapshot.
+ */
+export function isDefaultBindings(map: BindingMap): boolean {
+	return ACTIONS.every(
+		(action) =>
+			map[action].length === DEFAULT_BINDINGS[action].length &&
+			map[action].every((c, i) => c === DEFAULT_BINDINGS[action][i]),
+	);
+}
+
 /** Where a player's bindings are kept, so they are set once and not again. */
 const STORAGE_KEY = "vento.bindings";
 
@@ -322,11 +337,7 @@ export class KeyBindings {
 
 	/** True while every action is bound exactly as it ships. */
 	get isDefault(): boolean {
-		return ACTIONS.every(
-			(action) =>
-				this.map[action].length === DEFAULT_BINDINGS[action].length &&
-				this.map[action].every((c, i) => c === DEFAULT_BINDINGS[action][i]),
-		);
+		return isDefaultBindings(this.map);
 	}
 
 	subscribe(listener: () => void): () => void {

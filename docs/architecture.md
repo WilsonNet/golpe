@@ -218,3 +218,13 @@ Run modes are listed in [running-the-game.md](running-the-game.md).
 - **`EventBus` carries game → React events** only, and is deliberately
   dependency-free: using the renderer's emitter made the UI depend on the
   rendering engine for nothing more than a callback list.
+- **The React overlay is compiled, never hand-memoised.** The React Compiler
+  (`babel-plugin-react-compiler` via `reactCompilerPreset` +
+  `@rolldown/plugin-babel`, in both vite configs) memoises every component and
+  hook in `src/ui/` automatically. New UI code is written plain; `useCallback`
+  and `useMemo` only remain where legacy code has not been touched yet.
+- **A component that renders a store's data snapshots it into state.** The
+  compiler only memoises on values a render reads, so reading `bindings` or
+  `inputSettings` mid-render freezes the read; the store is subscribed to for a
+  fresh snapshot (`useState(() => store.snapshot())`) and asked via a pure
+  predicate (`isDefaultBindings`, `deckVisibleFor`) — never the live store.

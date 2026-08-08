@@ -36,6 +36,20 @@ something wears the gold.
 The world's nameplates (in-world, above each fighter) and the screen HUD (the
 local fighter's numbers) answer different questions and never merge.
 
+Every component in the overlay is **auto-memoised by the React Compiler**
+(`reactCompilerPreset` + `@rolldown/plugin-babel` in both vite configs), so a HUD
+component that subscribes to `hud-state` does not need hand-written
+`useCallback`/`useMemo` to avoid re-render storms — the compiler memoises it.
+Write the plain component; the existing hand-tuned hooks in `src/ui/` are
+legacy.
+
+**Never read a store straight out of a render, though.** The compiler memoises
+on what a render reads, and a `bindings.codesFor`-style read off a module
+singleton is invisible to it — the HUD's ult/item keycaps froze at mount, and
+the store's change events arrived at an unread `[, bump]` state. Snapshot the
+store into state (`useState(() => store.snapshot())` + resubscribe) and read
+the snapshot.
+
 ## Data flow: the hud-state event
 
 `Match.emitHud()` composes a `HudState` (`src/game/hud.ts` — the one contract

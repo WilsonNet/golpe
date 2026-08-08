@@ -34,7 +34,7 @@
  * probe runs and how shared links behave.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { readStoredHero, storeHero } from "../game/heroPref";
 import { bindings, codeLabel } from "../game/input/Bindings";
 import type { LaunchParams } from "../game/online/launch";
@@ -301,10 +301,8 @@ function HostForm({
 	const [settings, setSettings] = useState(DEFAULT_SETTINGS);
 	const [showAdvanced, setShowAdvanced] = useState(false);
 
-	const set = useCallback(
-		(patch: Partial<HostSettings>) => setSettings((s) => ({ ...s, ...patch })),
-		[],
-	);
+	const set = (patch: Partial<HostSettings>) =>
+		setSettings((s) => ({ ...s, ...patch }));
 
 	// A team room has a three-screen floor — wipe-out rounds need ground to give
 	// and take. The constraint is enforced here so the form never commits a room
@@ -312,7 +310,7 @@ function HostForm({
 	const minScreens = settings.mode === "tdm" ? 3 : 1;
 	const screens = Math.max(minScreens, Math.min(settings.screens, 8));
 
-	const commit = useCallback(() => {
+	const commit = () => {
 		onLaunch({
 			...NOTHING,
 			hero,
@@ -325,14 +323,12 @@ function HostForm({
 			freezeTime: settings.mode === "tdm" ? settings.freezeTime : undefined,
 			ultCharge: settings.ultCharge > 0 ? settings.ultCharge : undefined,
 		});
-	}, [onLaunch, settings, screens, hero]);
+	};
 
-	const summary = useMemo(() => {
-		if (settings.mode === "tdm") {
-			return `Team deathmatch · ${screens} screens · first side to ${settings.scoreLimit} rounds · ${settings.timeLimitSec}s of play per round fight, ${settings.freezeTime}s freezetime${settings.bots > 0 ? ` · ${settings.bots} bots` : ""}`;
-		}
-		return `Deathmatch · ${screens} ${screens === 1 ? "screen" : "screens"} · first to ${settings.scoreLimit} frags, or best score in ${formatMinutes(settings.timeLimitSec)}${settings.bots > 0 ? ` · ${settings.bots} bots` : ""}`;
-	}, [settings, screens]);
+	const summary =
+		settings.mode === "tdm"
+			? `Team deathmatch · ${screens} screens · first side to ${settings.scoreLimit} rounds · ${settings.timeLimitSec}s of play per round fight, ${settings.freezeTime}s freezetime${settings.bots > 0 ? ` · ${settings.bots} bots` : ""}`
+			: `Deathmatch · ${screens} ${screens === 1 ? "screen" : "screens"} · first to ${settings.scoreLimit} frags, or best score in ${formatMinutes(settings.timeLimitSec)}${settings.bots > 0 ? ` · ${settings.bots} bots` : ""}`;
 
 	return (
 		<>
@@ -534,20 +530,17 @@ function JoinForm({
 	const [value, setValue] = useState("");
 	const [error, setError] = useState("");
 
-	const submit = useCallback(
-		(e: React.FormEvent) => {
-			e.preventDefault();
-			const id = roomIdFromInput(value);
-			if (id === null || !ROOM_ID_RE.test(id)) {
-				setError(
-					"Room ids are letters, numbers, dashes and underscores. Paste the full link if you have it.",
-				);
-				return;
-			}
-			onLaunch({ ...NOTHING, room: id, hero });
-		},
-		[value, onLaunch, hero],
-	);
+	const submit = (e: React.FormEvent) => {
+		e.preventDefault();
+		const id = roomIdFromInput(value);
+		if (id === null || !ROOM_ID_RE.test(id)) {
+			setError(
+				"Room ids are letters, numbers, dashes and underscores. Paste the full link if you have it.",
+			);
+			return;
+		}
+		onLaunch({ ...NOTHING, room: id, hero });
+	};
 
 	return (
 		<>
@@ -595,8 +588,12 @@ function JoinForm({
  * worse than no hint, and this one is the same store the game plays by.
  */
 function HowToPlay({ onBack }: { onBack: () => void }) {
-	const [, bump] = useState(0);
-	useEffect(() => bindings.subscribe(() => bump((n) => n + 1)), []);
+	// A snapshot of the live bindings, kept as state for the same reason the
+	// controls dialog does: the rows read what a player has actually rebound,
+	// and a render that read the store straight off would freeze them under the
+	// React Compiler, whose memoisation only sees values the render reads.
+	const [map, setMap] = useState(() => bindings.snapshot());
+	useEffect(() => bindings.subscribe(() => setMap(bindings.snapshot())), []);
 
 	const key = (
 		action:
@@ -610,7 +607,7 @@ function HowToPlay({ onBack }: { onBack: () => void }) {
 			| "sword"
 			| "gun",
 	) => {
-		const code = bindings.codesFor(action)[0];
+		const code = map[action][0];
 		return code ? codeLabel(code) : "—";
 	};
 

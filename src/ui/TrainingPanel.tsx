@@ -12,7 +12,7 @@
  * describing.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { EventBus } from "../game/EventBus";
 import type { TrainingState } from "../game/training/report";
 import type {
@@ -244,15 +244,13 @@ export function TrainingPanel() {
 		return () => window.removeEventListener("pointerdown", onPointerDown);
 	}, []);
 
-	const apply = useCallback((patch: TrainingConfigPatch) => {
+	const apply = (patch: TrainingConfigPatch) => {
 		void window.__training?.set(patch);
-	}, []);
+	};
 
 	const config = state?.config;
-	const behaviourHint = useMemo(
-		() => BEHAVIOURS.find((b) => b.value === config?.behaviour)?.hint ?? "",
-		[config?.behaviour],
-	);
+	const behaviourHint =
+		BEHAVIOURS.find((b) => b.value === config?.behaviour)?.hint ?? "";
 
 	if (!state || !config) {
 		return (

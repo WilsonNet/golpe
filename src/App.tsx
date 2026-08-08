@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { GameCanvas } from "./GameCanvas";
 import {
 	isMenuShape,
@@ -57,18 +57,18 @@ function App() {
 	);
 
 	/** Commit a menu choice: make the URL the launch request, then boot. */
-	const launch = useCallback((params: LaunchParams) => {
+	const launch = (params: LaunchParams) => {
 		const url = new URL(window.location.href);
 		url.search = serializeLaunchParams(params);
 		window.history.replaceState(null, "", url.toString());
 		setStarted(true);
-	}, []);
+	};
 
 	/** Back to the menu: drop the launch request from the URL, stop the game. */
-	const exitToMenu = useCallback(() => {
+	const exitToMenu = () => {
 		window.history.replaceState(null, "", window.location.pathname);
 		setStarted(false);
-	}, []);
+	};
 
 	if (!started) {
 		return (

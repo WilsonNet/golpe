@@ -747,6 +747,25 @@ the ways a *side* breaks things a free-for-all could not.
   handed `block`, not `ShiftLeft`. The moment a key name travels, two clients
   with different keyboards are two clients running different games — and the
   packer would not even complain.
+- **A compiled component must not read an external store mid-render.** The
+  React Compiler memoises JSX on the values a render actually reads, so a
+  `bindings.codesFor(...)` read straight off a module singleton is invisible to
+  it: the controls dialog's slot table froze at whatever it showed when the
+  dialog opened, and *Reset to defaults* — which rewrote the store and correctly
+  refreshed the note below the table — kept showing the rebound key. The
+  store's change events were arriving at an unread `[, bump]` state that no JSX
+  depended on, which is the whole trap: the pattern worked under hand-written
+  memoisation because `useCallback` made the closure the dependency; the
+  compiler sees neither the store read nor the bump. (The bind path had masked
+  it all along — binding a key also clears `capture`, and that *state* the JSX
+  did read.) The fix is to snapshot the store into state
+  (`useState(() => store.snapshot())`, resubscribed), and to ask the snapshot
+  with a pure predicate (`isDefaultBindings`, `deckVisibleFor`) rather than the
+  live store — the snapshot is a value the compiler sees, and the predicate
+  keeps the question in one place. If a closure the compiler memoises is still
+  flagged by Biome's `useExhaustiveDependencies`, the suppression is a
+  *single-line* parameterised comment directly above the deps line — a
+  multi-line block or any other placement is reported as unused.
 - **One code belongs to one action.** Binding a key that another action already
   holds has to *take* it, visibly. Two owners means the loser is silently
   unbound, and the player finds out mid-fight that jump does nothing.

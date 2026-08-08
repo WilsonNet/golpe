@@ -20,7 +20,7 @@
  * No JS measurement, no drift on a wide window or a portrait phone.
  */
 
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { EventBus } from "../game/EventBus";
 import { HUD_EVENTS, type HudState } from "../game/hud";
 import { bindings, codeLabel } from "../game/input/Bindings";
@@ -288,15 +288,16 @@ function useBattleMessage(): [
 ] {
 	const [message, setMessage] = useState("");
 	const timer = useRef<number | undefined>(undefined);
-	const announce = useCallback((text: string) => {
+	const announce = (text: string) => {
 		window.clearTimeout(timer.current);
 		setMessage(text);
 		if (text) {
 			timer.current = window.setTimeout(() => setMessage(""), 3500);
 		}
-	}, []);
+	};
 	useEffect(
 		() => EventBus.on(HUD_EVENTS.status, announce as never),
+		// biome-ignore lint/correctness/useExhaustiveDependencies(announce): closes over a ref and a setter only — the React Compiler memoises it with a stable identity.
 		[announce],
 	);
 	return [message, announce];
@@ -341,13 +342,17 @@ export function FightHud({ training = false }: { training?: boolean }) {
 
 	// The ultimate meter's keycap shows the *actual* binding, and redraws when
 	// the controls dialog changes it — a hint that lies about the button is
-	// worse than no hint.
-	const [, setBump] = useState(0);
-	useEffect(() => bindings.subscribe(() => setBump((n) => n + 1)), []);
-	const ultKey = codeLabel(bindings.codesFor("ultimate")[0] ?? "");
+	// worse than no hint. The bindings are snapshotted into state rather than
+	// read straight off the store, because the React Compiler only memoises
+	// on values a render reads: a direct store read would freeze the keycaps
+	// at mount, and the store's change events would arrive at a bump state
+	// nothing in the JSX depended on.
+	const [map, setMap] = useState(() => bindings.snapshot());
+	useEffect(() => bindings.subscribe(() => setMap(bindings.snapshot())), []);
+	const ultKey = codeLabel(map.ultimate[0] ?? "");
 	const ult = hud ? Math.max(0, Math.min(ULT_MAX_CHARGE, hud.ult)) : 0;
 	const ultReady = ult >= ULT_MAX_CHARGE;
-	const itemKey = codeLabel(bindings.codesFor("item")[0] ?? "");
+	const itemKey = codeLabel(map.item[0] ?? "");
 	const item = hud?.itemCharges ?? 0;
 	const itemMax = hud?.itemMaxCharges ?? 0;
 

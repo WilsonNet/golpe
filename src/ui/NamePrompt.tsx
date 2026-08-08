@@ -11,7 +11,7 @@
  * than a bypass nobody plays.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { EventBus } from "../game/EventBus";
 import { roomLink } from "../game/online/room";
 import { HUD_CSS } from "./hudStyles";
@@ -59,23 +59,20 @@ export function NamePrompt() {
 		if (asking) inputRef.current?.focus();
 	}, [asking]);
 
-	const submit = useCallback(
-		(e: React.FormEvent) => {
-			e.preventDefault();
-			const name = value.trim().slice(0, MAX_NAME);
-			if (name.length === 0) {
-				setError("Pick something. Anything.");
-				return;
-			}
-			EventBus.emit("player-name", name);
-		},
-		[value],
-	);
+	const submit = (e: React.FormEvent) => {
+		e.preventDefault();
+		const name = value.trim().slice(0, MAX_NAME);
+		if (name.length === 0) {
+			setError("Pick something. Anything.");
+			return;
+		}
+		EventBus.emit("player-name", name);
+	};
 
-	const share = useCallback(async () => {
+	const share = async () => {
 		const ok = await copyText(roomLink(roomId), linkRef.current);
 		setCopied(ok ? "Link copied." : "Select it and press Ctrl+C.");
-	}, [roomId]);
+	};
 
 	if (!asking) return null;
 

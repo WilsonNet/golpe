@@ -33,12 +33,16 @@
  * away. `auto` means "a finger is the pointer *and* the aim is a controller's".
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { EventBus } from "../game/EventBus";
 import { quantise8 } from "../game/input/Aim";
 import { codeLabel } from "../game/input/Bindings";
 import { PAD_DOWN, PAD_LEFT, PAD_RIGHT, PAD_UP } from "../game/input/Gamepad";
-import { inputSettings, isTouchPrimary } from "../game/input/Scheme";
+import {
+	deckVisibleFor,
+	inputSettings,
+	isTouchPrimary,
+} from "../game/input/Scheme";
 import { DECK_CSS } from "./deckStyles";
 
 /**
@@ -135,7 +139,7 @@ function Cross() {
 	const live = useRef({ x: 0, y: 0 });
 	const liveContra = useRef<{ x: number; y: number } | null>(null);
 
-	const apply = useCallback((raw: { x: number; y: number } | null) => {
+	const apply = (raw: { x: number; y: number } | null) => {
 		// The movement half stays quantised — walking is still left or right —
 		// while the aim half is the raw deflection, exactly like a physical left
 		// stick. Same deadzone for both, so a thumb resting on the hub neither
@@ -169,7 +173,7 @@ function Cross() {
 			liveContra.current = contra;
 			EventBus.emit("virtual-contra", contra);
 		}
-	}, []);
+	};
 
 	const track = (e: React.PointerEvent) => {
 		const el = ref.current;
@@ -302,12 +306,19 @@ function AimStick() {
 }
 
 export function TouchControls() {
-	// The store is deliberately not React state — `Input` reads it every frame
-	// from outside React entirely — so this subscribes to it the way the controls
-	// dialog subscribes to the bindings.
-	const [, bump] = useState(0);
+	// The settings store is deliberately not React state — `Input` reads it
+	// every frame from outside React entirely — so the deck snapshots it into
+	// state and resubscribes. The indirection is what the React Compiler
+	// needs: it memoises on the values a render reads, and a gate that read
+	// `deckVisible` straight off the store would freeze — a deck that stayed
+	// on screen after its owner turned it off, with the store's change events
+	// arriving at a bump state nothing in the JSX read.
+	const [settings, setSettings] = useState(() => inputSettings.snapshot());
 	const [touch, setTouch] = useState(isTouchPrimary);
-	useEffect(() => inputSettings.subscribe(() => bump((n) => n + 1)), []);
+	useEffect(
+		() => inputSettings.subscribe(() => setSettings(inputSettings.snapshot())),
+		[],
+	);
 
 	// A tablet that gets a mouse plugged in, or a phone rotated into a mode the
 	// media query answers differently. Re-asked rather than latched at mount.
@@ -381,7 +392,11 @@ export function TouchControls() {
 	// left holding a button that no longer has anything to release it.
 	useEffect(() => releaseAll, []);
 
-	if (!inputSettings.deckVisible(touch)) return null;
+	// Same gate `deckVisible` answers, computed from the snapshot — a render
+	// must ask the pure predicate about the state it holds, never the live
+	// store.
+	const deckVisible = deckVisibleFor(settings, touch);
+	if (!deckVisible) return null;
 
 	return (
 		<div className="vg-deck">

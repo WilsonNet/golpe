@@ -97,6 +97,56 @@ useEffect(() => {
 }, []);
 ```
 
+## The React overlay is compiled
+
+`babel-plugin-react-compiler` runs in both vite configs (dev and prod) through
+`@vitejs/plugin-react`'s `reactCompilerPreset` + `@rolldown/plugin-babel`, so
+every component and hook in `src/ui/` is memoised automatically — no
+`useCallback`/`useMemo`/`memo()` needed in new code, and the hand-written ones
+already in the tree are legacy. The preset's rolldown filter only compiles files
+whose source looks like a component (`/\b(?:[A-Z]|use[A-Z0-9])/`), and its
+`applyToEnvironmentHook` pins it to the client consumer so the server build
+never sees it.
+
+Two consequences to keep in mind:
+
+1. **The compiler output calls `useMemoCache`** (inlining `react/compiler-runtime`,
+   which the preset adds to `optimizeDeps.include`). Grep the built bundle for
+   `useMemoCache` to prove a config change actually compiled — absence means the
+   plugin silently stopped running.
+2. **The Rules of Hooks are now enforced at build time.** A component that
+   violates them makes the compiler refuse to compile the file (a build error),
+   which is usually a real bug the linter was going to find anyway. A needed
+   escape hatch is `compilationMode: "annotation"` on the preset, or excluding
+   the file via the preset's `rolldown.filter`.
+
+### The one thing the compiler breaks: reading an external store mid-render
+
+The compiler memoises JSX on the values a render *reads*. A read straight off a
+module singleton — `bindings.codesFor(action)`, `inputSettings.scheme` — is
+invisible to it, so the block that read it freezes at whatever it computed on
+first render, and the store's change events arriving at an unread `[, bump]`
+state change nothing the JSX depends on. The controls dialog's reset button
+kept showing the old key under exactly this pattern.
+
+The fix is to make the store read *visible*: snapshot the store into state and
+resubscribe —
+
+```ts
+const [bindingsMap, setBindingsMap] = useState(() => bindings.snapshot());
+useEffect(() => bindings.subscribe(() => setBindingsMap(bindings.snapshot())), []);
+```
+
+— and ask the snapshot with a pure predicate exported next to the store
+(`isDefaultBindings(map)`, `deckVisibleFor(settings, touch)`). The snapshot is
+reactive state the compiler sees; the predicate keeps the question in one
+place. A closure the compiler memoises may still trip Biome's
+`useExhaustiveDependencies` (it cannot see the compiler); suppress it with a
+*single-line* parameterised comment directly above the deps line —
+`// biome-ignore lint/correctness/useExhaustiveDependencies(fn): closes over
+setters only — the compiler memoises it stably.` Multi-line suppressions and
+other placements are reported as unused.
+
 ## Vite: Pixi must exist exactly once
 
 Pixi registers renderers and environment adapters through a **global extension
