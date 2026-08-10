@@ -181,8 +181,8 @@ measurement. Never mix in `px` for layout (hairlines at 1-2px are fine).
 
 ## Verifying a HUD change
 
-1. `npm run typecheck && npm run lint && npm run test` first.
-2. Boot `npm run dev:herdr`, then screenshot with Playwright
+1. `pnpm run typecheck && pnpm run lint && pnpm run test` first.
+2. Boot `pnpm run dev:herdr`, then screenshot with Playwright
    (`?ai=true&bots=1&scoreLimit=10&ultCharge=100` for a live duel with a full
    ultimate; `?offline=true` for the no-server panels; `?screen=2` to confirm
    the HUD stays pinned while the camera scrolls).

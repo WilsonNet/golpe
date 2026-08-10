@@ -21,7 +21,7 @@ here; the folder is pure data, so changing a number can never desync a match.
    comment — read it before you tune, because several numbers are load-bearing:
    gravity and the jump velocity set level reachability (see `movement.ts`),
    and the melee table's hitstun is sized to the chain's link times.
-2. **Run the verification:** `npm run verify` (typecheck both projects, the
+2. **Run the verification:** `pnpm run verify` (typecheck both projects, the
    full test suite, build, dead-code). The tests assert the invariants the
    numbers are allowed to break — e.g. the shotgun's shell reload must stay
    slower than its blast, the dagger's dash must stay quicker than the sword's.

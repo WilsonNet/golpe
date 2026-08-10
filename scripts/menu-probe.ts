@@ -7,7 +7,7 @@
  * boots from it — not on styling. It also proves the agentic path is intact: a
  * URL that already carries a launch key must never show the menu.
  *
- * Run with the dev servers up (npm run dev:herdr).
+ * Run with the dev servers up (pnpm run dev:herdr).
  */
 import { chromium } from "playwright";
 

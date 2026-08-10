@@ -72,14 +72,14 @@ const SERVICES: Service[] = [
 	{
 		name: "vite",
 		label: "vite :8084",
-		command: ["npm", "run", "dev"],
+		command: ["pnpm", "run", "dev"],
 		port: 8084,
 		ready: /Local:\s+http/,
 	},
 	{
 		name: "server",
 		label: "geckos :9208",
-		command: ["npm", "run", "dev:server"],
+		command: ["pnpm", "run", "dev:server"],
 		port: 9208,
 		ready: /listening on port 9208/,
 	},

@@ -20,7 +20,7 @@ the full workflow** — this file is the reference for the tool itself.
 ## Harness (preferred)
 
 ```bash
-npm run dev:herdr                               # both servers in visible panes
+pnpm run dev:herdr                               # both servers in visible panes
 node scripts/diagnose.ts                       # offline + online, 8s each
 node scripts/diagnose.ts --mode=online --runs=3  # the canonical duel
 node scripts/diagnose.ts --mode=online --ultCharge=100  # bots cast their ultimates
@@ -479,7 +479,7 @@ correct behaviour trains you to ignore it**:
   its pane can leave the old server holding `:9208` — the port check passes, and
   every room then has the *old* rules. Symptom: a `--screens=2` run reports
   `worldScreens: 1` while the code says 2. Fix: `pgrep -af "tsx server"`, kill
-  the survivor, then `npm run dev:herdr:down && npm run dev:herdr` — and read the
+  the survivor, then `pnpm run dev:herdr:down && pnpm run dev:herdr` — and read the
   room-creation line, which now names the screen count
   (`[MATCH] Created room … (fill N, M screens)`).
 - **`pgrep -f "tsx server/index.ts"` matches its own shell.** Check the port

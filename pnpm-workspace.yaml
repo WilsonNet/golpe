@@ -1,0 +1,10 @@
+# Single-project workspace: the root package is the only member. Settings here
+# are pnpm's 11+ home for dependency lifecycle approvals (the `pnpm` field in
+# package.json is no longer read).
+#
+# node-datachannel ships a native N-API binary that its install script fetches;
+# esbuild's postinstall verifies its platform binary. Everything else is
+# allowed to skip scripts by pnpm's default security policy.
+allowBuilds:
+  esbuild: true
+  node-datachannel: true

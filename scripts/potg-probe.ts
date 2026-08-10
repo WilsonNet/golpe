@@ -75,7 +75,7 @@ async function assertServerUp() {
 	const res = await fetch(`${SERVER_URL}/health`).catch(() => null);
 	if (!res?.ok) {
 		throw new Error(
-			`game server unreachable on ${SERVER_URL} — start it with \`npm run dev:herdr\``,
+			`game server unreachable on ${SERVER_URL} — start it with \`pnpm run dev:herdr\``,
 		);
 	}
 }

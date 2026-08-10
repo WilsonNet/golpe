@@ -26,8 +26,8 @@ netcode.
 ## Quick start
 
 ```bash
-npm install
-npm run dev:herdr      # or: npm run dev:all
+pnpm install
+pnpm run dev:herdr      # or: pnpm run dev:all
 
 # then open one of (all served by the authoritative server):
 #   http://localhost:8084/                        solo vs server bot
@@ -38,6 +38,6 @@ npm run dev:herdr      # or: npm run dev:all
 #   http://localhost:8084/?offline=true           escape hatch, no server
 ```
 
-Verify a change with `npm run verify` (typechecks the client *and* the server,
-then tests and builds), plus `npm run diagnose` for anything touching physics or
+Verify a change with `pnpm run verify` (typechecks the client *and* the server,
+then tests and builds), plus `pnpm run diagnose` for anything touching physics or
 netcode.

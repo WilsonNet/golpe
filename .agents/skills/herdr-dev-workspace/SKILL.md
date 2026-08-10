@@ -1,6 +1,6 @@
 ---
 name: herdr-dev-workspace
-description: "Use when starting, inspecting or stopping this project's dev servers (Vite :8084 and the Geckos game server :9208), or when you need to read a running server's output. Runs them in visible herdr panes instead of detached background processes, and exposes their logs non-interactively. Triggers on: run the dev server, start the game, npm run dev, dev:all, background process, server logs, is the server running, herdr, workspace, pane, tab, terminal multiplexer, port 8084, port 9208."
+description: "Use when starting, inspecting or stopping this project's dev servers (Vite :8084 and the Geckos game server :9208), or when you need to read a running server's output. Runs them in visible herdr panes instead of detached background processes, and exposes their logs non-interactively. Triggers on: run the dev server, start the game, pnpm run dev, dev:all, background process, server logs, is the server running, herdr, workspace, pane, tab, terminal multiplexer, port 8084, port 9208."
 license: MIT
 ---
 
@@ -11,7 +11,7 @@ rather than as detached background processes.
 
 ## Why not just background them
 
-A `npm run dev &` server is invisible and, worse, *misleadingly* invisible:
+A `pnpm run dev &` server is invisible and, worse, *misleadingly* invisible:
 
 - You cannot watch Vite recompile or see the game server's `[MATCH]` lines.
 - A crashed server leaves no trace in your terminal.
@@ -26,10 +26,10 @@ jitter. Panes you can actually look at make that failure obvious.
 ## Commands
 
 ```bash
-npm run dev:herdr           # create the "dev" tab, start both servers, wait for ports
-npm run dev:herdr:status    # pane liveness + real port checks
-npm run dev:herdr:logs      # tail both panes
-npm run dev:herdr:down      # ctrl+c both panes and close the tab
+pnpm run dev:herdr           # create the "dev" tab, start both servers, wait for ports
+pnpm run dev:herdr:status    # pane liveness + real port checks
+pnpm run dev:herdr:logs      # tail both panes
+pnpm run dev:herdr:down      # ctrl+c both panes and close the tab
 
 node scripts/dev-herdr.mjs logs server --lines=60   # one service, more history
 node scripts/dev-herdr.mjs logs vite
@@ -48,8 +48,8 @@ because pane ids are machine-local.
 ```
 workspace "vento-aureo"
 └── tab "dev"
-    ├── pane "vite :8084"     npm run dev
-    └── pane "geckos :9208"   npm run dev:server
+    ├── pane "vite :8084"     pnpm run dev
+    └── pane "geckos :9208"   pnpm run dev:server
 ```
 
 It reuses the existing `vento-aureo` workspace when there is one, so the dev tab
@@ -83,7 +83,7 @@ herdr tab create --workspace w1 --cwd "$PWD" --label dev --no-focus
 herdr pane split w1:pA --direction down --ratio 0.5 --cwd "$PWD"
                                         # -> result.pane.pane_id
 herdr pane rename w1:pA "vite :8084"
-herdr pane run w1:pA npm run dev  # command is argv, not a shell string
+herdr pane run w1:pA pnpm run dev  # command is argv, not a shell string
 herdr pane send-keys w1:pA ctrl+c
 herdr pane list                         # -> result.panes[] with agent_status
 herdr tab close w1:tA
@@ -94,7 +94,7 @@ herdr tab close w1:tA
 Both of these have already burned a session, and both look like a *code* bug.
 
 **1. `up` can report "ready :9208" for a server that just died.** The pane's
-`npm run dev:server` exits with `EADDRINUSE` because a previous server process
+`pnpm run dev:server` exits with `EADDRINUSE` because a previous server process
 still holds the port — and the readiness check polls the *port*, which is open,
 because the old process is holding it. The room you then connect to is running
 **the code from before your change**.
@@ -120,7 +120,7 @@ divergence rather than a crash.
 matches the agent's own command line, exactly as the `pgrep` note below warns —
 the tool call dies mid-chain with exit 144 and every command *after* it is
 silently skipped. That is how a `git stash push … ; … ; git stash pop` chain left
-a whole session's work sitting in a stash. Use `npm run dev:herdr:down`, which
+a whole session's work sitting in a stash. Use `pnpm run dev:herdr:down`, which
 sends ctrl+c to the panes and does not pattern-match anything.
 
 ### Gotchas found the hard way
@@ -129,7 +129,7 @@ sends ctrl+c to the panes and does not pattern-match anything.
 - **Use `--source visible`.** The default `recent` source returns *empty* for a
   long-running process that is simply sitting there logging. `--lines` applies
   to the JSON sources, so slice the text yourself.
-- **`pane run` takes argv**, e.g. `pane run w1:pA npm run dev` — not a
+- **`pane run` takes argv**, e.g. `pane run w1:pA pnpm run dev` — not a
   quoted shell string.
 - A workspace/tab/pane id is `w1`, `w1:t5`, `w1:p5`. Ids are per-session and are
   not stable across a server restart, hence the state file.

@@ -97,7 +97,7 @@ typechecked. It grew a real bug behind that gap — `botInput` read `foe.facingD
 after facing moved into `PlayerPosition`, so `playerFacingDirection` was
 `undefined`, `undefined * n` was `NaN`, every `playerFacesMe` test was false, and
 **the server's bots could never evade**. Nothing failed, nothing logged; the bots
-were simply worse. `npm run typecheck` now covers both projects.
+were simply worse. `pnpm run typecheck` now covers both projects.
 
 ## Combat authority
 

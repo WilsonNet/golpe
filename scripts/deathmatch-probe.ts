@@ -59,7 +59,7 @@ async function assertServerUp() {
 	}).catch(() => null);
 	if (!res) {
 		throw new Error(
-			"game server unreachable on :9208 — start it with `npm run dev:server`",
+			"game server unreachable on :9208 — start it with `pnpm run dev:server`",
 		);
 	}
 }

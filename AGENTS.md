@@ -244,13 +244,13 @@ One line each; the war story behind every one is in
 ## Commands
 
 ```bash
-npm run dev:herdr        # both servers in visible panes, waits for the ports
-npm run dev:herdr:logs   # read their output
-npm run dev:herdr:down
+pnpm run dev:herdr        # both servers in visible panes, waits for the ports
+pnpm run dev:herdr:logs   # read their output
+pnpm run dev:herdr:down
 
-npm run verify           # typecheck (client AND server) + tests + build + dead-code (knip)
-npm run lint             # biome, across src/ server/ scripts/
-npm run knip             # unused exports/files/dependencies — run before believing the tree is lean
+pnpm run verify           # typecheck (client AND server) + tests + build + dead-code (knip)
+pnpm run lint             # biome, across src/ server/ scripts/
+pnpm run knip             # unused exports/files/dependencies — run before believing the tree is lean
 tsx scripts/diagnose.ts --mode=online --runs=3       # the feedback loop, in a duel
 tsx scripts/diagnose.ts --mode=online --ultCharge=100 # ...and the bots cast their ultimates
 tsx scripts/deathmatch-probe.ts                      # sixteen AI fighters, to a winner
@@ -276,7 +276,7 @@ measurement on a wide arena — the follow camera and the wide-world spawns are
 part of what they must prove.
 
 - Ports: Vite **8084**, Geckos **9208**.
-- **`npm run typecheck` covers two projects.** `tsconfig.json` is client-only;
+- **`pnpm run typecheck` covers two projects.** `tsconfig.json` is client-only;
   `tsconfig.server.json` covers `server/`. Running bare `tsc` checks half the
   game — which is how the server's bots silently lost the ability to evade.
 - **Restart the server after touching `server/`, `src/game/simulation/`,

@@ -176,7 +176,7 @@ string. Rules that follow:
 
 ## Verifying a menu change
 
-1. `npm run typecheck && npm run lint && npm run test`.
+1. `pnpm run typecheck && pnpm run lint && pnpm run test`.
 2. `node scripts/menu-probe.mjs` with the servers up — it drives the real menu:
    bare URL shows the menu; Quick match boots with `bots=1`; Practice boots
    training; Join accepts a room; a URL with a launch key never shows the menu.

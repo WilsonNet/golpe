@@ -13,7 +13,7 @@ only by habit, delete it and see what breaks.
 
 ## The order that works
 
-1. **Baseline first.** `npm run verify` (typecheck both projects + tests +
+1. **Baseline first.** `pnpm run verify` (typecheck both projects + tests +
    build + knip) and note the timings. A tidying session that cannot show a
    before/after is guessing.
 2. **Dead code (knip).** This is the biggest win and it is mechanical.
@@ -76,7 +76,7 @@ dead.
 
 One tidy day removed ~90 exports, a whole deprecated type alias, a duplicated
 bot-personality block, and a debug overlay nobody rendered — every one found by
-knip, every one verified by `--trace-export`, and `npm run verify` stayed green
+knip, every one verified by `--trace-export`, and `pnpm run verify` stayed green
 throughout.
 
 ## Step 3 — constants and single source of truth
@@ -205,7 +205,7 @@ Every tidying day ends by re-reading the markdown:
 ## Step 7 — prove it
 
 ```
-npm run verify
+pnpm run verify
 node scripts/diagnose.mjs --mode=online --runs=3       # the canonical run
 node scripts/diagnose.mjs --mode=online --ultCharge=100
 node scripts/deathmatch-probe.mjs                      # at scale

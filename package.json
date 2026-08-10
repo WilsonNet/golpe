@@ -3,6 +3,7 @@
   "description": "An online-first 2D sword-fighting game: GunZ: The Duel's K-Style rebuilt in two dimensions on a deterministic simulation shared by client and server.",
   "version": "1.1.0",
   "type": "module",
+  "packageManager": "pnpm@11.12.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/WilsonNet/vento-aureo.git"
@@ -32,7 +33,7 @@
     "format": "biome format --write src",
     "knip": "knip",
     "dev:server": "tsx server/index.ts",
-    "dev:all": "concurrently \"npm run dev\" \"npm run dev:server\"",
+    "dev:all": "concurrently \"pnpm run dev\" \"pnpm run dev:server\"",
     "test": "vitest run",
     "dev:herdr": "tsx scripts/dev-herdr.ts up",
     "dev:herdr:down": "tsx scripts/dev-herdr.ts down",
@@ -41,7 +42,7 @@
     "diagnose": "tsx scripts/diagnose.ts",
     "deathmatch": "tsx scripts/deathmatch-probe.ts",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json && tsc -p tsconfig.scripts.json",
-    "verify": "npm run typecheck && npm run test && npm run build && npm run knip"
+    "verify": "pnpm run typecheck && pnpm run test && pnpm run build && pnpm run knip"
   },
   "dependencies": {
     "@geckos.io/client": "^3.1.0",

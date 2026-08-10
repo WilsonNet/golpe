@@ -22,7 +22,7 @@ Every way to launch Vento Áureo, and what each one is for.
 ## Prerequisites
 
 ```bash
-npm install
+pnpm install
 ```
 
 Node.js is required. Two ports are used, and **both bind every interface**, so
@@ -53,10 +53,10 @@ Runs both servers in named panes you can watch, and waits for the ports before
 reporting success.
 
 ```bash
-npm run dev:herdr          # start
-npm run dev:herdr:status   # pane liveness + real port checks
-npm run dev:herdr:logs     # tail both panes
-npm run dev:herdr:down     # stop and close the tab
+pnpm run dev:herdr          # start
+pnpm run dev:herdr:status   # pane liveness + real port checks
+pnpm run dev:herdr:logs     # tail both panes
+pnpm run dev:herdr:down     # stop and close the tab
 ```
 
 Requires a running [herdr](https://herdr.dev) server (just run `herdr` in a
@@ -66,9 +66,9 @@ for the full model and the socket-API gotchas.
 ### Alternatives
 
 ```bash
-npm run dev:all      # both servers, interleaved in one terminal via concurrently
-npm run dev          # Vite only  — enough for ?offline=true
-npm run dev:server   # game server only
+pnpm run dev:all      # both servers, interleaved in one terminal via concurrently
+pnpm run dev          # Vite only  — enough for ?offline=true
+pnpm run dev:server   # game server only
 ```
 
 > **Avoid backgrounding these with `&`.** A detached server is invisible when it
@@ -421,7 +421,7 @@ node scripts/deathmatch-probe.ts                 # 16 AI fighters, played to a w
 node scripts/tdm-probe.ts                       # two sides, wipe-out rounds, no friendly fire
 node scripts/menu-probe.ts                       # the root menu: every click a URL, boots a match
 node scripts/potg-probe.ts                      # play of the game — the only probe that reads past the final whistle
-npm run diagnose                                  # offline + online, 8s each
+pnpm run diagnose                                  # offline + online, 8s each
 node scripts/verify-modes.ts                     # smoke-check every launch mode
 node scripts/probe-online.ts                     # raw console from one online client
 ```
@@ -448,8 +448,8 @@ npx vitest run
 
 | Symptom | Cause and fix |
 |---|---|
-| "Connecting..." never clears | Game server is down. `npm run dev:herdr:status`, or `curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:9208/.wrtc/v2/connections` |
+| "Connecting..." never clears | Game server is down. `pnpm run dev:herdr:status`, or `curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:9208/.wrtc/v2/connections` |
 | Online run reports `INVALID: no server snapshots received` | The harness caught a dead server — start it and re-run |
-| Server changes have no effect | `tsx` does not hot-reload; restart `npm run dev:server` |
-| Port already in use | A previous background server survived. `npm run dev:herdr:down`, or `pkill -f "tsx server/index.ts"` |
+| Server changes have no effect | `tsx` does not hot-reload; restart `pnpm run dev:server` |
+| Port already in use | A previous background server survived. `pnpm run dev:herdr:down`, or `pkill -f "tsx server/index.ts"` |
 | Both fighters idle in AI vs AI | Check `xRange`/`yRange` in the diagnostic — a fighter may be stuck on geometry |

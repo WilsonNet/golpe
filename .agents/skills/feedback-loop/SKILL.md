@@ -412,8 +412,8 @@ Use the harness — it handles two-tab matchmaking, console scraping, server
 preflight and the digest.
 
 ```bash
-npm run dev:server &   # :9208 — REQUIRED for online runs
-npm run dev &          # :8084
+pnpm run dev:server &   # :9208 — REQUIRED for online runs
+pnpm run dev &          # :8084
 
 node scripts/diagnose.mjs                          # offline + online, 8s each
 node scripts/diagnose.mjs --mode=offline
@@ -493,7 +493,7 @@ A green verdict is necessary, not sufficient. These all produced convincing lies
 - **A stuck fighter is perfectly smooth.** Always read `playerMovement.xRange/yRange`
   and `movementSummary` alongside the verdict.
 - **Stale server.** tsx does not hot-reload; restart after editing `server/` or
-  `simulation/`. `npm run dev:herdr` restarts both and waits for the ports.
+  `simulation/`. `pnpm run dev:herdr` restarts both and waits for the ports.
 - **An offline PASS is not evidence.** Offline skips prediction, reconciliation
   and server-owned bullets. Only `--mode=online` exercises them.
 - **A metric that has never failed is not a measurement.** Confirm a new
