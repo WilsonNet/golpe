@@ -21,11 +21,16 @@ Every way to launch Vento Áureo, and what each one is for.
 
 ## Prerequisites
 
+Node.js and pnpm are required. If you use asdf, the versions are pinned in
+`.tool-versions` at the repo root:
+
 ```bash
+asdf install            # installs the pinned nodejs + pnpm
 pnpm install
 ```
 
-Node.js is required. Two ports are used, and **both bind every interface**, so
+Otherwise, the `packageManager` field in `package.json` lets corepack provide
+the same pnpm: Two ports are used, and **both bind every interface**, so
 either is reachable from another machine on the network:
 
 | Port | Process | Needed for |

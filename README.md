@@ -26,6 +26,7 @@ netcode.
 ## Quick start
 
 ```bash
+# versions are pinned in .tool-versions (asdf) and package.json (corepack)
 pnpm install
 pnpm run dev:herdr      # or: pnpm run dev:all
 
