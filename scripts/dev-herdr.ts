@@ -192,7 +192,9 @@ async function up() {
 		herdr(["tab", "close", existing.tab_id]);
 	}
 
-	const tab = herdr<{ tab: HerdrTab }>([
+	// The create envelope carries the root pane beside the tab — `root_pane`
+	// moved out of `tab` in a herdr update, so accept either shape.
+	const created = herdr<{ tab: HerdrTab; root_pane?: HerdrPane }>([
 		"tab",
 		"create",
 		"--workspace",
@@ -203,11 +205,11 @@ async function up() {
 		TAB_LABEL,
 		"--no-focus",
 	]);
-	const tabId = tab.tab.tab_id;
+	const tabId = created.tab.tab_id;
 
 	// First service takes the tab's root pane; each later one splits downward.
 	const panes: { name: string; paneId: string; label: string }[] = [];
-	let previous = tab.tab.root_pane.pane_id;
+	let previous = created.root_pane?.pane_id ?? created.tab.root_pane.pane_id;
 	for (const [i, service] of SERVICES.entries()) {
 		let paneId = previous;
 		if (i > 0) {

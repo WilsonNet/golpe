@@ -51,6 +51,7 @@ skill({ name: "feedback-loop" })    # the full workflow
 | Where does this code live, and who owns it? | [`docs/architecture.md`](docs/architecture.md) |
 | How do I measure anything? | [`docs/diagnostics.md`](docs/diagnostics.md) + the `feedback-loop` skill |
 | How do I run the game? | [`docs/running-the-game.md`](docs/running-the-game.md) |
+| How do I slice a raw art board into a game sheet? | [`docs/sprite-slicer.md`](docs/sprite-slicer.md) — the `?slicer=true` workshop |
 | Why are there symlinks everywhere? | [`docs/agent-config.md`](docs/agent-config.md) |
 
 **`specs/` is the source of truth for behaviour.** Code is volatile; intent

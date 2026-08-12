@@ -170,6 +170,30 @@ const SHEET_CELLS: Record<string, { w: number; h: number }> = {
 	[TEX["jeffs-roll"]]: { w: ROLL_FRAME_W, h: PLAYER_HEIGHT },
 };
 
+/**
+ * Sheets defined by the sprite workshop's exported atlas JSON, not by the
+ * table above.
+ *
+ * The workshop (`?slicer=true`, see `docs/sprite-slicer.md`) turns a raw art
+ * board into a clean strip — uniform cells, transparent background — plus a
+ * small JSON carrying the cell size and the named clips. A sheet shipped that
+ * way is registered here, one line: the strip and its JSON sit in
+ * `public/assets`, and `loadAssets` slices the strip by the JSON's cell size
+ * exactly as if `SHEET_CELLS` had named it. The clips live in
+ * `HERO_CLIPS` in `ecs/systems.ts`, written from the JSON's `clips` —
+ * the wire format and the animation states are per-hero code, not data.
+ */
+const ATLAS_SHEETS: Record<string, { png: string; json: string }> = {};
+
+/** The atlas JSON the workshop exports — `cellW`/`cellH` and the clips. */
+interface AtlasMeta {
+	name: string;
+	cellW: number;
+	cellH: number;
+	frames: { x: number; y: number; w: number; h: number }[];
+	clips: { name: string; frames: number[]; fps: number; loop: boolean }[];
+}
+
 /** The per-hero pose textures, keyed `hero:pose`. */
 const poseTextures = new Map<string, Texture>();
 
@@ -296,6 +320,47 @@ export async function loadAssets(): Promise<void> {
 
 	jeffsRollFrames = sliceStrip(TEX["jeffs-roll"], 16);
 	ROLL_SETS[TEX["jeffs-roll"]] = jeffsRollFrames;
+
+	// Sheets shipped from the sprite workshop: one strip, sliced by its own
+	// JSON instead of by a hand-kept table. The strips are uniform grids, so
+	// this is the same slice as `sliceStrip` with the cell size read from the
+	// file rather than from `SHEET_CELLS`.
+	await Promise.all(
+		Object.entries(ATLAS_SHEETS).map(([name, { png, json }]) =>
+			loadAtlasSheet(name, png, json),
+		),
+	);
+}
+
+/**
+ * One workshop sheet: load its strip, slice it by the JSON's cell size, and
+ * register it like any other hero strip. The clips in the JSON are for the
+ * per-hero clip table in `ecs/systems.ts` — this is the strip side only.
+ */
+async function loadAtlasSheet(
+	name: string,
+	png: string,
+	json: string,
+): Promise<void> {
+	const res = await fetch(json);
+	if (!res.ok) {
+		throw new Error(
+			`atlas sheet "${name}": missing ${json} — export it from the sprite workshop`,
+		);
+	}
+	const meta = (await res.json()) as AtlasMeta;
+	const texture = await Assets.load<Texture>({ alias: name, src: png });
+	const frames: Texture[] = [];
+	for (let i = 0; i < meta.frames.length; i++) {
+		frames.push(
+			new Texture({
+				source: texture.source,
+				frame: new Rectangle(i * meta.cellW, 0, meta.cellW, meta.cellH),
+			}),
+		);
+	}
+	FRAME_SETS[name] = frames;
+	SHEET_CELLS[name] = { w: meta.cellW, h: meta.cellH };
 }
 
 /**

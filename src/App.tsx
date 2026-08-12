@@ -12,6 +12,7 @@ import { NamePrompt } from "./ui/NamePrompt";
 import { PauseMenu } from "./ui/PauseMenu";
 import { PlayOfTheGame } from "./ui/PlayOfTheGame";
 import { Scoreboard } from "./ui/Scoreboard";
+import { SpriteSlicer } from "./ui/SpriteSlicer";
 import { TouchControls } from "./ui/TouchControls";
 import { TrainingPanel } from "./ui/TrainingPanel";
 import { UltimateCinematic } from "./ui/UltimateCinematic";
@@ -31,6 +32,16 @@ function isTrainingMode(): boolean {
 	return (
 		params.get("training") === "true" || params.get("training-room") === "true"
 	);
+}
+
+/**
+ * The sprite workshop: a dev tool, not a match. `?slicer=true` shows it
+ * instead of the game — no Pixi, no server, just raw boards, a grid, clips
+ * and exports. See `docs/sprite-slicer.md`.
+ */
+function isSlicerMode(): boolean {
+	const params = new URLSearchParams(window.location.search);
+	return params.get("slicer") === "true";
 }
 
 /**
@@ -69,6 +80,14 @@ function App() {
 		window.history.replaceState(null, "", window.location.pathname);
 		setStarted(false);
 	};
+
+	if (isSlicerMode()) {
+		return (
+			<div id="app">
+				<SpriteSlicer />
+			</div>
+		);
+	}
 
 	if (!started) {
 		return (
