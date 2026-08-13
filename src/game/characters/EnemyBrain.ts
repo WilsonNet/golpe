@@ -148,6 +148,21 @@ const DASH_ESCAPE_CHANCE = 0.14;
 const ZONE_JUMP_HURT_CHANCE = 0.6;
 const ZONE_JUMP_HALE_CHANCE = 0.3;
 
+// ---- the dash approach ----
+/**
+ * The burst's closing band: outside a swing's reach (walking into one is how
+ * swings get whiffed) but inside a dash's range (a burst covers 160px at
+ * 1000px/s, so anything in this band is reachable in one).
+ */
+const DASH_APPROACH_MIN_PX = STRIKE_RANGE_PX + 60;
+const DASH_APPROACH_MAX_PX = 280;
+/** Base odds of bursting in, at zero skill and no aggression. */
+const DASH_APPROACH_BASE_CHANCE = 0.06;
+/** Odds per point of skill — a maxed bot bursts in far more often. */
+const DASH_APPROACH_SKILL_PER_POINT = 0.006;
+/** Odds per point of aggressiveness — a bloodthirsty bot closes hard. */
+const DASH_APPROACH_AGGRO_WEIGHT = 0.06;
+
 // ---- item decisions ----
 /** A grenade is a ranged option, not a point-blank one: the throw's far band. */
 const GRENADE_MIN_RANGE_PX = 120;
@@ -789,6 +804,16 @@ export class EnemyBrain {
 			case AIState.RETREAT: {
 				output.moveRight = input.playerX <= input.selfX;
 				output.moveLeft = input.playerX > input.selfX;
+				// A walk retreat is a walk-forward chase: both sides move at
+				// 240px/s, so the gap never opens. The burst is the one tool
+				// that creates separation against an equal-speed pursuer, the
+				// same roll zoning's escape uses.
+				if (
+					input.touchingDown &&
+					Math.random() < DASH_ESCAPE_CHANCE
+				) {
+					output.dash = input.playerX >= input.selfX ? -1 : 1;
+				}
 				output.jump =
 					input.touchingDown &&
 					(isLowHP
@@ -823,6 +848,29 @@ export class EnemyBrain {
 					if (input.distanceToPlayer > wanted) {
 						output.moveRight = input.playerX > input.selfX;
 						output.moveLeft = input.playerX <= input.selfX;
+					}
+					// The burst approach: walk until the dash is worth it, then
+					// cover the gap in one line. Without it the bots walked the
+					// whole arena at 240px/s, and the dash — the movement tool
+					// the whole game is built around — never happened outside
+					// zoning. Gated on the foe being in neutral: bursting into
+					// a live swing is exactly how a human loses, and the bot
+					// should not be better at dying than playing.
+					if (
+						this.melee.swordDrawn &&
+						input.touchingDown &&
+						input.enemyGrounded &&
+						input.enemyAction === "none" &&
+						input.distanceToPlayer >= DASH_APPROACH_MIN_PX &&
+						input.distanceToPlayer <= DASH_APPROACH_MAX_PX &&
+						Math.random() <
+							DASH_APPROACH_BASE_CHANCE +
+								DASH_APPROACH_SKILL_PER_POINT *
+									this.config.skillLevel +
+								DASH_APPROACH_AGGRO_WEIGHT *
+									this.config.aggressiveness
+					) {
+						output.dash = input.playerX >= input.selfX ? 1 : -1;
 					}
 					const strafe =
 						!this.melee.swordDrawn &&

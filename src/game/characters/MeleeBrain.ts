@@ -49,6 +49,19 @@ const GUARD_READ_GRACE_PX = 30;
 const MASSIVE_SPEND_GRACE_PX = 20;
 /** A turtle is read as coverable this far beyond the uppercut's reach. */
 const TURTLE_READ_GRACE_PX = 25;
+/**
+ * A swing in flight threatens a *walker* this far beyond its reach.
+ *
+ * The backstep's band: wide enough that a foe who started a swing just outside
+ * reach is still walked out of, narrow enough that it never fights the stance
+ * hysteresis (a bot that backed out of 100px would holster the sword and the
+ * whole melee game would never happen).
+ */
+const BACKSTEP_GRACE_PX = 36;
+/** Base odds of stepping out of an incoming swing, at zero skill. */
+const BACKSTEP_BASE_CHANCE = 0.1;
+/** Odds per point of skill — a maxed bot walks out of most swings it reads. */
+const BACKSTEP_SKILL_CHANCE_PER_POINT = 0.045;
 
 // Chance knobs, rolled once per decision. They scale with the config's
 // personality: skill shifts the *skill-dependent* roll, aggressiveness shifts
@@ -269,12 +282,36 @@ export class MeleeBrain {
 		// to hold a guard would silently parry instead — and the uppercut would
 		// again have nothing to punish.
 		const turtling = this.beats === TURTLE && reaction === GUARD;
+		const guarded = reaction === GUARD || reaction === TURTLE;
 		if (reaction && !turtling) {
 			// Compared by identity, so re-reading the same threat continues the
 			// rhythm instead of restarting it from the first beat every tick.
 			if (this.beats !== reaction) this.startBeats(reaction);
 		} else if (!this.beats) {
 			this.startBeats(this.pressureTechnique(input, distance));
+		}
+
+		// Walk out of a swing the guard chose not to stop.
+		//
+		// The guard is a read and the read fails sometimes; a bot that only ever
+		// blocked or swung back stood and ate every swing it failed to read. The
+		// third answer is distance: the slash's box is 42px and the walk is
+		// 240px/s, so a backstep started the frame the active window is seen
+		// takes ~20px off the gap before it closes. Rolled per tick like the
+		// guard itself, scaled by skill, and refused while the bot is mid-swing
+		// — a committed swing is a commitment, and the state machine will walk
+		// the bot back in on the ticks the roll misses.
+		const steppingBack =
+			!guarded &&
+			input.enemyPhase === "active" &&
+			distance < STRIKE_RANGE_PX + BACKSTEP_GRACE_PX &&
+			input.selfAction === "none" &&
+			Math.random() <
+				BACKSTEP_BASE_CHANCE +
+					BACKSTEP_SKILL_CHANCE_PER_POINT * this.skill;
+		if (steppingBack) {
+			output.moveRight = input.playerX <= input.selfX;
+			output.moveLeft = input.playerX > input.selfX;
 		}
 
 		this.playBeats(output, delta);

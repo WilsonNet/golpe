@@ -195,6 +195,17 @@ randomised per match so no two fights are identical.
 - **It sword-fights rather than mashing:** butterflies to close, blocks a swing
   it reads coming, uppercuts an opponent who is blocking, charges a Massive only
   at a safe distance, and punishes a whiffed heavy move.
+- **It respects a swing it failed to read.** The guard is a *read* and the read
+  fails; the third answer to a live hitbox is distance — a skill-scaled
+  backstep the moment the swing's active window is seen, refused while the bot
+  is mid-swing itself. A bot that only ever blocked or swung back stood and ate
+  every swing it missed, and no melee opponent in the game is that passive.
+- **It closes with the burst, not just the walk.** The double-tap dash (or the
+  tumble, which the stance decides) is the approach tool: a bot in attack range
+  whose foe is grounded and in neutral bursts to cover the gap instead of
+  walking the whole arena at walk speed. A hurt bot *retreats* with the burst
+  for the same reason — a walk retreat is a walk-forward chase, and the burst
+  is the only tool that creates separation against an equal-speed pursuer.
 - **It breaks away and takes height.** Cautious fighters disengage more, dash to
   create the gap, climb to a specific ledge, and fight with the gun from there.
   Without this the state machine could only ever close and swing: two bots met in

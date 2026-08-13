@@ -451,6 +451,9 @@ export class PhysicsDiagnostics {
 	private lastGroundY = 0;
 	private wasGrounded = false;
 	private prevAirJumps = AIR_JUMPS;
+	/** Dashes (or tumbles) started — a burst's active window opening. */
+	private dashes = 0;
+	private prevDashActive = false;
 	/** Ultimate casts by the fighter this client owns — i.e. by the local AI brain. */
 	private localUltCasts = 0;
 
@@ -534,6 +537,8 @@ export class PhysicsDiagnostics {
 		this.peakRise = 0;
 		this.wasGrounded = false;
 		this.prevAirJumps = AIR_JUMPS;
+		this.dashes = 0;
+		this.prevDashActive = false;
 		this.localUltCasts = 0;
 		this.surfacesUsed.clear();
 		this.highestY = Number.POSITIVE_INFINITY;
@@ -1222,6 +1227,11 @@ export class PhysicsDiagnostics {
 
 	private trackMovement(p: PlayerPosition) {
 		this.highestY = Math.min(this.highestY, p.y);
+		// A fresh burst: the dash's active window opening. Counted here because
+		// the dash is the game's signature movement tool, and a build where the
+		// bots never use it was invisible until the counter existed.
+		if (p.dashActiveTimer > 0 && !this.prevDashActive) this.dashes++;
+		this.prevDashActive = p.dashActiveTimer > 0;
 		if (p.grounded) {
 			// Which surface is underfoot: the body's feet rest on a platform's top.
 			this.world.platforms.forEach((plat, i) => {
@@ -1399,6 +1409,7 @@ export class PhysicsDiagnostics {
 				jumps: this.jumps,
 				doubleJumps: this.doubleJumps,
 				wallJumps: this.wallJumps,
+				dashes: this.dashes,
 				pctAirborne: Math.round((this.airFrames / totalFrames) * 100),
 				peakRisePx: Math.round(this.peakRise),
 			},

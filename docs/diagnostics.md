@@ -401,7 +401,7 @@ Emitted as `__DIAGNOSTIC_RESULT__{...}__END__` on one console line.
 |---|---|
 | `verdict` | `PASS` only when nothing violated a rule — **necessary, not sufficient** |
 | `collisionSummary.penetrationFrames` | frames a body was inside solid geometry — **must be 0** |
-| `movementSummary` | `jumps`, `doubleJumps`, `wallJumps`, `pctAirborne`, `peakRisePx` — is the fighter using the arena? `doubleJumps` was structurally 0 and `peakRisePx` sat at exactly one jump's height until the bots learned the air jump |
+| `movementSummary` | `jumps`, `doubleJumps`, `wallJumps`, `dashes`, `pctAirborne`, `peakRisePx` — is the fighter using the arena? `doubleJumps` was structurally 0 and `peakRisePx` sat at exactly one jump's height until the bots learned the air jump; `dashes` sat near 0 until the bots learned the burst approach |
 | `playerMovement.xRange/yRange` | a tiny range means the AI is stuck, even when the verdict says PASS |
 | `reconciliationSummary.avgErrorPx` | client/server disagreement; **0.00 is achievable and expected** |
 | `reconciliationSummary.visibleCorrections` | corrections > 1px; only respawns should appear |
