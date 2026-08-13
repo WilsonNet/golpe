@@ -146,4 +146,31 @@ describe("EnemyBrain", () => {
 		);
 		expect(output.dash).toBe(0);
 	});
+
+	it("jumps a hostile trap a step before the feet would cross it", () => {
+		// A trap whose trigger sits 70px from the feet (inside radius + the
+		// reaction margin): the bot leaves the floor instead of walking onto
+		// it. The trap's centre is at feet level, world coords — the same
+		// body-space conversion `trapCatches` uses. The foe stands level, so
+		// the height wish cannot press the jump instead.
+		const output = decide(
+			perception({
+				playerY: 480,
+				traps: [{ x: 316 + 70, y: 480 + 48 }],
+			}),
+			0.5,
+		);
+		expect(output.jump).toBe(true);
+	});
+
+	it("does not hop when the trap is too far to matter", () => {
+		const output = decide(
+			perception({
+				playerY: 480,
+				traps: [{ x: 316 + 300, y: 480 + 48 }],
+			}),
+			0.5,
+		);
+		expect(output.jump).toBe(false);
+	});
 });

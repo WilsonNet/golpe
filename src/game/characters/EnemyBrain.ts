@@ -7,6 +7,7 @@ import {
 } from "../simulation/Arena.js";
 import type { HeroId } from "../simulation/Heroes.js";
 import { smokeLobAngle } from "../simulation/Items.js";
+import { TRAP_RADIUS } from "../../tweakables/items.js";
 import { BULLET_SPEED, JUMP_HEIGHT_PX } from "../simulation/Physics.js";
 import { SINGULARITY_REACH } from "../../tweakables/ultimate.js";
 import type { AIConfig } from "./AIConfig.js";
@@ -197,6 +198,15 @@ const THRUST_JUMP_RANGE_PX = 300;
  * a step early.
  */
 const HOLE_ESCAPE_MARGIN_PX = 40;
+/**
+ * How far short of a trap's trigger the bot leaves the floor.
+ *
+ * A trap springs on the feet crossing its patch, so the jump has to begin
+ * *before* the trigger — a bot that reacts once already inside simply
+ * springs it. A jump holds for 240ms and lifts the feet 136px, so a jump
+ * started a body-width out clears a patch the bot would otherwise land on.
+ */
+const TRAP_JUMP_MARGIN_PX = 40;
 
 /**
  * The nearest ledge that is above the fighter and within a jump or two.
@@ -470,6 +480,29 @@ export class EnemyBrain {
 			output.dash = awayX >= 0 ? 1 : -1;
 			output.attack = false;
 		}
+
+		// ---- the hostile trap ----
+		//
+		// A floor mine springs the moment the feet cross its patch, and the
+		// designed counter is the same thing that clears every low obstacle:
+		// a jump — the patch is a 40px radius and a full jump lifts the feet
+		// 136px. The perception already hands every bot the hostile traps,
+		// pre-filtered by the friendly-fire predicate; the reaction is to
+		// leave the floor a step before the feet would cross the trigger,
+		// so the crossing happens with the feet in the air. Unlike the hole
+		// this does not shelve the plan — the bot keeps fighting, it just
+		// hops the minefield.
+		const nearTrap =
+			input.touchingDown &&
+			input.traps.some(
+				(t) =>
+					Math.hypot(
+						t.x - (input.selfX + PLAYER_WIDTH / 2),
+						t.y - (input.selfY + PLAYER_HEIGHT),
+					) <
+					TRAP_RADIUS + TRAP_JUMP_MARGIN_PX,
+			);
+		if (nearTrap) output.jump = true;
 
 		// ---- the thrust's anticipation ----
 		//

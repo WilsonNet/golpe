@@ -140,7 +140,12 @@ place for the follow-up is the exact tool a storm of stabs wants.
   from becoming spam. Charges reset on death and on a round reset; a dead
   Anands' traps leave the floor with her.
 - **Visible and single-use.** Anyone can see it, and nothing can destroy it
-  before it springs — the seeing is the counterplay. The moment an enemy's feet
+  before it springs — the seeing is the counterplay. Bots see it too: the
+  perception hands every bot the hostile traps (pre-filtered by the same
+  friendly-fire predicate), and a bot whose feet are a step short of a trigger
+  leaves the floor — the jump is the trap's designed counter, and a bot that
+  walked onto a patch would be a bot that taught the AI-vs-AI loop nothing
+  about the item. The moment an enemy's feet
   cross its patch it **bursts into particles and is destroyed**, like a Dota
   mine: a trap is either on the floor and armed or it no longer exists.
 - **Friendly traps are faded.** Your own and every teammate's are drawn at a
