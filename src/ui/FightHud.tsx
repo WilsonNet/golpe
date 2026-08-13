@@ -382,15 +382,22 @@ export function FightHud({ training = false }: { training?: boolean }) {
 			) : null}
 
 			{/* The magazine and the reload, bottom-right above the item: the
-			    weapon's own resource beside the kit's. The count is the readable
-			    part; the bar fills as the reload lands — a shell at a time for
-			    the shotgun, the whole magazine for the rifle and the machine
-			    gun — and a CSS glide smooths the 20Hz snapshot steps. */}
+			    weapon's own resource beside the kit's. The count reads
+			    "rounds loaded / rounds behind" — 12/36 at the start of a life
+			    — so a player can see the gun run dry coming: a per-bullet
+			    reload moves one round from the reserve into the magazine, and
+			    when the reserve and the magazine are both empty the count
+			    becomes DRY, flashing red. The bar fills as the reload lands
+			    and a CSS glide smooths the 20Hz snapshot steps. */}
 			<section className="vdh-ammo">
 				<span className="vdh-ammo-label">AMMO</span>
-				<span className="vdh-ammo-count">
-					{`${hud?.ammo ?? 0}/${hud?.magazine ?? 0}`}
-				</span>
+				{(hud?.ammo ?? 0) > 0 || (hud?.reserveRounds ?? 0) > 0 ? (
+					<span className="vdh-ammo-count">
+						{`${hud?.ammo ?? 0}/${hud?.reserveRounds ?? 0}`}
+					</span>
+				) : (
+					<span className="vdh-ammo-count vdh-ammo-count-dry">DRY</span>
+				)}
 				<div className="vdh-ammo-track">
 					<div
 						className="vdh-ammo-fill"

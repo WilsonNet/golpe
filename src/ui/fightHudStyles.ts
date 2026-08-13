@@ -442,9 +442,25 @@ export const FIGHT_HUD_CSS = `
 	font-weight: bold;
 	font-variant-numeric: tabular-nums;
 	color: #f2e8ff;
-	min-width: 4cqw;
+	min-width: 5cqw;
 	text-align: right;
 	text-shadow: 0 0.2cqh 0 rgba(0, 0, 0, 0.75);
+}
+/* The gun has nothing left in this life: the magazine is empty and there is
+   no reserve to draw from. It flashes so the "go melee" moment is impossible
+   to miss, not a quiet grey. */
+.vdh-ammo-count-dry {
+	color: #ff5d5d;
+	animation: vdh-dry-flash 0.9s ease-in-out infinite;
+}
+@keyframes vdh-dry-flash {
+	0%,
+	100% {
+		text-shadow: 0 0 0.8cqw rgba(255, 93, 93, 0.7);
+	}
+	50% {
+		text-shadow: 0 0 0.2cqw rgba(255, 93, 93, 0.2);
+	}
 }
 .vdh-ammo-track {
 	position: relative;

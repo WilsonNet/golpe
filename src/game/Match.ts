@@ -117,6 +117,7 @@ import {
 	type PlayerIntent,
 	type PlayerPosition,
 	rectsOverlap,
+	reserveRoundsFor,
 	resolveMelee,
 	type Singularity,
 	singularityGrip,
@@ -508,7 +509,9 @@ export class Match {
 			// could not fire until somebody died. (The reload used to mask it
 			// by silently refilling an empty mag in sword stance.)
 			this.localAmmo = kitFor(this.hero).ranged.magazine;
+			this.localReserve = reserveRoundsFor(kitFor(this.hero).ranged);
 			this.remoteAmmo = kitFor(this.foeHero()).ranged.magazine;
+			this.remoteReserve = reserveRoundsFor(kitFor(this.foeHero()).ranged);
 			this.localReload = 0;
 			this.remoteReload = 0;
 			if (this.aiMode) this.startOfflineAi();
@@ -606,24 +609,25 @@ export class Match {
 		const foeId = this.online?.primaryRemoteId ?? "";
 		// The magazine and the reload bar. Online, the local body carries the
 		// server's authoritative ammo (reconciled like everything else); the
-		// offline escape hatch keeps its own counters. The progress includes
-		// the round being loaded — for the shotgun that is the shell filling,
-		// for the rifle and the machine gun the whole magazine refilling.
+		// offline escape hatch keeps its own counters. Every weapon reloads
+		// per round, so the progress includes the round being loaded — the
+		// bar reads "how full is the gun becoming".
 		const ranged = kitFor(this.hero).ranged;
 		const ammo = this.onlineMode ? this.local.body.ammo : this.localAmmo;
+		const reserve = this.onlineMode
+			? this.local.body.reserveRounds
+			: this.localReserve;
 		const reloadTimer = this.onlineMode
 			? this.local.body.reloadTimer
 			: this.localReload;
-		const shellTotal =
-			ranged.reloadShellMs !== undefined
-				? ammo === 0
-					? (ranged.reloadFirstShellMs ?? ranged.reloadShellMs ?? 0)
-					: (ranged.reloadShellMs as number)
-				: (ranged.reloadMs ?? 0);
-		const shellProgress =
-			reloadTimer > 0 ? 1 - Math.max(0, reloadTimer) / shellTotal : 0;
+		const roundTotal =
+			ammo === 0
+				? (ranged.reloadFirstRoundMs ?? ranged.reloadRoundMs)
+				: ranged.reloadRoundMs;
+		const roundProgress =
+			reloadTimer > 0 ? 1 - Math.max(0, reloadTimer) / roundTotal : 0;
 		const reloadProgress =
-			(ammo + shellProgress * (ranged.magazine - ammo)) / ranged.magazine;
+			(ammo + roundProgress * (ranged.magazine - ammo)) / ranged.magazine;
 		const state: HudState = {
 			hp: this.local.fighter.hp,
 			maxHp: this.local.fighter.maxHp,
@@ -633,6 +637,7 @@ export class Match {
 			itemLabel: kitFor(this.hero).item.label,
 			ammo: Math.max(0, Math.min(ranged.magazine, ammo)),
 			magazine: ranged.magazine,
+			reserveRounds: Math.max(0, Math.round(reserve)),
 			reloadProgress: Math.max(0, Math.min(1, reloadProgress)),
 			stance: this.local.body.stance,
 			hero: this.hero,
@@ -2636,6 +2641,8 @@ export class Match {
 		this.tickOfflineReload(
 			this.localAmmo,
 			(ammo) => (this.localAmmo = ammo),
+			this.localReserve,
+			(reserve) => (this.localReserve = reserve),
 			this.localReload,
 			(t) => (this.localReload = t),
 			this.localIntent.attack,
@@ -2647,6 +2654,8 @@ export class Match {
 		this.tickOfflineReload(
 			this.remoteAmmo,
 			(ammo) => (this.remoteAmmo = ammo),
+			this.remoteReserve,
+			(reserve) => (this.remoteReserve = reserve),
 			this.remoteReload,
 			(t) => (this.remoteReload = t),
 			this.remoteIntent.attack,
@@ -2664,8 +2673,10 @@ export class Match {
 		// exactly as it does online. The sim never touches `ammo` — the wire
 		// and the offline counters are its only writers.
 		this.local.body.ammo = this.localAmmo;
+		this.local.body.reserveRounds = this.localReserve;
 		this.local.body.reloadTimer = this.localReload;
 		foe.body.ammo = this.remoteAmmo;
+		foe.body.reserveRounds = this.remoteReserve;
 		foe.body.reloadTimer = this.remoteReload;
 	}
 
@@ -2675,6 +2686,9 @@ export class Match {
 	/** The escape hatch's own magazines, mirrored from the server's model. */
 	private localAmmo = 0;
 	private remoteAmmo = 0;
+	/** And the reserve behind them — the rest of the life's magazines. */
+	private localReserve = 0;
+	private remoteReserve = 0;
 	private localReload = 0;
 	private remoteReload = 0;
 
@@ -2689,6 +2703,8 @@ export class Match {
 	private tickOfflineReload(
 		ammo: number,
 		setAmmo: (n: number) => void,
+		reserve: number,
+		setReserve: (n: number) => void,
 		reload: number,
 		setReload: (t: number) => void,
 		attack: boolean,
@@ -2701,7 +2717,12 @@ export class Match {
 			setReload(0);
 			return;
 		}
-		const state = { ammo, reloadTimer: reload, stance: body.stance };
+		const state = {
+			ammo,
+			reserveRounds: reserve,
+			reloadTimer: reload,
+			stance: body.stance,
+		};
 		const dt = Math.min(
 			MAX_RELOAD_STEP_SECONDS,
 			(now - this.offlineReloadLastAt) / MILLIS_PER_SECOND,
@@ -2709,6 +2730,7 @@ export class Match {
 		this.offlineReloadLastAt = now;
 		tickReload(state, { attack }, kit, dt);
 		setAmmo(state.ammo);
+		setReserve(state.reserveRounds);
 		setReload(state.reloadTimer);
 	}
 
@@ -2832,10 +2854,12 @@ export class Match {
 		this.local.fighter.hp = MAX_HP;
 		this.localIntent = { ...NO_INTENT };
 		this.remoteIntent = { ...NO_INTENT };
-		// A new life is a new magazine, online or off.
+		// A new life is a new magazine and a fresh reserve, online or off.
 		this.localAmmo = kitFor(this.hero).ranged.magazine;
+		this.localReserve = reserveRoundsFor(kitFor(this.hero).ranged);
 		this.localReload = 0;
 		this.remoteAmmo = kitFor(this.foeHero()).ranged.magazine;
+		this.remoteReserve = reserveRoundsFor(kitFor(this.foeHero()).ranged);
 		this.remoteReload = 0;
 
 		if (this.offlineFoe) {

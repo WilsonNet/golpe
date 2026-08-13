@@ -53,7 +53,10 @@ produced a second sprite nothing simulated — it froze on screen forever.
 - Bullet speed **600 px/s**, damage **10** per hit, and a **12-round
   magazine** that auto-reloads in **800ms** — see the reload section below.
 - Attack cooldown **250ms**, shared by all attacks.
-- **Unlimited ammunition, one magazine at a time.**
+- **Limited ammunition: `magazinesPerLife` magazines per life.** One is loaded
+  at spawn; the rest are a reserve the reload draws from. When both run out the
+  gun is **dry** until the next life — the lever that forces the fight back to
+  the sword.
 - Bullets fly in a straight line: **no gravity, no bounce, no collision
   response.** This is what makes their position a closed-form function of time,
   and it is why they are dead-reckoned rather than interpolated
@@ -86,16 +89,21 @@ produced a second sprite nothing simulated — it froze on screen forever.
 
 ## The magazine and the reload
 
-Every weapon carries **infinite ammo and one magazine**: there is no reserve,
-no pick-up and no manual reload key (R is the ultimate). The magazine is the
-only limit, and the reload is an **auto** rhythm that starts the moment the
-fighter is not firing — TF2's reload types, both of them:
+Every weapon carries **`magazinesPerLife` magazines per life** and an **auto**
+reload: there is no pick-up and no manual reload key (R is the ultimate). One
+magazine is loaded at spawn and the rest form the reserve — measured in rounds.
+**Every weapon reloads one round at a time** (the Valve/CS model): the reload
+is a per-bullet rhythm, never a whole-magazine refill, so a partial reload
+costs only the rounds it moves, an interruption loses only the round being
+loaded, and an empty magazine under a held trigger fires each round the moment
+it lands. A gun that has spent its last round is **dry** until the next life,
+which is the whole of how the game forces the fight back to the sword.
 
-| Weapon | Magazine | Reload |
-|---|---|---|
-| Lia's rifle | 12 | 800ms for the whole magazine — the fastest in the game |
-| Anands' machine gun | 30 | 1800ms for the whole magazine — a decent burst, a decent pause |
-| Jeffs' shotgun | 5 | **Shell-by-shell** — 1300ms for the rack from empty, 1200ms per shell after it |
+| Weapon | Magazine | Magazines per life | Reload |
+|---|---|---|---|
+| Lia's rifle | 12 | 4 | **Per round** — 70ms each, 120ms for the first from empty (a full rack ~0.9s) |
+| Anands' machine gun | 30 | 4 | **Per round** — 60ms each, 120ms for the first from empty (a full rack ~1.9s) |
+| Jeffs' shotgun | 5 | 4 | **Per round** — 1200ms each, 1300ms for the rack from empty |
 
 The rules, in the order a player meets them:
 
@@ -103,26 +111,37 @@ The rules, in the order a player meets them:
   released — a burst that stops with rounds left does not reload until the
   button is let go. An **empty** magazine is the exception: there is nothing
   to do with the trigger, so the reload runs even while it is held, and the
-  moment a shell (or the whole magazine) lands, the held trigger fires it.
+  moment a round lands the held trigger fires it.
 - **Firing mid-reload cancels the load.** The rounds already in the magazine
   stay, the round being loaded is lost, and the reload restarts from the
-  shells that are left. That is the whole "shoot in the middle of reload" —
+  rounds that are left. That is the whole "shoot in the middle of reload" —
   the shotgun always has its next blast close, and the interruption is the
-  only cost, because ammo is infinite (there is no reserve to "keep").
-- **The shotgun reloads one shell at a time** (TF2's "Single" type), the rack
-  from empty the slow shell. The rifle and the machine gun refill everything
-  in one animation.
+  only cost: the round never left the reserve.
+- **The reload draws only what the reserve has left, and never wastes.**
+  Fire two rounds and reload and exactly two rounds come out of the reserve —
+  a partial reload costs only the two rounds' worth of insertions. When the
+  reserve is empty the gun has only what is in the magazine, and a **dry**
+  gun (empty magazine, no reserve) stays dry until the next life.
+- **Each reload cycle loads exactly one round**, after the weapon's
+  `reloadRoundMs` — or, from an empty magazine, after the slower
+  `reloadFirstRoundMs` (the rack from empty is the slow one, the rounds that
+  follow it the fast ones). The shotgun's rounds take *longer* than the 900ms
+  between its blasts, so an emptied shotgun is a long silence; the rifle and
+  the machine gun reload faster than they fire, so their magazine is never the
+  bottleneck — the reserve is.
 - **The reload only runs while the gun is out, and a stance switch cancels
   it.** The gun left the hand, so the in-progress load is dropped where it
   stands — and the rounds that already landed stay: the shotgun's loaded
   shells survive a stance switch exactly as they survive a shot, and the
   reload restarts from the shells that are left when the gun comes back out.
   Death and stun cancel the reload the same way. A respawn, a round reset and
-  a hero change refill the magazine.
-- The state (`ammo`, `reloadTimer`) rides the wire so every client draws the
-  HUD's ammo count and reload bar, but **only the server ticks it** — the
-  fire that spends a round is the server's decision, so the reload is too,
-  exactly like the ultimate meter. The client never simulates ammo.
+  a hero change refill the magazine **and the reserve** — in deathmatch a
+  round is a life, so a dry gun is dry only until death.
+- The state (`ammo`, `reserveRounds`, `reloadTimer`) rides the wire so every
+  client draws the HUD's ammo count, reserve and reload bar, but **only the
+  server ticks it** — the fire that spends a round is the server's decision,
+  so the reload is too, exactly like the ultimate meter. The client never
+  simulates ammo.
 - Sprites come from a recycled pool; a bullet sprite is bound to a bullet **id**,
   never to a position in an array.
 - `EventBus` emits `bullet-fired` per shot, for the React UI.
@@ -193,6 +212,7 @@ randomised per match so no two fights are identical.
 
 - Knockback from **bullets** (melee knockback exists — see [melee.md](melee.md)).
 - Invincibility frames against **bullets** (melee has 180ms of them).
-- Ammunition pick-ups or a reserve pool. Ammo is infinite by design; the
-  magazine is the whole economy.
+- Ammunition pick-ups. Ammo is finite per life by design — `magazinesPerLife`
+  is the whole economy, and a dry gun is the game's way of saying "use the
+  sword".
 - Lag compensation on hit detection, ranged or melee.

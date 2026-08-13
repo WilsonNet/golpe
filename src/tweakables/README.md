@@ -10,7 +10,7 @@ here; the folder is pure data, so changing a number can never desync a match.
 | `movement.ts` | Gravity, the jump curve, walking, dashes, tumbles, wall play |
 | `combat.ts` | A fighter's health, the attack cooldown, the bullet itself |
 | `melee.ts` | The whole `MOVES` frame-data table, the Massive Strike and the plunge bomb, the guard, the chain |
-| `ranged.ts` | The weapon stat cards: the rifle, the machine gun, the shotgun's pellet fan and magazine |
+| `ranged.ts` | The weapon stat cards: the rifle, the machine gun, the shotgun's pellet fan, magazine, `magazinesPerLife` and the per-round reload times |
 | `ultimate.ts` | The charge economy, the cinematic freeze, the black hole, the dragon, the Death Blossom |
 | `items.ts` | The HE grenade, the trap, the smoke grenade, and the charges each kit grants |
 | `match.ts` | Frag limits, timers, the end-of-match ceremony, MVP weights, team deathmatch's rounds |

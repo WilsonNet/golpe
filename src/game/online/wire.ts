@@ -167,6 +167,7 @@ const NUMBER_FIELDS = [
 	// The magazine and the auto-reload. Server-ticked (the client only
 	// draws them), appended for the same reason as every field before.
 	"ammo",
+	"reserveRounds",
 	"reloadTimer",
 ] as const;
 

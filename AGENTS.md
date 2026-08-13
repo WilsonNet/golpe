@@ -311,18 +311,29 @@ Lia's HE grenade, Anands' floor trap (2 and 3 uses per life; see
 sword/gun stance · **P** toggle AI vs AI · **hold Tab** scoreboard · **Esc**
 menu. Sword is the default stance.
 
-**Every gun has a magazine and an auto-reload** — infinite ammo, no reserve,
-no manual key (R is the ultimate). The reload starts when the trigger is
-released (or instantly on an empty magazine, even while held), firing cancels
+**Every gun has a magazine and an auto-reload, and ammo is finite per life**
+— no manual key (R is the ultimate). Every weapon carries **`magazinesPerLife`
+magazines** (all three ship at 4, tuned in `tweakables/ranged.ts`): one loaded,
+the rest a reserve the reload draws from, so a **dry** gun (empty magazine, no
+reserve) is done until the next life — the game's way of forcing the fight back
+to the sword. **Every weapon reloads per bullet, never a whole magazine**
+(Valve/CS model): each cycle loads one round from the reserve, so a partial
+reload costs only the rounds it moves and an interruption loses only the round
+being loaded. The reload starts when the trigger is
+released (or instantly on an empty magazine, even while held — the moment a
+round lands, the held trigger fires it), firing cancels
 it (loaded rounds stay, the round being loaded is lost), and a stance switch,
 stun or death cancels it too — a switch drops the in-progress load, never the
 rounds that already landed, so the shotgun's loaded shells survive a stance
-switch and the reload restarts from them when the gun comes back out. Lia's rifle: 12 rounds, 800ms. Anands' machine
-gun: 30 rounds, 1800ms. Jeffs' shotgun: 5 shells, one at a time — 1300ms for
-the rack from empty, 1200ms per shell after (TF2's "Single" reload). The ammo
-count and reload bar live in the HUD's bottom-right corner, and `ammo` /
-`reloadTimer` ride the wire **server-ticked only** — the client draws them,
-never simulates them, exactly like the ultimate meter. (The offline escape
+switch and the reload restarts from them when the gun comes back out. Lia's rifle: 12 rounds, 70ms each (120ms first). Anands' machine
+gun: 30 rounds, 60ms each (120ms first). Jeffs' shotgun: 5 shells, one at a time — 1300ms for
+the rack from empty, 1200ms per shell after. The ammo
+count, reserve and reload bar live in the HUD's bottom-right corner — the count
+reads **loaded/behind** (`12/36`), and DRY flashes where it stood when both hit
+zero — and
+`ammo` / `reserveRounds` / `reloadTimer` ride the wire **server-ticked only** —
+the client draws them, never simulates them, exactly like the ultimate meter.
+(The offline escape
 hatch mirrors its own counters onto the body so the firing animation — an
 ammo drop — reads the same in both modes.)
 

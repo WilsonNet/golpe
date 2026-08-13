@@ -24,9 +24,12 @@ export const PELLET_ALPHA = 0.9;
  * so both sides spawn the same pattern from the same aim and prediction never
  * disagrees with the server.
  *
- * Ammo is **infinite**: every fighter carries a full magazine and the reload
- * is auto — there is no reserve, no pick-up and no manual key (R is the
- * ultimate). The magazine is the only limit, and the reload is the rhythm.
+ * Ammo is **finite per life**: every fighter spawns with `magazinesPerLife`
+ * magazines — one loaded, the rest a reserve measured in rounds. There is no
+ * pick-up and no manual reload key (R is the ultimate); when the last round
+ * is spent the gun is **dry** until the next life. The reload is auto — no
+ * manual key — and the magazine plus the reserve together are the economy,
+ * which is what forces the fight back to the sword.
  */
 export interface RangedWeaponDef {
 	id: RangedWeaponId;
@@ -43,24 +46,28 @@ export interface RangedWeaponDef {
 	/** Rounds per magazine. The reload fills exactly this many. */
 	magazine: number;
 	/**
-	 * ms to refill the whole magazine — the rifle and the machine gun. The
-	 * shotgun does not set it: its magazine refills shell-by-shell, and the
-	 * two shell times below are the whole of its reload.
+	 * Magazines carried per life (the deathmatch "round" is a life). One is
+	 * loaded at spawn; the rest form the reserve the reload draws from. When
+	 * the reserve and the magazine are both empty the gun is dry until the
+	 * next life — this is the lever that forces the fight back to melee.
+	 * All three weapons ship at 4; tune per weapon, not globally.
 	 */
-	reloadMs?: number;
+	magazinesPerLife: number;
 	/**
-	 * The shotgun's shell-by-shell reload (TF2's "Single" reload type): the
-	 * magazine fills one shell at a time, each taking this long. Firing
-	 * mid-reload keeps the loaded shells and loses only the shell being
-	 * loaded — the shotgun always has its next blast close.
+	 * ms to load **one** round from the reserve into the magazine. Every
+	 * weapon reloads per bullet (the Valve/CS model), never a whole magazine
+	 * at once: a reload moves a single round per cycle, so a partial reload
+	 * costs only the rounds it moves, an interruption loses only the round
+	 * being loaded (the rounds already in stay), and an empty magazine under
+	 * a held trigger fires each round the moment it lands.
 	 */
-	reloadShellMs?: number;
+	reloadRoundMs: number;
 	/**
-	 * The shell that loads from an empty magazine — the full rack — is
-	 * slower than the shells that follow it, TF2's ~0.9s first shell against
-	 * the 0.51s consecutive ones. Absent, the shell time applies to all.
+	 * The round that loads from an empty magazine — the first — is slower
+	 * than the rounds that follow it, TF2's ~0.9s first shell against the
+	 * 0.51s consecutive ones. Absent, `reloadRoundMs` applies to every round.
 	 */
-	reloadFirstShellMs?: number;
+	reloadFirstRoundMs?: number;
 }
 export const RANGED_WEAPONS: Record<RangedWeaponId, RangedWeaponDef> = {
 	rifle: {
@@ -68,12 +75,15 @@ export const RANGED_WEAPONS: Record<RangedWeaponId, RangedWeaponDef> = {
 		label: "RIFLE",
 		// The semi-automatic rifle: a clean single shot per press, a small
 		// magazine, and the fastest reload in the game — the rifle's whole
-		// character is that its pause is short.
+		// character is that its pause is short. Per bullet, so a one-round
+		// top-up costs almost nothing; an empty-to-full rack is ~0.9s.
 		cooldownMs: 250,
 		damage: 10,
 		speed: 600,
 		magazine: 12,
-		reloadMs: 800,
+		magazinesPerLife: 4,
+		reloadRoundMs: 70,
+		reloadFirstRoundMs: 120,
 	},
 	machinegun: {
 		id: "machinegun",
@@ -82,13 +92,15 @@ export const RANGED_WEAPONS: Record<RangedWeaponId, RangedWeaponDef> = {
 		// weapon in the game and its ranged answer is a stream, not a poke —
 		// lower per-shot damage so the stream does not out-kill the rifle by
 		// double, faster bullets so a stream can actually be landed. A decent
-		// magazine and a decent reload: a burst is long enough to matter, and
-		// the pause is long enough to punish.
+		// magazine and a per-bullet reload: a burst is long enough to matter,
+		// and refilling the whole rack (~1.9s) is long enough to punish.
 		cooldownMs: 110,
 		damage: 5,
 		speed: 780,
 		magazine: 30,
-		reloadMs: 1800,
+		magazinesPerLife: 4,
+		reloadRoundMs: 60,
+		reloadFirstRoundMs: 120,
 	},
 	shotgun: {
 		id: "shotgun",
@@ -109,7 +121,8 @@ export const RANGED_WEAPONS: Record<RangedWeaponId, RangedWeaponDef> = {
 		// gun can never keep up with its own trigger, so an emptied shotgun
 		// is a long silence. The rack from empty is the slowest shell.
 		magazine: 5,
-		reloadShellMs: 1200,
-		reloadFirstShellMs: 1300,
+		magazinesPerLife: 4,
+		reloadRoundMs: 1200,
+		reloadFirstRoundMs: 1300,
 	},
 };

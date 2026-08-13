@@ -141,6 +141,7 @@ import {
 	type PlayerPosition,
 	placeTrap,
 	rectsOverlap,
+	reserveRoundsFor,
 	resolveMelee,
 	SINGULARITY_DAMAGE_INTERVAL_MS,
 	SINGULARITY_DURATION_MS,
@@ -792,8 +793,10 @@ export class GameRoom {
 			dummy: sources.dummy ?? null,
 			state: {
 				...createPlayerState(spawn.x, spawn.y, spawn.facing),
-				// The magazine starts full, like the item kit.
+				// The magazine starts full and the rest of the life's magazines
+				// sit in the reserve, like the item kit.
 				ammo: kitFor(hero).ranged.magazine,
+				reserveRounds: reserveRoundsFor(kitFor(hero).ranged),
 			},
 			hp,
 			kills: 0,
@@ -2949,9 +2952,14 @@ export class GameRoom {
 		tickReload(s, input, kitFor(player.hero), dt);
 	}
 
-	/** The magazine is a per-life resource: refilled on every new life. */
+	/**
+	 * The magazine and the reserve are a per-life resource: refilled on every
+	 * new life, so a dry gun is dry only until death.
+	 */
 	private refillMagazine(player: ConnectedPlayer) {
-		player.state.ammo = kitFor(player.hero).ranged.magazine;
+		const ranged = kitFor(player.hero).ranged;
+		player.state.ammo = ranged.magazine;
+		player.state.reserveRounds = reserveRoundsFor(ranged);
 		player.state.reloadTimer = 0;
 	}
 

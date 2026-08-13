@@ -235,6 +235,7 @@ import {
 	WALL_JUMP_VERTICAL,
 	WALL_SLIDE_SPEED,
 } from "../../tweakables/movement.js";
+import type { RangedWeaponDef } from "../../tweakables/ranged.js";
 import { MS_PER_SECOND } from "./units.js";
 
 export { MS_PER_SECOND } from "./units.js";
@@ -423,14 +424,23 @@ export interface PlayerPosition extends MeleeState {
 	 */
 	blossomTimer: number;
 	/**
-	 * Rounds left in the magazine. Infinite ammo, so this is the whole
-	 * economy: when it hits zero the reload runs and nothing else restores
-	 * it. **Server-ticked only** — the fire that spends it is the server's
-	 * decision, and the client draws it from the wire without ever simulating
-	 * it, exactly like the ultimate meter. Refilled on respawn, on a round
-	 * reset and on a hero change.
+	 * Rounds left in the magazine. Finite ammo: when this hits zero the
+	 * reload draws from `reserveRounds`, and when both are empty the gun is
+	 * **dry** until the next life. **Server-ticked only** — the fire that
+	 * spends it is the server's decision, and the client draws it from the
+	 * wire without ever simulating it, exactly like the ultimate meter.
+	 * Refilled on respawn, on a round reset and on a hero change.
 	 */
 	ammo: number;
+	/**
+	 * Rounds carried beyond the loaded magazine — the rest of the life's
+	 * `magazinesPerLife` magazines, measured in rounds so a shotgun's
+	 * shell-by-shell reload can draw from it one at a time. The reload moves
+	 * rounds from here into `ammo`, never wasting a partial reload. When it
+	 * reaches zero the gun has only what is left in the magazine; when `ammo`
+	 * is zero too, the gun is dry. Server-ticked like `ammo`, refilled with it.
+	 */
+	reserveRounds: number;
 	/**
 	 * ms until the next round (or the next shotgun shell) is loaded, zero
 	 * when not reloading. Server-ticked, like `ammo` — the client draws the
@@ -469,6 +479,7 @@ export function createPlayerState(
 		trapTimer: 0,
 		blossomTimer: 0,
 		ammo: 0,
+		reserveRounds: 0,
 		reloadTimer: 0,
 		...createMeleeState(facing),
 	};
@@ -503,6 +514,7 @@ export function copyPlayerState(
 	target.trapTimer = source.trapTimer;
 	target.blossomTimer = source.blossomTimer;
 	target.ammo = source.ammo;
+	target.reserveRounds = source.reserveRounds;
 	target.reloadTimer = source.reloadTimer;
 	copyMeleeState(source, target);
 	return target;
@@ -1032,19 +1044,30 @@ export function canFire(
 // ---------------------------------------------------------------------------
 // The reload
 //
-// Infinite ammo, one magazine, and an **auto** reload that starts the moment
-// the fighter is not firing: no manual key (R is the ultimate), no reserve,
-// no pick-up. TF2's reload types are both here — the rifle and the machine
-// gun refill the whole magazine in one animation, and the shotgun loads its
-// shells one at a time ("Single" in TF2's terms), the rack from empty being
-// the slow one.
+// Finite ammo, `magazinesPerLife` magazines per life, and an **auto** reload
+// that starts the moment the fighter is not firing: no manual key (R is the
+// ultimate), no pick-up. One magazine is loaded at spawn and the rest form
+// the reserve (`reserveRounds`), measured in rounds; the reload moves rounds
+// from the reserve into the magazine and stops when either is empty — a dry
+// gun stays dry until the next life.
+//
+// **Every weapon reloads one round at a time** (the Valve/CS model): a reload
+// is a per-bullet rhythm, never a whole-magazine refill. A partial reload
+// costs only the rounds it moves, an interruption loses only the round being
+// loaded, and the rifle and the machine gun ride the same code as the
+// shotgun's rack — the only per-weapon difference is the per-round time.
 //
 // This is **server-ticked only**. The fire that spends a round is the
 // server's decision, so the reload that follows it is too — the client draws
-// `ammo` and `reloadTimer` off the wire and never simulates them, exactly
-// like the ultimate meter. The function is pure and shared so the server can
-// be tested against the same numbers a client would draw.
+// `ammo`, `reserveRounds` and `reloadTimer` off the wire and never simulates
+// them, exactly like the ultimate meter. The function is pure and shared so
+// the server can be tested against the same numbers a client would draw.
 // ---------------------------------------------------------------------------
+
+/** Rounds the reserve starts a life with: everything but the loaded magazine. */
+export function reserveRoundsFor(r: RangedWeaponDef): number {
+	return (r.magazinesPerLife - 1) * r.magazine;
+}
 
 /**
  * Advance one fighter's reload by `dt` seconds. Mutates in place, like
@@ -1057,26 +1080,26 @@ export function canFire(
  *   without calling here.
  * - **Not holding the gun: no reload, and any reload in progress is
  *   cancelled — a stance switch *is* dropping the weapon.** The loaded
- *   rounds stay (a shotgun's shells are already in `ammo`); only the
- *   in-progress load is lost, and the reload restarts from the shells that
- *   are left when the gun comes back out.
+ *   rounds stay; only the in-progress load is lost, and the reload restarts
+ *   from the rounds that are left when the gun comes back out.
  * - A full magazine never reloads.
+ * - **An empty reserve never reloads.** The gun has only what is left in the
+ *   magazine, and a dry gun (both empty) stays dry until the next life.
  * - **Holding fire with rounds in the mag delays the reload.** The fighter
  *   shoots until the button is released — CS and TF2 both wait for the
  *   trigger to be let go. An empty magazine is the exception: there is
  *   nothing to do with the button, so the reload runs even while held, and
- *   the moment a shell (or the full mag) lands, the held trigger fires it.
+ *   the moment a round lands the held trigger fires it.
  * - Firing cancels the reload — the in-progress round is lost. That is the
  *   whole "shoot in the middle of reload": the loaded rounds stay, the one
- *   being loaded does not, and the reload restarts from the shells that are
- *   left. The interruption is the cost, and there is nothing else to pay —
- *   ammo is infinite, so there is no "reload keep" to worry about.
- * - The shotgun fills one shell at a time; the rack from an empty magazine
- *   is the slow shell (`reloadFirstShellMs`), the shells after it the fast
- *   ones. The rifle and the machine gun refill everything in `reloadMs`.
+ *   being loaded does not, and the reload restarts from the rounds that are
+ *   left. The interruption is the cost — the round never left the reserve.
+ * - **Each cycle loads one round**, after `reloadRoundMs` — or, from an empty
+ *   magazine, after the slower `reloadFirstRoundMs` (the rack from empty is
+ *   the slow one, and the rounds that follow it the fast ones).
  */
 export function tickReload(
-	s: Pick<PlayerPosition, "ammo" | "reloadTimer" | "stance">,
+	s: Pick<PlayerPosition, "ammo" | "reserveRounds" | "reloadTimer" | "stance">,
 	input: Pick<PlayerIntent, "attack">,
 	kit: HeroKit,
 	dt: number,
@@ -1084,7 +1107,7 @@ export function tickReload(
 	const r = kit.ranged;
 	const dtMs = dt * MS_PER_SECOND;
 
-	if (s.ammo >= r.magazine) {
+	if (s.ammo >= r.magazine || s.reserveRounds <= 0) {
 		s.reloadTimer = 0;
 		return;
 	}
@@ -1097,23 +1120,17 @@ export function tickReload(
 		return;
 	}
 
-	const shellByShell = r.reloadShellMs !== undefined;
-	if (s.reloadTimer <= 0) {
-		s.reloadTimer = shellByShell
-			? s.ammo === 0
-				? (r.reloadFirstShellMs ?? r.reloadShellMs ?? 0)
-				: (r.reloadShellMs as number)
-			: (r.reloadMs ?? 0);
-	}
+	const roundMs =
+		s.ammo === 0 ? (r.reloadFirstRoundMs ?? r.reloadRoundMs) : r.reloadRoundMs;
+	if (s.reloadTimer <= 0) s.reloadTimer = roundMs;
 	s.reloadTimer -= dtMs;
 	if (s.reloadTimer <= 0) {
-		if (shellByShell) {
-			s.ammo = Math.min(r.magazine, s.ammo + 1);
-			s.reloadTimer = s.ammo < r.magazine ? (r.reloadShellMs as number) : 0;
-		} else {
-			s.ammo = r.magazine;
-			s.reloadTimer = 0;
-		}
+		s.reserveRounds--;
+		s.ammo = Math.min(r.magazine, s.ammo + 1);
+		// The round that just landed took the slow time if it was the first;
+		// whatever follows is an ordinary round.
+		s.reloadTimer =
+			s.ammo < r.magazine && s.reserveRounds > 0 ? r.reloadRoundMs : 0;
 	}
 }
 

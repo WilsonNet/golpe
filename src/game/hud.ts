@@ -25,6 +25,11 @@ export interface HudState {
 	/** The magazine's full size, so the HUD can draw the count and the bar. */
 	magazine: number;
 	/**
+	 * Rounds in the reserve — the rest of the life's magazines. When `ammo`
+	 * and this are both zero, the gun is dry until the next life.
+	 */
+	reserveRounds: number;
+	/**
 	 * The magazine as a fraction, including the round being reloaded — the
 	 * reload bar's fill. 1 when full; while a shotgun loads a shell it climbs
 	 * past the shells already in, so the bar reads "how full is the gun
