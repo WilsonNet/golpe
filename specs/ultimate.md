@@ -324,6 +324,16 @@ client brain that kept deciding through a freeze held and released while no
 input could leave the client, and every cast was silently swallowed. The freeze
 is the one moment a bot's own ultimate cannot happen, so it waits it out.
 
+**And every brain runs from a hostile hole.** `input.fields` hands each bot the
+open singularities with `hostile` already applied, and the coordinator treats a
+hostile field inside its outer reach as a shelve-everything emergency, exactly
+like a diving bomb: move away and dash — the dash is the designed escape, the
+tug is beatable at 1000px/s. The escape only saves what can still be saved: a
+fighter inside the event horizon is caught, stunned, and past steering. A bot
+that kept fighting beside a hostile hole stood in the pull for the whole 4.4s
+hold; the rule is what makes the hole a threat the room plays around rather
+than a puddle bots stand in.
+
 ## Controls
 
 - **R** by default, and **Pad1** (the right-hand face button, B/Circle).

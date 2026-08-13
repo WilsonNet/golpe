@@ -8,6 +8,7 @@ import {
 import type { HeroId } from "../simulation/Heroes.js";
 import { smokeLobAngle } from "../simulation/Items.js";
 import { BULLET_SPEED, JUMP_HEIGHT_PX } from "../simulation/Physics.js";
+import { SINGULARITY_REACH } from "../../tweakables/ultimate.js";
 import type { AIConfig } from "./AIConfig.js";
 import { BlossomBrain } from "./BlossomBrain.js";
 import { DaggerBrain } from "./DaggerBrain.js";
@@ -187,6 +188,15 @@ const PANIC_SMOKE_COOLDOWN_MS = 8000;
 const RUSHED_ALLY_RANGE_PX = 200;
 /** A thrust winding up nearby means leave the floor: the designed dodge. */
 const THRUST_JUMP_RANGE_PX = 300;
+/**
+ * The fringe beyond the hole's outer reach where the tug is still felt.
+ *
+ * The escape is the dash, and the pull falls linearly from the horizon to
+ * zero at `SINGULARITY_REACH`; a fighter that waits until it is visibly
+ * inside the reach has already lost ground to the drag, so the bot reacts
+ * a step early.
+ */
+const HOLE_ESCAPE_MARGIN_PX = 40;
 
 /**
  * The nearest ledge that is above the fighter and within a jump or two.
@@ -432,6 +442,32 @@ export class EnemyBrain {
 			output.moveLeft = input.playerX > input.selfX;
 			output.moveRight = input.playerX <= input.selfX;
 			output.dash = input.playerX >= input.selfX ? -1 : 1;
+			output.attack = false;
+		}
+
+		// ---- the hostile hole ----
+		//
+		// The singularity is an area hazard with a pull: inside its outer reach
+		// the tug drags a fighter in, and the *designed* escape is the dash —
+		// a walk at 220px/s loses the tug, a dash at 1000px/s shrugs it off.
+		// A bot that kept fighting beside a hostile hole stood in the pull for
+		// the whole 4.4s hold and took the full drain, exactly the passivity
+		// the bomb reaction above was added to cure. Same shelving order: this
+		// runs after the team module, so it beats even a cover order. A hole
+		// inside the event horizon is a catch — stunned, no steering — so the
+		// rule only saves what can still be saved, and the margin is the fringe
+		// where the tug still bites.
+		const hostileField = input.fields.find(
+			(f) =>
+				f.hostile &&
+				Math.hypot(f.x - input.selfX, f.y - input.selfY) <
+					SINGULARITY_REACH + HOLE_ESCAPE_MARGIN_PX,
+		);
+		if (hostileField) {
+			const awayX = input.selfX - hostileField.x;
+			output.moveRight = awayX > 0;
+			output.moveLeft = awayX < 0;
+			output.dash = awayX >= 0 ? 1 : -1;
 			output.attack = false;
 		}
 

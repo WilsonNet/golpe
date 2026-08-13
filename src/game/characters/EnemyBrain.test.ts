@@ -115,4 +115,35 @@ describe("EnemyBrain", () => {
 		expect(output.dash).toBe(1);
 		expect(output.moveRight).toBe(true);
 	});
+
+	it("runs from a hostile black hole, dash first — the dash is the escape", () => {
+		// A hostile hole 234px away on the left: inside the outer reach plus
+		// the reaction margin, outside the event horizon. The bot drops every
+		// plan and bursts right, away from the tug.
+		const output = decide(
+			perception({
+				fields: [{ x: 250, y: 300, hostile: true }],
+				selfX: 400,
+			}),
+			0.1,
+		);
+		expect(output.dash).toBe(1);
+		expect(output.moveRight).toBe(true);
+		expect(output.moveLeft).toBe(false);
+		expect(output.attack).toBe(false);
+	});
+
+	it("ignores its own side's hole — the tug is a friendly-fire predicate", () => {
+		// 0.5 keeps the state machine out of ZONE (its escape burst would set
+		// the dash on its own) so the dash can only come from the hole rule —
+		// and a friendly hole must not trigger it.
+		const output = decide(
+			perception({
+				fields: [{ x: 250, y: 300, hostile: false }],
+				selfX: 400,
+			}),
+			0.5,
+		);
+		expect(output.dash).toBe(0);
+	});
 });
