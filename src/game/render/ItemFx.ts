@@ -24,6 +24,7 @@ import {
 	HE_GRENADE_FUSE_MS,
 	type HeGrenadeState,
 	SMOKE_GRENADE_FUSE_MS,
+	SMOKE_PUFF_SCALE,
 	tickHeGrenade,
 	tickSmokeGrenade,
 } from "../simulation/Items";
@@ -40,8 +41,12 @@ const COLOR = {
 	ring: 0xffe0b3,
 	/** The trap's burst: its own teal, so a spring reads as *that* trap going. */
 	trap: 0x7ff0f4,
-	/** The smoke's grey — the cloud's one tint, lightened for the ally haze. */
-	smoke: 0x9aa0ab,
+	/**
+	 * The smoke's dark grey — the cloud's one tint, lightened for the ally
+	 * haze. Dark enough that a wall reads as a wall rather than a light fog,
+	 * grey enough that it never reads as a team colour.
+	 */
+	smoke: 0x32383f,
 } as const;
 
 /** A grenade the client is running off its own clock, bounced like the server's. */
@@ -366,7 +371,10 @@ export class ItemFx {
 			const fadeOut = Math.min(1, cloud.remainingMs / 800);
 			const breathe = 1 + Math.sin(puffs.ageMs / 700 + cloud.id) * 0.06;
 			puffs.sprites.forEach((sprite, i) => {
-				sprite.scale.set(0.9 * breathe, 0.9 * breathe);
+				sprite.scale.set(
+					SMOKE_PUFF_SCALE * breathe,
+					SMOKE_PUFF_SCALE * breathe,
+				);
 				sprite.alpha = (friendly ? 0.3 : 1) * fadeOut;
 				sprite.rotation = (i * 0.7 + cloud.id * 0.13) % (Math.PI * 2);
 			});
@@ -386,6 +394,9 @@ export class ItemFx {
 		for (let i = 0; i < 6; i++) {
 			const sprite = new Sprite(tex(TEX.smoke));
 			sprite.anchor.set(0.5);
+			// The texture ships white so a single tint can be faded for allies;
+			// the dark grey is the cloud's own, applied once here.
+			sprite.tint = COLOR.smoke;
 			// The puffs sit under the fighters — the concealment is drawn by
 			// hiding the fighters, not by painting over them.
 			this.fieldLayer.addChild(sprite);
@@ -458,11 +469,14 @@ export class ItemFx {
 			const t = puffs.ageMs / 1000;
 			puffs.sprites.forEach((sprite, i) => {
 				const phase = puffs.phases[i] ?? 0;
-				const radius = 18 + ((i * 13) % 22);
+				// The puffs wander in a wider circle than the old small cloud —
+				// the drift is the breathing, and a cloud four times the area
+				// needs a longer stride to still read as alive.
+				const radius = 34 + ((i * 11) % 36);
 				const speed = 0.25 + ((i * 7) % 10) / 40;
 				sprite.position.set(
 					puffs.x + Math.cos(t * speed + phase) * radius,
-					puffs.y - 20 + Math.sin(t * speed * 0.8 + phase) * radius * 0.7,
+					puffs.y - 30 + Math.sin(t * speed * 0.8 + phase) * radius * 0.7,
 				);
 			});
 
@@ -476,12 +490,12 @@ export class ItemFx {
 				this.particles.burst({
 					texture: TEX.smoke,
 					count: 1,
-					x: puffs.x + (Math.random() - 0.5) * 120,
-					y: puffs.y - 20 + (Math.random() - 0.5) * 80,
+					x: puffs.x + (Math.random() - 0.5) * 260,
+					y: puffs.y - 40 + (Math.random() - 0.5) * 160,
 					tint: COLOR.smoke,
 					speed: [2, 14],
 					lifeMs: 1400,
-					scale: [0.5, 0.9],
+					scale: [0.8, 1.6],
 					alpha: puffs.friendly ? [0.16, 0] : [0.34, 0],
 				});
 			}

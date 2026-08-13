@@ -182,11 +182,21 @@ export const SMOKE_COLLIDE_R = 6;
 export const SMOKE_REST_VY = 80;
 
 /**
- * The cloud's radius. A sixth of a screen, a patch you can cross in a dash
+ * The cloud's radius. A quarter of a screen, a patch you can cross in a dash
  * and hide a whole team behind — the smoke's job is to answer "how many are
- * in there" with a wall.
+ * in there" with a wall, and a bigger wall makes the question louder.
  */
-export const SMOKE_RADIUS = 150;
+export const SMOKE_RADIUS = 200;
+
+/** The smoke puff texture's soft radius, in texture pixels — see `createSmokePuffTexture`. */
+const SMOKE_PUFF_TEXTURE_RADIUS = 44;
+
+/**
+ * The drawn cloud's puff scale, derived from the concealment radius so the
+ * visible smoke matches the zone it hides — a cloud must not conceal a fighter
+ * the eye places outside it. At radius 200 the six puffs sit at ~4.5x.
+ */
+export const SMOKE_PUFF_SCALE = SMOKE_RADIUS / SMOKE_PUFF_TEXTURE_RADIUS;
 
 /**
  * How long a cloud stands. Long enough to cross an arena with (a walk covers

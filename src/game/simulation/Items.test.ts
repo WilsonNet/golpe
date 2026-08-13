@@ -508,10 +508,11 @@ describe("the smoke grenade", () => {
 		expect(
 			smokeHidesFrom(cloud, "me", null, "foe", null, 400 - 16, 400 - 24),
 		).toBe(true);
-		// The local fighter is never hidden from themselves.
+		// Standing in your own smoke fades you to yourself — the cue that you
+		// are invisible right now.
 		expect(
 			smokeHidesFrom(cloud, "me", null, "me", null, 400 - 16, 400 - 24),
-		).toBe(false);
+		).toBe(true);
 		// Outside the radius is visible.
 		expect(
 			smokeHidesFrom(cloud, "me", null, "foe", null, 400 - 16 - 400, 400 - 24),
@@ -547,6 +548,11 @@ describe("the smoke grenade", () => {
 		expect(
 			smokeHidesFrom(cloud, "teammate", 0, "other-ally", 0, 400 - 16, 400 - 24),
 		).toBe(false);
+		// You see your own fighter fade too, standing in your side's smoke —
+		// team or free-for-all, the ghost is the "you are invisible" cue.
+		expect(smokeHidesFrom(cloud, "me", 0, "me", 0, 400 - 16, 400 - 24)).toBe(
+			true,
+		);
 	});
 
 	it("the overlap is centre-to-centre against the cloud's radius", () => {

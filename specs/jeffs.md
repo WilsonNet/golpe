@@ -80,22 +80,26 @@ side that is looking at it.
   gravity 900, 0.4 restitution bounce) and its fuse runs out after 900ms;
   where it stops, the cloud blooms. A canister that is still rolling when the
   fuse ends blooms where it is — smoking mid-air is a real throw.
-- **The cloud:** 150px radius, lasting 6.5s, anchored where it bloomed.
+- **The cloud:** 200px radius, lasting 6.5s, anchored where it bloomed. The
+  cloud is drawn as a deep dark grey — a wall that reads as a wall, not a
+  light fog — scaled so the visible smoke matches the zone it conceals.
 - **Allies see through it.** Your own smoke and every teammate's is drawn at a
   fraction of full opacity — a near-transparent haze that reads as "your
   smoke" without hiding the fight behind it. The side a cloud belongs to is
   the same `sameTeam` predicate the friendly-fade of traps uses.
 - **Enemies see a wall.** A hostile cloud is full-strength: layered, drifting
-  puffs of grey that read as *something is in there* and hide exactly what. It
-  is the point of the item — the enemy cannot count you, cannot see whether
-  you are still there, cannot read how many walked in.
-- **Ally smoke hides the people inside.** A fighter standing inside a cloud
-  that belongs to *their own side* is invisible to everyone hostile to them:
-  no sprite, no shadow, no nameplate, no health bar. "Who is in the smoke" is
-  the question the cloud exists to make unanswerable — the thrower can walk
-  into their own smoke to vanish, and a teammate caught mid-retreat can be
-  swallowed by a friendly cloud. The local fighter is never hidden from
-  themselves.
+  puffs of dark grey that read as *something is in there* and hide exactly
+  what. It is the point of the item — the enemy cannot count you, cannot see
+  whether you are still there, cannot read how many walked in.
+- **Ally smoke ghosts the people inside.** A fighter standing inside a cloud
+  that belongs to *their own side* is hidden from everyone hostile to them: a
+  faded ghost, with no shadow, no nameplate, no health bar — the enemy can
+  know *someone* is in the smoke, never who, never how hurt. "Who is in the
+  smoke" is the question the cloud exists to make unanswerable — the thrower
+  can walk into their own smoke to vanish, and a teammate caught mid-retreat
+  can be swallowed by a friendly cloud. The local fighter ghosts too, standing
+  in their own smoke: the fade is the cue that *you* are invisible right now,
+  and it leaves you exactly where you are standing.
 - **Enemy smoke hides nobody.** Walking into a cloud the *enemy* threw does
   not conceal you — you are in their smoke, their side can see you plainly,
   and your own side sees you too. The concealment belongs to the smoke's

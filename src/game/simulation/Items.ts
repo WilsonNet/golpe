@@ -39,6 +39,7 @@ import {
 	SMOKE_GRENADE_FUSE_MS,
 	SMOKE_GRENADE_GRAVITY,
 	SMOKE_GRENADE_SPEED,
+	SMOKE_PUFF_SCALE,
 	SMOKE_RADIUS,
 	SMOKE_REST_VY,
 	SMOKE_RESTITUTION,
@@ -73,6 +74,7 @@ export {
 	SMOKE_GRENADE_FUSE_MS,
 	SMOKE_GRENADE_GRAVITY,
 	SMOKE_GRENADE_SPEED,
+	SMOKE_PUFF_SCALE,
 	SMOKE_RADIUS,
 	TRAP_DAMAGE,
 	TRAP_PLACE_OFFSET,
@@ -409,8 +411,10 @@ export function smokeCloudOverlaps(
  * viewer must be hostile to them. A fighter in the *enemy's* smoke is not
  * hidden — the concealment belongs to the smoke's owner.
  *
- * The viewer is never concealed from themselves, even in a free-for-all where
- * `hostile(null, null)` is true: you always know where you are standing.
+ * The viewer is concealed from themselves too when standing in their own
+ * side's smoke: the fade is the cue that they are invisible to the enemy
+ * right now. In a free-for-all that is every cloud they threw; in a team room
+ * it is their own smoke and every teammate's.
  */
 export function smokeHidesFrom(
 	c: SmokeCloud,
@@ -421,10 +425,13 @@ export function smokeHidesFrom(
 	bodyX: number,
 	bodyY: number,
 ): boolean {
-	if (viewerId === fighterId) return false;
 	if (c.ownerId !== fighterId && !sameTeam(c.ownerTeam, fighterTeam)) {
 		return false;
 	}
+	// Standing in your own side's smoke fades your own fighter out — the ghost
+	// is the "you are invisible right now" cue, and it still leaves you exactly
+	// where you are standing.
+	if (viewerId === fighterId) return smokeCloudOverlaps(c, bodyX, bodyY);
 	if (!hostile(fighterTeam, viewerTeam)) return false;
 	return smokeCloudOverlaps(c, bodyX, bodyY);
 }

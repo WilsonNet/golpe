@@ -1459,8 +1459,10 @@ export class Match {
 	 * The rule is the simulation's (`smokeHidesFrom` — the fighter must be in
 	 * a cloud that belongs to *their* side, and the viewer must be hostile to
 	 * them) and the answer is presentation only, written onto each fighter
-	 * entity for the systems to read. The local fighter is never hidden, by
-	 * the predicate itself — you always know where you are standing.
+	 * entity for the systems to read. The local fighter is concealed too when
+	 * standing in their own smoke, so the ghost is the cue that they are
+	 * invisible — you know where you are standing because you are faded, not
+	 * because you are exempt.
 	 *
 	 * Asked against the *drawn* position: the render smoother deliberately
 	 * offsets a sprite from its body, and a concealment that followed the body
@@ -1479,11 +1481,17 @@ export class Match {
 		const myTeam = session.myTeam;
 		for (const e of this.queries.drawnFighters) {
 			const at = e.renderPos ?? e.body;
+			// The local fighter's entity is keyed `"local"` while the cloud's
+			// `ownerId` is the server's id for the same fighter — translate it
+			// (exactly like the black hole's friendly-fire rule does), or the
+			// "cloud must be your own side's" test never matches your own cloud
+			// and the self-concealment ghost never fires.
+			const fighterId = this.serverIdOf(e.fighter.id);
 			for (const cloud of clouds) {
 				if (
 					smokeHidesFrom(
 						cloud,
-						e.fighter.id,
+						fighterId,
 						e.fighter.team,
 						myId,
 						myTeam,

@@ -515,6 +515,14 @@ export function idleTexture(hero: HeroId, facing: number) {
 }
 
 /**
+ * A fighter concealed in their own side's smoke, ghosted. Faded, not gone:
+ * visible enough to know exactly where you are standing — the local fighter
+ * sees their own ghost, which is the cue that they are invisible — and faded
+ * enough that the enemy cannot read who is in the cloud or how hurt they are.
+ */
+const SMOKE_GHOST_ALPHA = 0.35;
+
+/**
  * Copy simulation positions onto sprites.
  *
  * Bodies are AABB top-left and sprites are centre-origin, so fighters go through
@@ -528,10 +536,12 @@ export function spriteSyncSystem(queries: Queries) {
 		const at = e.renderPos ?? e.body;
 		syncSpriteToBody(e.sprite, at.x, at.y);
 		// A dead fighter fades rather than vanishing, so a KO reads as a KO. A
-		// fighter concealed in an ally's smoke vanishes outright — the enemy is
-		// not allowed to know they are there at all, and a fading silhouette
-		// would be exactly the information the smoke exists to withhold.
-		e.sprite.alpha = e.fighter.hp <= 0 ? 0.3 : e.fighter.smokeHidden ? 0 : 1;
+		// fighter concealed in their own side's smoke ghosts out to a whisper —
+		// faded, not gone, so the fade itself is the "you are invisible right
+		// now" cue (your own fighter fades too), while the enemy still cannot
+		// read who is in the cloud or how hurt they are.
+		e.sprite.alpha =
+			e.fighter.hp <= 0 ? 0.3 : e.fighter.smokeHidden ? SMOKE_GHOST_ALPHA : 1;
 		// The blossom's spin and the dragon ride's rotation are accumulated by
 		// `animationSystem`; this is the one place the wind-down can live,
 		// because it runs after the animation step and before anything else

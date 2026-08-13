@@ -117,7 +117,7 @@ full kit; the rules here are the wire and the general item rules.
 - **Two per life**, like the HE. The smoke hides — it does not hurt — so it is
   scarce, and spending one is a decision.
 - **Thrown, then planted.** The canister arcs (700 px/s, gravity 900, 0.4
-  restitution bounces) and blooms into a 150px cloud where its 900ms fuse runs
+  restitution bounces) and blooms into a 200px cloud where its 900ms fuse runs
   out. The cloud is anchored there for **6.5s** and then dissipates.
 - **Travels like a trap:** full state in the snapshot, both the canisters in
   flight (dead-reckoned like bullets) and the clouds themselves. There is
@@ -126,9 +126,11 @@ full kit; the rules here are the wire and the general item rules.
 - **Per-side drawing is the whole feature.** Your own and your teammates'
   clouds are drawn nearly transparent; hostile clouds are full-strength. The
   side test is the one `sameTeam` predicate the trap's friendly-fade uses.
-- **Ally smoke hides the people inside.** A fighter in a cloud belonging to
-  their own side is not drawn to anyone hostile to them — no sprite, no
-  shadow, no nameplate, no health bar. The local fighter always sees themself.
+- **Ally smoke ghosts the people inside.** A fighter in a cloud belonging to
+  their own side is faded almost out to anyone hostile to them — a ghost, with
+  no shadow, no nameplate, no health bar. The local fighter ghosts too,
+  standing in their own smoke, so the fade is the cue that they are invisible
+  right now.
 - **A dead Jeffs' clouds leave the floor with him**, exactly like traps:
   removed at respawn and at a round reset.
 - The cloud affects vision only. No damage, no collision, no bullet block.

@@ -71,11 +71,12 @@ interface Entity {
 		 */
 		hero: HeroId;
 		/**
-		 * Is this fighter concealed inside an ally's smoke cloud, as this
-		 * viewer sees it? Presentation-only, recomputed every frame by the
-		 * match from the smoke list: while set, the fighter is not drawn, not
-		 * shadowed and not named — the enemy is not allowed to know who is in
-		 * the smoke. The local fighter is never set.
+		 * Is this fighter concealed inside their own side's smoke cloud, as
+		 * this viewer sees it? Presentation-only, recomputed every frame by the
+		 * match from the smoke list: while set, the fighter is ghosted — faded
+		 * almost out, with no shadow, nameplate or health bar. The local
+		 * fighter is set too, so standing in your own smoke tells you that you
+		 * are invisible right now.
 		 */
 		smokeHidden?: boolean;
 	};
