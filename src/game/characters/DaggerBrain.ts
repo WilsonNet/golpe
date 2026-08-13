@@ -21,17 +21,17 @@ const GUN_DISENGAGE_PX = 320;
 /** How far the machine gun will actually fire. */
 const GUN_FIRE_RANGE_PX = 520;
 /** The thrust's closing band: far enough to lunge through, near enough to land. */
-const THRUST_RANGE_PX = 190;
+const THRUST_RANGE_PX = 114;
 /** The shoryuken's anti-air: how close and how high the foe must be. */
-const SHORYUKEN_RANGE_PX = 110;
+const SHORYUKEN_RANGE_PX = 80;
 const SHORYUKEN_MIN_RISE_PX = 40;
 /** A foe turtling behind a sword guard is a thrust target, not a stab target. */
-const TURTLE_THRUST_RANGE_PX = 120;
+const TURTLE_THRUST_RANGE_PX = 72;
 /** The spacing read is a mid-band move: not point-blank, inside the lunge. */
-const SPACING_THRUST_MIN_PX = 70;
+const SPACING_THRUST_MIN_PX = 42;
 const SPACING_THRUST_MAX_PX = THRUST_RANGE_PX;
 /** The stab is a read on a committed foe: inside it the lunge beats the stab. */
-const STAB_READ_RANGE_PX = 150;
+const STAB_READ_RANGE_PX = 90;
 /** Chance the brain commits to the turtle-breaking thrust, at full aggression. */
 const TURTLE_THRUST_BASE_CHANCE = 0.55;
 const TURTLE_THRUST_AGGRO_STEP = 0.4;

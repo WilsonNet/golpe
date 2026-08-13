@@ -224,7 +224,7 @@ describe("the thrust", () => {
 		// Through the active window the body travels at selfVx.
 		const start = s.x;
 		s = ticks(s, {}, Math.floor(MOVES.thrust.activeMs / (1000 * DT)));
-		expect(s.x - start).toBeGreaterThan(120);
+		expect(s.x - start).toBeGreaterThan((MOVES.thrust.selfVx ?? 0) * 0.12);
 		expect(s.vx).toBeCloseTo(MOVES.thrust.selfVx ?? 0);
 	});
 
@@ -261,13 +261,14 @@ describe("the thrust", () => {
 	it("sweeps: the swept box covers the whole path taken so far", () => {
 		const s = dagger({
 			meleeAction: "thrust",
-			// Mid-active: 70ms into the dash at 1300 px/s ≈ 91px of path.
+			// Mid-active: 70ms into the dash.
 			meleeTimer: MOVES.thrust.startupMs + 70,
 			hitLatch: false,
 		});
+		const travelled = (70 / 1000) * (MOVES.thrust.selfVx ?? 0);
 		const box = swept(sweptThrustBox(s));
 		// The body's original spot is inside the sweep…
-		expect(rectsOverlap(box, bodyRect(s.x - 90, s.y))).toBe(true);
+		expect(rectsOverlap(box, bodyRect(s.x - travelled, s.y))).toBe(true);
 		// …and the reach ahead is too, but a distant fighter is not.
 		expect(rectsOverlap(box, bodyRect(s.x + 36, s.y))).toBe(true);
 		expect(rectsOverlap(box, bodyRect(s.x + 400, s.y))).toBe(false);

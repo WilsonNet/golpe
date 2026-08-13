@@ -366,8 +366,8 @@ export const MOVES: Record<MeleeMove, MoveDef> = {
 		knockbackVx: 240,
 		knockdown: true,
 		knockdownMs: 1500,
-		/** The dash: 1300 px/s, faster than the sword's dash (1000). */
-		selfVx: 1300,
+		/** The dash: 780 px/s — 60% of the original 1300, a ~109px carry. */
+		selfVx: 780,
 		/** The flat line: `vy` pinned to zero so an airborne thrust does not fall. */
 		selfVy: 0,
 	},
@@ -383,10 +383,16 @@ export const MOVES: Record<MeleeMove, MoveDef> = {
 		activeMs: 140,
 		recoveryMs: 320,
 		damage: 8,
-		reachPx: 34,
-		/** The box reaches 52px above the head — the anti-air. */
-		boxTopOffset: -52,
-		boxHeight: 96,
+		/**
+		 * A wide anti-air reach — nearly double the stab's 30 and the sword
+		 * uppercut's 34. The anti-air must connect with a foe who is *above*,
+		 * which is already a moving target: a narrow box on top of that made
+		 * the move whiff everything but a point-blank jump-in.
+		 */
+		reachPx: 62,
+		/** The box reaches 60px above the head — the anti-air. */
+		boxTopOffset: -60,
+		boxHeight: 112,
 		/** Blockable, unlike the sword's uppercut. */
 		blockable: true,
 		cancellable: false,

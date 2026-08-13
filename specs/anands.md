@@ -27,8 +27,8 @@ ultimate — is simply absent here, and the dagger's answer is to hit first.
 | Move | Startup | Active | Recovery | Total | Damage | Reach | Blockable | Cancellable |
 |---|---|---|---|---|---|---|---|---|
 | **Stab** | 45ms | 55ms | 90ms | 190ms | 5 | 30px | **yes** | **yes** |
-| **Thrust** | 260ms | 140ms | 480ms | 880ms | 16 | sweep | **no** | **no** |
-| **Shoryuken** | 90ms | 140ms | 320ms | 550ms | 8 | 34px, tall | **yes** | **no** |
+| **Thrust** | 260ms | 140ms | 480ms | 880ms | 16 | sweep, ~109px | **no** | **no** |
+| **Shoryuken** | 90ms | 140ms | 320ms | 550ms | 8 | 62px, tall | **yes** | **no** |
 
 On hit:
 
@@ -54,17 +54,27 @@ On hit:
   jumps during the wind-up is over the line when it arrives. What the
   anticipation buys is the rest of the move: unblockable, unparryable, hitting
   **everyone in the path** (the one melee move that does), and knocking them
-  down for a full second and a half. The 480ms recovery is the cost of that
-  power and the thing that keeps thrust spam honest: a whiff is a walk-in, and
-  back-to-back thrusts are a choice a foe can punish, not a rhythm to lean on.
-  It does not fall in the air — `selfVx`
+  down for a full second and a half. The dash carries **780 px/s for 140ms —
+  about 109px**, 60% of its original 1300 px/s lunge: a thrust still closes
+  the gap a stab cannot, but the reads that used to land from two body-widths
+  away must now be walked in, and a whiffed lunge is easier to punish — the
+  range *is* the trade the move was balanced around. The 480ms recovery is the
+  cost
+  of that power and the thing that keeps thrust spam honest: a whiff is a
+  walk-in, and back-to-back thrusts are a choice a foe can punish, not a
+  rhythm to lean on. It does not fall in the air — `selfVx`
   pins the dash like a dash pins its line — so an airborne thrust is a flat
   lunge across the arena.
-- **The shoryuken is an anti-air with a gate.** Its hitbox starts 52px above
-  the head and the move rises at a constant `selfVy`, so it catches a jumping
-  foe. It is **not a third jump**: it only fires while the second jump is
-  still in hand (`airJumps > 0`), so a fighter who double-jumped has spent its
-  vertical options. And it is **blockable** — unlike the sword's uppercut —
+- **The shoryuken is an anti-air with a gate.** Its hitbox starts 60px above
+  the head, runs 112px tall and reaches a wide 62px in front of the body —
+  nearly double the stab's 30 and the sword uppercut's 34 — and the move
+  rises at a constant `selfVy`, so it catches a jumping foe. The width is the
+  point: a box that only reached 34px whiffed everything but a point-blank
+  jump-in (one hit from three swings in a measured AI duel), so the anti-air
+  reach is the widest of any melee box in the game. It is **not a third
+  jump**: it only fires while the second jump is still in hand
+  (`airJumps > 0`), so a fighter who double-jumped has spent its vertical
+  options. And it is **blockable** — unlike the sword's uppercut —
   with a knockdown (900ms) that is weaker than the thrust's. The trade for a
   knockdown that lands is that a read guard stops it.
 - **The double-tap dash is the dagger's own**: a little faster than the
