@@ -25,8 +25,10 @@ import {
 	type HeGrenadeState,
 	SMOKE_GRENADE_FUSE_MS,
 	SMOKE_PUFF_SCALE,
+	type TrapCanisterState,
 	tickHeGrenade,
 	tickSmokeGrenade,
+	tickTrapCanister,
 } from "../simulation/Items";
 import { sameTeam, type TeamId } from "../simulation/Teams";
 import { TEX, tex } from "./assets";
@@ -53,6 +55,13 @@ const COLOR = {
 interface HeFlight {
 	state: HeGrenadeState;
 	/** Local render clock at the last step, ms. */
+	lastMs: number;
+	sprite: Sprite;
+}
+
+/** A trap canister the client is running off its own clock, like a grenade. */
+interface TrapFlight {
+	state: TrapCanisterState;
 	lastMs: number;
 	sprite: Sprite;
 }
@@ -101,6 +110,7 @@ interface CloudPuffs {
 export class ItemFx {
 	private readonly particles: ParticleSystem;
 	private readonly heGrenades = new Map<number, HeFlight>();
+	private readonly trapFlights = new Map<number, TrapFlight>();
 	private readonly trapSprites = new Map<number, Sprite>();
 	private readonly smokeFlights = new Map<number, HeFlight>();
 	private readonly smokeClouds = new Map<number, CloudPuffs>();
@@ -178,6 +188,54 @@ export class ItemFx {
 			if (seen.has(id)) continue;
 			flight.sprite.destroy();
 			this.heGrenades.delete(id);
+		}
+	}
+
+	/**
+	 * Draw the trap canisters in flight, dead-reckoned exactly like the HE
+	 * grenades — anchored on first sight, flown through the same deterministic
+	 * `tickTrapCanister` the server runs, so the arc plants where the server's
+	 * does. The sprite is the trap's own, tumbling: the throw is the counterplay
+	 * announcement, and the mine that lands is the same object the whole room
+	 * watched come down.
+	 */
+	syncTrapCanisters(live: readonly HeGrenadeView[], nowMs: number) {
+		const seen = new Set<number>();
+		for (const c of live) {
+			seen.add(c.id);
+			let flight = this.trapFlights.get(c.id);
+			if (!flight) {
+				const sprite = new Sprite(tex(TEX.trap));
+				sprite.anchor.set(0.5);
+				this.effectsLayer.addChild(sprite);
+				flight = {
+					state: {
+						id: c.id,
+						ownerId: "",
+						ownerTeam: null,
+						x: c.x,
+						y: c.y,
+						vx: c.vx,
+						vy: c.vy,
+					},
+					lastMs: nowMs,
+					sprite,
+				};
+				this.trapFlights.set(c.id, flight);
+			}
+			const dtSec = Math.max(0, nowMs - flight.lastMs) / 1000;
+			flight.lastMs = nowMs;
+			if (dtSec > 0) tickTrapCanister(flight.state, dtSec, this.world);
+			flight.sprite.position.set(flight.state.x, flight.state.y);
+			// A fast tumble — heavier than the grenades', because it is going to
+			// be planted, not lobbed.
+			flight.sprite.rotation += dtSec * 8;
+		}
+
+		for (const [id, flight] of this.trapFlights) {
+			if (seen.has(id)) continue;
+			flight.sprite.destroy();
+			this.trapFlights.delete(id);
 		}
 	}
 
@@ -507,6 +565,8 @@ export class ItemFx {
 	reset() {
 		for (const flight of this.heGrenades.values()) flight.sprite.destroy();
 		this.heGrenades.clear();
+		for (const flight of this.trapFlights.values()) flight.sprite.destroy();
+		this.trapFlights.clear();
 		for (const flight of this.smokeFlights.values()) flight.sprite.destroy();
 		this.smokeFlights.clear();
 		for (const sprite of this.trapSprites.values()) sprite.destroy();

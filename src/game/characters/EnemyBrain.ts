@@ -550,7 +550,6 @@ export class EnemyBrain {
 		if (this.itemCooldownMs > 0) return;
 		if (input.selfItemCharges <= 0) return;
 		if (input.selfStunned) return;
-		if (!input.touchingDown && input.selfHero === "anands") return;
 
 		// The grenade needs a corridor to throw down: range to reach, nothing
 		// between, and a target that is not already being sworded (a grenade at
@@ -566,15 +565,21 @@ export class EnemyBrain {
 		}
 
 		// The trap is a delay, so it belongs in the path of a rush: an enemy
-		// close enough to step on it. The brain always faces the nearest foe, so
-		// the trap lands between them; a cooldown and the three-charge cap stop
-		// a brain from littering the floor with them.
+		// close enough to step on it. The trap is *thrown* now, so the aim is
+		// the throw: the foe's feet, from the bot's chest — the arc plants the
+		// mine a step short of the foe, exactly where a rusher is about to
+		// stand. A cooldown and the three-charge cap stop a brain from
+		// littering the floor with them.
 		if (input.selfHero === "anands") {
 			if (
 				input.distanceToPlayer < TRAP_MAX_RANGE_PX &&
 				input.distanceToPlayer > TRAP_MIN_RANGE_PX &&
 				input.hasLineOfSight
 			) {
+				output.aimAngle = Math.atan2(
+					input.playerY + PLAYER_HEIGHT - (input.selfY + PLAYER_HEIGHT / 2),
+					Math.max(1, input.playerX - input.selfX),
+				);
 				output.item = true;
 				this.itemCooldownMs = TRAP_COOLDOWN_MS;
 			}

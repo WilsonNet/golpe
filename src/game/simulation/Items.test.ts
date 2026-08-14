@@ -23,7 +23,7 @@ import {
 	ITEMS,
 	launchHeGrenade,
 	launchSmokeGrenade,
-	placeTrap,
+	launchTrapCanister,
 	SMOKE_DURATION_MS,
 	SMOKE_GRENADE_FUSE_MS,
 	SMOKE_GRENADE_GRAVITY,
@@ -33,11 +33,15 @@ import {
 	smokeGrenadeEnd,
 	smokeHidesFrom,
 	smokeLobAngle,
-	TRAP_PLACE_OFFSET,
+	TRAP_COLLIDE_R,
 	TRAP_RADIUS,
+	TRAP_THROW_GRAVITY,
+	TRAP_THROW_SPEED,
 	TRAP_TRIGGER_MS,
+	type Trap,
 	tickHeGrenade,
 	tickSmokeGrenade,
+	tickTrapCanister,
 	trapCatches,
 	trapFor,
 } from "./Items.js";
@@ -131,12 +135,82 @@ describe("the HE grenade", () => {
 });
 
 describe("the trap", () => {
-	const trap = () => placeTrap(1, "me", 400, 480, 1, null);
+	/** An armed trap at a known spot. Owner is never the caught fighter. */
+	const trapAt = (
+		id: number,
+		x: number,
+		y: number,
+		owner = "someone-else",
+		ownerTeam: TeamId | null = null,
+	): Trap => ({ id, ownerId: owner, ownerTeam, x, y });
 
-	it("is placed on the floor, one step in front of the fighter", () => {
-		const t = trap();
-		expect(t.x).toBeCloseTo(400 + 16 + TRAP_PLACE_OFFSET);
-		expect(t.y).toBeCloseTo(480 + 48);
+	/** The old placement: one step in front of a fighter standing at `x`. */
+	const inFrontOf = (
+		id: number,
+		bodyX: number,
+		bodyY: number,
+		owner = "someone-else",
+	): Trap =>
+		trapAt(id, bodyX + PLAYER_WIDTH / 2 + 30, bodyY + PLAYER_HEIGHT, owner);
+
+	const trap = () => inFrontOf(1, 400, 480, "me");
+
+	it("is thrown, not placed: the throw inherits the thrower's momentum", () => {
+		// A standing throw: pure aim, no carry.
+		const still = launchTrapCanister(1, "me", 400, 300, 0, 0, 0, null);
+		expect(still.vx).toBeCloseTo(TRAP_THROW_SPEED);
+		expect(still.vy).toBeCloseTo(0);
+		// A dash-throw carries the dash: momentum adds to the throw.
+		const dashing = launchTrapCanister(2, "me", 400, 300, 0, 300, 0, null);
+		expect(dashing.vx).toBeCloseTo(TRAP_THROW_SPEED + 300);
+		// A jump-throw's upward fall carries too.
+		const falling = launchTrapCanister(3, "me", 400, 300, 0, 0, 250, null);
+		expect(falling.vy).toBeCloseTo(250);
+	});
+
+	it("arcs under gravity and plants an armed trap where it lands", () => {
+		const c = launchTrapCanister(1, "me", 400, 300, 0, 0, 0, null);
+		// Its own gravity pulls the canister down, semi-implicit like the HE's.
+		tickTrapCanister(c, 0.1, DEFAULT_WORLD);
+		expect(c.vy).toBeCloseTo(TRAP_THROW_GRAVITY * 0.1);
+		let planted = false;
+		let x = c.x;
+		let y = c.y;
+		for (let i = 0; i < 60 * 4; i++) {
+			if (tickTrapCanister(c, 1 / 60, DEFAULT_WORLD)) {
+				planted = true;
+				x = c.x;
+				y = c.y;
+				break;
+			}
+		}
+		expect(planted).toBe(true);
+		// It flew forward and fell: gravity, not a slide.
+		expect(x).toBeGreaterThan(400);
+		expect(c.vy).toBe(0);
+		// The canister's box bottoms out on the floor — the server plants the
+		// trap at `y + TRAP_COLLIDE_R`, the floor line the trigger lives on.
+		expect(y + TRAP_COLLIDE_R).toBeCloseTo(DEFAULT_WORLD.bottom - 32, 0);
+	});
+
+	it("does not bounce: a wall scrub drops it to plant at the wall's base", () => {
+		// Thrown at the arena's right wall (x 800) from chest height.
+		const c = launchTrapCanister(2, "me", 700, 300, 0, 0, 0, null);
+		let planted = false;
+		let wallHit = false;
+		for (let i = 0; i < 60 * 5; i++) {
+			const wasVx = c.vx;
+			if (tickTrapCanister(c, 1 / 60, DEFAULT_WORLD)) {
+				planted = true;
+				break;
+			}
+			if (wasVx !== 0 && c.vx === 0) wallHit = true;
+		}
+		expect(wallHit).toBe(true);
+		expect(planted).toBe(true);
+		// Planted at the wall's base, not carried through it.
+		expect(c.x).toBeLessThan(DEFAULT_WORLD.right - 1);
+		expect(c.y + TRAP_COLLIDE_R).toBeCloseTo(DEFAULT_WORLD.bottom - 32, 0);
 	});
 
 	it("catches by the feet, not the whole body", () => {
@@ -156,7 +230,13 @@ describe("the trap", () => {
 		// enemy of it — the team case is the placed-by-a-teammate one below.
 		expect(trapFor([t], "foe", null)).toHaveLength(1);
 
-		const teamTrap = placeTrap(9, "me", 400, 480, 1, 0);
+		const teamTrap = trapAt(
+			9,
+			400 + PLAYER_WIDTH / 2 + 30,
+			480 + PLAYER_HEIGHT,
+			"me",
+			0,
+		);
 		expect(trapFor([teamTrap], "teammate", 0)).toHaveLength(0);
 		expect(trapFor([teamTrap], "foe", 1)).toHaveLength(1);
 		expect(trapFor([teamTrap], "foe", null)).toHaveLength(1);
@@ -165,7 +245,7 @@ describe("the trap", () => {
 	it("locks mobility but not attacks in `tickPlayer`", () => {
 		// The trap under a fighter standing on its patch.
 		const state = groundedState(400);
-		const t = placeTrap(2, "someone-else", state.x, state.y, 1, null);
+		const t = inFrontOf(2, state.x, state.y);
 		const kit: HeroKit = kitFor("lia");
 
 		// A tick with the trap present sets the lock.
@@ -207,7 +287,7 @@ describe("the trap", () => {
 
 	it("does not re-trigger while already locked, and decays the lock", () => {
 		const state = groundedState(400);
-		const t = placeTrap(3, "someone-else", state.x, state.y, 1, null);
+		const t = inFrontOf(3, state.x, state.y);
 		const kit: HeroKit = kitFor("lia");
 		const caught = tickPlayer(
 			state,
@@ -236,7 +316,7 @@ describe("the trap", () => {
 		// the fighter dashes across the patch at full speed.
 		const kit: HeroKit = kitFor("anands");
 		const s0 = groundedState(544);
-		const t = placeTrap(4, "someone-else", 610, 568 - PLAYER_HEIGHT, 1, null); // centre x 656
+		const t = trapAt(4, 610 + PLAYER_WIDTH / 2 + 30, 568); // centre x 656
 		let caught: PlayerPosition | null = null;
 		let s = s0;
 		for (let i = 0; i < 60; i++) {
@@ -276,7 +356,7 @@ describe("the trap", () => {
 	it("catches a tumble dead: the roll's momentum dies with the catch", () => {
 		const kit: HeroKit = kitFor("anands");
 		const s0 = { ...groundedState(544), stance: "gun" as const };
-		const t = placeTrap(5, "someone-else", 610, 568 - PLAYER_HEIGHT, 1, null); // centre x 656
+		const t = trapAt(5, 610 + PLAYER_WIDTH / 2 + 30, 568); // centre x 656
 		let caught: PlayerPosition | null = null;
 		let s: PlayerPosition = s0;
 		for (let i = 0; i < 60; i++) {
@@ -314,7 +394,7 @@ describe("the trap", () => {
 	it("a jump buffered before the catch cannot fire through the lock", () => {
 		const kit: HeroKit = kitFor("anands");
 		const state = groundedState(400);
-		const t = placeTrap(6, "someone-else", state.x, state.y, 1, null);
+		const t = inFrontOf(6, state.x, state.y);
 		const caught = tickPlayer(
 			state,
 			neutral(),
@@ -344,7 +424,7 @@ describe("the trap", () => {
 	it("counters the dagger's thrust and shoryuken, but not the stab", () => {
 		const kit: HeroKit = kitFor("anands");
 		const state = groundedState(400);
-		const t = placeTrap(7, "someone-else", state.x, state.y, 1, null);
+		const t = inFrontOf(7, state.x, state.y);
 		const caught = tickPlayer(
 			state,
 			neutral(),
@@ -406,7 +486,7 @@ describe("the trap", () => {
 	it("does not counter the dragon thrust: a caught rider keeps riding", () => {
 		const kit: HeroKit = kitFor("anands");
 		const state = groundedState(400);
-		const t = placeTrap(8, "someone-else", state.x, state.y, 1, null);
+		const t = inFrontOf(8, state.x, state.y);
 		const caught = tickPlayer(
 			state,
 			neutral(),
@@ -441,7 +521,7 @@ describe("the trap", () => {
 	it("freezes a mid-lunge's swept box: the lock lends the thrust no arc", () => {
 		const kit: HeroKit = kitFor("anands");
 		const state = groundedState(400);
-		const t = placeTrap(9, "someone-else", state.x, state.y, 1, null);
+		const t = inFrontOf(9, state.x, state.y);
 		const caught = tickPlayer(
 			state,
 			neutral(),

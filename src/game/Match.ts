@@ -1440,6 +1440,7 @@ export class Match {
 			// do not carry the item world state, so nothing is drawn — the same
 			// rule the black hole's replay follows, minus the recorded field.
 			this.items.syncHeGrenades([], this.itemClock);
+			this.items.syncTrapCanisters([], this.itemClock);
 			this.items.syncTraps([], "", null);
 			this.items.syncSmokeGrenades([], this.itemClock);
 			this.items.syncSmokeClouds([], "", null);
@@ -1448,6 +1449,7 @@ export class Match {
 		}
 
 		this.items.syncHeGrenades(session.heGrenades, session.renderClock);
+		this.items.syncTrapCanisters(session.trapCanisters, session.renderClock);
 		this.items.syncTraps(session.traps, session.manager.myId, session.myTeam);
 		this.items.syncSmokeGrenades(session.smokeGrenades, session.renderClock);
 		this.items.syncSmokeClouds(

@@ -129,6 +129,7 @@ import {
 	launchGrenade,
 	launchHeGrenade,
 	launchSmokeGrenade,
+	launchTrapCanister,
 	MASSIVE_BLAST_DAMAGE,
 	MASSIVE_BLAST_KNOCKBACK_PX_S,
 	MASSIVE_BLAST_RADIUS_PX,
@@ -144,7 +145,6 @@ import {
 	PLUNGE_CARRY_MS,
 	type PlayerIntent,
 	type PlayerPosition,
-	placeTrap,
 	plungeCatchRect,
 	rectsOverlap,
 	reserveRoundsFor,
@@ -159,14 +159,17 @@ import {
 	singularityGrip,
 	smokeGrenadeEnd,
 	sweptThrustBox,
+	TRAP_COLLIDE_R,
 	TRAP_DAMAGE,
 	type Trap,
+	type TrapCanisterState,
 	tickBullet,
 	tickGrenade,
 	tickHeGrenade,
 	tickPlayer,
 	tickReload,
 	tickSmokeGrenade,
+	tickTrapCanister,
 	trapCatches,
 	trapFor,
 	ULT_CHARGE_MELEE_MULTIPLIER,
@@ -574,6 +577,13 @@ export class GameRoom {
 	// no simulation state), but the concealment is re-derived from the list
 	// every snapshot.
 	private traps: Trap[] = [];
+	/**
+	 * Trap canisters in flight. The trap is *thrown*: a canister arcs out of
+	 * the fighter's hand, inheriting their momentum, and plants into an armed
+	 * trap where it touches the floor. Server-owned and dead-reckoned by the
+	 * client, exactly like an HE grenade.
+	 */
+	private trapCanisters: TrapCanisterState[] = [];
 	private heGrenades: HeGrenadeState[] = [];
 	private smokeGrenades: SmokeGrenadeState[] = [];
 	private smokeClouds: SmokeCloud[] = [];
@@ -1674,6 +1684,13 @@ export class GameRoom {
 		player.itemHeld = false;
 		this.refillMagazine(player);
 		this.traps = this.traps.filter((t) => t.ownerId !== player.id);
+		// A throw in flight leaves with the thrower too: the canister is part of
+		// the life that spent the charge, and a dead fighter's arc landing a
+		// fresh mine after the respawn would be the same stacking the floor
+		// rule exists to stop.
+		this.trapCanisters = this.trapCanisters.filter(
+			(c) => c.ownerId !== player.id,
+		);
 		// The dead fighter's clouds leave the floor with them, exactly like
 		// their traps: a respawn is a new life, and a new life does not stack
 		// yesterday's concealment on top of today's two charges.
@@ -2007,8 +2024,11 @@ export class GameRoom {
 			blossom: this.blossom ? { ...this.blossom } : null,
 			cinematic,
 			// Traps are fed into `tickPlayer` the same way the singularity is, so
-			// they travel in full every snapshot too.
+			// they travel in full every snapshot too. The canisters in flight
+			// dead-reckon like bullets — position and velocity, anchored by the
+			// client on first sight.
 			traps: this.traps.map((t) => ({ ...t })),
+			trapCanisters: this.trapCanisters.map((c) => ({ ...c })),
 			heGrenades: this.heGrenades.map((g) => ({
 				id: g.id,
 				ownerId: g.ownerId,
@@ -2161,7 +2181,11 @@ export class GameRoom {
 			// The hole this fighter is in, if any — already filtered for friendly
 			// fire, so the caster is handed null and walks through their own field.
 			// The kit is the hero's weapons: an argument, never state, so the two
-			// sides cannot disagree about which table a move belongs to.
+			// sides cannot disagree about which table a move belongs to. The traps
+			// are the same shape of argument — filtered by the same `trapFor` the
+			// client's prediction uses — because the lock is a timer both sides
+			// simulate. Without them the *server* never sets `trapTimer` and the
+			// first snapshot after a spring erases the root the client predicted.
 			player.state = tickPlayer(
 				player.state,
 				input,
@@ -2169,6 +2193,7 @@ export class GameRoom {
 				this.world,
 				fieldFor(this.singularity, player.id, player.team),
 				kitFor(player.hero),
+				trapFor(this.traps, player.id, player.team),
 			);
 			this.noteBlasts(player, prev);
 
@@ -3023,20 +3048,21 @@ export class GameRoom {
 			return;
 		}
 
-		// The trap is left on the floor right in front of the fighter. It needs
-		// a floor under the feet to mean anything, so an airborne placement is
-		// refused (the charge is returned).
-		if (!player.state.grounded) {
-			player.itemCharges++;
-			return;
-		}
-		this.traps.push(
-			placeTrap(
+		// The trap is *thrown*, from the air as happily as from the floor: a
+		// canister arcs out of the hand under its own gravity — inheriting the
+		// thrower's momentum, so a throw out of a dash or a fall carries — and
+		// plants into an armed trap where it touches the ground. Aiming the
+		// landing patch is the skill; the arc is the counterplay, because
+		// everybody gets to watch it come down.
+		this.trapCanisters.push(
+			launchTrapCanister(
 				this.nextItemId++,
 				player.id,
-				player.state.x,
-				player.state.y,
-				player.state.facing,
+				player.state.x + PLAYER_WIDTH / 2,
+				player.state.y + PLAYER_HEIGHT / 2,
+				player.lastInput.aimAngle,
+				player.state.vx,
+				player.state.vy,
 				player.team,
 			),
 		);
@@ -3073,12 +3099,19 @@ export class GameRoom {
 		player.state.reloadTimer = 0;
 	}
 
-	/** Advance HE grenades, smoke canisters, the clouds and the traps. */
+	/** Advance HE grenades, smoke canisters, the clouds, the traps and the canisters in flight. */
 	private tickItems(dt: number) {
 		this.tickHeGrenades(dt);
 		this.tickSmokeGrenades(dt);
 		this.tickSmokeClouds(dt);
+		// The spring runs before the planting: a canister that lands this tick
+		// becomes an armed trap only for the *next* tick's `tickPlayer`, so the
+		// fighter standing on it gets the lock first and the spring (damage,
+		// destruction) follows it — never the other way around, which would
+		// destroy a trap on the same tick it planted without ever locking
+		// anybody.
 		this.tickTraps();
+		this.tickTrapCanisters(dt);
 	}
 
 	private tickHeGrenades(dt: number) {
@@ -3283,6 +3316,34 @@ export class GameRoom {
 			this.traps[kept++] = trap;
 		}
 		this.traps.length = kept;
+	}
+
+	/**
+	 * Advance the trap canisters in flight. A canister that touches the floor
+	 * **plants**: it becomes an armed trap at its landing spot, carrying the
+	 * thrower's side, and the flight is over. Compact in place, like the
+	 * grenades.
+	 */
+	private tickTrapCanisters(dt: number) {
+		if (this.trapCanisters.length === 0) return;
+		let kept = 0;
+		for (const c of this.trapCanisters) {
+			if (tickTrapCanister(c, dt, this.world)) {
+				// The canister's box bottoms out on the floor, so the trap's
+				// patch sits at the landing spot's floor line — the same "feet
+				// level" `placeTrap` used to hand the server.
+				this.traps.push({
+					id: c.id,
+					ownerId: c.ownerId,
+					ownerTeam: c.ownerTeam,
+					x: c.x,
+					y: c.y + TRAP_COLLIDE_R,
+				});
+				continue;
+			}
+			this.trapCanisters[kept++] = c;
+		}
+		this.trapCanisters.length = kept;
 	}
 
 	/** Advance grenades in flight and the open singularity. */
@@ -3494,6 +3555,7 @@ export class GameRoom {
 		this.meleeEvents.length = 0;
 		this.denies.length = 0;
 		this.traps = [];
+		this.trapCanisters.length = 0;
 		this.heGrenades.length = 0;
 		this.smokeGrenades.length = 0;
 		this.smokeClouds.length = 0;

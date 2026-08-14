@@ -327,6 +327,13 @@ export interface GameSnapshot {
 	cinematic: SnapshotCinematic | null;
 	/** Anands' floor traps, as they stand. Cleared on a round reset. */
 	traps: SnapshotTrap[];
+	/**
+	 * Anands' trap canisters in flight. Server-owned, dead-reckoned like
+	 * bullets: the client anchors one on first sight and runs the shared
+	 * `tickTrapCanister` until the snapshot says it planted (the canister is
+	 * gone and an armed trap sits where it landed).
+	 */
+	trapCanisters: SnapshotTrapCanister[];
 	/** HE grenades in flight. Server-owned, dead-reckoned like bullets. */
 	heGrenades: SnapshotHeGrenade[];
 	/** Jeffs' smoke canisters in flight. Server-owned, dead-reckoned like bullets. */
@@ -357,6 +364,19 @@ export interface SnapshotTrap {
 	/** Centre, in world coordinates. */
 	x: number;
 	y: number;
+}
+
+/** A trap canister in flight. Server-owned, like a bullet. */
+export interface SnapshotTrapCanister {
+	id: number;
+	ownerId: string;
+	/** The thrower's side — the planted trap inherits it. */
+	ownerTeam: TeamId | null;
+	x: number;
+	y: number;
+	/** Carried so the client can dead-reckon the arc between snapshots. */
+	vx: number;
+	vy: number;
 }
 
 /** An HE grenade in flight. Server-owned, like a bullet. */

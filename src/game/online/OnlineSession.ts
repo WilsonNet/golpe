@@ -64,6 +64,7 @@ import type {
 	SnapshotSmokeCloud,
 	SnapshotSmokeGrenade,
 	SnapshotTrap,
+	SnapshotTrapCanister,
 	TrappedMsg,
 } from "./types";
 import { GAME_SERVER_PORT } from "./types";
@@ -268,8 +269,9 @@ export class OnlineSession {
 	private readonly pendingTeleports = new Set<string>();
 
 	private latestSnapshot: GameSnapshot | undefined;
-	/** The room's traps and HE grenades, as the newest snapshot reports them. */
+	/** The room's traps, trap canisters and HE grenades, as the newest snapshot reports them. */
 	private latestTraps: SnapshotTrap[] = [];
+	private latestTrapCanisters: SnapshotTrapCanister[] = [];
 	private latestHeGrenades: SnapshotHeGrenade[] = [];
 	/** Jeffs' smoke canisters and clouds, as the newest snapshot reports them. */
 	private latestSmokeGrenades: SnapshotSmokeGrenade[] = [];
@@ -470,6 +472,11 @@ export class OnlineSession {
 	/** HE grenades in flight, straight off the newest snapshot. */
 	get heGrenades(): readonly SnapshotHeGrenade[] {
 		return this.latestHeGrenades;
+	}
+
+	/** Trap canisters in flight, straight off the newest snapshot. */
+	get trapCanisters(): readonly SnapshotTrapCanister[] {
+		return this.latestTrapCanisters;
 	}
 
 	/** Smoke canisters in flight, straight off the newest snapshot. */
@@ -1149,6 +1156,9 @@ export class OnlineSession {
 	 */
 	private absorbItems(snap: GameSnapshot) {
 		this.latestTraps = (snap.traps ?? []).map((t) => ({ ...t }));
+		this.latestTrapCanisters = (snap.trapCanisters ?? []).map((c) => ({
+			...c,
+		}));
 		this.latestHeGrenades = (snap.heGrenades ?? []).map((g) => ({ ...g }));
 		this.latestSmokeGrenades = (snap.smokeGrenades ?? []).map((g) => ({
 			...g,

@@ -76,6 +76,7 @@ export type {
 	SmokeCloud,
 	SmokeGrenadeState,
 	Trap,
+	TrapCanisterState,
 } from "./Items.js";
 /**
  * Items, re-exported by name for the same reason melee and the ultimate are:
@@ -92,12 +93,14 @@ export {
 	heGrenadeTouches,
 	launchHeGrenade,
 	launchSmokeGrenade,
-	placeTrap,
+	launchTrapCanister,
 	SMOKE_DURATION_MS,
 	smokeGrenadeEnd,
+	TRAP_COLLIDE_R,
 	TRAP_DAMAGE,
 	tickHeGrenade,
 	tickSmokeGrenade,
+	tickTrapCanister,
 	trapCatches,
 	trapFor,
 } from "./Items.js";

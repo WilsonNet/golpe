@@ -3,7 +3,7 @@
  * ranged weapon. See specs/items.md.
  *
  * Like weapons, items are **not unique to a hero**: Lia throws an HE grenade,
- * Anands plants a trap, and a future hero could carry either. Unlike weapons —
+ * Anands throws a trap, and a future hero could carry either. Unlike weapons —
  * and like the ultimate — every use is a **server decision**, because a use
  * spends a charge only the server counts: it decides whether the fighter was
  * alive, unfrozen and not stunned, and it owns the consequence (the grenade,
@@ -43,9 +43,11 @@ import {
 	SMOKE_RADIUS,
 	SMOKE_REST_VY,
 	SMOKE_RESTITUTION,
+	TRAP_COLLIDE_R,
 	TRAP_DAMAGE,
-	TRAP_PLACE_OFFSET,
 	TRAP_RADIUS,
+	TRAP_THROW_GRAVITY,
+	TRAP_THROW_SPEED,
 	TRAP_TRIGGER_MS,
 } from "../../tweakables/items.js";
 import {
@@ -76,9 +78,11 @@ export {
 	SMOKE_GRENADE_SPEED,
 	SMOKE_PUFF_SCALE,
 	SMOKE_RADIUS,
+	TRAP_COLLIDE_R,
 	TRAP_DAMAGE,
-	TRAP_PLACE_OFFSET,
 	TRAP_RADIUS,
+	TRAP_THROW_GRAVITY,
+	TRAP_THROW_SPEED,
 	TRAP_TRIGGER_MS,
 };
 
@@ -210,6 +214,10 @@ export function heBlastDamage(distPx: number): number {
  * catches somebody it bursts into particles and is gone, exactly like a Dota
  * mine. A trap is either on the floor and armed or it no longer exists; there
  * is no spent state to draw.
+ *
+ * The armed trap is the *second* act of the item: the first is the thrown
+ * `TrapCanister` that arcs out of the hand and plants into one of these where
+ * it touches the floor.
  */
 export interface Trap {
 	id: number;
@@ -220,22 +228,83 @@ export interface Trap {
 	y: number;
 }
 
-/** Put a trap down at the fighter's feet, one step in front of them. */
-export function placeTrap(
+/**
+ * A trap canister in flight. Server-owned, dead-reckoned like a bullet.
+ *
+ * The trap is *thrown*, not laid: the canister arcs out of the fighter's hand,
+ * gravity pulls it down, and the moment it touches the floor it plants into an
+ * armed `Trap` at its landing spot. The throw inherits the thrower's momentum,
+ * so a trap thrown out of a dash carries — the canister's initial velocity is
+ * the throw plus the fighter's own.
+ */
+export interface TrapCanisterState {
+	id: number;
+	ownerId: string;
+	ownerTeam: TeamId | null;
+	x: number;
+	y: number;
+	vx: number;
+	vy: number;
+}
+
+/**
+ * Launch a trap canister from the fighter's hand.
+ *
+ * `momentumX`/`momentumY` are the thrower's own velocity at the press, added
+ * to the throw — a moving throw carries, and a dash-throw reaches places a
+ * standing throw cannot. Deterministic and shared, so the client's dead-reckon
+ * starts from the same numbers the server ticks.
+ */
+export function launchTrapCanister(
 	id: number,
 	ownerId: string,
 	x: number,
 	y: number,
-	facing: number,
+	angle: number,
+	momentumX: number,
+	momentumY: number,
 	ownerTeam: TeamId | null = null,
-): Trap {
+): TrapCanisterState {
 	return {
 		id,
 		ownerId,
 		ownerTeam,
-		x: x + PLAYER_WIDTH / 2 + facing * TRAP_PLACE_OFFSET,
-		y: y + PLAYER_HEIGHT,
+		x,
+		y,
+		vx: Math.cos(angle) * TRAP_THROW_SPEED + momentumX,
+		vy: Math.sin(angle) * TRAP_THROW_SPEED + momentumY,
 	};
+}
+
+/**
+ * Advance one canister, resolving it against the world. Mutates in place,
+ * like `tickHeGrenade`. Returns true when it **plants**: the moment the
+ * canister touches the floor, it is an armed trap at its landing spot.
+ *
+ * The trap does not bounce — that is the whole difference from the HE. A wall
+ * or the ceiling scrubs the offending velocity and gravity carries the
+ * canister down to plant at the wall's base; only the floor ends the flight.
+ * Deterministic and shared, so the client's dead-reckon plants in exactly the
+ * place the server does.
+ */
+export function tickTrapCanister(
+	c: TrapCanisterState,
+	dt: number,
+	world: World = DEFAULT_WORLD,
+): boolean {
+	c.vy += TRAP_THROW_GRAVITY * dt;
+	const r = TRAP_COLLIDE_R;
+	const box: MovingBox = { x: c.x - r, y: c.y - r, w: r * 2, h: r * 2 };
+	const contacts = moveAndCollide(box, c.vx * dt, c.vy * dt, world);
+	c.x = box.x + r;
+	c.y = box.y + r;
+	if (contacts.wall !== "none") c.vx = 0;
+	if (contacts.ceiling && c.vy < 0) c.vy = 0;
+	if (contacts.grounded) {
+		c.vy = 0;
+		return true;
+	}
+	return false;
 }
 
 /**

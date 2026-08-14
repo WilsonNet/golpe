@@ -105,13 +105,25 @@ export const HE_GRENADE_TOUCH_PX = 20;
 // ---------------------------------------------------------------------------
 
 /**
- * How far in front of the body's centre the trap is placed.
+ * The trap's throw speed along the aim angle.
  *
- * "Right in front of her": past the leading edge by a clear step, so an enemy
- * chasing into the fighter's space walks over it and an enemy who has already
- * crossed (backstab territory) is behind it.
+ * The trap is *thrown*, not laid: a canister arcs out of the fighter's hand and
+ * plants into an armed mine where it touches the floor. The speed is the
+ * smoke's — the trap is the smoke's structural cousin, and the two throws
+ * should read as the same gesture with a heavier payload.
  */
-export const TRAP_PLACE_OFFSET = 30;
+export const TRAP_THROW_SPEED = 700;
+
+/**
+ * The canister's own gravity — a touch heavier than the grenades' 900, so a
+ * trap reads as *planted* rather than lobbed: the throw is about choosing the
+ * landing patch, and a trap that floats reads as a grenade that forgot to
+ * explode.
+ */
+export const TRAP_THROW_GRAVITY = 1000;
+
+/** The canister's collision radius, as a box — a small object, not a body. */
+export const TRAP_COLLIDE_R = 6;
 
 /**
  * The trigger radius around the trap's centre, measured to the victim's feet.

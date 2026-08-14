@@ -1299,40 +1299,92 @@ const BATTERY: BatteryRow[] = [
 	},
 
 	{
-		name: "a trap catches the walking dummy",
+		name: "a trap catches the walking dummy and roots it for the full 3s",
 		dagger: true,
-		// Custom run: the trap has to be laid, then the *dummy* has to walk into
-		// it — the trap's whole behaviour is about where the other fighter
-		// goes, so a scenario that only pressed buttons at the player would
-		// never spring anything.
+		// Custom run: the trap has to be thrown, then the *dummy* has to walk into
+		// it — the trap's whole behaviour is about where the other fighter goes,
+		// so a scenario that only pressed buttons at the player would never
+		// spring anything. The root itself is measured: the dummy keeps pressing
+		// left through the lock, so its x staying put for 3s and then moving is
+		// the lock doing its job, sampled at 2.2s (still rooted) and 3.7s (free).
 		async run(page) {
-			await page.evaluate(async () => {
+			return await page.evaluate(async () => {
 				// `reset` clears the counters after its own settle, so it has to
 				// be awaited before the trap is laid — otherwise the trap's spring
 				// can race the counter reset.
 				await window.__training!.reset();
 				await new Promise((r) => setTimeout(r, 300));
-				// Lay the trap one step in front of the player, facing the dummy.
-				await window.__training!.input({ item: true }, 60, 0);
+				// Throw the trap at the dummy's feet: the canister arcs under its
+				// own gravity and plants a step short of the aim, right in the
+				// path the dummy walks left across.
+				const s = window.__training!.state();
+				const angle = Math.atan2(
+					s.dummy.y + 48 - (s.local.y + 24),
+					Math.max(1, s.dummy.x - s.local.x),
+				);
+				await window.__training!.input({ item: true }, 60, angle);
 				await new Promise((r) => setTimeout(r, 400));
-				// Walk the dummy left, straight across where the trap is.
+				// Walk the dummy left for a long beat: long enough that the 3s
+				// lock visibly ends before the script does, so the *resume* is
+				// observable rather than an idle coincidence.
 				await window.__training!.set({
 					behaviour: "script",
 					script: {
-						beats: [{ ms: 1500, hold: { moveLeft: true } }],
+						beats: [{ ms: 7000, hold: { moveLeft: true } }],
 						loop: false,
 					},
 				});
-				await new Promise((r) => setTimeout(r, 2000));
+				await new Promise((r) => setTimeout(r, 300));
+				// The spring: the dummy crosses the planted trap within a second
+				// of walking.
+				let sprungX: number | null = null;
+				for (let i = 0; i < 60; i++) {
+					await new Promise((r) => setTimeout(r, 50));
+					if (window.__training!.report().trapped >= 1) {
+						sprungX = window.__training!.state().dummy.x;
+						break;
+					}
+				}
+				if (sprungX === null) {
+					throw new Error("the dummy never walked onto the trap");
+				}
+				// 2.2s into the 3s lock: still rooted, the held walk moves nobody.
+				await new Promise((r) => setTimeout(r, 2200));
+				const lockedX = window.__training!.state().dummy.x;
+				// 1.5s later (3.7s after the spring): the lock has lifted and the
+				// walk has resumed.
+				await new Promise((r) => setTimeout(r, 1500));
+				const freeX = window.__training!.state().dummy.x;
+				return {
+					report: window.__training!.report(),
+					extra: { sprungX, lockedX, freeX },
+				};
 			});
-			return { report: await report(page), extra: {} };
 		},
-		verify(report) {
+		verify(report, { sprungX, lockedX, freeX }) {
 			const c = checks(report);
 			c.atLeast("trap springs", report.trapped, 1);
 			// The little bit of damage that makes a sprung trap read as having
 			// done something.
 			c.atLeast("trap damage", report.player.damageDealt, 10);
+			// The root is a *root*: 2.2s into a 3s lock the dummy has not moved
+			// a pixel despite holding left the whole time.
+			// The root is a *root*: 2.2s into a 3s lock the dummy has not walked —
+			// a couple of px of reconciliation glide while the 20Hz snapshot
+			// settles is noise; the 484px a free walk would cover is not.
+			c.eq(
+				"rooted at 2.2s",
+				Math.abs(lockedX - sprungX) < 10,
+				true,
+			);
+			// And the lock ends: 3.7s after the spring the walk is moving again.
+			c.eq("walk resumed after the lock", freeX < lockedX - 60, true);
+			// The samples themselves, so a failure says what the lock actually did.
+			if (c.fails.length) {
+				c.fails.push(
+					`root samples: sprung ${sprungX} → locked ${lockedX} → free ${freeX}`,
+				);
+			}
 			return c.fails;
 		},
 	},

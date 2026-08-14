@@ -60,13 +60,28 @@ damage that **falls off linearly from the epicentre**.
 
 ## Anands: the trap
 
-A floor hazard laid one step in front of the fighter — a **landmine seen from
-the side**, a squat dome sitting on the floor. It is **visible to anyone** — the
-seeing it is the whole of the counterplay — and **single-use**: nothing can
-destroy it before it springs, but the moment an enemy's feet cross its patch it
-**bursts into particles and is destroyed**, exactly like a Dota mine. A trap is
-either on the floor and armed or it no longer exists.
+A **landmine seen from the side** — a squat dome sitting on the floor. It is
+**thrown**, not laid: the press hurls a canister out of the hand along the aim
+angle, under its own gravity, and the moment it touches the floor it plants
+into an armed mine at its landing spot. It is **visible to anyone** — the
+seeing it is the whole of the counterplay, and an arc everyone can watch come
+down is a louder warning than a mine already sitting there — and
+**single-use**: nothing can destroy it before it springs, but the moment an
+enemy's feet cross its patch it **bursts into particles and is destroyed**,
+exactly like a Dota mine. A trap is either on the floor and armed or it no
+longer exists.
 
+- **The throw takes the thrower's momentum.** The canister's launch velocity
+  is the throw plus the fighter's own velocity at the press, so a dash-throw
+  or a throw out of a fall carries — momentum is the reward for throwing on
+  the move, and a standing throw lands a step short of the aim. The canister
+  flies under `TRAP_THROW_GRAVITY` and does **not** bounce: a wall or the
+  ceiling scrubs the offending velocity and the canister slides down to plant
+  at the wall's base. Only the floor ends the flight.
+- **Airborne throws are legal.** The old grounded-only placement is gone: the
+  charge is spent wherever the press finds the fighter, and throwing from the
+  air is the move — a trap dropped from a double-jump plants at the feet
+  below.
 - **Friendly traps are faded.** Your own traps and every teammate's are drawn
   at a fraction of full opacity, so "whose side is this mine on" is answered at
   a glance and a friendly trap never does the worrying for you. An enemy's trap
@@ -95,10 +110,12 @@ either on the floor and armed or it no longer exists.
   Anands can still cast her ultimate, and a rider caught as the trap springs
   keeps riding — the one voluntary movement the trap lets through.
 - The lock is carried in `PlayerPosition.trapTimer`, set inside `tickPlayer` on
-  both sides, so a caught fighter's own client reels exactly as the server says
-  — the same prediction property the black hole's pull relies on. The trap's
-  *consequences* — its destruction, the damage, the burst and the caption — are
-  the server's alone.
+  **both** sides — the server's tick passes the same `trapFor`-filtered traps
+  the client's prediction does, so the lock is authoritative, not a client-side
+  hope that the next snapshot erases. A caught fighter's own client reels
+  exactly as the server says — the same prediction property the black hole's
+  pull relies on. The trap's *consequences* — its destruction, the damage, the
+  burst and the caption — are the server's alone.
 - It deals a little damage (10) — not a kill tool, the reward for reading where
   somebody was going to stand, and the thing that makes a sprung trap read as
   having done something.
@@ -148,20 +165,23 @@ costs a caption, never the consequence, which is already in the victim's state.
 Traps travel in the snapshot **in full, every snapshot** — like the singularity,
 because the client feeds them into `tickPlayer` for every fighter it predicts.
 A trap in the list is armed; the server removes one the tick it springs, so
-there is no spent state on the wire. HE grenades travel like bullets (position
-+ velocity, dead-reckoned by the client through the same bounce the server
-runs). Smoke canisters travel like HE grenades; smoke **clouds** travel in full
-every snapshot too — they are not fed into `tickPlayer` (they change no
-simulation state), but the concealment is re-derived from the list every
-snapshot, so a lost datagram costs a puff at most and never a false clear.
-The `trapped` and `explosions` event lists are one-shot effects, drained
-every snapshot.
+there is no spent state on the wire. Trap canisters in flight travel like HE
+grenades — position + velocity, dead-reckoned by the client through the same
+`tickTrapCanister` the server runs, so the arc plants in exactly the place the
+server's does (the snapshot then shows the canister gone and an armed trap at
+its landing spot). HE grenades travel like bullets. Smoke canisters travel like
+HE grenades; smoke **clouds** travel in full every snapshot too — they are not
+fed into `tickPlayer` (they change no simulation state), but the concealment is
+re-derived from the list every snapshot, so a lost datagram costs a puff at
+most and never a false clear. The `trapped` and `explosions` event lists are
+one-shot effects, drained every snapshot.
 
 ## Bots
 
 Bots play the item. Lia's brain throws the grenade at medium range with line of
-sight; Anands' lays a trap in the path of a nearby enemy. Both respect a cooldown
-so the finite resource is not dumped in one exchange.
+sight; Anands' throws a trap at the feet of a nearby enemy, so the arc plants it
+in the rush path. Both respect a cooldown so the finite resource is not dumped
+in one exchange.
 
 ## Not implemented
 
