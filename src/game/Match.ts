@@ -18,6 +18,7 @@ const SPRITE_ANCHOR_CENTRE = 0.5;
  */
 
 import { Container, Sprite } from "pixi.js";
+import { pelletDamageAt } from "../tweakables/ranged.js";
 import { type AIConfig, randomBotConfig } from "./characters/AIConfig";
 import { EnemyBrain } from "./characters/EnemyBrain";
 import type { AIInput, AIOutput, AllyInfo, FoeInfo } from "./characters/types";
@@ -102,6 +103,7 @@ import {
 	applyHitToDefender,
 	applyMeleeResult,
 	bodyRect,
+	bulletDistanceFromMuzzle,
 	canFire,
 	createPlayerState,
 	fieldAffects,
@@ -2805,8 +2807,8 @@ export class Match {
 	}
 
 	private bulletTargets(foe: FighterEntity): BulletTarget[] {
-		const localDamage = kitFor(this.hero).ranged.damage;
-		const foeDamage = kitFor(this.foeHero()).ranged.damage;
+		const localRanged = kitFor(this.hero).ranged;
+		const foeRanged = kitFor(this.foeHero()).ranged;
 		return [
 			{
 				owner: "enemy",
@@ -2814,7 +2816,15 @@ export class Match {
 				y: foe.body.y,
 				alive: foe.fighter.hp > 0,
 				state: foe.body,
-				onHit: () => this.applyOfflineDamage(foe, localDamage, "bullet"),
+				// The round that landed rides the callback so the falloff the
+				// server reads at range is read here too — a shotgun pellet
+				// that flew 150px hurts the same online and off.
+				onHit: (b) =>
+					this.applyOfflineDamage(
+						foe,
+						pelletDamageAt(localRanged, bulletDistanceFromMuzzle(b)),
+						"bullet",
+					),
 			},
 			{
 				owner: "player",
@@ -2822,7 +2832,12 @@ export class Match {
 				y: this.local.body.y,
 				alive: this.local.fighter.hp > 0,
 				state: this.local.body,
-				onHit: () => this.applyOfflineDamage(this.local, foeDamage, "bullet"),
+				onHit: (b) =>
+					this.applyOfflineDamage(
+						this.local,
+						pelletDamageAt(foeRanged, bulletDistanceFromMuzzle(b)),
+						"bullet",
+					),
 			},
 		];
 	}

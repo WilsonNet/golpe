@@ -33,7 +33,8 @@ cone-spread burst.
 | Cooldown | 900ms (vs the rifle's 250) |
 | Damage per pellet | 17 (102 if all six land) |
 | Pellet speed | 900 px/s |
-| Spread | ±10°, six fixed angles |
+| Spread | ±16°, six fixed angles |
+| Falloff | full ≤ 60px → 3 per pellet by 200px |
 | Magazine | 5 shells |
 | Reload | shell-by-shell — 1300ms for the rack from empty, 1200ms per shell after |
 
@@ -44,18 +45,26 @@ cone-spread burst.
 - **Point blank is lethal.** Six pellets at touching range all land: 102
   damage, a one-shot kill against a full bar. The weapon's entire identity is
   in that number — a shotgun that needed two blasts at touching range would be
-  a slow pistol.
+  a slow pistol. The one-shot is the whole point of walking into smoke.
 - **The spread is the range.** The cone is fixed at the muzzle, so distance
-  *is* the miss: at 60px every pellet connects; at 200px the edge pellets are
-  off a 32px body and only the middle lands; at 400px the blast is a warning
-  shot. There is no damage falloff — the cone already is the falloff, and a
-  pellet that lands at any distance hits for the same 17.
+  *is* the miss: at 60px every pellet connects; by a hundred px the edge
+  pellets are leaving a 32px body and only the middle four land; by 500px the
+  fan has drifted off even the middle. No randomness — the six angles are
+  fixed, so both sides spawn the same pattern from the same aim and the
+  client's prediction never disagrees with the server's.
+- **And the falloff is the range too.** A pellet that lands at a distance does
+  less damage: the full 17 within 60px of the muzzle, sliding linearly down to
+  a 3-per-pellet floor by 200px. This is the second, standard shotgun lever —
+  TF2's scattergun falls 175%→53% over distance, Reaper's hellfire to about a
+  third — and it is what makes the blast a point-blank weapon rather than a
+  cone-shaped rifle: at 100px the four pellets that connect are at 13 each (52,
+  half a bar, follow-up territory), at 140px a third of a bar, at 200px a
+  warning shot. Only the shotgun has a falloff; the rifle and the machine gun
+  deal their card damage at any range, and a shotgun pellet that never left
+  the muzzle hurts for the full 17.
 - **Pellets are bullets.** Each is an ordinary server-owned bullet: blocked
   by a front guard, stopped by geometry, dead-reckoned by the client. Six
   pellets into a raised guard is six absorbed shots.
-- **The fan is deterministic.** The six angles are fixed (`-10°…+10°` in even
-  steps) — no randomness, so both sides spawn the same pattern from the same
-  aim and the client's prediction never disagrees with the server's.
 - **Five shells, TF2's reload.** The shotgun loads one shell at a time, the
   rack from empty the slow one, and firing mid-reload keeps the loaded shells
   and loses only the shell being loaded. Each shell takes **longer than the
@@ -173,7 +182,7 @@ the coordinator.
   thrust, the shoryuken or a massive would end the channel the moment it
   lands, so a storm thrown into that tell is a storm that dies unborn.
 - **The executioner's stance.** The sword is the default at every range; the
-  shotgun is a *point-blank finisher* — a jeffs bot pulls it at ~140px when
+  shotgun is a *point-blank finisher* — a jeffs bot pulls it at ~100px when
   the blast is the answer (a reeling foe is a free blast; a killshot is worth
   the gamble; both rolled once per approach), fires once, and holsters again
   so the sword covers the 900ms cooldown. A jeffs bot that kited with the

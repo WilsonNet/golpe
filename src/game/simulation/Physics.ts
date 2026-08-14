@@ -1198,6 +1198,15 @@ export interface BulletState {
 	vx: number;
 	vy: number;
 	/**
+	 * The muzzle this round left. The distance from here to the round's
+	 * present position is what a weapon's damage falloff is measured against —
+	 * a shotgun pellet that has flown 150px has lost most of its punch. Absent
+	 * means the round never travelled (or the weapon has no falloff), and
+	 * `bulletDistanceFromMuzzle` reads zero — full damage.
+	 */
+	originX?: number;
+	originY?: number;
+	/**
 	 * One round of a shotgun's fan — drawn smaller and dimmer than a full
 	 * shot, and nothing else about it differs. Absent means an ordinary
 	 * bullet; a stale server running without the field simply draws full
@@ -1209,6 +1218,12 @@ export interface BulletState {
 export function tickBullet(b: BulletState, dt: number): void {
 	b.x += b.vx * dt;
 	b.y += b.vy * dt;
+}
+
+/** How far this round has flown from the muzzle that fired it, in px. */
+export function bulletDistanceFromMuzzle(b: BulletState): number {
+	if (b.originX === undefined || b.originY === undefined) return 0;
+	return Math.hypot(b.x - b.originX, b.y - b.originY);
 }
 
 export function isBulletOutOfBounds(

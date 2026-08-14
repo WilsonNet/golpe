@@ -82,10 +82,15 @@ produced a second sprite nothing simulated — it froze on screen forever.
     carries a `MeleeMove`, which a bullet is not.
 - Bullets spawn at the **centre** of the firing body, not its top-left corner.
 - **A shotgun fires a deterministic fan of pellets.** A pellet is an ordinary
-  bullet; the cone is six fixed angles spread ±10° around the aim, fired at
+  bullet; the cone is six fixed angles spread ±16° around the aim, fired at
   once. The weapon's cooldown, pellet damage and pellet speed are its stat
   card (`RANGED_WEAPONS.shotgun`), and the fan is fixed so client and server
-  always spawn the same pattern from the same aim.
+  always spawn the same pattern from the same aim. It is the one weapon with a
+  **distance damage falloff**: a pellet's damage is the card's, read at the
+  distance it has flown from the muzzle (`pelletDamageAt`), sliding from full
+  within `falloffStartPx` down to a `minDamage` floor by `falloffEndPx`. Only
+  the shotgun carries one; a rifle or machine-gun round is its card damage at
+  any range.
 
 ## The magazine and the reload
 

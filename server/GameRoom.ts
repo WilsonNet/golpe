@@ -71,7 +71,10 @@ import type {
 	TrainingFighterStats,
 	TrainingStateMsg,
 } from "../src/game/training/types.js";
-import { DEGREES_PER_PI_RADIANS } from "../src/tweakables/ranged.js";
+import {
+	DEGREES_PER_PI_RADIANS,
+	pelletDamageAt,
+} from "../src/tweakables/ranged.js";
 import { botName, sanitiseName, uniqueName } from "./BotNames.js";
 import { PotgRecorder } from "./PlayOfTheGame.js";
 import {
@@ -90,6 +93,7 @@ import {
 	bodyRect,
 	bombBlastFor,
 	bombFallHeight,
+	bulletDistanceFromMuzzle,
 	bulletHitsPlatform,
 	bulletHitsPlayer,
 	canFire,
@@ -2221,6 +2225,11 @@ export class GameRoom {
 						ownerId: player.id,
 						x: muzzleX,
 						y: muzzleY,
+						// The muzzle, kept for the damage falloff: a shotgun
+						// pellet is judged by how far it has flown, and
+						// distance needs a place it started from.
+						originX: muzzleX,
+						originY: muzzleY,
 						vx: Math.cos(angle) * kit.ranged.speed,
 						vy: Math.sin(angle) * kit.ranged.speed,
 						pellet: pellets > 1,
@@ -2719,9 +2728,15 @@ export class GameRoom {
 			let consumed = false;
 			const shooter = this.players.get(b.ownerId);
 			// The bullet's damage is the shooter's weapon's — a machine gun round
-			// is worth half a pistol round, however fast the stream arrives.
+			// is worth half a pistol round, however fast the stream arrives. A
+			// shotgun's pellet is read at the distance it has flown: the falloff
+			// is why the weapon dies by a hundred px. A weapon without a falloff
+			// (the rifle, the machine gun) deals its flat card damage anywhere.
 			const shotDamage = shooter
-				? kitFor(shooter.hero).ranged.damage
+				? pelletDamageAt(
+						kitFor(shooter.hero).ranged,
+						bulletDistanceFromMuzzle(b),
+					)
 				: BULLET_DAMAGE;
 			for (const player of this.players.values()) {
 				if (b.ownerId === player.id || !player.alive) continue;

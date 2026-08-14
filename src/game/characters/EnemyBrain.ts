@@ -133,11 +133,12 @@ const SWORD_SETTLE_GRACE_PX = 12;
 const GUN_KITE_RANGE_PX = 80;
 /**
  * The shotgun's settle range: closer than the gun's kite, because the whole
- * weapon is the cone. A bot that kited at 80px with a shotgun would fire a
- * fan whose edge pellets are already off a 32px body — it has to walk in
- * until the blast actually lands, which is the weapon's whole discipline.
+ * weapon is the cone *and* the falloff. A bot that kited at 110px with a
+ * shotgun after the damage falloff landed would fire a fan that had already
+ * lost most of its punch — it has to walk in until the blast actually lands,
+ * which is the weapon's whole discipline.
  */
-const SHOTGUN_KITE_RANGE_PX = 110;
+const SHOTGUN_KITE_RANGE_PX = 80;
 const STRAFE_HURT_CHANCE = 0.2;
 const STRAFE_HALE_CHANCE = 0.4;
 const STRAFE_DIR_COINFLIP = 0.5;

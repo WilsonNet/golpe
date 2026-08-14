@@ -37,7 +37,12 @@ export interface BulletTarget {
 	 * rolling fighter is judged against its smaller roll box.
 	 */
 	state: PlayerPosition;
-	onHit: () => void;
+	/**
+	 * `bullet` is the round that landed, so a weapon's distance falloff can be
+	 * read at the range it connected — a shotgun pellet hurts less the farther
+	 * it flew, online and off.
+	 */
+	onHit: (bullet: BulletState) => void;
 }
 
 /**
@@ -103,6 +108,8 @@ export class BulletSystem {
 			ownerId: owner,
 			x,
 			y,
+			originX: x,
+			originY: y,
 			vx: Math.cos(angle) * BULLET_SPEED,
 			vy: Math.sin(angle) * BULLET_SPEED,
 			sprite,
@@ -138,6 +145,8 @@ export class BulletSystem {
 				ownerId: owner,
 				x,
 				y,
+				originX: x,
+				originY: y,
 				vx: Math.cos(a) * BULLET_SPEED,
 				vy: Math.sin(a) * BULLET_SPEED,
 				sprite,
@@ -171,8 +180,9 @@ export class BulletSystem {
 				if (!bulletHitsPlayer(b, target.state)) continue;
 				// The same rule the server applies, from the same function. The escape
 				// hatch is the one path nobody dogfoods, so it must never become a
-				// second set of combat rules.
-				if (!blocksBullet(target.state, b.vx)) target.onHit();
+				// second set of combat rules. The round itself rides the callback so
+				// the same distance falloff the server reads is read here too.
+				if (!blocksBullet(target.state, b.vx)) target.onHit(b);
 				consumed = true;
 				break;
 			}

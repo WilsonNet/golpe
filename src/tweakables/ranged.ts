@@ -43,6 +43,23 @@ export interface RangedWeaponDef {
 	pellets?: number;
 	/** Half the cone, in degrees. The fan spreads ±`spreadDeg` around the aim. */
 	spreadDeg?: number;
+	/**
+	 * Distance damage falloff, in px from the muzzle. A round that lands
+	 * `falloffStartPx` or closer deals the full `damage`; between
+	 * `falloffStartPx` and `falloffEndPx` the damage scales linearly down to
+	 * `minDamage`; beyond `falloffEndPx` it is flat `minDamage`. Absent means
+	 * no falloff — a rifle round's 10 at any range. This is the second half of
+	 * a shotgun's range (the cone is the first): every real shotgun loses
+	 * punch as it travels — TF2's scattergun falls from 175% to 52.8% over
+	 * distance, Reaper's hellfire to ~30% — and without it the cone alone
+	 * leaves all six pellets on a 32px body at a hundred px, which was a
+	 * one-shot at a range the weapon had no business killing from.
+	 */
+	falloffStartPx?: number;
+	/** The distance at which the pellet's damage stops shrinking. */
+	falloffEndPx?: number;
+	/** The floor per round, at and beyond `falloffEndPx`. */
+	minDamage?: number;
 	/** Rounds per magazine. The reload fills exactly this many. */
 	magazine: number;
 	/**
@@ -110,12 +127,18 @@ export const RANGED_WEAPONS: Record<RangedWeaponId, RangedWeaponDef> = {
 		// commitment, like the Massive — fire when you are sure, or pay.
 		cooldownMs: 900,
 		// 17 per pellet, 102 if all six land at point blank — a full bar,
-		// one blast. The cone is the range: no damage falloff, the spread
-		// already is the miss.
+		// one blast. And then the range: the cone is wide enough that the
+		// edge pellets leave a 32px body around a hundred px out, and the
+		// falloff cuts each pellet's punch from that point on — by 100px the
+		// blast is a half-bar, by 140px a third, by 200px a warning shot. A
+		// shotgun that killed at a hundred px was the rifle with a cone.
 		damage: 17,
 		speed: 900,
 		pellets: 6,
-		spreadDeg: 10,
+		spreadDeg: 16,
+		falloffStartPx: 60,
+		falloffEndPx: 200,
+		minDamage: 3,
 		// Five shells, TF2's slow shell-by-shell reload: a blast is precious,
 		// and each shell takes *longer* than the 900ms between blasts — the
 		// gun can never keep up with its own trigger, so an emptied shotgun
@@ -126,3 +149,37 @@ export const RANGED_WEAPONS: Record<RangedWeaponId, RangedWeaponDef> = {
 		reloadFirstRoundMs: 1300,
 	},
 };
+
+/**
+ * The damage one round deals, read at the distance it has travelled from the
+ * muzzle.
+ *
+ * A weapon without a falloff deals its flat card `damage` at any range; a
+ * weapon with one (the shotgun) deals the full amount up to `falloffStartPx`,
+ * then slides linearly down to `minDamage` by `falloffEndPx` and holds it. The
+ * rounding keeps HP whole numbers the way every other damage value in the game
+ * is. This is the one function both the server's `tickBullets` and the offline
+ * escape hatch's `bulletTargets` call, so a pellet that lands at range hurts
+ * exactly the same with a server in the room as without one.
+ */
+export function pelletDamageAt(
+	weapon: Pick<
+		RangedWeaponDef,
+		"damage" | "falloffStartPx" | "falloffEndPx" | "minDamage"
+	>,
+	distancePx: number,
+): number {
+	if (
+		weapon.falloffStartPx === undefined ||
+		weapon.falloffEndPx === undefined
+	) {
+		return weapon.damage;
+	}
+	const floor = weapon.minDamage ?? weapon.damage;
+	if (distancePx <= weapon.falloffStartPx) return weapon.damage;
+	if (distancePx >= weapon.falloffEndPx) return floor;
+	const t =
+		(distancePx - weapon.falloffStartPx) /
+		(weapon.falloffEndPx - weapon.falloffStartPx);
+	return Math.round(weapon.damage + (floor - weapon.damage) * t);
+}

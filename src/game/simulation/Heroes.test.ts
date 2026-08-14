@@ -7,6 +7,7 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { pelletDamageAt } from "../../tweakables/ranged.js";
 import { buildWorld } from "./Arena.js";
 import type { MeleeBody } from "./Melee.js";
 import {
@@ -132,6 +133,41 @@ describe("hero registry", () => {
 		expect(shotgun.speed).toBeGreaterThan(RANGED_WEAPONS.rifle.speed);
 		// The cone is fixed at the muzzle: no randomness to desync over.
 		expect(shotgun.spreadDeg).toBeGreaterThan(0);
+	});
+
+	it("the shotgun's damage falls off with distance — lethal only at point blank", () => {
+		const shotgun = RANGED_WEAPONS.shotgun;
+		expect(shotgun.falloffStartPx).toBeDefined();
+		expect(shotgun.falloffEndPx).toBeDefined();
+		const start = shotgun.falloffStartPx ?? 0;
+		const end = shotgun.falloffEndPx ?? 0;
+
+		// The blast is a one-shot at the muzzle and for the first start px.
+		expect(pelletDamageAt(shotgun, 0)).toBe(shotgun.damage);
+		expect(pelletDamageAt(shotgun, start)).toBe(shotgun.damage);
+		expect(
+			(shotgun.pellets ?? 1) * pelletDamageAt(shotgun, start),
+		).toBeGreaterThanOrEqual(100);
+
+		// Past the start it slides toward the floor: at 100px a pellet is down
+		// from 17 to 13 — a reduced hit, and a blast there is ~half a bar once
+		// the fan's edge pellets have already left the body (4 × 13 = 52).
+		expect(pelletDamageAt(shotgun, 100)).toBeLessThan(shotgun.damage);
+		expect(pelletDamageAt(shotgun, 100)).toBeGreaterThanOrEqual(
+			shotgun.minDamage ?? 0,
+		);
+
+		// At the far end it has hit the floor and stays there — a warning shot.
+		expect(pelletDamageAt(shotgun, end)).toBe(shotgun.minDamage);
+		expect(pelletDamageAt(shotgun, end * 2)).toBe(shotgun.minDamage);
+		expect(shotgun.minDamage ?? 0).toBeLessThan(shotgun.damage);
+	});
+
+	it("falloff is a shotgun rule only: a rifle round is its card damage at any range", () => {
+		const rifle = RANGED_WEAPONS.rifle;
+		expect(rifle.falloffStartPx).toBeUndefined();
+		expect(pelletDamageAt(rifle, 0)).toBe(rifle.damage);
+		expect(pelletDamageAt(rifle, 500)).toBe(rifle.damage);
 	});
 
 	it("the machine gun fires faster than the pistol and hits weaker", () => {

@@ -34,10 +34,17 @@ const CHARGE_RANGE_PX = 150;
 // every range; the shotgun comes out at point blank, when the blast is the
 // answer, and holsters again after one blast so the sword covers the 900ms
 // cooldown.
-/** Inside this, a jeffs bot may pull the shotgun for the finisher blast. */
-const SHOTGUN_BLAST_RANGE_PX = 140;
+/**
+ * Inside this, a jeffs bot may pull the shotgun for the finisher blast.
+ *
+ * The blast range tracks the weapon's damage falloff: at a hundred px the fan
+ * still lands most of its pellets at half card damage, and beyond that the
+ * blast dies — a bot that pulled at 140px after the falloff landed would be
+ * a bot firing a warning shot.
+ */
+const SHOTGUN_BLAST_RANGE_PX = 100;
 /** The shotgun holsters once the foe leaves this much. */
-const SHOTGUN_HOLSTER_RANGE_PX = 190;
+const SHOTGUN_HOLSTER_RANGE_PX = 140;
 /** How long the shotgun stays out for one blast, before the sword follows. */
 const SHOTGUN_STANCE_MS = 320;
 

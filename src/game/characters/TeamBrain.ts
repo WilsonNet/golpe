@@ -38,9 +38,10 @@ const THREAT_RANGE_PX = 300;
 const ALLY_SPACING_PX = 400;
 /**
  * The shotgun's blast range — the one distance a jeffs support's gun can
- * still mean something. Beyond it the smoke support holds its fire.
+ * still mean something. Beyond it the smoke support holds its fire: the
+ * falloff has already gutted the blast, so a shot at 140px is a warning.
  */
-const SHOTGUN_BLAST_RANGE_PX = 140;
+const SHOTGUN_BLAST_RANGE_PX = 100;
 
 const THREAT_RADIUS_PX = 330;
 /** The support's comfort band: inside the floor it runs, outside the ceiling it advances. */
