@@ -41,6 +41,8 @@ import {
 	PLUNGE_BLAST_BASE_RADIUS_PX,
 	PLUNGE_BLAST_MAX_RADIUS_PX,
 	PLUNGE_BLAST_RADIUS_PER_PX,
+	PLUNGE_CARRY_MS,
+	PLUNGE_CATCH_RADIUS_PX,
 	PLUNGE_DAMAGE,
 	PLUNGE_DECEL,
 	PLUNGE_KNOCKUP_BASE,
@@ -89,6 +91,8 @@ export {
 	PARRY_MASSIVE_LIFETIME_MS,
 	PLUNGE_BLAST_BASE_RADIUS_PX,
 	PLUNGE_BLAST_MAX_RADIUS_PX,
+	PLUNGE_CARRY_MS,
+	PLUNGE_CATCH_RADIUS_PX,
 	PLUNGE_DECEL,
 	PLUNGE_KNOCKUP_BASE,
 	PLUNGE_KNOCKUP_MAX,
@@ -267,6 +271,8 @@ export interface MeleeTickState extends MeleeState {
 	dragonTimer?: number;
 	/** ms left of a Death Blossom channel. Only `PlayerPosition` ever sets it. */
 	blossomTimer?: number;
+	/** ms left of a plunge-bomb carry. Only `PlayerPosition` ever sets it. */
+	plungeCarryTimer?: number;
 	/** ms left of a trap lock. Only `PlayerPosition` ever sets it. */
 	trapTimer?: number;
 }
@@ -444,6 +450,21 @@ export function massiveSlamPoint(s: { x: number; y: number; facing: number }): {
 	return {
 		x: s.x + PLAYER_WIDTH / 2 + s.facing * MASSIVE_SLAM_OFFSET_PX,
 		y: s.y + PLAYER_HEIGHT,
+	};
+}
+
+/**
+ * The dive's grab column: the bomber's body expanded by `PLUNGE_CATCH_RADIUS_PX`
+ * on every side. The server tests every airborne hostile against it; the
+ * geometry is shared so a future client-side preview (or a diagnostic) reads
+ * the same reach the server judges.
+ */
+export function plungeCatchRect(s: { x: number; y: number }): Rect {
+	return {
+		x: s.x - PLUNGE_CATCH_RADIUS_PX,
+		y: s.y - PLUNGE_CATCH_RADIUS_PX,
+		w: PLAYER_WIDTH + PLUNGE_CATCH_RADIUS_PX * 2,
+		h: PLAYER_HEIGHT + PLUNGE_CATCH_RADIUS_PX * 2,
 	};
 }
 
@@ -685,8 +706,12 @@ export function tickMelee(
 	//
 	// The dive discards intent entirely: the bomb is committed the moment the
 	// release was judged airborne. It ends in `tickPlayer`, at floor contact —
-	// the same shared code that plants the fighter in the ground.
-	if (s.plunging) {
+	// the same shared code that plants the fighter in the ground. A fighter
+	// *caught* by somebody else's dive is cargo in the same gate: the carry
+	// pins the body in `tickPlayer`, and the stun the catch applies would hold
+	// here anyway — this is belt and suspenders for the tick the stun and the
+	// carry disagree by.
+	if (s.plunging || (s.plungeCarryTimer ?? 0) > 0) {
 		s.attackHeld = input.attack;
 		s.blockHeld = input.block;
 		s.uppercutHeld = input.uppercut;
@@ -1035,6 +1060,13 @@ export function resolveMelee(
 
 	const move = attacker.meleeAction as MeleeMove;
 	const def = MOVES[move];
+	// A mid-dive bomber cannot be anti-aired: while `plunging` the bomb is
+	// immune to melee entirely — slashes, stabs, the uppercut and the
+	// shoryuken all pass through it. The dive is committed and unanswerable
+	// by a swing; its counters are distance and the ultimates (the black
+	// hole's hold and the dragon's sweep), neither of which is a melee hit.
+	// See specs/melee.md.
+	if (defender.plunging) return null;
 	// A chain link connects through the invulnerability its own opener applied.
 	// Nothing else does — see `piercesIframes`.
 	if (defender.iframeTimer > 0 && !def.piercesIframes) return null;

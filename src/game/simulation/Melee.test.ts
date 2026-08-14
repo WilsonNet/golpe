@@ -32,6 +32,8 @@ import {
 	PARRY_MASSIVE_LIFETIME_MS,
 	PLUNGE_BLAST_BASE_RADIUS_PX,
 	PLUNGE_BLAST_MAX_RADIUS_PX,
+	PLUNGE_CARRY_MS,
+	PLUNGE_CATCH_RADIUS_PX,
 	PLUNGE_KNOCKUP_BASE,
 	PLUNGE_KNOCKUP_MAX,
 	PLUNGE_SPEED,
@@ -39,6 +41,7 @@ import {
 	PLUNGE_STUCK_MAX_MS,
 	PLUNGE_STUN_BASE_MS,
 	PLUNGE_STUN_MAX_MS,
+	plungeCatchRect,
 	resolveMelee,
 	tickMelee,
 } from "./Melee.js";
@@ -48,6 +51,7 @@ import {
 	DASH_SPEED,
 	JUMP_VELOCITY,
 	NEUTRAL_INTENT,
+	PLAYER_HEIGHT,
 	PLAYER_WIDTH,
 	type PlayerIntent,
 	type PlayerPosition,
@@ -1157,6 +1161,71 @@ describe("the plunge bomb", () => {
 		expect(s.vx).toBe(0);
 		const recovered = tickUntil(s, {}, (x) => x.plungeStuckTimer <= 0);
 		expect(recovered.state.plungeStuckTimer).toBe(0);
+	});
+
+	it("is immune to melee while diving — nothing anti-airs a bomb", () => {
+		// The control: the same swing connects against a normal defender.
+		const control = duel({});
+		expect(
+			connects(resolveMelee(control.attacker, control.defender)),
+		).toBeTruthy();
+
+		// The diver: the swing that would have connected passes through.
+		const { attacker, defender } = duel({});
+		defender.plunging = true;
+		expect(resolveMelee(attacker, defender)).toBeNull();
+	});
+
+	it("carries a caught fighter down at the dive's own speed", () => {
+		let s = fighter({
+			y: 100,
+			plungeCarryTimer: PLUNGE_CARRY_MS,
+			stunTimer: PLUNGE_CARRY_MS,
+		});
+		s = tickPlayer(s, intent({ right: true, up: true }), DT);
+		// The pin, not a fall: the dive's own speed, in the column it was caught.
+		expect(s.vy).toBe(PLUNGE_SPEED);
+		expect(s.x).toBe(100); // rooted, pinned to the column
+		// And the timer runs on the same clock as every other timer.
+		expect(s.plungeCarryTimer).toBeLessThan(PLUNGE_CARRY_MS);
+	});
+
+	it("drops the carry at floor contact — the pin never buries a fighter", () => {
+		let s = fighter({
+			x: 240,
+			y: 400,
+			plungeCarryTimer: PLUNGE_CARRY_MS,
+			stunTimer: PLUNGE_CARRY_MS,
+		});
+		let landed = false;
+		for (let i = 0; i < 120 && !landed; i++) {
+			s = tickPlayer(s, intent({}), DT);
+			landed = s.grounded;
+		}
+		expect(landed).toBe(true);
+		expect(s.y).toBe(568 - PLAYER_HEIGHT);
+		expect(s.vy).toBe(0);
+		// The landing is not the end of the pin's *timer*, but it is the end of
+		// the pin: grounded, the next tick does not dive again.
+		const after = tickPlayer(s, intent({}), DT);
+		expect(after.grounded).toBe(true);
+		expect(after.vy).toBe(0);
+	});
+
+	it("takes the whole kit away while carried, like the dive itself", () => {
+		let s = fighter({ plungeCarryTimer: 100 });
+		s = melee(s, { attack: true, block: true, uppercut: true }, 10);
+		expect(s.meleeAction).toBe("none");
+		expect(s.blocking).toBe(false);
+		expect(s.massiveReady).toBe(false);
+	});
+
+	it("defines the grab column as the body plus a reach on every side", () => {
+		const rect = plungeCatchRect({ x: 100, y: 100 });
+		expect(rect.x).toBe(100 - PLUNGE_CATCH_RADIUS_PX);
+		expect(rect.y).toBe(100 - PLUNGE_CATCH_RADIUS_PX);
+		expect(rect.w).toBe(PLAYER_WIDTH + PLUNGE_CATCH_RADIUS_PX * 2);
+		expect(rect.h).toBe(PLAYER_HEIGHT + PLUNGE_CATCH_RADIUS_PX * 2);
 	});
 });
 

@@ -147,6 +147,8 @@ export {
 	meleePhase,
 	moveDuration,
 	PLUNGE_BLAST_BASE_RADIUS_PX,
+	PLUNGE_CARRY_MS,
+	plungeCatchRect,
 	resolveMelee,
 	SLASH_CANCELLED_MS,
 	sweptThrustBox,
@@ -429,6 +431,20 @@ export interface PlayerPosition extends MeleeState {
 	 */
 	blossomTimer: number;
 	/**
+	 * ms left of a plunge-bomb carry: this fighter was caught midair by a
+	 * diver and is being carried down with it.
+	 *
+	 * While non-zero and airborne, the body is pinned to the dive — no
+	 * gravity, no steering, straight down at `PLUNGE_SPEED` in the column it
+	 * was caught in — and the melee gate discards intent like the dive's
+	 * own. The pin ends at floor contact (grounded skips the pin); the timer
+	 * itself just decays, so both sides run the same number down. Set once
+	 * per catch by the server (the landing blast is what pins the victim,
+	 * and the timer's tail past the landing is how the blast tells "carried"
+	 * from "launched"). See specs/melee.md.
+	 */
+	plungeCarryTimer: number;
+	/**
 	 * Rounds left in the magazine. Finite ammo: when this hits zero the
 	 * reload draws from `reserveRounds`, and when both are empty the gun is
 	 * **dry** until the next life. **Server-ticked only** — the fire that
@@ -483,6 +499,7 @@ export function createPlayerState(
 		dragonVY: 0,
 		trapTimer: 0,
 		blossomTimer: 0,
+		plungeCarryTimer: 0,
 		ammo: 0,
 		reserveRounds: 0,
 		reloadTimer: 0,
@@ -518,6 +535,7 @@ export function copyPlayerState(
 	target.dragonVY = source.dragonVY;
 	target.trapTimer = source.trapTimer;
 	target.blossomTimer = source.blossomTimer;
+	target.plungeCarryTimer = source.plungeCarryTimer;
 	target.ammo = source.ammo;
 	target.reserveRounds = source.reserveRounds;
 	target.reloadTimer = source.reloadTimer;
@@ -635,11 +653,14 @@ export function tickPlayer(
 	// from release to extraction. A dragon rider is cargo; the dragon steers.
 	// A trapped fighter is rooted for movement *only*: the lock takes the feet
 	// and nothing else, so the trapped fighter still attacks, blocks and casts.
+	// A carried fighter is cargo of somebody else's dive — same root as the
+	// dive's own.
 	const rooted =
 		stunned ||
 		isCommitted(s) ||
 		s.plunging ||
 		s.plungeStuckTimer > 0 ||
+		s.plungeCarryTimer > 0 ||
 		s.dragonTimer > 0 ||
 		s.trapTimer > 0;
 	// The charge roots the *walk* and nothing else. Dash, jump and block are the
@@ -667,6 +688,10 @@ export function tickPlayer(
 	s.jumpBufferTimer = decay(s.jumpBufferTimer, dt);
 	s.wallCoyoteTimer = decay(s.wallCoyoteTimer, dt);
 	s.trapTimer = decay(s.trapTimer, dt);
+	// The carry rides the same clock as every other timer: the server sets it
+	// once per catch and both sides run the same number down. The pin is gated
+	// on being airborne, so the tail past the landing is inert.
+	s.plungeCarryTimer = decay(s.plungeCarryTimer, dt);
 	// The blossom channel runs on the same clock as every other timer. It does
 	// not end on a stun — the storm is a commitment, not a reaction — so it is
 	// decayed here, outside the stun handling. Only a knockdown zeroes it, in
@@ -856,6 +881,16 @@ export function tickPlayer(
 			s.meleeTimer = 0;
 			s.hitLatch = false;
 		}
+	} else if (s.plungeCarryTimer > 0 && !s.grounded) {
+		// A fighter the dive caught: cargo on the bomber's line. The same pin
+		// as the plunge itself — no gravity, straight down at the dive's speed,
+		// horizontal drift shed — so the victim rides down inside the column it
+		// was caught in and lands with the bomber. The pin stops at floor
+		// contact (the landing's `grounded`); the timer's tail is inert, and the
+		// landing blast is what pins the victim there instead of launching them.
+		s.vy = PLUNGE_SPEED;
+		s.vx = approach(s.vx, 0, PLUNGE_DECEL * dt);
+		s.jumping = false;
 	} else if (s.blossomTimer > 0 && !s.grounded) {
 		// The Death Blossom stops the fall: an air cast holds the caster at
 		// the height it was cast for the whole channel — Reaper's hover, and

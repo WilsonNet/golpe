@@ -307,8 +307,7 @@ export class MeleeBrain {
 			distance < STRIKE_RANGE_PX + BACKSTEP_GRACE_PX &&
 			input.selfAction === "none" &&
 			Math.random() <
-				BACKSTEP_BASE_CHANCE +
-					BACKSTEP_SKILL_CHANCE_PER_POINT * this.skill;
+				BACKSTEP_BASE_CHANCE + BACKSTEP_SKILL_CHANCE_PER_POINT * this.skill;
 		if (steppingBack) {
 			output.moveRight = input.playerX <= input.selfX;
 			output.moveLeft = input.playerX > input.selfX;

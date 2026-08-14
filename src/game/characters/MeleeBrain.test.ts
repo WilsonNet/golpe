@@ -48,11 +48,7 @@ function perception(overrides: Partial<AIInput> = {}): AIInput {
 	};
 }
 
-function decide(
-	input: AIInput,
-	skill: number,
-	random: number,
-): AIOutput {
+function decide(input: AIInput, skill: number, random: number): AIOutput {
 	const brain = new MeleeBrain();
 	const output: AIOutput = {
 		moveLeft: false,

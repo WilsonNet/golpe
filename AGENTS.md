@@ -402,7 +402,11 @@ slams 56px in front and blasts 100px front *and back* of the slam point (the
 guard); released in the air it becomes the **plunge bomb** — a 1500 px/s dive
 that blasts bigger with the fall, stuns and knocks up through guards, and
 plants the bomber in the ground afterwards (stuck, freed only by a melee hit).
-The swing itself is blockable: a front massive into a read guard is a gift, and
+The dive itself is a weapon: it **catches airborne enemies** in its column and
+carries them down to be pinned by the landing blast, and it **cannot be
+anti-aired** — a diving fighter is immune to melee, so the shoryuken and the
+uppercut lose to it (only the black hole and the dragon thrust can stop a
+dive). The swing itself is blockable: a front massive into a read guard is a gift, and
 the uppercut is the third answer to a turtle. Sword damage pays double ultimate
 charge.
 

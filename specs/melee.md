@@ -497,8 +497,39 @@ detonates. The fall height — release Y to landing Y, capped at
 The bomb **cannot be blocked**. Its stun and its knockup hit through a guard
 like the ground blast's do; the only way to avoid it is to be outside the
 blast radius when it lands. It is the strongest tactic in the game, and the
-arena's high ledges are what give it teeth — the higher you start, the more of
-it there is.
+arena's high ledges are what give it teeth — the higher you start, the more
+of it there is.
+
+**A dive cannot be anti-aired.** While `plunging`, the bomber is immune to
+melee — slashes, stabs, the thrust's sweep, the uppercut and the shoryuken
+all pass through it. The dive is committed and unanswerable by a swing; its
+counters are **distance** (the column is narrow and the dive is fixed to it)
+and **ultimates**: the black hole's hold and the dragon thrust's sweep are
+the only things that still stop a dive.
+
+### The catch — the dive carries its victims
+
+The dive is not just a descent: while it lasts, the bomber's body is a
+weapon column. Any hostile fighter **airborne and inside the bomber's reach**
+(`PLUNGE_CATCH_RADIUS_PX` — a body's width past the bomber on every side) is
+**caught**:
+
+- the catch is a hit, judged once per victim per dive by the server — a
+  carried fighter stays in the column (same speed, same line), so a
+  re-judged grab would re-stun every tick and no client could predict it;
+- the victim is stunned for the ride (`PLUNGE_CARRY_MS`) and **carried down
+  at the dive's own speed** — the carry is `PlayerPosition` state both sides
+  simulate, exactly like the dragon ride, so the victim's own client replays
+  it deterministically;
+- at the landing, the blast **pins instead of launches**: the bomb's usual
+  knockup is traded for a knockdown lasting the blast's whole stun, so a
+  caught anti-air ends face-down in the crater rather than thrown back up.
+
+This is what makes the plunge **win against the shoryuken** — and the
+uppercut: both anti-airs put their users in the dive's column (their
+launch *is* the entry), the dive ignores their hit by the immunity above,
+and it catches them on the way down. The bomb's counterplay is to step out
+of the column, not to swing into it.
 
 ### The stuck — the bomber's price
 
@@ -602,6 +633,7 @@ fire illegally**:
 | `meleeDesyncFrames` | **0** — predicted move matches the authoritative one |
 | `slashes`, `massives`, `plunges`, `uppercuts`, `blocks`, `parries`, `backstabs`, `stuns`, `butterflyChains`, `blasts`, `bombs` | **> 0** across a few runs |
 | `comboLinks`, `combosFinished`, `knockdowns` | **> 0** across a few runs |
+| `plungeCatches` | **> 0** when the runs include dives — a dive that never catches is a fancy fall |
 
 The second row matters as much as the first. Every must-be-zero metric is
 trivially satisfied by a build where melee never happens, so a run that reports

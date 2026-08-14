@@ -2,6 +2,7 @@ import type { Container, Sprite, Texture } from "pixi.js";
 import { PELLET_ALPHA, PELLET_SCALE } from "../../tweakables/ranged.js";
 import type { BulletSample } from "../diagnostics/PhysicsDiagnostics";
 import {
+	CARRY_START_SUPPRESSION_FRAMES,
 	CINEMATIC_LAUNCH_SUPPRESSION_FRAMES,
 	DRAGON_DROP_SUPPRESSION_FRAMES,
 } from "../diagnostics/PhysicsDiagnostics";
@@ -142,6 +143,8 @@ export interface OnlineCallbacks {
 	onReconcile: (result: ReconcileResult) => void;
 	/** A discontinuity that is expected — so it is not counted as jitter. */
 	onTeleport: (frames?: number) => void;
+	/** A dive caught a fighter this client simulates — counted, nothing drawn. */
+	onPlungeCatch: () => void;
 	/** The server reset the whole arena: all continuity is legitimately broken. */
 	onRoundReset: () => void;
 	/** A sword impact the server judged, for effects only. */
@@ -1218,6 +1221,14 @@ export class OnlineSession {
 			// is not reset for it, unlike a respawn — so the suppression
 			// window has to cover the glide, not just the snap.
 			this.callbacks.onTeleport(DRAGON_DROP_SUPPRESSION_FRAMES);
+		}
+		// A plunge-bomb catch the client could not predict (it is a hit, with
+		// no melee event of its own): the fighter's raw state lands up to a
+		// full fall ahead of the prediction, and the smoothed sprite glides
+		// after it over the same kind of window the dragon's drop uses.
+		if (result.carryStarted) {
+			this.callbacks.onTeleport(CARRY_START_SUPPRESSION_FRAMES);
+			this.callbacks.onPlungeCatch();
 		}
 		this.rollbackStats.record(result);
 		// A jump this large is a respawn the announcement lost the race to, or a

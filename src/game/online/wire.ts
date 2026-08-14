@@ -164,6 +164,9 @@ const NUMBER_FIELDS = [
 	"trapTimer",
 	// The Death Blossom channel, appended for the same reason.
 	"blossomTimer",
+	// The plunge-bomb carry: a fighter caught midair by a dive, appended for
+	// the same reason as every field before it.
+	"plungeCarryTimer",
 	// The magazine and the auto-reload. Server-ticked (the client only
 	// draws them), appended for the same reason as every field before.
 	"ammo",

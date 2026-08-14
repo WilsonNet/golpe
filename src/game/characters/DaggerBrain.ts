@@ -171,11 +171,15 @@ export class DaggerBrain {
 		// The foe is above us: the shoryuken is an anti-air, and it only fires
 		// while our own second jump is still in hand — the same gate the
 		// simulation enforces, so the brain never asks for a move that will be
-		// refused.
+		// refused. A foe *mid-dive* is above us and the one thing the anti-air
+		// loses to: the bomb is immune to melee and catches its anti-air on the
+		// way down, so a shoryuken into a dive is a shoryuken into a ride. The
+		// read on a dive is distance, and EnemyBrain owns that.
 		if (
 			input.playerY < input.selfY - SHORYUKEN_MIN_RISE_PX &&
 			distance < SHORYUKEN_RANGE_PX &&
-			input.selfAirJumps > 0
+			input.selfAirJumps > 0 &&
+			!input.enemyPlunging
 		) {
 			return SHORYUKEN_BEATS;
 		}

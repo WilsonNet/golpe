@@ -76,7 +76,12 @@ On hit:
   (`airJumps > 0`), so a fighter who double-jumped has spent its vertical
   options. And it is **blockable** — unlike the sword's uppercut —
   with a knockdown (900ms) that is weaker than the thrust's. The trade for a
-  knockdown that lands is that a read guard stops it.
+  knockdown that lands is that a read guard stops it. **The one thing the
+  anti-air loses to is the plunge bomb**: the dive is immune to melee, and
+  the shoryuken's own launch puts its user in the dive's column — a shoryuken
+  into a dive is a shoryuken into a ride down (see
+  [melee.md](melee.md#the-catch--the-dive-carries-its-victims)). The dagger
+  reads the dive as distance, not as a jump-in.
 - **The double-tap dash is the dagger's own**: a little faster than the
   sword's (1100 vs 1000 px/s), a little shorter, ready a little sooner. The
   difference is a feel, not a gap the sword cannot close — the thrust is where

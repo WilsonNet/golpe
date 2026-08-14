@@ -648,6 +648,26 @@ export const PLUNGE_MAX_FALL_PX = 500;
 
 export const PLUNGE_DAMAGE = 24;
 
+/**
+ * The dive's grab: how far past the bomber's own body the column reaches, on
+ * every side. Any hostile fighter airborne inside it is caught and carried
+ * down with the bomb. The dive is vertical and sheds `vx`, so the column is
+ * exactly where the bomber will land — which is what makes the catch dodgeable
+ * (step out of the line) and what makes it an anti-air answer (the shoryuken
+ * and the uppercut both put their users inside it).
+ */
+export const PLUNGE_CATCH_RADIUS_PX = 32;
+
+/**
+ * How long a caught fighter is carried down with the bomber.
+ *
+ * A body's worth more than the longest possible dive (`PLUNGE_MAX_FALL_PX` /
+ * `PLUNGE_SPEED` = 333ms), so the ride always reaches the floor, and the tail
+ * past it is what lets the landing blast tell "carried" from "launched".
+ * Set once per catch (never refreshed), so both sides decay the same number.
+ */
+export const PLUNGE_CARRY_MS = 400;
+
 export const PLUNGE_BLAST_BASE_RADIUS_PX = 70;
 
 export const PLUNGE_BLAST_RADIUS_PER_PX = 0.12;

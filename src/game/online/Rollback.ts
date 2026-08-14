@@ -111,6 +111,13 @@ export interface RollbackResult {
 	 * legitimate discontinuity, like a respawn; the jitter metric must be told.
 	 */
 	dragonDropped: boolean;
+	/**
+	 * The server folded in a plunge-bomb catch this client did not predict:
+	 * the rewind lands on a body already falling at the dive's speed. Same
+	 * family as `dragonDropped` — a ride entered, not left — and announced the
+	 * same way, so the enemy jitter metric skips the snap.
+	 */
+	carryStarted: boolean;
 }
 
 /**
@@ -252,6 +259,11 @@ export class RemoteFighter {
 		// the jitter metric does not count it.
 		const dragonDropped =
 			this.state.dragonTimer > 0 && authoritative.dragonTimer <= 0;
+		// And its mirror: the server folded in a plunge-bomb catch this client
+		// could not predict (it is a hit), and the rewind lands on a body
+		// already falling at the dive's speed. Announced like the dragon's drop.
+		const carryStarted =
+			this.state.plungeCarryTimer <= 0 && authoritative.plungeCarryTimer > 0;
 
 		return {
 			errorPx,
@@ -259,6 +271,7 @@ export class RemoteFighter {
 			frozen: intent === null,
 			teleported,
 			dragonDropped,
+			carryStarted,
 		};
 	}
 

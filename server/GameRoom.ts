@@ -137,9 +137,11 @@ import {
 	meleePhase,
 	PLAYER_HEIGHT,
 	PLAYER_WIDTH,
+	PLUNGE_CARRY_MS,
 	type PlayerIntent,
 	type PlayerPosition,
 	placeTrap,
+	plungeCatchRect,
 	rectsOverlap,
 	reserveRoundsFor,
 	resolveMelee,
@@ -464,6 +466,18 @@ export class GameRoom {
 	 * victims' state, and a client never needs to know who was caught.
 	 */
 	private sweepLatches = new Map<string, Set<string>>();
+	/**
+	 * Who each diver has already caught, this dive.
+	 *
+	 * The plunge catch is judged once per victim per dive: the carried victim
+	 * stays inside the column for the whole fall (same speed, same line), so
+	 * without the latch the server would re-catch — and re-stun — every tick
+	 * of the dive, and a timer that keeps resetting would make the client's
+	 * replay disagree with the server's by exactly the snapshot interval.
+	 * Same shape as `sweepLatches`: keyed by the bomber, cleared the moment
+	 * the dive ends, server only.
+	 */
+	private plungeCatches = new Map<string, Set<string>>();
 	/** Ultimate denies since the last broadcast, for the client's "DENY" splash. */
 	private denies: DenyEventMsg[] = [];
 	private channelIds: string[] = [];
@@ -2231,6 +2245,7 @@ export class GameRoom {
 
 		this.resolveBlasts();
 		this.resolveMeleeHits();
+		this.resolvePlungeCatches();
 		this.resolveThrusts();
 		this.resolveDragonHits();
 		this.tickBullets(dt);
@@ -2391,10 +2406,22 @@ export class GameRoom {
 				v.stunTimer = Math.max(v.stunTimer, blast.stunMs);
 				v.iframeTimer = MELEE_IFRAME_MS;
 				if (blast.knockupVy !== 0) {
-					// The bomb's launch: upward, plus a small shove off the crater.
-					v.vy = blast.knockupVy;
-					v.grounded = false;
-					v.vx += (Math.sign(cx - blast.x) || 1) * BOMB_KNOCKBACK_VX;
+					if (v.plungeCarryTimer > 0) {
+						// A fighter the dive carried to the floor is **pinned**, not
+						// launched: the bomb's knockup is traded for a knockdown for
+						// the blast's whole stun, so the victim ends face-down in
+						// the crater instead of thrown back up. The carry's tail is
+						// what says "carried" here — the timer still outlives the
+						// landing, and once it is spent there is no carry left to
+						// spare.
+						v.plungeCarryTimer = 0;
+						v.knockdownTimer = Math.max(v.knockdownTimer, blast.stunMs);
+					} else {
+						// The bomb's launch: upward, plus a small shove off the crater.
+						v.vy = blast.knockupVy;
+						v.grounded = false;
+						v.vx += (Math.sign(cx - blast.x) || 1) * BOMB_KNOCKBACK_VX;
+					}
 				} else {
 					// The ground slam shoves away from the slam point, so the fight
 					// separates instead of standing in the crater.
@@ -2482,6 +2509,70 @@ export class GameRoom {
 	}
 
 	/**
+	 * Judge every dive's grab against every other fighter.
+	 *
+	 * The plunge bomb's second weapon is the dive itself: a midair foe inside
+	 * the bomber's column is caught, carried down at the dive's own speed, and
+	 * pinned into the ground by the landing blast instead of launched. The
+	 * catch is a hit — server-only, like every hit — and its consequence
+	 * (the carry) travels in the victim's `PlayerPosition` for both sides to
+	 * simulate, exactly like the dragon ride.
+	 *
+	 * The reach is the shared `plungeCatchRect` (a body's width past the
+	 * bomber on every side), the grab is midair-only, and `plungeCatches`
+	 * keeps it to one victim per dive: a carried fighter stays in the column
+	 * for the whole fall (same speed, same line), so without the latch the
+	 * server would re-catch — and re-stun — every tick, and a timer that kept
+	 * resetting would make the client's replay disagree by exactly the
+	 * snapshot interval. The blast is immune to the guard like every blast;
+	 * so is the grab.
+	 */
+	private resolvePlungeCatches() {
+		for (const bomber of this.players.values()) {
+			if (!bomber.alive) continue;
+			const diving = bomber.state.plunging;
+			if (!diving) {
+				this.plungeCatches.delete(bomber.id);
+				continue;
+			}
+			const box = plungeCatchRect(bomber.state);
+			let latched = this.plungeCatches.get(bomber.id);
+			if (!latched) {
+				latched = new Set();
+				this.plungeCatches.set(bomber.id, latched);
+			}
+			for (const victim of this.players.values()) {
+				if (victim === bomber || !victim.alive) continue;
+				if (!hostile(bomber.team, victim.team)) continue;
+				if (latched.has(victim.id)) continue;
+				// Midair only: a fighter on the floor gets the landing blast,
+				// not the ride.
+				if (victim.state.grounded) continue;
+				if (!rectsOverlap(box, bodyRect(victim.state.x, victim.state.y))) {
+					continue;
+				}
+				latched.add(victim.id);
+
+				const v = victim.state;
+				// The grab is the ride's whole shape: the carry pins the body
+				// in `tickPlayer`, the stun makes the ride helpless (and reads
+				// as a hit in reconciliation, like any stun), and the tail the
+				// carry leaves past the landing is what tells the blast
+				// "carried" from "launched".
+				v.plungeCarryTimer = PLUNGE_CARRY_MS;
+				v.stunTimer = Math.max(v.stunTimer, PLUNGE_CARRY_MS);
+				v.iframeTimer = MELEE_IFRAME_MS;
+				v.meleeAction = "none";
+				v.meleeTimer = 0;
+				v.hitLatch = false;
+				v.blocking = false;
+				v.comboStep = 0;
+				v.comboTimer = 0;
+			}
+		}
+	}
+
+	/**
 	 * Judge every live thrust sweep against every other fighter.
 	 *
 	 * The dagger thrust is the one melee move that hits **everyone** in its
@@ -2510,6 +2601,10 @@ export class GameRoom {
 			for (const defender of this.players.values()) {
 				if (defender === attacker || !defender.alive) continue;
 				if (!hostile(attacker.team, defender.team)) continue;
+				// A dive cannot be anti-aired, thrust included: the plunge is
+				// immune to melee, and the sweep is melee. `resolveMelee` gets
+				// the same gate for the swings that go through it.
+				if (defender.state.plunging) continue;
 				if (latched.has(defender.id)) continue;
 				if (!rectsOverlap(box, bodyRect(defender.state.x, defender.state.y))) {
 					continue;

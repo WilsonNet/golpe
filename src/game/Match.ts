@@ -23,6 +23,7 @@ import { EnemyBrain } from "./characters/EnemyBrain";
 import type { AIInput, AIOutput, AllyInfo, FoeInfo } from "./characters/types";
 import { BulletSystem, type BulletTarget } from "./combat/BulletSystem";
 import {
+	CARRY_START_SUPPRESSION_FRAMES,
 	DRAGON_DROP_SUPPRESSION_FRAMES,
 	PhysicsDiagnostics,
 	RESPAWN_CORRECTION_PX,
@@ -775,6 +776,14 @@ export class Match {
 					if (result.dragonDropped) {
 						this.diagnostics.markTeleport(DRAGON_DROP_SUPPRESSION_FRAMES);
 					}
+					// The mirror: the server caught this fighter in a dive. The
+					// catch is a hit — unpredictable, and with no melee event to
+					// announce itself — so the rewind lands up to a full fall
+					// ahead of the prediction. Same announcement, same size.
+					if (result.carryStarted) {
+						this.diagnostics.markTeleport(CARRY_START_SUPPRESSION_FRAMES);
+						this.diagnostics.recordPlungeCatch();
+					}
 					// A correction this large is a respawn, not a misprediction. The
 					// server replaces the whole state, so the sword state changes too;
 					// counting that as a prediction desync would blame the netcode for a
@@ -803,6 +812,7 @@ export class Match {
 					}
 				},
 				onTeleport: (frames) => this.diagnostics.markTeleport(frames),
+				onPlungeCatch: () => this.diagnostics.recordPlungeCatch(),
 				onRoundReset: () => {
 					this.diagnostics.markRoundReset();
 					// A hole and a portrait both outlive the match they belong to
@@ -2755,10 +2765,12 @@ export class Match {
 			if (attacker.fighter.hp <= 0 || defender.fighter.hp <= 0) continue;
 
 			// The thrust's sweep: multi-target, like the server's. The offline
-			// room is a duel, so one sweep box against the one defender.
+			// room is a duel, so one sweep box against the one defender. Same
+			// gate as the server: a dive is immune to melee, thrust included.
 			const box = sweptThrustBox(attacker.body);
 			if (
 				box &&
+				!defender.body.plunging &&
 				rectsOverlap(box, bodyRect(defender.body.x, defender.body.y))
 			) {
 				const damage = applyHitToDefender(defender.body, {

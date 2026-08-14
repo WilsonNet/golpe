@@ -120,6 +120,18 @@ const TELEPORT_SUPPRESSION_FRAMES = 4;
 export const DRAGON_DROP_SUPPRESSION_FRAMES = 8;
 
 /**
+ * A plunge-bomb **catch**'s suppression window.
+ *
+ * The catch is a hit, and the local fighter's own client cannot predict it any
+ * more than it can predict a slash landing — but unlike a slash it has no melee
+ * event to announce itself with (there is no swing to draw), so the reconcile
+ * that folds the carry in snaps the raw body by up to a full dive's worth of
+ * fall in one frame. Same size as the dragon's: a ride is being *entered*, not
+ * left, and the snap is the same magnitude.
+ */
+export const CARRY_START_SUPPRESSION_FRAMES = 8;
+
+/**
  * A cinematic lift's suppression window: whatever was waiting on the far side
  * of the freeze just launched, and the dragon's launch snaps the rider forward.
  */
@@ -421,6 +433,13 @@ export class PhysicsDiagnostics {
 	private massivesArmed = 0;
 	/** Bomb dives begun. The airborne half of the massive, counted on the edge. */
 	private plunges = 0;
+	/**
+	 * Dive catches folded in from the wire: the local fighter was carried by
+	 * a bomb, or carried one. Counted on the reconcile's `carryStarted` edge —
+	 * the same edge that announces the snap to the jitter metric — so "did the
+	 * catch ever happen" has an answer instead of a plausible guess.
+	 */
+	private plungeCatches = 0;
 	/** Rule violations. Every one of these must end the run at zero. */
 	private illegalActions = 0;
 	/** Links thrown with no floor underfoot. Must be zero: the chain is grounded. */
@@ -560,6 +579,7 @@ export class PhysicsDiagnostics {
 		this.stunsTaken = 0;
 		this.massivesArmed = 0;
 		this.plunges = 0;
+		this.plungeCatches = 0;
 		this.illegalActions = 0;
 		this.airborneChainLinks = 0;
 		this.blockedUnblockables = 0;
@@ -665,6 +685,21 @@ export class PhysicsDiagnostics {
 		// and the resolver disagree about what blocking covers.
 		if (!MOVES[move].blockable && outcome === "parried") {
 			this.blockedUnblockables++;
+		}
+	}
+
+	/**
+	 * A plunge-bomb catch folded in from the wire — either the local fighter
+	 * was carried by a dive, or a remote this client simulates was.
+	 *
+	 * Fired on the same `carryStarted` edge that announces the snap to the
+	 * jitter metric, so "the catch ever happened" is measured by the thing
+	 * that already knows it happened. Zero here alongside healthy `plunges`
+	 * is the "the dive is a fancy fall" defect made visible.
+	 */
+	recordPlungeCatch() {
+		if (this.active) {
+			this.plungeCatches++;
 		}
 	}
 
@@ -1196,6 +1231,8 @@ export class PhysicsDiagnostics {
 			blocks: this.blocksRaised,
 			massivesArmed: this.massivesArmed,
 			plunges: this.plunges,
+			/** Dives that caught somebody — the carry ever firing. */
+			plungeCatches: this.plungeCatches,
 			hits: this.outcomeCounts.hit,
 			backstabs: this.outcomeCounts.backstab,
 			blasts: this.outcomeCounts.blast,

@@ -95,6 +95,16 @@ export interface ReconcileResult {
 	 * respawn, and the jitter metric must be told not to count it.
 	 */
 	dragonDropped: boolean;
+	/**
+	 * The server folded in a plunge-bomb catch this client did not know about.
+	 *
+	 * The carry is a hit — server-judged, unpredictable — so the rewind lands
+	 * on a body already falling at the dive's speed, up to a full fall ahead of
+	 * where the prediction was. The catch has no melee event to announce itself
+	 * (there is no swing to draw), so the jitter metric must be told here,
+	 * exactly like `dragonDropped`.
+	 */
+	carryStarted: boolean;
 	/** What diverged, when it did. Empty otherwise. */
 	meleeDivergence?: {
 		predictedAction: string;
@@ -222,6 +232,7 @@ export class PredictedPlayer {
 		const predictedBlocking = this.state.blocking;
 		const predictedMassiveReady = this.state.massiveReady;
 		const predictedDragon = this.state.dragonTimer;
+		const predictedCarry = this.state.plungeCarryTimer;
 
 		// Drop every input the server has already folded in.
 		while (this.pending[0] !== undefined && this.pending[0].seq <= lastSeq) {
@@ -323,6 +334,11 @@ export class PredictedPlayer {
 		// ridden to. A legitimate discontinuity, like a respawn — announced so
 		// the jitter metric does not count it.
 		const dragonDropped = predictedDragon > 0 && rewound.dragonTimer <= 0;
+		// The mirror image, one ride over: the server folded in a plunge-bomb
+		// catch this client could not have predicted (it is a hit), and the
+		// rewind lands on a body already falling at the dive's speed. The catch
+		// has no melee event to announce itself, so the reconcile must.
+		const carryStarted = predictedCarry <= 0 && rewound.plungeCarryTimer > 0;
 
 		return {
 			errorPx,
@@ -332,6 +348,7 @@ export class PredictedPlayer {
 			meleeReplaced: changed,
 			replaceReason: changed ? (reason ?? "unexplained") : null,
 			dragonDropped,
+			carryStarted,
 			// Captured so a rare divergence is diagnosable rather than a bare count.
 			// Captured whenever the state was replaced, not only when it was
 			// unexplained: the explained cases are exactly the ones another metric

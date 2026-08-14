@@ -1,3 +1,5 @@
+import { TRAP_RADIUS } from "../../tweakables/items.js";
+import { SINGULARITY_REACH } from "../../tweakables/ultimate.js";
 import {
 	DEFAULT_WORLD,
 	PLAYER_HEIGHT,
@@ -7,9 +9,7 @@ import {
 } from "../simulation/Arena.js";
 import type { HeroId } from "../simulation/Heroes.js";
 import { smokeLobAngle } from "../simulation/Items.js";
-import { TRAP_RADIUS } from "../../tweakables/items.js";
 import { BULLET_SPEED, JUMP_HEIGHT_PX } from "../simulation/Physics.js";
-import { SINGULARITY_REACH } from "../../tweakables/ultimate.js";
 import type { AIConfig } from "./AIConfig.js";
 import { BlossomBrain } from "./BlossomBrain.js";
 import { DaggerBrain } from "./DaggerBrain.js";
@@ -877,10 +877,7 @@ export class EnemyBrain {
 				// 240px/s, so the gap never opens. The burst is the one tool
 				// that creates separation against an equal-speed pursuer, the
 				// same roll zoning's escape uses.
-				if (
-					input.touchingDown &&
-					Math.random() < DASH_ESCAPE_CHANCE
-				) {
+				if (input.touchingDown && Math.random() < DASH_ESCAPE_CHANCE) {
 					output.dash = input.playerX >= input.selfX ? -1 : 1;
 				}
 				output.jump =
@@ -934,10 +931,8 @@ export class EnemyBrain {
 						input.distanceToPlayer <= DASH_APPROACH_MAX_PX &&
 						Math.random() <
 							DASH_APPROACH_BASE_CHANCE +
-								DASH_APPROACH_SKILL_PER_POINT *
-									this.config.skillLevel +
-								DASH_APPROACH_AGGRO_WEIGHT *
-									this.config.aggressiveness
+								DASH_APPROACH_SKILL_PER_POINT * this.config.skillLevel +
+								DASH_APPROACH_AGGRO_WEIGHT * this.config.aggressiveness
 					) {
 						output.dash = input.playerX >= input.selfX ? 1 : -1;
 					}
