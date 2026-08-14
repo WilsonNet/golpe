@@ -93,10 +93,10 @@ Every attack runs **startup → active → recovery**. A hitbox exists only duri
 table in `src/game/simulation/Melee.ts` and nowhere else.
 
 | Move | Startup | Active | Recovery | Total | Damage | Reach | Blockable | Cancellable |
-|---|---|---|---|---|---|---|---|---|
-| **Slash** (link 1) | 75ms | 85ms | 170ms | 330ms | 7 | 42px | **yes** | **yes** |
-| **Slash 2** (link 2) | 75ms | 85ms | 170ms | 330ms | 7 | 44px | **yes** | **yes** |
-| **Slash 3** (finisher) | 85ms | 100ms | 420ms | 605ms | 11 | 48px | **yes** | **no** |
+|---|---|---|---|---|---|---|---|---|---|
+| **Slash** (link 1) | 75ms | 85ms | 170ms | 330ms | 7 | 48px | **yes** | **yes** |
+| **Slash 2** (link 2) | 75ms | 85ms | 170ms | 330ms | 7 | 50px | **yes** | **yes** |
+| **Slash 3** (finisher) | 85ms | 100ms | 420ms | 605ms | 11 | 54px | **yes** | **no** |
 | **Uppercut** | 110ms | 100ms | 340ms | 550ms | 11 | 34px | **no** | **no** |
 | **Massive Strike** (slam) | 90ms | 130ms | 460ms | 680ms | 24 | 40px | **yes** | **no** |
 
@@ -164,6 +164,31 @@ it is an area event judged by the server when the swing reaches the floor. See
   attacker's swing ends `active + recovery` after its hitbox opened, and the
   victim gets up `KNOCKDOWN_MS` after being hit by it, so **a landed combo ends in
   neutral**. See *The ground chain* below.
+
+### The hitbox is swept, and it covers the body
+
+A slash's hitbox is not a fixed box parked in front of the fighter — it is the
+**union of the weapon's reach and the path the body has travelled since the
+swing began**. Two consequences, both lifted straight from GunZ:
+
+- **The dash-slash trails.** A slash thrown out of a dash carries its hitbox
+  across the dash's travel, so a fighter the dash passed *through* is caught by
+  the trail even though, by the time the active frames open, they are already
+  behind the sword. The sweep is derived from `vx` alone (`meleeHitbox`), so
+  during a dash — where `vx` is the constant burst speed — the trail is exact,
+  and during a walk it is the small, honest distance the fighter actually
+  moved. A move that carries its own body (the dagger thrust's `selfVx`) is
+  excluded: its sweep is `sweptThrustBox`'s job, and counting the lunge twice
+  would widen the thrust twice.
+- **Point-blank swings connect.** The box covers the attacker's own body, so a
+  fighter pinned against a wall — or two fighters standing inside one another
+  in a scramble — can never miss for being *too close*. The original box began
+  past the body's front edge, which is exactly the situation that missed.
+
+Reach is measured from the body's front edge as before; the body coverage and
+the trail are additions on top, not a redefinition. The guard is unaffected by
+either: a swept box still tests the defender's block the same way, so a read
+guard still turns a dash-slash into a guard break.
 
 ## The ground chain
 

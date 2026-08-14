@@ -48,6 +48,7 @@ import {
 	DASH_SPEED,
 	JUMP_VELOCITY,
 	NEUTRAL_INTENT,
+	PLAYER_WIDTH,
 	type PlayerIntent,
 	type PlayerPosition,
 	tickPlayer,
@@ -178,6 +179,52 @@ describe("frame data", () => {
 
 		expect(meleeHitbox(right)?.x).toBeGreaterThanOrEqual(right.x);
 		expect(meleeHitbox(left)?.x).toBeLessThan(left.x);
+	});
+
+	it("covers the attacker's own body, so a point-blank swing connects", () => {
+		// Two fighters overlapping: the defender stands inside the attacker's
+		// body. The old box began past the body's front edge and missed here.
+		const s = tickUntil(
+			melee(fighter({ facing: 1 }), { attack: true }),
+			{},
+			(x) => meleePhase(x) === "active",
+		).state;
+		const box = meleeHitbox(s);
+		expect(box).not.toBeNull();
+		// The box spans the body: its left edge is at (or behind) the body's own
+		// left edge, not past its front edge.
+		expect(box?.x).toBeLessThanOrEqual(s.x);
+		expect(box && box.x + box.w).toBeGreaterThanOrEqual(s.x + PLAYER_WIDTH);
+	});
+
+	it("sweeps the hitbox with the fighter's velocity (the dash-slash trail)", () => {
+		// A slash thrown mid-dash: the body is moving at dash speed, so the
+		// active box must trail backward over the ground the body has covered.
+		const s = tickUntil(
+			melee(fighter({ facing: 1, vx: DASH_SPEED }), { attack: true }),
+			{},
+			(x) => meleePhase(x) === "active",
+		).state;
+		const box = meleeHitbox(s);
+		expect(box).not.toBeNull();
+
+		// The swept box reaches back along the movement to where the body was
+		// when the slash began — several ticks of dash travel behind `s.x`.
+		const sweptBack = s.x - (box?.x ?? s.x);
+		expect(sweptBack).toBeGreaterThan(PLAYER_WIDTH);
+	});
+
+	it("does not double-count a move that carries its own body", () => {
+		// The thrust's `selfVx` is its lunge, not a dash: its sweep belongs to
+		// `sweptThrustBox`, so `meleeHitbox` must not widen it by `vx` as well.
+		const s = {
+			...fighter({ facing: 1, vx: 780 }),
+			meleeAction: "thrust" as const,
+			meleeTimer: MOVES.thrust.startupMs + 1,
+		};
+		const box = meleeHitbox(s);
+		expect(box).not.toBeNull();
+		expect(box?.w).toBe(MOVES.thrust.reachPx + PLAYER_WIDTH);
 	});
 });
 

@@ -883,17 +883,52 @@ export function bodyRect(x: number, y: number): Rect {
  *
  * Returns null once `hitLatch` is set, which is what stops one swing hitting
  * repeatedly across its whole active window.
+ *
+ * The box is **swept**: it covers the path the fighter's body has travelled
+ * since the move began, plus the weapon's reach in front — not merely the
+ * position the fighter happens to be in on this tick. That is the whole of
+ * GunZ's dash-slash: a slash thrown out of a dash carries its hitbox across
+ * the dash's travel, so a fighter the dash passed *through* is caught by the
+ * trail even though, by the time the active frames open, they are already
+ * behind the sword.
+ *
+ * It also **covers the attacker's own body**, so a point-blank swing — two
+ * fighters standing inside one another, a fighter pinned against a wall — can
+ * never miss for being too close. The old box began past the body's front
+ * edge, which is precisely the situation that missed.
+ *
+ * The sweep is derived from `vx` alone: during a dash that is the constant
+ * burst speed, so the trail is exact; during a walk it is the small, honest
+ * distance the fighter actually covered. A move that carries its own body (the
+ * dagger thrust's `selfVx`) is excluded — its sweep is `sweptThrustBox`'s job,
+ * and double-counting the lunge would widen the thrust twice.
  */
 export function meleeHitbox(s: MeleeBody): Rect | null {
 	if (s.meleeAction === "none" || s.hitLatch) return null;
 	if (meleePhase(s) !== "active") return null;
 
 	const def = MOVES[s.meleeAction];
-	const x = s.facing >= 0 ? s.x + PLAYER_WIDTH : s.x - def.reachPx;
+	const facing = s.facing >= 0 ? 1 : -1;
+
+	// The reach box, in front of the body along facing.
+	const reachLeft = facing >= 0 ? s.x + PLAYER_WIDTH : s.x - def.reachPx;
+	const reachRight = reachLeft + def.reachPx;
+
+	const externalVx = def.selfVx !== undefined ? 0 : s.vx;
+	const moved = externalVx * (s.meleeTimer / MS_PER_SECOND);
+
+	// The body's swept extent: where it was at move start, to where it is now.
+	const bodyLeft = Math.min(s.x, s.x - moved);
+	const bodyRight = Math.max(s.x + PLAYER_WIDTH, s.x + PLAYER_WIDTH - moved);
+
+	// The union of the body's path and the reach box.
+	const left = Math.min(reachLeft, bodyLeft);
+	const right = Math.max(reachRight, bodyRight);
+
 	return {
-		x,
+		x: left,
 		y: s.y + def.boxTopOffset,
-		w: def.reachPx,
+		w: right - left,
 		h: def.boxHeight,
 	};
 }
