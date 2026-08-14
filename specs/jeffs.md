@@ -124,8 +124,14 @@ announcement** — the same 1100ms freeze and portrait card the black hole has.
 - **The channel:** after the freeze, the caster spins in place for **2000ms**.
   Walk speed is halved and dash, jump, block, stance and the sword are all
   unavailable for the whole channel — the storm is a commitment, exactly like
-  Reaper's. Gravity and collision are ordinary: the caster can be carried, can
-  be shot, can be sworded, and falls off ledges while spinning.
+  Reaper's. **An airborne cast stops in the air:** gravity is suspended while
+  the caster is off the floor, so an air Death Blossom holds the caster at the
+  height it was cast for the whole channel — Reaper's hover — and walking off a
+  ledge mid-spin leaves him floating there until the storm ends. The hover is
+  not an immunity: the caster can still be shot, can still be sworded, can be
+  carried by a black hole (the grip beats the hover, exactly as it beats a
+  dash), and a knockdown ends the hover with the storm — the fall resumes from
+  the height the storm was cut.
 - **The storm:** every **250ms**, every enemy within **260px** of the caster
   with **line of sight** takes **13 damage** — 104 over the full channel, a
   full bar. A foe who stands in the storm dies; a foe who dashes out of the
@@ -145,7 +151,8 @@ announcement** — the same 1100ms freeze and portrait card the black hole has.
   `PlayerPosition` and both sides tick it — a client predicts its own spin
   exactly as it predicts a dash — while the interval damage is the server's
   alone, like the black hole's ticks. The whole channel (the walk slow, the
-  gates, the interrupt) is shared code; only the hurt is the server's.
+  hover, the gates, the interrupt) is shared code; only the hurt is the
+  server's.
 - **The draw:** a spinning storm — the caster's sprite rotated at full spin,
   radial streaks of gunfire, muzzle flashes circling, shell casings arcing
   away, smoke and sparks — the heaviest particle budget in the game, because

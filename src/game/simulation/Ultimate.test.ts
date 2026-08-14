@@ -157,6 +157,28 @@ describe("the Death Blossom", () => {
 		expect(dashing.dashActiveTimer).toBe(0);
 	});
 
+	it("an air cast stops in the air: the channel suspends gravity", () => {
+		const kit = kitFor("jeffs");
+		// Airborne, well above the floor at y=568: the first tick proves it.
+		let s = createPlayerState(400, 300);
+		s = tickPlayer(s, NEUTRAL_INTENT, DT, WORLD, null, kit);
+		expect(s.grounded).toBe(false);
+		s.vy = 400;
+		s.blossomTimer = BLOSSOM_DURATION_MS;
+
+		// The fall is stopped: vy pinned to zero, the height held for the
+		// whole channel — Reaper's hover, so an air cast stays an air cast.
+		const hovering = tickPlayer(s, NEUTRAL_INTENT, DT, WORLD, null, kit);
+		expect(hovering.vy).toBe(0);
+		expect(hovering.y).toBe(s.y);
+
+		// The moment the channel ends, gravity takes the caster back.
+		const after = { ...s, blossomTimer: 0 };
+		const falling = tickPlayer(after, NEUTRAL_INTENT, DT, WORLD, null, kit);
+		expect(falling.vy).toBeGreaterThan(0);
+		expect(falling.y).toBeGreaterThan(s.y);
+	});
+
 	it("a knockdown ends the channel; a plain hitstun does not", () => {
 		const kit = kitFor("jeffs");
 		let s = createPlayerState(400, 480);

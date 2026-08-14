@@ -418,9 +418,14 @@ export interface PlayerPosition extends MeleeState {
 	 * zeroes this timer in `applyHitToDefender` on both sides of the wire.
 	 * See specs/jeffs.md.
 	 *
-	 * The whole channel (the slow, the gates, the interrupt) is shared code;
-	 * the interval damage is the server's alone, exactly like the black
-	 * hole's ticks.
+	 * While it runs and the caster is off the floor, gravity is suspended:
+	 * an air Death Blossom stops the caster at the height it was cast and
+	 * holds them there for the whole channel — Reaper's hover, decided in
+	 * `tickPlayer`'s gravity chain, where a black hole's grip still beats it.
+	 *
+	 * The whole channel (the slow, the gates, the hover, the interrupt) is
+	 * shared code; the interval damage is the server's alone, exactly like
+	 * the black hole's ticks.
 	 */
 	blossomTimer: number;
 	/**
@@ -851,6 +856,18 @@ export function tickPlayer(
 			s.meleeTimer = 0;
 			s.hitLatch = false;
 		}
+	} else if (s.blossomTimer > 0 && !s.grounded) {
+		// The Death Blossom stops the fall: an air cast holds the caster at
+		// the height it was cast for the whole channel — Reaper's hover, and
+		// what turns the storm into a mid-air threat instead of a spell you
+		// fall out of. The walk steering above still applies (halved), so an
+		// airborne spinner drifts like a grounded one walks. The hover also
+		// cancels a plunge the cast interrupted: the storm is the commitment
+		// now, and a resumed dive after the channel would be a ghost of a
+		// bomb nobody released. Gravity returns the moment the channel ends
+		// or a knockdown cuts it — the fall resumes from the hover height.
+		s.plunging = false;
+		s.vy = 0;
 	} else if (s.plunging) {
 		// The plunge bomb: no gravity, no steering — a vertical dive at a fixed
 		// speed, faster than a fall can ever get. The fighter sheds horizontal
