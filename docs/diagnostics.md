@@ -475,6 +475,16 @@ correct behaviour trains you to ignore it**:
   no jitter. `scripts/diagnose.ts` preflights `:9208` and marks a run
   `INVALID: no server snapshots received`. Never trust an online run without a
   `reconciliationSummary`.
+- **A sampler that throws every call reads as an empty run.** `diagnose.ts`'s
+  state sampler declared a named arrow (`const round = ...`) inside its
+  `page.evaluate`; esbuild's keepNames decorates a named function with
+  `__name(fn, "fn")`, Playwright serializes *that* into the browser where
+  `__name` does not exist, and every sample threw — swallowed by the sampler's
+  own `try/catch`, so `activity.hpTrace` came back `[]` and `fighting: false`
+  for every run since the harness moved to TypeScript. The `try/catch` exists
+  for a mid-navigation page, not for a broken callback: the callback must be
+  self-contained (no named inner functions, nothing but literals and the page
+  globals).
 - **A *stale* server also reads as healthy.** A tsx process killed out from under
   its pane can leave the old server holding `:9208` — the port check passes, and
   every room then has the *old* rules. Symptom: a `--screens=2` run reports

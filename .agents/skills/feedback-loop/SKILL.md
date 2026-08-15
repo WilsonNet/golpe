@@ -504,6 +504,14 @@ A green verdict is necessary, not sufficient. These all produced convincing lies
 - **Idle fighters look healthy.** Playwright never presses a key, so a
   human-controlled fighter is motionless by definition. Assert damage only in AI
   modes; elsewhere assert the opponent exists and moves (`scripts/verify-modes.mjs`).
+- **A sampler that throws every call reads as an empty run.** Any named inner
+  function inside a `page.evaluate` gets esbuild's `__name(fn, "fn")` decoration,
+  which Playwright serializes into the browser where `__name` does not exist — so
+  the callback throws, and a `try/catch` around it silently returns nothing
+  forever. `diagnose.ts`'s state sampler did exactly this since the TS migration:
+  `activity.hpTrace` was always `[]` and `fighting: false`, so the fight metric
+  could never go red. Keep evaluate callbacks to literals and page globals; a
+  `try/catch` that swallows the *callback's* failure is a metric that cannot fail.
 
 ## Python Physics Analysis Script
 

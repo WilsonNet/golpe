@@ -68,6 +68,8 @@ function perception(overrides: Partial<AIInput> = {}): AIInput {
 		fields: [],
 		traps: [],
 		selfItemCharges: 0,
+		selfAmmo: 12,
+		selfReserveRounds: 36,
 		...overrides,
 	};
 }

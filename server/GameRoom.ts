@@ -1385,6 +1385,11 @@ export class GameRoom {
 			allies,
 			foes,
 			selfItemCharges: bot.itemCharges,
+			// The magazine and the reserve, so a brain can tell a live gun from
+			// a dry one. Both are per-life resources owned by the server; the
+			// brain reads them exactly like a human reads the HUD.
+			selfAmmo: bot.state.ammo,
+			selfReserveRounds: bot.state.reserveRounds,
 			// Hostile traps, pre-filtered by the same predicate the simulation
 			// uses, so a bot can route around them without re-deriving a rule.
 			traps: this.traps

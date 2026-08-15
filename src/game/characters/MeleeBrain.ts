@@ -202,6 +202,8 @@ export class MeleeBrain {
 	private beatLoops = 0;
 	/** Whether this particular incoming swing will be guarded. Rolled once. */
 	private guardDecision: boolean | null = null;
+	/** Whether this particular incoming swing will be walked out of. Rolled once. */
+	private backstepDecision: boolean | null = null;
 	/** Whether this particular stun will be punished with a charge. Rolled once. */
 	private stunPunishDecision: boolean | null = null;
 	/** Jeffs: ms the shotgun stays out for one blast. */
@@ -216,6 +218,7 @@ export class MeleeBrain {
 		this.beatElapsed = 0;
 		this.beatLoops = 0;
 		this.guardDecision = null;
+		this.backstepDecision = null;
 		this.stunPunishDecision = null;
 		this.blastTimer = 0;
 		this.blastDecision = null;
@@ -254,6 +257,18 @@ export class MeleeBrain {
 			// attack it ever started.
 			if (this.drawn && distance > SWORD_DISENGAGE_PX) this.drawn = false;
 			else if (!this.drawn && distance < SWORD_ENGAGE_PX) this.drawn = true;
+			// A fleeing foe is the gun's prey, not the sword's. The blade cannot
+			// reach a runner outside strike range — measured, a chaser walked the
+			// arena swinging at a kiter 200-280px out, and the fight never
+			// concluded. Holster and shoot the runner down; the sword returns
+			// the moment the foe stops running or the distance closes.
+			else if (
+				this.drawn &&
+				distance > STRIKE_RANGE_PX &&
+				(input.playerX - input.selfX) * input.enemyVX > 0
+			) {
+				this.drawn = false;
+			}
 		}
 
 		output.swordStance = this.drawn;
@@ -283,7 +298,8 @@ export class MeleeBrain {
 		// mid-butterfly was deaf for up to ~950ms — long enough to miss every
 		// swing aimed at it. Measured: 10 guards raised, 0 hits ever blocked. A
 		// block that cannot be raised in time is not a mechanic.
-		const reaction = this.reactiveTechnique(input, distance);
+		const incoming = this.incomingSwing(input, distance);
+		const reaction = this.reactiveTechnique(input, distance, incoming);
 		// Never interrupt a turtle with a reactive guard. Restarting the block
 		// would reset its timer back inside the parry window, so a fighter trying
 		// to hold a guard would silently parry instead — and the uppercut would
@@ -304,17 +320,29 @@ export class MeleeBrain {
 		// blocked or swung back stood and ate every swing it failed to read. The
 		// third answer is distance: the slash's box is 42px and the walk is
 		// 240px/s, so a backstep started the frame the active window is seen
-		// takes ~20px off the gap before it closes. Rolled per tick like the
-		// guard itself, scaled by skill, and refused while the bot is mid-swing
-		// — a committed swing is a commitment, and the state machine will walk
-		// the bot back in on the ticks the roll misses.
+		// takes ~20px off the gap before it closes.
+		//
+		// Rolled **once per incoming swing**, exactly like the guard decision
+		// itself, and refused while the guard is going to stop the swing. A
+		// per-tick roll at ~30-45% meant every active window turned into a step
+		// back — the swing was read as a threat for its whole active duration,
+		// so the bot backed out of nearly every exchange it entered, and two
+		// bots backing out of each other's swings never traded a hit. One roll
+		// per swing keeps the third answer without making it the only one.
+		if (!incoming) this.backstepDecision = null;
+		let willStep = this.backstepDecision;
+		if (willStep === null) {
+			willStep = guarded
+				? false
+				: Math.random() <
+					BACKSTEP_BASE_CHANCE + BACKSTEP_SKILL_CHANCE_PER_POINT * this.skill;
+			this.backstepDecision = willStep;
+		}
 		const steppingBack =
-			!guarded &&
+			willStep &&
 			input.enemyPhase === "active" &&
 			distance < STRIKE_RANGE_PX + BACKSTEP_GRACE_PX &&
-			input.selfAction === "none" &&
-			Math.random() <
-				BACKSTEP_BASE_CHANCE + BACKSTEP_SKILL_CHANCE_PER_POINT * this.skill;
+			input.selfAction === "none";
 		if (steppingBack) {
 			output.moveRight = input.playerX <= input.selfX;
 			output.moveLeft = input.playerX > input.selfX;
@@ -397,6 +425,34 @@ export class MeleeBrain {
 	}
 
 	/**
+	 * A swing is on its way: any blockable attack, in its startup or active
+	 * window, close enough to reach this fighter. One predicate shared by the
+	 * guard decision and the backstep decision, so the two answers to the same
+	 * question cannot disagree about which question they are answering.
+	 */
+	private incomingSwing(input: AIInput, distance: number): boolean {
+		return (
+			// Any link of the chain, not just its opener: reading only the first
+			// swing would leave a bot standing still through the two that follow it.
+			(isComboSlash(input.enemyAction) ||
+				// And the massive's own swing: it is blockable now, and the guard
+				// break that stops it is the same one that stops a slash — so a
+				// turtle can read the wind-up and turn the heaviest move in the
+				// game into their own free Massive.
+				input.enemyAction === "massive" ||
+				// A dagger's blockable moves: the stab's spam is exactly what a
+				// guard answers — every one stopped is a guard break — and the
+				// shoryuken is blockable by design. The thrust is *not* here: a
+				// guard cannot stop it, and the read against it is the jump,
+				// which EnemyBrain owns.
+				input.enemyAction === "stab" ||
+				input.enemyAction === "shoryuken") &&
+			(input.enemyPhase === "startup" || input.enemyPhase === "active") &&
+			distance < STRIKE_RANGE_PX + GUARD_READ_GRACE_PX
+		);
+	}
+
+	/**
 	 * Techniques chosen in answer to what the opponent is doing *right now*.
 	 *
 	 * Re-evaluated every tick and allowed to interrupt whatever is playing,
@@ -406,6 +462,7 @@ export class MeleeBrain {
 	private reactiveTechnique(
 		input: AIInput,
 		distance: number,
+		incoming: boolean,
 	): MeleeBeat[] | null {
 		// The opponent has committed to something long and uncancellable. This is
 		// the punish window the heavy moves exist to create.
@@ -436,24 +493,6 @@ export class MeleeBrain {
 		// defender collects a Massive. This outranks releasing an armed Massive on
 		// purpose: a Massive needs its wind-up against a slash that connects in 75,
 		// so answering a swing with one loses the exchange *and* the charge.
-		const incoming =
-			// Any link of the chain, not just its opener: reading only the first
-			// swing would leave a bot standing still through the two that follow it.
-			(isComboSlash(input.enemyAction) ||
-				// And the massive's own swing: it is blockable now, and the guard
-				// break that stops it is the same one that stops a slash — so a
-				// turtle can read the wind-up and turn the heaviest move in the
-				// game into their own free Massive.
-				input.enemyAction === "massive" ||
-				// A dagger's blockable moves: the stab's spam is exactly what a
-				// guard answers — every one stopped is a guard break — and the
-				// shoryuken is blockable by design. The thrust is *not* here: a
-				// guard cannot stop it, and the read against it is the jump,
-				// which EnemyBrain owns.
-				input.enemyAction === "stab" ||
-				input.enemyAction === "shoryuken") &&
-			(input.enemyPhase === "startup" || input.enemyPhase === "active") &&
-			distance < STRIKE_RANGE_PX + GUARD_READ_GRACE_PX;
 		// A hurt fighter answers a read by covering up rather than by timing a
 		// single parry. That is also the only way a guard ever gets held past the
 		// parry window in an AI match — a purely reactive guard is always fresh,

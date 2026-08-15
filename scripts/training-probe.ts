@@ -1372,11 +1372,7 @@ const BATTERY: BatteryRow[] = [
 			// The root is a *root*: 2.2s into a 3s lock the dummy has not walked —
 			// a couple of px of reconciliation glide while the 20Hz snapshot
 			// settles is noise; the 484px a free walk would cover is not.
-			c.eq(
-				"rooted at 2.2s",
-				Math.abs(lockedX - sprungX) < 10,
-				true,
-			);
+			c.eq("rooted at 2.2s", Math.abs(lockedX - sprungX) < 10, true);
 			// And the lock ends: 3.7s after the spring the walk is moving again.
 			c.eq("walk resumed after the lock", freeX < lockedX - 60, true);
 			// The samples themselves, so a failure says what the lock actually did.

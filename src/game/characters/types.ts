@@ -128,6 +128,18 @@ export interface AIInput {
 	traps: { x: number; y: number }[];
 	/** Item charges left this life, so the brain knows when it has one to spend. */
 	selfItemCharges: number;
+	/**
+	 * Rounds left in the magazine. The gun's ranged game is finite per life,
+	 * so every decision that leans on the gun — zoning, kiting, shooting a
+	 * fleeing runner — must know whether the gun can still produce damage.
+	 */
+	selfAmmo: number;
+	/**
+	 * Rounds in the reserve. `selfAmmo + selfReserveRounds === 0` is the DRY
+	 * gun: the fight has to come back to the sword, and a brain that does not
+	 * know that keeps pressing a trigger nothing answers.
+	 */
+	selfReserveRounds: number;
 }
 
 export interface AIOutput {

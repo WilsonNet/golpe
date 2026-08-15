@@ -53,6 +53,8 @@ function perception(overrides: Partial<AIInput> = {}): AIInput {
 		fields: [],
 		traps: [],
 		selfItemCharges: 0,
+		selfAmmo: 12,
+		selfReserveRounds: 36,
 		...overrides,
 	};
 }
@@ -172,5 +174,226 @@ describe("EnemyBrain", () => {
 			0.5,
 		);
 		expect(output.jump).toBe(false);
+	});
+
+	it("a cornered flee turns and fights — the wall is the end of the runway", () => {
+		// Low HP starts a RETREAT down an open runway; when the fleeing bot
+		// reaches the wall (the escape direction is blocked for 700ms), the
+		// flee has failed — the brain commits to ATTACK and stays committed
+		// instead of re-fleeing on the next decision.
+		const brain = new EnemyBrain(CONFIG);
+		const spy = vi.spyOn(Math, "random").mockReturnValue(0.5);
+		const input = perception({
+			distanceToPlayer: 60,
+			selfHP: 20,
+			enemyHP: 100,
+			playerX: 340,
+			selfX: 400,
+		});
+		try {
+			brain.decide(input, 0, DT);
+			expect(brain.getCurrentState()).toBe("RETREAT");
+			for (let i = 0; i < 30; i++) brain.decide(input, 0, DT);
+			expect(brain.getCurrentState()).toBe("RETREAT");
+			input.touchingRight = true;
+			for (let i = 0; i < 30; i++) brain.decide(input, 0, DT);
+			expect(brain.getCurrentState()).toBe("ATTACK");
+			for (let i = 0; i < 10; i++) brain.decide(input, 0, DT);
+			expect(brain.getCurrentState()).toBe("ATTACK");
+		} finally {
+			spy.mockRestore();
+		}
+	});
+
+	it("a hurt bot refuses a flee it cannot run — a wall behind commits now", () => {
+		// The same low-HP strike-range situation, but the wall is already
+		// behind on the very first decision: RETREAT would run into it, so the
+		// brain skips the flee and commits to the fight immediately.
+		const output = decide(
+			perception({
+				distanceToPlayer: 60,
+				selfHP: 20,
+				enemyHP: 100,
+				playerX: 340,
+				selfX: 400,
+				touchingRight: true,
+			}),
+			0.5,
+		);
+		expect(output.attack).toBe(true);
+	});
+
+	it("a dry gun never zones — zoning is the ranged game, and the ranged game is over", () => {
+		// Strike range, hale, a roll that would zone (0.07 < wantsSpace): the
+		// only thing stopping ZONE is the empty magazine and reserve.
+		const brain = new EnemyBrain(CONFIG);
+		const spy = vi.spyOn(Math, "random").mockReturnValue(0.07);
+		try {
+			brain.decide(
+				perception({
+					distanceToPlayer: 60,
+					selfHP: 100,
+					enemyHP: 100,
+					selfAmmo: 0,
+					selfReserveRounds: 0,
+				}),
+				0,
+				DT,
+			);
+			expect(brain.getCurrentState()).toBe("ATTACK");
+		} finally {
+			spy.mockRestore();
+		}
+	});
+
+	it("an armed gun still zones on the same roll — the space is for the rifle", () => {
+		const brain = new EnemyBrain(CONFIG);
+		const spy = vi.spyOn(Math, "random").mockReturnValue(0.07);
+		try {
+			brain.decide(
+				perception({
+					distanceToPlayer: 60,
+					selfHP: 100,
+					enemyHP: 100,
+					selfAmmo: 6,
+					selfReserveRounds: 12,
+				}),
+				0,
+				DT,
+			);
+			expect(brain.getCurrentState()).toBe("ZONE");
+		} finally {
+			spy.mockRestore();
+		}
+	});
+
+	it("a chase shoots the runner down — the walk never closes, the gun does", () => {
+		// Beyond the chase band (500 > 400), the sword holsters on the first
+		// tick; from then on the chase presses the trigger whenever it has a
+		// live gun and a sightline.
+		const brain = new EnemyBrain(CONFIG);
+		const spy = vi.spyOn(Math, "random").mockReturnValue(0.5);
+		const input = perception({
+			distanceToPlayer: 500,
+			selfHP: 100,
+			enemyHP: 20,
+			selfAmmo: 5,
+			playerX: 800,
+			selfX: 300,
+		});
+		try {
+			brain.decide(input, 0, DT);
+			const out = brain.decide(input, 0, DT);
+			expect(out.attack).toBe(true);
+		} finally {
+			spy.mockRestore();
+		}
+	});
+
+	it("a dry chaser does not waste the press — no rounds, no trigger", () => {
+		const brain = new EnemyBrain(CONFIG);
+		const spy = vi.spyOn(Math, "random").mockReturnValue(0.5);
+		const input = perception({
+			distanceToPlayer: 500,
+			selfHP: 100,
+			enemyHP: 20,
+			selfAmmo: 0,
+			selfReserveRounds: 0,
+			playerX: 800,
+			selfX: 300,
+		});
+		try {
+			brain.decide(input, 0, DT);
+			const out = brain.decide(input, 0, DT);
+			expect(out.attack).toBe(false);
+		} finally {
+			spy.mockRestore();
+		}
+	});
+
+	it("chases a fleeing foe with a burst — the runner is caught by the dash", () => {
+		// 380px out, the foe running away (vx > 0, foe on the right): the
+		// fleeing bonus pushes the roll (0.05 < 0.37) and the chase bursts in.
+		const brain = new EnemyBrain(CONFIG);
+		const spy = vi.spyOn(Math, "random").mockReturnValue(0.05);
+		const input = perception({
+			distanceToPlayer: 380,
+			selfHP: 100,
+			enemyHP: 100,
+			playerX: 780,
+			selfX: 400,
+			enemyVX: 60,
+		});
+		try {
+			brain.decide(input, 0, DT);
+			const out = brain.decide(input, 0, DT);
+			expect(out.dash).toBe(1);
+		} finally {
+			spy.mockRestore();
+		}
+	});
+
+	it("turns to fight when the pursuer catches up — a failed flee is a fight", () => {
+		// Low HP flees from a pursuer 100px behind — but after 700ms of
+		// running, a pursuer still that close means the escape is not
+		// working, so the flee becomes a fight instead of draining the clock.
+		const brain = new EnemyBrain(CONFIG);
+		const spy = vi.spyOn(Math, "random").mockReturnValue(0.5);
+		const input = perception({
+			distanceToPlayer: 100,
+			selfHP: 20,
+			enemyHP: 100,
+			playerX: 340,
+			selfX: 440,
+		});
+		try {
+			brain.decide(input, 0, DT);
+			expect(brain.getCurrentState()).toBe("RETREAT");
+			for (let i = 0; i < 60; i++) brain.decide(input, 0, DT);
+			expect(brain.getCurrentState()).toBe("ATTACK");
+		} finally {
+			spy.mockRestore();
+		}
+	});
+
+	it("holsters the sword against a fleeing foe out of reach — the gun finishes", () => {
+		// 200px out, the foe running away: the blade cannot reach a runner
+		// outside strike range, so the stance gives the gun the job instead of
+		// swinging at the air all the way across the arena.
+		const brain = new EnemyBrain(CONFIG);
+		const spy = vi.spyOn(Math, "random").mockReturnValue(0.5);
+		const input = perception({
+			distanceToPlayer: 200,
+			selfHP: 100,
+			enemyHP: 30,
+			playerX: 600,
+			selfX: 400,
+			enemyVX: 60,
+		});
+		try {
+			const out = brain.decide(input, 0, DT);
+			expect(out.swordStance).toBe(false);
+		} finally {
+			spy.mockRestore();
+		}
+	});
+
+	it("keeps the sword against a stationary foe — only a runner is the gun's prey", () => {
+		const brain = new EnemyBrain(CONFIG);
+		const spy = vi.spyOn(Math, "random").mockReturnValue(0.5);
+		const input = perception({
+			distanceToPlayer: 200,
+			selfHP: 100,
+			enemyHP: 100,
+			playerX: 600,
+			selfX: 400,
+			enemyVX: 0,
+		});
+		try {
+			const out = brain.decide(input, 0, DT);
+			expect(out.swordStance).toBe(true);
+		} finally {
+			spy.mockRestore();
+		}
 	});
 });

@@ -202,15 +202,35 @@ randomised per match so no two fights are identical.
   at a safe distance, and punishes a whiffed heavy move.
 - **It respects a swing it failed to read.** The guard is a *read* and the read
   fails; the third answer to a live hitbox is distance — a skill-scaled
-  backstep the moment the swing's active window is seen, refused while the bot
-  is mid-swing itself. A bot that only ever blocked or swung back stood and ate
-  every swing it missed, and no melee opponent in the game is that passive.
+  backstep, rolled **once per incoming swing** like the guard itself and
+  refused while the guard is going to stop it. A bot that only ever blocked or
+  swung back stood and ate every swing it missed; a per-tick roll instead
+  turned every active window into a step back, and two bots backing out of
+  each other's swings never traded a hit.
 - **It closes with the burst, not just the walk.** The double-tap dash (or the
-  tumble, which the stance decides) is the approach tool: a bot in attack range
-  whose foe is grounded and in neutral bursts to cover the gap instead of
-  walking the whole arena at walk speed. A hurt bot *retreats* with the burst
-  for the same reason — a walk retreat is a walk-forward chase, and the burst
-  is the only tool that creates separation against an equal-speed pursuer.
+  tumble, which the stance decides) is the approach tool: a bot whose foe is
+  grounded and in neutral bursts to cover the gap instead of walking the whole
+  arena at walk speed — from **both** ATTACK and CHASE, because a walk-chase
+  at equal speed against a fleeing foe never closes. A fleeing foe is worth a
+  stronger roll: it is not going to turn and swing at the approach. A hurt bot
+  *retreats* with the burst for the same reason — a walk retreat is a
+  walk-forward chase, and the burst is the only tool that creates separation
+  against an equal-speed pursuer.
+- **A chase shoots.** The sword holsters beyond ~280px, so a chaser at range is
+  a gunner by stance — and it presses the trigger whenever it has a live gun
+  and a sightline. Without this the chase standoff sat at 400-500px forever:
+  the runner flees at walk speed plus dashes, the equal-speed walk never
+  closes, and the gun was the range answer the standoff needed.
+- **It flees with exits, not forever.** EVADE is a ~600ms dodge on a cooldown —
+  a reaction, not a way of life. RETREAT is a *kite*: back off and shoot back,
+  for at most ~2.2s, and the moment the escape is walled the flee is over —
+  a cornered bot commits to the fight for ~1.6s rather than standing at the
+  wall, because with the runway gone, the sword is the only option that
+  exists.
+- **A dry gun never zones.** The perception carries the magazine and the
+  reserve, and zoning is the ranged game — with neither round left, a bot
+  pressing a trigger that answers nothing is not zoning, it is hiding. The
+  only decision left is the fight.
 - **It breaks away and takes height.** Cautious fighters disengage more, dash to
   create the gap, climb to a specific ledge, and fight with the gun from there.
   Without this the state machine could only ever close and swing: two bots met in

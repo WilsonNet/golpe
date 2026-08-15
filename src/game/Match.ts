@@ -2371,6 +2371,12 @@ export class Match {
 			fields,
 			traps,
 			selfItemCharges,
+			// The magazine and the reserve, from the same body the HUD reads:
+			// wire-updated online, mirrored onto the body offline. A brain that
+			// does not know the gun is dry keeps pressing a trigger nothing
+			// answers.
+			selfAmmo: self.ammo,
+			selfReserveRounds: self.reserveRounds,
 		};
 	}
 

@@ -883,3 +883,43 @@ ways it goes wrong quietly.
 - **Typing is not gameplay.** `Input` ignores keydown on editable elements and
   the panel blurs on any canvas click. Without it, setting a walk bound to "500"
   also walked the fighter, and a menu that swallows WASD makes the mode useless.
+
+## The AI
+
+Behaviour detail lives in [specs/combat.md](../specs/combat.md); these are the
+ways an AI-vs-AI match quietly stops being a fight.
+
+- **A hold state must not outlast the alternative it competes with.** A retreat
+  that held 2.2s against an attack that lasted one decision meant a hurt bot
+  kited ~85% of every exchange — and the team round stopped wiping (measured:
+  reverting to the old build gave 2 wipes in 3 rounds, the hold build gave 0).
+  The peel is now allies-aware (`RETREAT_TEAM_DURATION_MS`, 900ms) and the
+  mid-range hurt decision rolls a fight half the time when a teammate is on
+  the line. An asymmetry of one committed state vs. one uncommitted other is
+  a commitment to only one of them.
+- **A per-tick movement roll is a per-exchange commitment.** The backstep was
+  rolled every tick at 28-46% while an enemy swing was active — but an active
+  window lasts ~6-9 ticks, so *every* exchange ended with a step back, and two
+  bots backing out of each other's swings never traded a hit. The guard reads
+  a swing once per threat (`willGuard`); the backstep now rolls once per
+  threat too, and only when the guard refused. Same family as the stun-punish
+  roll: decisions belong to the exchange, not the frame.
+- **A chaser needs a closing tool *and* a finishing tool.** An equal-speed walk
+  against a runner that also dashes is a permanent standoff: measured at
+  400-500px for the last 30s of a duel, nobody damaged and the clock ran out.
+  The burst (dash-approach from CHASE as well as ATTACK, with a fleeing-foe
+  bonus) is the closer; the gun (CHASE presses the trigger when the stance
+  has already holstered the sword) is the finisher. A chase state that only
+  walks is not a chase, it is a parade.
+- **The stance must serve the situation, not just the range.** The sword drawn
+  inside 280px made a chaser at 200-280px swing at a kiter it could never
+  reach — the fight concluded only when the fleeing read holstered the sword
+  so the gun could finish the runner. A stance hysteresis with no situational
+  override is why the ranged game loses to a jog.
+- **A fleeing bot that never turns around is the match clock draining.** A hurt
+  bot in a wide arena kites until the wall — with a 3-screen map that is a
+  very long time. The exits are what make the flee a tactic instead of a
+  stall: a flee that is walled or whose pursuer stays within ~130px for 700ms
+  has failed, and the bot commits to the fight (`CORNERED_COMMIT_MS`). The
+  "no other option besides fighting" rule is the wall and the pursuer's
+  shadow.

@@ -42,6 +42,8 @@ function input(over: Partial<AIInput> = {}): AIInput {
 		fields: [],
 		traps: [],
 		selfItemCharges: 2,
+		selfAmmo: 12,
+		selfReserveRounds: 36,
 		...over,
 	};
 }

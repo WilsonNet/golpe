@@ -103,6 +103,11 @@ const WANTS_SPACE_BASE = 0.5;
 const WANTS_SPACE_AGGRO_WEIGHT = 0.28;
 /** Range bands for the four engagement decisions. */
 const EVADE_RANGE_PX = 500;
+/**
+ * The hurt-and-pressed roll when teammates are holding the line: fight it
+ * out half the time instead of always peeling. Solo, the kite is the only
+ * wisdom and this roll never runs.
+ */
 const EVADE_COINFLIP = 0.5;
 const EXECUTE_RANGE_PX = 300;
 const FINISH_CHASE_CHANCE = 0.7;
@@ -154,17 +159,26 @@ const ZONE_JUMP_HALE_CHANCE = 0.3;
 // ---- the dash approach ----
 /**
  * The burst's closing band: outside a swing's reach (walking into one is how
- * swings get whiffed) but inside a dash's range (a burst covers 160px at
- * 1000px/s, so anything in this band is reachable in one).
+ * swings get whiffed) but inside a burst's range (a dash covers ~160px at
+ * 1000px/s, so anything in this band is reachable in one). The top of the
+ * band reaches into the chase standoff: a walk-chase at equal speed against a
+ * fleeing foe never closes, so the burst has to be an option the moment the
+ * gap is within two of them.
  */
 const DASH_APPROACH_MIN_PX = STRIKE_RANGE_PX + 60;
-const DASH_APPROACH_MAX_PX = 280;
+const DASH_APPROACH_MAX_PX = 420;
 /** Base odds of bursting in, at zero skill and no aggression. */
 const DASH_APPROACH_BASE_CHANCE = 0.06;
 /** Odds per point of skill — a maxed bot bursts in far more often. */
 const DASH_APPROACH_SKILL_PER_POINT = 0.006;
 /** Odds per point of aggressiveness — a bloodthirsty bot closes hard. */
 const DASH_APPROACH_AGGRO_WEIGHT = 0.06;
+/**
+ * Extra odds of bursting when the foe is *fleeing* — running away instead of
+ * turning to fight the approach. The burst is the answer to a runner: the
+ * whole point is that the gap is open and staying open.
+ */
+const DASH_APPROACH_FLEE_BONUS = 0.25;
 
 // ---- item decisions ----
 /** A grenade is a ranged option, not a point-blank one: the throw's far band. */
@@ -208,6 +222,41 @@ const HOLE_ESCAPE_MARGIN_PX = 40;
  * started a body-width out clears a patch the bot would otherwise land on.
  */
 const TRAP_JUMP_MARGIN_PX = 40;
+
+// ---- fleeing states: commitment and exits ----
+/**
+ * A flee that has run this long without opening space is a flee that failed —
+ * the pursuer is faster, or there is nowhere left to go — and a fighter that
+ * keeps running anyway is not wise, it is passive. After this window the
+ * fleeing states look for their exits instead of holding themselves.
+ */
+const FLEE_MIN_MS = 700;
+/**
+ * The flee has failed when the pursuer is still this close after `FLEE_MIN_MS`
+ * of running: the dash-escape could not open the gap, so keep running is just
+ * the match clock draining. Turn and trade.
+ */
+const FLEE_GIVE_UP_PX = 130;
+/** How long a cornered bot commits to the fight before it may flee again. */
+const CORNERED_COMMIT_MS = 1600;
+/** The dodge's own duration, so an evade is a dodge, not a way of life. */
+const EVADE_DURATION_MS = 600;
+/** Between dodges, so a bot cannot roll out of every exchange. */
+const DODGE_COOLDOWN_MS = 1200;
+/**
+ * How long one retreat episode may run before the brain re-evaluates. A kite
+ * is not forever: with the gap open or the wall behind, the next decision is
+ * the turn-around.
+ */
+const RETREAT_DURATION_MS = 2200;
+/**
+ * With a teammate covering, the peel is short: the kite only exists to get a
+ * little space, and the side needs the fighter back on the line. Without the
+ * shorter hold the peel outlasted the fight — a retreat that held 2.2s
+ * against an attack that lasted one decision kept the hurt bot running most
+ * of every exchange.
+ */
+const RETREAT_TEAM_DURATION_MS = 900;
 
 /**
  * The nearest ledge that is above the fighter and within a jump or two.
@@ -270,6 +319,10 @@ export class EnemyBrain {
 	 * for the rest of the round.
 	 */
 	private itemCooldownMs = 0;
+	/** ms the bot is committed to fighting after a cornered flee flips over. */
+	private corneredTimer = 0;
+	/** ms until the bot may dodge again, so evades cannot be chained. */
+	private dodgeCooldownMs = 0;
 
 	/** The sword game: techniques, rhythms, stance hysteresis. */
 	private readonly melee: MeleeModule;
@@ -331,6 +384,8 @@ export class EnemyBrain {
 		this.stuckCheckY = 0;
 		this.stuckCount = 0;
 		this.zoneCooldown = 0;
+		this.corneredTimer = 0;
+		this.dodgeCooldownMs = 0;
 		this.melee.reset();
 		this.jump.reset();
 		this.ultimate.reset();
@@ -374,6 +429,8 @@ export class EnemyBrain {
 		this.decisionCooldown -= delta;
 		this.stateTimer += delta;
 		this.zoneCooldown = Math.max(0, this.zoneCooldown - delta);
+		this.corneredTimer = Math.max(0, this.corneredTimer - delta);
+		this.dodgeCooldownMs = Math.max(0, this.dodgeCooldownMs - delta);
 		this.trackStuck(input, delta);
 
 		const isLowHP = input.selfHP <= LOW_HP;
@@ -395,6 +452,7 @@ export class EnemyBrain {
 			DODGE_SKILL_SCALE *
 			dodgeMultiplier;
 		const shouldEvade =
+			this.dodgeCooldownMs <= 0 &&
 			playerFacesMe &&
 			input.distanceToPlayer < DODGE_RANGE_PX &&
 			dodgeRoll < dodgeThreshold;
@@ -403,6 +461,7 @@ export class EnemyBrain {
 			if (this.state !== AIState.EVADE && shouldEvade) {
 				this.state = AIState.EVADE;
 				this.stateTimer = 0;
+				this.dodgeCooldownMs = DODGE_COOLDOWN_MS;
 			} else {
 				const newState = this.evaluateState(input, isLowHP, isEnemyLow);
 				if (newState !== this.state) {
@@ -656,6 +715,48 @@ export class EnemyBrain {
 	// -------------------------------------------------------------------------
 
 	/**
+	 * The gun can still produce damage: rounds in the magazine or in the
+	 * reserve, which the auto-reload keeps feeding the magazine. Only a gun
+	 * with neither is DRY — and a dry gun is a sword fight waiting to happen.
+	 */
+	private gunLive(input: AIInput): boolean {
+		return input.selfAmmo > 0 || input.selfReserveRounds > 0;
+	}
+
+	/** The foe is moving away from this fighter — a runner, not a duellist. */
+	private foeFleeing(input: AIInput): boolean {
+		return (input.playerX - input.selfX) * input.enemyVX > 0;
+	}
+
+	/**
+	 * The burst that closes a gap: dash (or tumble — the stance decides) toward
+	 * the foe while it is still catchable.
+	 *
+	 * Rolled per tick while the band holds, from CHASE and ATTACK alike. A
+	 * burst confined to ATTACK measured the chase standoff: an equal-speed
+	 * walk against a fleeing foe at 400-500px never closes, because the only
+	 * tool that closes — the burst — was gated to a band the chase could
+	 * never reach. A fleeing foe is worth a stronger roll: it is not going to
+	 * turn and swing at the approach.
+	 */
+	private burstClose(input: AIInput, output: AIOutput) {
+		if (
+			input.touchingDown &&
+			input.enemyGrounded &&
+			input.enemyAction === "none" &&
+			input.distanceToPlayer >= DASH_APPROACH_MIN_PX &&
+			input.distanceToPlayer <= DASH_APPROACH_MAX_PX &&
+			Math.random() <
+				DASH_APPROACH_BASE_CHANCE +
+					DASH_APPROACH_SKILL_PER_POINT * this.config.skillLevel +
+					DASH_APPROACH_AGGRO_WEIGHT * this.config.aggressiveness +
+					(this.foeFleeing(input) ? DASH_APPROACH_FLEE_BONUS : 0)
+		) {
+			output.dash = input.playerX >= input.selfX ? 1 : -1;
+		}
+	}
+
+	/**
 	 * The angle to point the gun: lead the target, then miss by accuracy.
 	 *
 	 * A bullet takes `distance / BULLET_SPEED` to arrive, and in that time the
@@ -757,22 +858,102 @@ export class EnemyBrain {
 			this.zoneCooldown = ZONE_COOLDOWN_MS;
 		}
 
+		// ---- the fleeing states hold themselves — until they cannot ----
+		//
+		// A flee with no exit is a fighter that never comes back: the old
+		// brain re-rolled EVADE at 50% per decision and a hurt bot could run
+		// for the whole clock. A dodge is short by definition, and a retreat
+		// is a *kite* — keep distance, shoot back — that ends the moment it
+		// is cornered or has run its course, after which ordinary evaluation
+		// decides whether to close again.
+		if (this.state === AIState.EVADE) {
+			if (this.stateTimer < EVADE_DURATION_MS) return AIState.EVADE;
+		}
+		if (this.state === AIState.RETREAT) {
+			const holdMs =
+				input.allies.length > 0
+					? RETREAT_TEAM_DURATION_MS
+					: RETREAT_DURATION_MS;
+			if (this.stateTimer < holdMs) {
+				// A cornered flee stops being a flee. "Keep running" is only an
+				// option while running does something; with a wall behind and
+				// the pursuer arriving, the fight is the only option that
+				// exists, and the flip commits to it so the bot does not
+				// change its mind every decision.
+				const awayBlocked =
+					input.playerX > input.selfX
+						? input.touchingLeft
+						: input.touchingRight;
+				// Or the pursuer simply caught up: after long enough to see
+				// whether the escape is working, a pursuer still inside the
+				// sword's shadow means the flee has failed — the dash-escape
+				// could not open the gap. Keep running and the match runs out
+				// of clock; turn and the fight at least happens.
+				const caught = input.distanceToPlayer < FLEE_GIVE_UP_PX;
+				if (this.stateTimer > FLEE_MIN_MS && (awayBlocked || caught)) {
+					this.corneredTimer = CORNERED_COMMIT_MS;
+					return AIState.ATTACK;
+				}
+				return AIState.RETREAT;
+			}
+		}
+
 		if (input.distanceToPlayer < STRIKE_RANGE_PX) {
-			if (isLowHP) return AIState.RETREAT;
+			if (isLowHP && this.corneredTimer <= 0) {
+				// A flee that starts with a wall behind it is not a flee — the
+				// runway is already gone. Commit to the fight on the spot
+				// rather than running into the wall and standing there.
+				const awayBlocked =
+					input.playerX > input.selfX
+						? input.touchingLeft
+						: input.touchingRight;
+				if (awayBlocked) {
+					this.corneredTimer = CORNERED_COMMIT_MS;
+					return AIState.ATTACK;
+				}
+				return AIState.RETREAT;
+			}
 			// Break away sometimes rather than brawling until someone dies. Cautious
 			// fighters zone more, which is what makes two bots play differently
 			// instead of mirroring each other into the centre of the map.
+			//
+			// A dry gun never zones: the whole point of a zoning phase is the
+			// ranged game, and a bot pressing a trigger that answers nothing is
+			// not zoning, it is hiding. With no rounds left the only weapon is
+			// the sword, so the only decision is the fight.
 			const wantsSpace =
 				WANTS_SPACE_BASE -
 				WANTS_SPACE_AGGRO_WEIGHT * this.config.aggressiveness;
-			if (this.zoneCooldown <= 0 && Math.random() < wantsSpace) {
+			if (
+				this.gunLive(input) &&
+				this.zoneCooldown <= 0 &&
+				Math.random() < wantsSpace
+			) {
 				return AIState.ZONE;
 			}
 			return AIState.ATTACK;
 		}
 		if (isLowHP && !isEnemyLow) {
 			if (input.distanceToPlayer < EVADE_RANGE_PX) {
-				return Math.random() < EVADE_COINFLIP ? AIState.ATTACK : AIState.EVADE;
+				// Hurt and pressed: RETREAT backs off and shoots back, and its
+				// exits (cornered, caught, or the cornered flip's commitment)
+				// decide when the kite turns into the fight again. A committed
+				// bot chases instead, so a cornered fighter does not instantly
+				// resume the flee it already lost.
+				//
+				// With a teammate on the line the kite is only a peel: fight it
+				// out half the time, and the retreat that does happen is short
+				// (`RETREAT_TEAM_DURATION_MS`) — a side where every hurt
+				// fighter kites for the full 2.2s measured the round draining
+				// away with nobody on the line. Solo, the kite is the only
+				// wisdom, and the long hold is what the chaser's gun finishes.
+				if (
+					input.allies.length > 0 &&
+					Math.random() < EVADE_COINFLIP
+				) {
+					return AIState.ATTACK;
+				}
+				return this.corneredTimer <= 0 ? AIState.RETREAT : AIState.CHASE;
 			}
 			return AIState.CHASE;
 		}
@@ -873,6 +1054,23 @@ export class EnemyBrain {
 				) {
 					output.jump = true;
 				}
+
+				// A chase shoots. The sword is holstered beyond 280px, so the
+				// stance has already chosen the gun — and a chaser that only
+				// walked measured the standoff: the runner flees at walk speed
+				// plus dashes, and an equal-speed walk never closes. The gun is
+				// the range answer — shoot the runner down while the burst
+				// below closes the ground.
+				if (
+					!this.melee.swordDrawn &&
+					input.hasLineOfSight &&
+					this.gunLive(input)
+				) {
+					output.attack = true;
+				}
+				// And the burst closes: from a chase too, not just an attack —
+				// the chase is precisely where a fleeing foe needs catching.
+				this.burstClose(input, output);
 				break;
 			}
 
@@ -921,27 +1119,12 @@ export class EnemyBrain {
 						output.moveRight = input.playerX > input.selfX;
 						output.moveLeft = input.playerX <= input.selfX;
 					}
-					// The burst approach: walk until the dash is worth it, then
-					// cover the gap in one line. Without it the bots walked the
-					// whole arena at 240px/s, and the dash — the movement tool
-					// the whole game is built around — never happened outside
-					// zoning. Gated on the foe being in neutral: bursting into
-					// a live swing is exactly how a human loses, and the bot
-					// should not be better at dying than playing.
-					if (
-						this.melee.swordDrawn &&
-						input.touchingDown &&
-						input.enemyGrounded &&
-						input.enemyAction === "none" &&
-						input.distanceToPlayer >= DASH_APPROACH_MIN_PX &&
-						input.distanceToPlayer <= DASH_APPROACH_MAX_PX &&
-						Math.random() <
-							DASH_APPROACH_BASE_CHANCE +
-								DASH_APPROACH_SKILL_PER_POINT * this.config.skillLevel +
-								DASH_APPROACH_AGGRO_WEIGHT * this.config.aggressiveness
-					) {
-						output.dash = input.playerX >= input.selfX ? 1 : -1;
-					}
+					// The burst approach: walk until the burst is worth it, then
+					// cover the gap in one line. Gated on the foe being in
+					// neutral: bursting into a live swing is exactly how a human
+					// loses, and the bot should not be better at dying than
+					// playing. Same tool the chase uses to catch a runner.
+					this.burstClose(input, output);
 					const strafe =
 						!this.melee.swordDrawn &&
 						Math.random() < (isLowHP ? STRAFE_HURT_CHANCE : STRAFE_HALE_CHANCE);
