@@ -44,7 +44,7 @@ made every choice look like every other choice:
 - **Your fighter** — the hero picker lives here, on the home screen, beside the
   name field: a hero shooter should show its heroes, and the choice rides every
   match started here. There is no separate Heroes page; picking is the
-  discoverable face of `vento.hero`.
+  discoverable face of `golpe.hero`.
 - **Learn & settings** — How to play and Options, smallest and quietest.
 
 Two-column rows (Host/Join, How to play/Options) collapse to a single column on
@@ -55,7 +55,7 @@ a phone so every button is a thumb-sized target.
 | Entry | What it commits | Notes |
 |---|---|---|
 | Quick match (primary) | `?bots=1` | A duel vs a server bot: action in one click. The room link is the bot's seat — friends replace it. |
-| Your fighter (on home) | `vento.hero`, and `?hero=` on every launch below | Two portrait chips: Lia and Anands, each the fighter's own sheet frame. Picking writes the preference immediately; a commit below carries it. |
+| Your fighter (on home) | `golpe.hero`, and `?hero=` on every launch below | Two portrait chips: Lia and Anands, each the fighter's own sheet frame. Picking writes the preference immediately; a commit below carries it. |
 | Host a match | `?mode=…&screen=N&bots=N&scoreLimit=N&timeLimit=N` (+ `fill`, `freezeTime`, `ultCharge`) | Every room-creator choice, defaults pre-filled to the server's own defaults. |
 | Join a match | `?room=<id>` | One field accepts the bare id *or* the whole link. |
 | Practice | `?training=true` | The training room, one click away. |
@@ -103,7 +103,7 @@ caught before a connection is ever attempted.
 ## The name
 
 The menu's name field reads and writes the same `localStorage` key as the
-in-match prompt (`vento.playerName`), so a player who names themselves in the
+in-match prompt (`golpe.playerName`), so a player who names themselves in the
 menu never sees the prompt — and a script that answers `player-name` through
 `window.__setPlayerName` still walks the path a human walks. See
 [controls.md](controls.md) for the name rules.

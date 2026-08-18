@@ -77,7 +77,7 @@ ${HERO_SPRITE_CSS}
 	margin: 0 auto 6px;
 }
 .hp-name {
-	font: 700 15px/1.1 var(--vd-font, inherit);
+	font: 700 15px/1.1 var(--gd-font, inherit);
 	color: #ffd166;
 	letter-spacing: 0.04em;
 	margin-bottom: 2px;

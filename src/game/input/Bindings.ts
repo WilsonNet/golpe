@@ -151,7 +151,7 @@ export function isDefaultBindings(map: BindingMap): boolean {
 }
 
 /** Where a player's bindings are kept, so they are set once and not again. */
-const STORAGE_KEY = "vento.bindings";
+const STORAGE_KEY = "golpe.bindings";
 
 /** The pointer, in the same code namespace as the keyboard. */
 export function mouseCode(button: number): string {

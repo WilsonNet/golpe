@@ -947,10 +947,7 @@ export class EnemyBrain {
 				// fighter kites for the full 2.2s measured the round draining
 				// away with nobody on the line. Solo, the kite is the only
 				// wisdom, and the long hold is what the chaser's gun finishes.
-				if (
-					input.allies.length > 0 &&
-					Math.random() < EVADE_COINFLIP
-				) {
+				if (input.allies.length > 0 && Math.random() < EVADE_COINFLIP) {
 					return AIState.ATTACK;
 				}
 				return this.corneredTimer <= 0 ? AIState.RETREAT : AIState.CHASE;

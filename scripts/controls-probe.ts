@@ -17,13 +17,13 @@
  *      survives a reload, and is undone by Reset to defaults.
  *
  *   tsx scripts/controls-probe.ts
- *   VENTO_URL=http://localhost:8084 tsx scripts/controls-probe.ts
+ *   GOLPE_URL=http://localhost:8084 tsx scripts/controls-probe.ts
  */
 import { randomUUID } from "node:crypto";
 import type { Page } from "playwright";
 import { chromium } from "playwright";
 
-const BASE_URL = process.env.VENTO_URL ?? "http://localhost:8084";
+const BASE_URL = process.env.GOLPE_URL ?? "http://localhost:8084";
 
 /** A jump has to clear this much to count as one. A full jump peaks at 136px. */
 const JUMP_RISE_PX = 60;

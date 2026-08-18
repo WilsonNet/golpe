@@ -8,7 +8,7 @@
 import type { Page } from "playwright";
 import { chromium } from "playwright";
 
-const BASE = process.env.VENTO_URL ?? "http://localhost:8084";
+const BASE = process.env.GOLPE_URL ?? "http://localhost:8084";
 
 /** One launch mode under test. Optional flags describe what the mode seats. */
 interface Mode {

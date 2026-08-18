@@ -46,13 +46,13 @@ because pane ids are machine-local.
 ## Layout it creates
 
 ```
-workspace "vento-aureo"
+workspace "golpe"
 └── tab "dev"
     ├── pane "vite :8084"     pnpm run dev
     └── pane "geckos :9208"   pnpm run dev:server
 ```
 
-It reuses the existing `vento-aureo` workspace when there is one, so the dev tab
+It reuses the existing `golpe` workspace when there is one, so the dev tab
 sits beside whatever agents are already working in that project.
 
 ## Herdr model

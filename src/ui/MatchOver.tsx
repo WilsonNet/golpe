@@ -84,33 +84,33 @@ export function MatchOver() {
 	const mvp = mvpOf(standings) ?? podium[0];
 
 	return (
-		<div className="vd-veil">
+		<div className="gd-veil">
 			<style>{HUD_CSS}</style>
-			<div className="vd-card" style={{ minWidth: "min(560px, 92vw)" }}>
+			<div className="gd-card" style={{ minWidth: "min(560px, 92vw)" }}>
 				{teamScores ? (
 					<>
 						<div
-							className="vd-team-banner"
+							className="gd-team-banner"
 							style={{ color: team === null ? undefined : teamCss(team) }}
 						>
 							{team === null ? "DRAW" : `${TEAM_NAMES[team]} WIN`}
 						</div>
-						<div className="vd-team-final">
+						<div className="gd-team-final">
 							{TEAM_NAMES.map(
 								(name, i) => `${name} ${teamScores[i] ?? 0}`,
 							).join("  ·  ")}
 							{over.reason === "time" ? "  ·  time" : ""}
 						</div>
-						<p className="vd-sub">
+						<p className="gd-sub">
 							{mvp ? `MVP: ${mvp.name}, ${mvp.kills} frags.` : ""}
 						</p>
 					</>
 				) : (
 					<>
-						<h2 className="vd-title">
+						<h2 className="gd-title">
 							{winner ? `${winner.name} wins` : "Match over"}
 						</h2>
-						<p className="vd-sub">
+						<p className="gd-sub">
 							{over.reason === "score"
 								? `Reached the frag limit with ${winner?.kills ?? 0}.`
 								: "Time. Highest score takes it."}
@@ -118,7 +118,7 @@ export function MatchOver() {
 					</>
 				)}
 
-				<div className="vd-podium">
+				<div className="gd-podium">
 					{/* Second, first, third — so the winner stands in the middle. The
 					    slot, not the array index, is the key: a match can end with fewer
 					    than three fighters, and an empty slot keeps the winner centred
@@ -127,22 +127,22 @@ export function MatchOver() {
 						const entry = podium[place - 1];
 						if (!entry) {
 							return (
-								<div key={slot} className="vd-place" style={{ opacity: 0 }} />
+								<div key={slot} className="gd-place" style={{ opacity: 0 }} />
 							);
 						}
 						return (
-							<div key={slot} className={`vd-place vd-place-${entry.place}`}>
-								<div className="vd-place-rank">
+							<div key={slot} className={`gd-place gd-place-${entry.place}`}>
+								<div className="gd-place-rank">
 									{PLACE_LABEL[entry.place] ?? `#${entry.place}`}
 								</div>
 								<div
-									className="vd-place-name"
+									className="gd-place-name"
 									style={nameStyle(entry.place, entry.name)}
 								>
 									{entry.name}
 									{entry.id === myId ? " (you)" : ""}
 								</div>
-								<div className="vd-place-frags">
+								<div className="gd-place-frags">
 									{entry.kills} frags · {entry.deaths} deaths
 								</div>
 							</div>
@@ -152,12 +152,12 @@ export function MatchOver() {
 
 				{standings.length > 3 ? (
 					<>
-						<p className="vd-rest-head">The rest of the field</p>
+						<p className="gd-rest-head">The rest of the field</p>
 						<ScoreTable standings={standings} myId={myId} from={4} />
 					</>
 				) : null}
 
-				<div className="vd-next">
+				<div className="gd-next">
 					{nextIn > 0
 						? `Next match in ${formatClock(nextIn)}`
 						: "Next match starting…"}

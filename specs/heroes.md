@@ -86,7 +86,7 @@ unique (`slash` is the sword's, `stab` is the dagger's), which is what keeps
 ## The hero select
 
 - **The root menu** has a *Heroes* row showing the current pick. The choice is
-  remembered in `localStorage` (`vento.hero`) and written into every launch URL
+  remembered in `localStorage` (`golpe.hero`) and written into every launch URL
   the menu commits, so a menu commit and a boot can never disagree.
 - **The Esc menu** has a *Heroes* item with the same three cards. It changes the
   fighter mid-match (see above) and updates the remembered preference.

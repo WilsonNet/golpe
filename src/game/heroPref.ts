@@ -10,7 +10,7 @@
 
 import { DEFAULT_HERO, type HeroId, isHeroId } from "./simulation/Heroes";
 
-const KEY = "vento.hero";
+const KEY = "golpe.hero";
 
 export function readStoredHero(): HeroId {
 	try {

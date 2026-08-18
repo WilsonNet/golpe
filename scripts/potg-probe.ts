@@ -28,8 +28,8 @@ import type { Page } from "playwright";
 import { chromium } from "playwright";
 import type { MatchStateSnapshot, PotgSnapshot } from "../src/types/global";
 
-const BASE_URL = process.env.VENTO_URL ?? "http://localhost:8084";
-const SERVER_URL = process.env.VENTO_SERVER_URL ?? "http://localhost:9208";
+const BASE_URL = process.env.GOLPE_URL ?? "http://localhost:8084";
+const SERVER_URL = process.env.GOLPE_SERVER_URL ?? "http://localhost:9208";
 
 function arg(name: string, fallback: string): string {
 	const hit = process.argv.find((a) => a.startsWith(`--${name}=`));

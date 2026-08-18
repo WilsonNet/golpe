@@ -20,8 +20,8 @@
  *   budget is asserted against the intro's length in `Director.test.ts`, so the
  *   two cannot silently drift apart.
  *
- * Every class is prefixed `vp-` (vento play) so it cannot collide with the
- * deathmatch overlay's `vd-`, the fight HUD's `vf-` or the cinematic's `vu-`.
+ * Every class is prefixed `gp-` (golpe play) so it cannot collide with the
+ * deathmatch overlay's `gd-`, the fight HUD's `vf-` or the cinematic's `vu-`.
  */
 
 import { POTG_BAR_FRACTION, POTG_INTRO_MS } from "../game/potg/Director";
@@ -74,7 +74,7 @@ export const POTG_CARD_MS = Math.max(
 );
 
 export const POTG_CSS = `
-.vp-root {
+.gp-root {
 	position: absolute;
 	inset: 0;
 	z-index: 45;
@@ -107,7 +107,7 @@ export const POTG_CSS = `
    a caption over footage that is already playing. At 0 they are exactly the
    letterbox bars. The reveal is therefore not a fade: it is a curtain opening
    into the frame it was always going to be. */
-.vp-bar {
+.gp-bar {
 	position: absolute;
 	left: 0;
 	right: 0;
@@ -121,7 +121,7 @@ export const POTG_CSS = `
 /* The gold inner edge is the *letterbox's* line, not the curtain's: while the
    halves are closed they meet in the middle, and two lit edges there drew a rule
    straight through the wordmark. It fades in as they open. */
-.vp-bar.top {
+.gp-bar.top {
 	top: 0;
 	--dir: to bottom;
 	border-bottom: 1px solid
@@ -130,7 +130,7 @@ export const POTG_CSS = `
 		0 6px 26px rgba(0, 0, 0, 0.9),
 		0 1px 12px rgba(255, 209, 102, calc(0.2 * (1 - var(--potg-curtain))));
 }
-.vp-bar.bottom {
+.gp-bar.bottom {
 	bottom: 0;
 	border-top: 1px solid
 		rgba(255, 209, 102, calc(0.45 * (1 - var(--potg-curtain))));
@@ -141,7 +141,7 @@ export const POTG_CSS = `
 
 /* A vignette that tightens as the bars close, so the corners of a 4:3 arena
    stop competing with the middle of the frame. */
-.vp-vignette {
+.gp-vignette {
 	position: absolute;
 	inset: 0;
 	background: radial-gradient(
@@ -156,7 +156,7 @@ export const POTG_CSS = `
    Above the curtain, so it reads on black while the halves are closed. It fades
    out slightly ahead of them, so what the curtain reveals is the arena and not a
    headline sitting on top of it. */
-.vp-splash {
+.gp-splash {
 	position: absolute;
 	inset: 0;
 	display: grid;
@@ -167,13 +167,13 @@ export const POTG_CSS = `
 	/* The whole card takes one hit on the slam. Small — this is a punctuation
 	   mark, not an earthquake — but it is the difference between the words
 	   appearing and the words *arriving*. */
-	animation: vp-slam 420ms cubic-bezier(0.22, 1.4, 0.4, 1) ${FLASH_AT}ms both;
+	animation: gp-slam 420ms cubic-bezier(0.22, 1.4, 0.4, 1) ${FLASH_AT}ms both;
 }
 
 /* Diagonal speed lines drifting behind everything. A repeating gradient is
    exactly right for straight parallel lines — unlike the sunburst, which was a
    conic gradient once and read as a warning label rather than as light. */
-.vp-streaks {
+.gp-streaks {
 	position: absolute;
 	inset: -30%;
 	background: repeating-linear-gradient(
@@ -183,17 +183,17 @@ export const POTG_CSS = `
 		rgba(255, 209, 102, 0.07) 27px,
 		rgba(255, 209, 102, 0.07) 30px
 	);
-	animation: vp-drift 3.2s linear infinite;
+	animation: gp-drift 3.2s linear infinite;
 	mask-image: radial-gradient(ellipse at 50% 50%, #000 20%, transparent 72%);
 	-webkit-mask-image: radial-gradient(ellipse at 50% 50%, #000 20%, transparent 72%);
 }
 
-.vp-burst {
+.gp-burst {
 	position: absolute;
 	/* \`inset: 0; margin: auto\` rather than a top/left transform: the flare is
 	   spinning, and a centring transform would be overwritten by its own
 	   animation. Auto margins centre a fixed-size absolute box without touching
-	   \`transform\` at all — which matters here because \`.vp-splash\` is a grid, and
+	   \`transform\` at all — which matters here because \`.gp-splash\` is a grid, and
 	   an absolutely positioned child of a grid is otherwise placed at its *cell*
 	   rather than at the middle of the card. */
 	inset: 0;
@@ -203,14 +203,14 @@ export const POTG_CSS = `
 	background: url("assets/potg-burst.png") center / contain no-repeat;
 	opacity: 0.42;
 	animation:
-		vp-spin 26s linear infinite,
-		vp-burst-in 900ms cubic-bezier(0.16, 1, 0.3, 1) ${FLASH_AT}ms both;
+		gp-spin 26s linear infinite,
+		gp-burst-in 900ms cubic-bezier(0.16, 1, 0.3, 1) ${FLASH_AT}ms both;
 	mix-blend-mode: screen;
 }
 
 /* The slam's white flash. One frame of overexposure is what sells an impact
    that has no sound behind it — this game has no audio. */
-.vp-flash {
+.gp-flash {
 	position: absolute;
 	inset: -50%;
 	margin: auto;
@@ -220,17 +220,17 @@ export const POTG_CSS = `
 		rgba(255, 209, 102, 0) 62%
 	);
 	opacity: 0;
-	animation: vp-flash ${FLASH_MS}ms ease-out ${FLASH_AT}ms both;
+	animation: gp-flash ${FLASH_MS}ms ease-out ${FLASH_AT}ms both;
 }
 
-.vp-emblem {
+.gp-emblem {
 	position: relative;
 	width: clamp(52px, 12cqh, 104px);
 	height: clamp(52px, 12cqh, 104px);
 	margin-bottom: 2cqh;
 	background: url("assets/potg-emblem.png") center / contain no-repeat;
 	filter: drop-shadow(0 4px 18px rgba(0, 0, 0, 0.8));
-	animation: vp-emblem-in ${EMBLEM_MS}ms cubic-bezier(0.16, 1, 0.3, 1) ${EMBLEM_AT}ms both;
+	animation: gp-emblem-in ${EMBLEM_MS}ms cubic-bezier(0.16, 1, 0.3, 1) ${EMBLEM_AT}ms both;
 }
 
 /* ---- the wordmark ----
@@ -239,7 +239,7 @@ export const POTG_CSS = `
    present on every platform — a CSS stack would have looked right here and like
    Arial Bold on the next machine. One file per word is also what lets each one
    arrive on its own. */
-.vp-words {
+.gp-words {
 	position: relative;
 	display: flex;
 	align-items: baseline;
@@ -248,28 +248,28 @@ export const POTG_CSS = `
 	filter: drop-shadow(0 6px 20px rgba(0, 0, 0, 0.85));
 }
 
-.vp-word {
+.gp-word {
 	display: block;
 	height: clamp(34px, 12cqh, 116px);
 	width: auto;
 	/* Each word arrives from the left with motion blur, overshoots and settles.
 	   \`both\` matters: without it a word sits at full opacity through its own
 	   delay, so all four would be on screen before the first one moved. */
-	animation: vp-word-in ${WORD_MS}ms cubic-bezier(0.17, 1.5, 0.4, 1) both;
+	animation: gp-word-in ${WORD_MS}ms cubic-bezier(0.17, 1.5, 0.4, 1) both;
 }
-.vp-word.w1 { animation-delay: ${WORD_AT}ms; }
-.vp-word.w2 { animation-delay: ${WORD_AT + WORD_STAGGER}ms; }
-.vp-word.w3 { animation-delay: ${WORD_AT + WORD_STAGGER * 2}ms; }
-.vp-word.w4 { animation-delay: ${WORD_AT + WORD_STAGGER * 3}ms; }
+.gp-word.w1 { animation-delay: ${WORD_AT}ms; }
+.gp-word.w2 { animation-delay: ${WORD_AT + WORD_STAGGER}ms; }
+.gp-word.w3 { animation-delay: ${WORD_AT + WORD_STAGGER * 2}ms; }
+.gp-word.w4 { animation-delay: ${WORD_AT + WORD_STAGGER * 3}ms; }
 /* "OF" and "THE" are connective tissue; setting them smaller is what stops the
    line reading as four equal shouts. */
-.vp-word.small { height: clamp(22px, 7.9cqh, 78px); }
+.gp-word.small { height: clamp(22px, 7.9cqh, 78px); }
 
 /* A bar of light crossing the finished card.
-   At card level rather than inside \`.vp-words\`: an absolutely positioned child
+   At card level rather than inside \`.gp-words\`: an absolutely positioned child
    of a flex row takes its *static* position, so nested here it sized itself to
    the gap between two words and rendered as a grey block over "OF". */
-.vp-sweep {
+.gp-sweep {
 	position: absolute;
 	inset: 0;
 	background: linear-gradient(
@@ -280,10 +280,10 @@ export const POTG_CSS = `
 	);
 	mix-blend-mode: screen;
 	pointer-events: none;
-	animation: vp-sweep ${SWEEP_MS}ms ease-in-out ${SWEEP_AT}ms both;
+	animation: gp-sweep ${SWEEP_MS}ms ease-in-out ${SWEEP_AT}ms both;
 }
 
-.vp-byline {
+.gp-byline {
 	position: relative;
 	margin-top: 2.4cqh;
 	display: flex;
@@ -295,20 +295,20 @@ export const POTG_CSS = `
 	text-indent: 0.26em;
 	text-transform: uppercase;
 	white-space: nowrap;
-	animation: vp-byline-in ${BYLINE_MS}ms cubic-bezier(0.16, 1, 0.3, 1) ${BYLINE_AT}ms both;
+	animation: gp-byline-in ${BYLINE_MS}ms cubic-bezier(0.16, 1, 0.3, 1) ${BYLINE_AT}ms both;
 }
-.vp-byline .name { color: #ffffff; }
-.vp-byline .dot {
+.gp-byline .name { color: #ffffff; }
+.gp-byline .dot {
 	width: 5px;
 	height: 5px;
 	border-radius: 50%;
 	background: var(--potg-accent);
 	box-shadow: 0 0 10px var(--potg-accent);
 }
-.vp-byline .deed { color: var(--potg-accent); }
+.gp-byline .deed { color: var(--potg-accent); }
 
 /* A hairline under the byline, drawn out from the centre. */
-.vp-rule {
+.gp-rule {
 	position: relative;
 	margin-top: 1.6cqh;
 	width: min(46cqw, 520px);
@@ -321,7 +321,7 @@ export const POTG_CSS = `
 		transparent
 	);
 	opacity: 0.85;
-	animation: vp-rule-in ${BYLINE_MS}ms cubic-bezier(0.16, 1, 0.3, 1) ${BYLINE_AT}ms both;
+	animation: gp-rule-in ${BYLINE_MS}ms cubic-bezier(0.16, 1, 0.3, 1) ${BYLINE_AT}ms both;
 }
 
 /* The receipt: what the play actually was, under the name of it. "3 KILLS ·
@@ -329,7 +329,7 @@ export const POTG_CSS = `
    the headline owns the first half of the card and the numbers arrive after
    the name has landed. The order is the argument: frags first, then the two
    damage rows, with absorbed last because it is the one that reads worst. */
-.vp-stats {
+.gp-stats {
 	position: relative;
 	margin-top: 1.4cqh;
 	display: flex;
@@ -344,13 +344,13 @@ export const POTG_CSS = `
 	white-space: nowrap;
 	color: rgba(246, 239, 224, 0.92);
 	text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
-	animation: vp-stats-in ${STATS_MS}ms cubic-bezier(0.16, 1, 0.3, 1) ${STATS_AT}ms both;
+	animation: gp-stats-in ${STATS_MS}ms cubic-bezier(0.16, 1, 0.3, 1) ${STATS_AT}ms both;
 }
-.vp-stats .num {
+.gp-stats .num {
 	color: var(--potg-accent);
 	font-variant-numeric: tabular-nums;
 }
-.vp-stats .sep {
+.gp-stats .sep {
 	width: 4px;
 	height: 4px;
 	border-radius: 50%;
@@ -365,7 +365,7 @@ export const POTG_CSS = `
    left edge — because the roll is exactly when the frame fills up: a black
    hole, a sword arc and a headline all claiming the same pixels is a headline
    that lost. A broadcast lower-third stays legible over anything. */
-.vp-card {
+.gp-card {
 	position: absolute;
 	left: 4%;
 	bottom: calc(var(--potg-bars) * ${BARS} + 26px);
@@ -385,7 +385,7 @@ export const POTG_CSS = `
 	text-shadow: 0 2px 10px rgba(0, 0, 0, 0.9);
 }
 
-.vp-headline {
+.gp-headline {
 	font-size: clamp(20px, 4cqw, 40px);
 	font-weight: 800;
 	letter-spacing: 0.14em;
@@ -393,7 +393,7 @@ export const POTG_CSS = `
 	line-height: 1.05;
 }
 
-.vp-name {
+.gp-name {
 	margin-top: 6px;
 	font-size: clamp(15px, 2.6cqw, 26px);
 	font-weight: 700;
@@ -401,7 +401,7 @@ export const POTG_CSS = `
 	color: #ffffff;
 }
 
-.vp-name .vp-you {
+.gp-name .gp-you {
 	margin-left: 10px;
 	padding: 2px 8px;
 	font-size: 0.62em;
@@ -412,7 +412,7 @@ export const POTG_CSS = `
 	vertical-align: middle;
 }
 
-.vp-sub {
+.gp-sub {
 	margin-top: 4px;
 	font-size: clamp(11px, 1.7cqw, 15px);
 	letter-spacing: 0.05em;
@@ -518,7 +518,7 @@ export const POTG_CSS = `
    The only thing on screen through the roll itself. A replay that said nothing
    at all is a replay a player cannot tell from a live match they have lost
    control of. */
-.vp-tag {
+.gp-tag {
 	position: absolute;
 	left: 4%;
 	top: calc(var(--potg-bars) * ${BARS} + 18px);
@@ -532,19 +532,19 @@ export const POTG_CSS = `
 	opacity: calc(1 - var(--potg-curtain));
 	text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9);
 }
-.vp-tag::before {
+.gp-tag::before {
 	content: "";
 	width: 7px;
 	height: 7px;
 	border-radius: 50%;
 	background: #ff5a5a;
 	box-shadow: 0 0 10px #ff5a5a;
-	animation: vp-rec 1.4s steps(1, end) infinite;
+	animation: gp-rec 1.4s steps(1, end) infinite;
 }
 
 /* ---- footer ----
    The progress of the footage, and the way out. */
-.vp-progress {
+.gp-progress {
 	position: absolute;
 	left: 0;
 	bottom: 0;
@@ -554,7 +554,7 @@ export const POTG_CSS = `
 	box-shadow: 0 0 10px rgba(255, 209, 102, 0.6);
 }
 
-.vp-skip {
+.gp-skip {
 	position: absolute;
 	right: 4%;
 	bottom: calc(var(--potg-bars) * ${BARS} + 22px);
@@ -571,30 +571,30 @@ export const POTG_CSS = `
 	color: rgba(255, 209, 102, 0.9);
 	cursor: pointer;
 }
-.vp-skip:hover { background: rgba(255, 209, 102, 0.16); }
+.gp-skip:hover { background: rgba(255, 209, 102, 0.16); }
 
-@keyframes vp-spin { to { transform: rotate(360deg); } }
-@keyframes vp-drift { to { transform: translateX(-58px); } }
-@keyframes vp-rec { 0%, 55% { opacity: 1; } 56%, 100% { opacity: 0.15; } }
+@keyframes gp-spin { to { transform: rotate(360deg); } }
+@keyframes gp-drift { to { transform: translateX(-58px); } }
+@keyframes gp-rec { 0%, 55% { opacity: 1; } 56%, 100% { opacity: 0.15; } }
 
-@keyframes vp-flash {
+@keyframes gp-flash {
 	0% { opacity: 0; transform: scale(0.7); }
 	18% { opacity: 1; transform: scale(1); }
 	100% { opacity: 0; transform: scale(1.25); }
 }
-@keyframes vp-burst-in {
+@keyframes gp-burst-in {
 	from { opacity: 0; transform: scale(0.55) rotate(-24deg); }
 	to { opacity: 0.42; }
 }
-@keyframes vp-slam {
+@keyframes gp-slam {
 	0% { transform: scale(1.16); }
 	55% { transform: scale(0.985); }
 	100% { transform: scale(1); }
 }
-@keyframes vp-emblem-in {
+@keyframes gp-emblem-in {
 	from { opacity: 0; transform: scale(0.35) rotate(-40deg); }
 }
-@keyframes vp-word-in {
+@keyframes gp-word-in {
 	0% {
 		opacity: 0;
 		transform: translateX(-14%) scaleX(1.9);
@@ -604,23 +604,23 @@ export const POTG_CSS = `
 	78% { transform: translateX(0) scaleX(0.97); filter: blur(0); }
 	100% { transform: none; filter: blur(0); }
 }
-@keyframes vp-sweep {
+@keyframes gp-sweep {
 	from { transform: translateX(-115%); }
 	to { transform: translateX(115%); }
 }
-@keyframes vp-byline-in {
+@keyframes gp-byline-in {
 	from { opacity: 0; transform: translateY(14px); letter-spacing: 0.6em; }
 }
-@keyframes vp-rule-in {
+@keyframes gp-rule-in {
 	from { opacity: 0; transform: scaleX(0.1); }
 }
-@keyframes vp-stats-in {
+@keyframes gp-stats-in {
 	from { opacity: 0; transform: translateY(10px); letter-spacing: 0.55em; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.vp-burst, .vp-streaks, .vp-sweep { animation: none; }
-	.vp-splash, .vp-emblem, .vp-word, .vp-byline, .vp-rule, .vp-flash, .vp-stats {
+	.gp-burst, .gp-streaks, .gp-sweep { animation: none; }
+	.gp-splash, .gp-emblem, .gp-word, .gp-byline, .gp-rule, .gp-flash, .gp-stats {
 		animation-duration: 1ms;
 	}
 	.vv-veil, .vv-word, .vv-line, .vv-sub { animation-duration: 1ms; }

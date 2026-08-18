@@ -39,10 +39,10 @@ export function Scoreboard() {
 	const { status, standings, myId } = match;
 	const teams = status.teams;
 	return (
-		<div className="vd-board">
+		<div className="gd-board">
 			<style>{HUD_CSS}</style>
-			<div className="vd-board-card">
-				<div className="vd-board-head">
+			<div className="gd-board-card">
+				<div className="gd-board-head">
 					<span>
 						{teams
 							? `Teams — round ${teams.round}, first to ${status.scoreLimit}`
@@ -51,7 +51,7 @@ export function Scoreboard() {
 						    "I'm in" is actually in this one. Shortened: a full uuid is
 						    unreadable and the address bar has the whole thing. */}
 						{roomId ? (
-							<span className="vd-room"> · room {roomId.slice(0, 8)}</span>
+							<span className="gd-room"> · room {roomId.slice(0, 8)}</span>
 						) : null}
 					</span>
 					<span>{formatClock(status.timeLimitMs - status.elapsedMs)}</span>
@@ -91,15 +91,15 @@ function TeamTables({
 				return (
 					<div
 						key={team}
-						className="vd-team-block"
+						className="gd-team-block"
 						style={{ color: teamCss(team) }}
 					>
-						<div className="vd-team-head">
+						<div className="gd-team-head">
 							<span>{TEAM_NAMES[team]}</span>
-							<span className="vd-team-alive">
+							<span className="gd-team-alive">
 								{teams.alive[team] ?? 0} of {teams.seated[team] ?? 0} standing
 							</span>
-							<span className="vd-team-rounds">{teams.scores[team] ?? 0}</span>
+							<span className="gd-team-rounds">{teams.scores[team] ?? 0}</span>
 						</div>
 						{rows.length > 0 ? (
 							<ScoreTable standings={rows} myId={myId} />
@@ -123,37 +123,37 @@ export function ScoreTable({
 }) {
 	const rows = standings.filter((s) => s.place >= from);
 	return (
-		<table className="vd-table">
+		<table className="gd-table">
 			<thead>
 				<tr>
 					<th style={{ width: "3em" }}>#</th>
 					<th>Fighter</th>
-					<th className="vd-num">Frags</th>
-					<th className="vd-num">Deaths</th>
-					<th className="vd-num" title="Damage dealt">
+					<th className="gd-num">Frags</th>
+					<th className="gd-num">Deaths</th>
+					<th className="gd-num" title="Damage dealt">
 						DMG
 					</th>
-					<th className="vd-num" title="Ultimates taken away">
+					<th className="gd-num" title="Ultimates taken away">
 						Denies
 					</th>
-					<th className="vd-num" title="Damage the guard turned away">
+					<th className="gd-num" title="Damage the guard turned away">
 						Blocked
 					</th>
 				</tr>
 			</thead>
 			<tbody>
 				{rows.map((s) => (
-					<tr key={s.id} className={s.id === myId ? "vd-me" : undefined}>
-						<td className="vd-num">{s.place}</td>
+					<tr key={s.id} className={s.id === myId ? "gd-me" : undefined}>
+						<td className="gd-num">{s.place}</td>
 						<td>
 							{s.name}
-							{s.bot ? <span className="vd-tag">BOT</span> : null}
+							{s.bot ? <span className="gd-tag">BOT</span> : null}
 						</td>
-						<td className="vd-num">{s.kills}</td>
-						<td className="vd-num">{s.deaths}</td>
-						<td className="vd-num">{s.damage}</td>
-						<td className="vd-num">{s.denies}</td>
-						<td className="vd-num">{s.blocked}</td>
+						<td className="gd-num">{s.kills}</td>
+						<td className="gd-num">{s.deaths}</td>
+						<td className="gd-num">{s.damage}</td>
+						<td className="gd-num">{s.denies}</td>
+						<td className="gd-num">{s.blocked}</td>
 					</tr>
 				))}
 			</tbody>

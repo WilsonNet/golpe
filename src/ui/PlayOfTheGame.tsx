@@ -134,51 +134,51 @@ export function PlayOfTheGame() {
 		: undefined;
 
 	return (
-		<div className="vp-root" ref={rootRef} style={style} aria-live="polite">
+		<div className="gp-root" ref={rootRef} style={style} aria-live="polite">
 			<style>{POTG_CSS}</style>
 
-			<div className="vp-vignette" />
+			<div className="gp-vignette" />
 			{/* Curtain *and* letterbox, in one pair of elements: closed over the
 			    whole screen for the title card, then opened into the bars the rest
 			    of the ceremony is framed by. See `potgStyles.ts`. */}
-			<div className="vp-bar top" />
-			<div className="vp-bar bottom" />
+			<div className="gp-bar top" />
+			<div className="gp-bar bottom" />
 
 			{/* The title card. Everything in here is generated art or CSS: the
 			    wordmark is four PNGs from `scripts/make-potg-art.py` because its
 			    condensed uppercase face exists on no platform by default, and the
 			    burst is a PNG rather than a conic gradient because a gradient's rays
 			    stay hard-edged to the rim and read as a warning label. */}
-			<div className="vp-splash">
-				<div className="vp-streaks" />
-				<div className="vp-burst" />
-				<div className="vp-flash" />
-				<div className="vp-emblem" role="img" aria-label="Play of the game" />
-				<div className="vp-words" role="img" aria-label="Play of the game">
-					<img className="vp-word w1" src="assets/potg-word-play.png" alt="" />
+			<div className="gp-splash">
+				<div className="gp-streaks" />
+				<div className="gp-burst" />
+				<div className="gp-flash" />
+				<div className="gp-emblem" role="img" aria-label="Play of the game" />
+				<div className="gp-words" role="img" aria-label="Play of the game">
+					<img className="gp-word w1" src="assets/potg-word-play.png" alt="" />
 					<img
-						className="vp-word w2 small"
+						className="gp-word w2 small"
 						src="assets/potg-word-of.png"
 						alt=""
 					/>
 					<img
-						className="vp-word w3 small"
+						className="gp-word w3 small"
 						src="assets/potg-word-the.png"
 						alt=""
 					/>
-					<img className="vp-word w4" src="assets/potg-word-game.png" alt="" />
+					<img className="gp-word w4" src="assets/potg-word-game.png" alt="" />
 				</div>
-				<div className="vp-sweep" />
-				<div className="vp-byline">
+				<div className="gp-sweep" />
+				<div className="gp-byline">
 					<span className="name">{announce.protagonistName}</span>
 					<i className="dot" />
 					<span className="deed">{announce.headline}</span>
 				</div>
-				<div className="vp-rule" />
+				<div className="gp-rule" />
 				{/* The receipt, under the name of it. The stats travel in the
 				    announcement, so a ceremony with no footage still gets them. */}
 				{statLine.length > 0 ? (
-					<div className="vp-stats" role="note">
+					<div className="gp-stats" role="note">
 						{statLine.map((part, i) => (
 							<Fragment key={part}>
 								{i > 0 ? <i className="sep" /> : null}
@@ -192,25 +192,25 @@ export function PlayOfTheGame() {
 			{/* Through the roll itself, when the title is gone: the one thing that
 			    distinguishes a replay from a live match the player has lost control
 			    of. */}
-			<div className="vp-tag">Replay · {announce.protagonistName}</div>
+			<div className="gp-tag">Replay · {announce.protagonistName}</div>
 
-			<div className="vp-card">
-				<div className="vp-headline">{announce.headline}</div>
-				<div className="vp-name">
+			<div className="gp-card">
+				<div className="gp-headline">{announce.headline}</div>
+				<div className="gp-name">
 					{announce.protagonistName}
-					{mine ? <span className="vp-you">You</span> : null}
+					{mine ? <span className="gp-you">You</span> : null}
 				</div>
-				<div className="vp-sub">{announce.subtitle}</div>
+				<div className="gp-sub">{announce.subtitle}</div>
 			</div>
 
 			<button
 				type="button"
-				className="vp-skip"
+				className="gp-skip"
 				onClick={() => EventBus.emit("potg-skip", null)}
 			>
 				Skip
 			</button>
-			<div className="vp-progress" />
+			<div className="gp-progress" />
 		</div>
 	);
 }

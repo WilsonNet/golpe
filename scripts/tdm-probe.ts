@@ -29,7 +29,7 @@ import { chromium } from "playwright";
 import type { TeamId } from "../src/game/simulation/Teams";
 import type { MatchStateSnapshot } from "../src/types/global";
 
-const BASE_URL = process.env.VENTO_URL ?? "http://localhost:8084";
+const BASE_URL = process.env.GOLPE_URL ?? "http://localhost:8084";
 const RESULT_RE = /__DIAGNOSTIC_RESULT__(\{.*?\})__END__/s;
 
 function arg(name: string, fallback: string): string {

@@ -1,6 +1,6 @@
 ---
 name: tidying-up
-description: "Run a tidying day on Vento Áureo: aggressive dead-code removal with knip, performance work (build speed, ECS hygiene, parallelism), DRY/single-source-of-truth consolidation with named constants, Biome noMagicNumbers enforcement, and a markdown/docs leanness pass. Ends with the full verify pipeline plus the online feedback-loop probes, because a cleanup that broke the game is not a cleanup. Triggers on: tidy, tidying, cleanup, dead code, refactor, DRY, constants, magic numbers, knip, unused, performance, parallel, docs review, AGENTS.md lean."
+description: "Run a tidying day on Golpe: aggressive dead-code removal with knip, performance work (build speed, ECS hygiene, parallelism), DRY/single-source-of-truth consolidation with named constants, Biome noMagicNumbers enforcement, and a markdown/docs leanness pass. Ends with the full verify pipeline plus the online feedback-loop probes, because a cleanup that broke the game is not a cleanup. Triggers on: tidy, tidying, cleanup, dead code, refactor, DRY, constants, magic numbers, knip, unused, performance, parallel, docs review, AGENTS.md lean."
 license: MIT
 ---
 

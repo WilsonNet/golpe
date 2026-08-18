@@ -14,7 +14,7 @@ import { chromium } from "playwright";
 import type { AIState } from "../src/game/characters/EnemyBrain";
 import type { WallSide } from "../src/game/simulation/Physics";
 
-const BASE_URL = process.env.VENTO_URL ?? "http://localhost:8084";
+const BASE_URL = process.env.GOLPE_URL ?? "http://localhost:8084";
 const RESULT_RE = /__DIAGNOSTIC_RESULT__(\{.*?\})__END__/s;
 
 /**
@@ -117,30 +117,30 @@ async function sampleStates(
 	for (let i = 0; i < samples; i++) {
 		await page.waitForTimeout(gap);
 		try {
-		out.push(
-			await page.evaluate(() => {
-				const s = window.__gameState!();
-				// No named inner function here: esbuild's keepNames decorates a
-				// named arrow with `__name(fn, "fn")`, and Playwright serializes
-				// that call into the browser context, where `__name` does not
-				// exist — which silently emptied every state sample since the
-				// harness moved to TypeScript.
-				const p = s.playerPhys;
-				return {
-					pState: s.playerState,
-					eState: s.enemyState,
-					hp: `${s.playerHP}v${s.enemyHP}`,
-					player: p
-						? {
-								x: Math.round(p.x),
-								y: Math.round(p.y),
-								g: p.grounded,
-								w: p.wallTouch,
-							}
-						: null,
-				};
-			}),
-		);
+			out.push(
+				await page.evaluate(() => {
+					const s = window.__gameState!();
+					// No named inner function here: esbuild's keepNames decorates a
+					// named arrow with `__name(fn, "fn")`, and Playwright serializes
+					// that call into the browser context, where `__name` does not
+					// exist — which silently emptied every state sample since the
+					// harness moved to TypeScript.
+					const p = s.playerPhys;
+					return {
+						pState: s.playerState,
+						eState: s.enemyState,
+						hp: `${s.playerHP}v${s.enemyHP}`,
+						player: p
+							? {
+									x: Math.round(p.x),
+									y: Math.round(p.y),
+									g: p.grounded,
+									w: p.wallTouch,
+								}
+							: null,
+					};
+				}),
+			);
 		} catch {
 			/* page may be mid-navigation */
 		}

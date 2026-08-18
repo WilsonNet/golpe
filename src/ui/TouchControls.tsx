@@ -207,7 +207,7 @@ function Cross() {
 	return (
 		<div
 			ref={ref}
-			className={`vg-cross${nub ? " live" : ""}`}
+			className={`gg-cross${nub ? " live" : ""}`}
 			onPointerDown={down}
 			onPointerMove={move}
 			onPointerUp={release}
@@ -215,7 +215,7 @@ function Cross() {
 			onLostPointerCapture={() => apply(null)}
 		>
 			<div
-				className="vg-cross-nub"
+				className="gg-cross-nub"
 				style={
 					nub
 						? // 29% of the pad, so a fully deflected nub sits inside the
@@ -224,7 +224,7 @@ function Cross() {
 						: undefined
 				}
 			/>
-			<div className="vg-cross-label">Move</div>
+			<div className="gg-cross-label">Move</div>
 		</div>
 	);
 }
@@ -283,7 +283,7 @@ function AimStick() {
 	return (
 		<div
 			ref={ref}
-			className={`vg-stick${nub ? " live" : ""}`}
+			className={`gg-stick${nub ? " live" : ""}`}
 			onPointerDown={down}
 			onPointerMove={move}
 			onPointerUp={release}
@@ -291,7 +291,7 @@ function AimStick() {
 			onLostPointerCapture={release}
 		>
 			<div
-				className="vg-stick-nub"
+				className="gg-stick-nub"
 				style={
 					nub
 						? // 29% of the pad, so a fully deflected nub sits inside the rim
@@ -300,7 +300,7 @@ function AimStick() {
 						: undefined
 				}
 			/>
-			<div className="vg-stick-label">Aim</div>
+			<div className="gg-stick-label">Aim</div>
 		</div>
 	);
 }
@@ -399,19 +399,17 @@ export function TouchControls() {
 	if (!deckVisible) return null;
 
 	return (
-		<div className="vg-deck">
+		<div className="gg-deck">
 			<style>{DECK_CSS}</style>
-			<div className="vg-brand">
-				<span className="vg-brand-mark">
-					Vento <b>Áureo</b>
-				</span>
-				<span className="vg-brand-sub">Golden Wind</span>
+			<div className="gg-brand">
+				<span className="gg-brand-mark">Golpe</span>
+				<span className="gg-brand-sub">The strike</span>
 				{/* A phone has no Escape key, and the menu is where a player turns
 				    this deck off again — so without this, choosing the on-screen
 				    gamepad on a phone is a decision that cannot be undone. */}
 				<button
 					type="button"
-					className="vg-menu"
+					className="gg-menu"
 					aria-label="Menu"
 					onPointerDown={(e) => {
 						e.preventDefault();
@@ -425,37 +423,37 @@ export function TouchControls() {
 			    portrait layout stacks them two and two, and the landscape one pins
 			    them into the two letterbox margins a 4:3 game leaves beside itself.
 			    Same DOM, and therefore the same held buttons, through a rotation. */}
-			<div className="vg-body">
-				<div className="vg-cell cross">
+			<div className="gg-body">
+				<div className="gg-cell cross">
 					<Cross />
 				</div>
-				<div className="vg-cell stance">
+				<div className="gg-cell stance">
 					<PadButton
 						code={CODES.sword}
 						label="Sword"
-						className="vg-pill"
+						className="gg-pill"
 						title="Sword stance"
 					/>
 					<PadButton
 						code={CODES.gun}
 						label="Gun"
-						className="vg-pill"
+						className="gg-pill"
 						title="Gun stance"
 					/>
 					{ultReadyNow && (
 						<PadButton
 							code={CODES.ult}
 							label="Ult"
-							className="vg-pill ult"
+							className="gg-pill ult"
 							title="Ultimate — Black Hole"
 						/>
 					)}
 				</div>
-				<div className="vg-cell stick">
+				<div className="gg-cell stick">
 					<AimStick />
 				</div>
-				<div className="vg-cell face">
-					<div className="vg-face">
+				<div className="gg-cell face">
+					<div className="gg-face">
 						{/* Sword and gun do not share buttons. Block and Uppercut are
 						    sword moves and do nothing in gun stance, so in gun mode they
 						    are not drawn — a dead button on a phone is a thumb spent on
@@ -464,28 +462,28 @@ export function TouchControls() {
 							<PadButton
 								code={CODES.upper}
 								label="Upper"
-								className="vg-btn upper"
+								className="gg-btn upper"
 								title="Uppercut"
 							/>
 						)}
 						<PadButton
 							code={CODES.slash}
 							label="Slash"
-							className="vg-btn slash"
+							className="gg-btn slash"
 							title="Slash / fire"
 						/>
 						{stance === "sword" && (
 							<PadButton
 								code={CODES.block}
 								label="Block"
-								className="vg-btn block"
+								className="gg-btn block"
 								title="Block"
 							/>
 						)}
 						<PadButton
 							code={CODES.jump}
 							label="Jump"
-							className="vg-btn jump"
+							className="gg-btn jump"
 							title="Jump / double jump"
 						/>
 						{/* The item works in both stances — it is the third member of the
@@ -494,7 +492,7 @@ export function TouchControls() {
 						<PadButton
 							code={CODES.item}
 							label={itemCharges > 0 ? `Item ${itemCharges}` : "Item"}
-							className="vg-btn item"
+							className="gg-btn item"
 							title="Item"
 						/>
 					</div>
@@ -502,7 +500,7 @@ export function TouchControls() {
 			</div>
 			{/* The raked grille. Pure decoration, and the single detail that stops
 			    the shell reading as a flat slab under the buttons. */}
-			<div className="vg-speaker" />
+			<div className="gg-speaker" />
 		</div>
 	);
 }

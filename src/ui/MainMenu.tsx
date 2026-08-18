@@ -124,21 +124,21 @@ export function MainMenu({
 	}, []);
 
 	return (
-		<div className="vd-menu-page">
+		<div className="gd-menu-page">
 			<style>{HUD_CSS}</style>
 			<style>{MENU_CSS}</style>
-			<div className="vd-card">
-				<h1 className="vd-title">Vento Áureo</h1>
-				<p className="vd-sub">
+			<div className="gd-card">
+				<h1 className="gd-title">Golpe</h1>
+				<p className="gd-sub">
 					A 2D swordfight, online first — the link is the invitation.
 				</p>
 
 				{view === "home" ? (
 					<>
-						<div className="vd-section">
-							<div className="vd-section-head">Play</div>
+						<div className="gd-section">
+							<div className="gd-section-head">Play</div>
 							<button
-								className="vd-play-item vd-play-item-primary"
+								className="gd-play-item gd-play-item-primary"
 								type="button"
 								onClick={() => onLaunch({ ...NOTHING, bots: 1, hero })}
 							>
@@ -148,9 +148,9 @@ export function MainMenu({
 									share.
 								</span>
 							</button>
-							<div className="vd-two">
+							<div className="gd-two">
 								<button
-									className="vd-play-item"
+									className="gd-play-item"
 									type="button"
 									onClick={() => setView("host")}
 								>
@@ -160,7 +160,7 @@ export function MainMenu({
 									</span>
 								</button>
 								<button
-									className="vd-play-item"
+									className="gd-play-item"
 									type="button"
 									onClick={() => setView("join")}
 								>
@@ -169,7 +169,7 @@ export function MainMenu({
 								</button>
 							</div>
 							<button
-								className="vd-play-item"
+								className="gd-play-item"
 								type="button"
 								onClick={() => onLaunch({ ...NOTHING, training: true, hero })}
 							>
@@ -178,14 +178,14 @@ export function MainMenu({
 							</button>
 						</div>
 
-						<div className="vd-section">
-							<div className="vd-section-head">Your fighter</div>
-							<div className="vd-hero-pick">
+						<div className="gd-section">
+							<div className="gd-section-head">Your fighter</div>
+							<div className="gd-hero-pick">
 								{HERO_IDS.map((id) => (
 									<button
 										key={id}
 										type="button"
-										className={`vd-hero-chip${hero === id ? " vd-hero-chip-on" : ""}`}
+										className={`gd-hero-chip${hero === id ? " gd-hero-chip-on" : ""}`}
 										aria-pressed={hero === id}
 										onClick={() => {
 											setHero(id);
@@ -196,22 +196,22 @@ export function MainMenu({
 											className={`hp-sprite hp-sprite-${id}`}
 											aria-hidden="true"
 										/>
-										<span className="vd-hero-chip-meta">
-											<span className="vd-hero-chip-name">
+										<span className="gd-hero-chip-meta">
+											<span className="gd-hero-chip-name">
 												{HEROES[id].name}
 											</span>
-											<span className="vd-hero-chip-kit">
+											<span className="gd-hero-chip-kit">
 												{HEROES[id].melee.label} · {HEROES[id].ranged.label}
 											</span>
 										</span>
 									</button>
 								))}
 							</div>
-							<div className="vd-name-row">
-								<label htmlFor="vd-name">Fighter name</label>
+							<div className="gd-name-row">
+								<label htmlFor="gd-name">Fighter name</label>
 								<input
-									id="vd-name"
-									className="vd-input"
+									id="gd-name"
+									className="gd-input"
 									value={name}
 									maxLength={MAX_NAME}
 									placeholder="your name"
@@ -223,14 +223,14 @@ export function MainMenu({
 									}}
 								/>
 							</div>
-							<p className="vd-hero-blurb">{HEROES[hero].blurb}</p>
+							<p className="gd-hero-blurb">{HEROES[hero].blurb}</p>
 						</div>
 
-						<div className="vd-section">
-							<div className="vd-section-head">Learn &amp; settings</div>
-							<div className="vd-two">
+						<div className="gd-section">
+							<div className="gd-section-head">Learn &amp; settings</div>
+							<div className="gd-two">
 								<button
-									className="vd-play-item"
+									className="gd-play-item"
 									type="button"
 									onClick={() => setView("howto")}
 								>
@@ -238,7 +238,7 @@ export function MainMenu({
 									<span>Movement, the sword chain, and the ultimate.</span>
 								</button>
 								<button
-									className="vd-play-item"
+									className="gd-play-item"
 									type="button"
 									onClick={() => setView("controls")}
 								>
@@ -270,7 +270,7 @@ export function MainMenu({
 
 				{view === "controls" ? (
 					<>
-						<h2 className="vd-title">Options</h2>
+						<h2 className="gd-title">Options</h2>
 						<ControlsDialog onClose={() => setView("home")} />
 					</>
 				) : null}
@@ -332,14 +332,14 @@ function HostForm({
 
 	return (
 		<>
-			<h2 className="vd-title">Host a match</h2>
+			<h2 className="gd-title">Host a match</h2>
 
-			<div className="vd-field">
-				<span className="vd-field-label">Mode</span>
-				<div className="vd-choice">
+			<div className="gd-field">
+				<span className="gd-field-label">Mode</span>
+				<div className="gd-choice">
 					<button
 						type="button"
-						className={`vd-chip${settings.mode === "ffa" ? " vd-chip-on" : ""}`}
+						className={`gd-chip${settings.mode === "ffa" ? " gd-chip-on" : ""}`}
 						onClick={() => {
 							set({ mode: "ffa", scoreLimit: SCORE_LIMIT_FFA });
 						}}
@@ -348,7 +348,7 @@ function HostForm({
 					</button>
 					<button
 						type="button"
-						className={`vd-chip${settings.mode === "tdm" ? " vd-chip-on" : ""}`}
+						className={`gd-chip${settings.mode === "tdm" ? " gd-chip-on" : ""}`}
 						onClick={() => {
 							set({
 								mode: "tdm",
@@ -361,14 +361,14 @@ function HostForm({
 					</button>
 				</div>
 			</div>
-			<p className="vd-field-note">
+			<p className="gd-field-note">
 				{settings.mode === "tdm"
 					? "Two sides, no friendly fire, wipe-out rounds. A team room always plays on at least three screens."
 					: "Everyone for themselves. First to 21 frags or the best score in five minutes."}
 			</p>
 
-			<div className="vd-field">
-				<span className="vd-field-label">
+			<div className="gd-field">
+				<span className="gd-field-label">
 					Arena width {settings.mode === "tdm" ? "(min 3 for teams)" : ""}
 				</span>
 				<input
@@ -382,8 +382,8 @@ function HostForm({
 					}}
 				/>
 			</div>
-			<div className="vd-field">
-				<span className="vd-field-label">Bots to fight</span>
+			<div className="gd-field">
+				<span className="gd-field-label">Bots to fight</span>
 				<input
 					type="number"
 					min={0}
@@ -395,8 +395,8 @@ function HostForm({
 					}}
 				/>
 			</div>
-			<div className="vd-field">
-				<span className="vd-field-label">
+			<div className="gd-field">
+				<span className="gd-field-label">
 					{settings.mode === "tdm" ? "Rounds to win" : "Frags to win"}
 				</span>
 				<input
@@ -410,8 +410,8 @@ function HostForm({
 					}}
 				/>
 			</div>
-			<div className="vd-field">
-				<span className="vd-field-label">Match length (minutes)</span>
+			<div className="gd-field">
+				<span className="gd-field-label">Match length (minutes)</span>
 				<input
 					type="number"
 					min={1}
@@ -426,9 +426,9 @@ function HostForm({
 				/>
 			</div>
 
-			<div className="vd-advanced">
+			<div className="gd-advanced">
 				<button
-					className="vd-advanced-toggle"
+					className="gd-advanced-toggle"
 					type="button"
 					onClick={() => setShowAdvanced(!showAdvanced)}
 				>
@@ -436,8 +436,8 @@ function HostForm({
 				</button>
 				{showAdvanced ? (
 					<>
-						<div className="vd-field">
-							<span className="vd-field-label">
+						<div className="gd-field">
+							<span className="gd-field-label">
 								Keep room filled to (0 = off)
 							</span>
 							<input
@@ -454,8 +454,8 @@ function HostForm({
 							/>
 						</div>
 						{settings.mode === "tdm" ? (
-							<div className="vd-field">
-								<span className="vd-field-label">Freezetime (seconds)</span>
+							<div className="gd-field">
+								<span className="gd-field-label">Freezetime (seconds)</span>
 								<input
 									type="number"
 									min={0}
@@ -470,8 +470,8 @@ function HostForm({
 								/>
 							</div>
 						) : null}
-						<div className="vd-field">
-							<span className="vd-field-label">
+						<div className="gd-field">
+							<span className="gd-field-label">
 								Ultimate charge floor (0–100)
 							</span>
 							<input
@@ -493,17 +493,17 @@ function HostForm({
 				) : null}
 			</div>
 
-			<p className="vd-summary">{summary}</p>
+			<p className="gd-summary">{summary}</p>
 
-			<div className="vd-row-actions">
+			<div className="gd-row-actions">
 				<button
-					className="vd-btn vd-btn-primary"
+					className="gd-btn gd-btn-primary"
 					type="button"
 					onClick={commit}
 				>
 					Create match
 				</button>
-				<button className="vd-btn" type="button" onClick={onBack}>
+				<button className="gd-btn" type="button" onClick={onBack}>
 					Back
 				</button>
 			</div>
@@ -544,15 +544,15 @@ function JoinForm({
 
 	return (
 		<>
-			<h2 className="vd-title">Join a match</h2>
-			<p className="vd-join-hint">
+			<h2 className="gd-title">Join a match</h2>
+			<p className="gd-join-hint">
 				A host's link looks like{" "}
-				<span className="vd-join-example">…/?room=abc-123</span>. Paste it here,
+				<span className="gd-join-example">…/?room=abc-123</span>. Paste it here,
 				or just type the room id.
 			</p>
 			<form onSubmit={submit}>
 				<input
-					className="vd-input"
+					className="gd-input"
 					value={value}
 					placeholder="room id or link"
 					autoComplete="off"
@@ -562,19 +562,19 @@ function JoinForm({
 						setError("");
 					}}
 				/>
-				<div className="vd-row-actions">
+				<div className="gd-row-actions">
 					<button
-						className="vd-btn vd-btn-primary"
+						className="gd-btn gd-btn-primary"
 						type="submit"
 						disabled={value.trim() === ""}
 					>
 						Join
 					</button>
-					<button className="vd-btn" type="button" onClick={onBack}>
+					<button className="gd-btn" type="button" onClick={onBack}>
 						Back
 					</button>
 				</div>
-				<div className="vd-error">{error}</div>
+				<div className="gd-error">{error}</div>
 			</form>
 		</>
 	);
@@ -613,62 +613,62 @@ function HowToPlay({ onBack }: { onBack: () => void }) {
 
 	return (
 		<>
-			<h2 className="vd-title">How to play</h2>
-			<div className="vd-how-row">
-				<span className="vd-key">{key("left")}</span>
-				<span className="vd-key">{key("right")}</span>
+			<h2 className="gd-title">How to play</h2>
+			<div className="gd-how-row">
+				<span className="gd-key">{key("left")}</span>
+				<span className="gd-key">{key("right")}</span>
 				<span>
 					Move. Double-tap either to dash — a flat line, even in the air.
 				</span>
 			</div>
-			<div className="vd-how-row">
-				<span className="vd-key">{key("jump")}</span>
+			<div className="gd-how-row">
+				<span className="gd-key">{key("jump")}</span>
 				<span>
 					Jump. Again in the air: double jump. Jump off a wall to climb it.
 				</span>
 			</div>
-			<div className="vd-how-row">
-				<span className="vd-key">{key("attack")}</span>
+			<div className="gd-how-row">
+				<span className="gd-key">{key("attack")}</span>
 				<span>
 					Sword slash — or gunshot, in gun stance. Tap again as each swing lands
 					for the three-hit chain (finisher knocks down).
 				</span>
 			</div>
-			<div className="vd-how-row">
-				<span className="vd-key">{key("block")}</span>
+			<div className="gd-how-row">
+				<span className="gd-key">{key("block")}</span>
 				<span>
 					Block. The first 140ms of a fresh block is a parry — absorb a swing
 					inside it and the attacker is yours.
 				</span>
 			</div>
-			<div className="vd-how-row">
-				<span className="vd-key">{key("uppercut")}</span>
+			<div className="gd-how-row">
+				<span className="gd-key">{key("uppercut")}</span>
 				<span>Uppercut: unblockable, launches the target.</span>
 			</div>
-			<div className="vd-how-row">
-				<span className="vd-key">{key("sword")}</span>
-				<span className="vd-key">{key("gun")}</span>
+			<div className="gd-how-row">
+				<span className="gd-key">{key("sword")}</span>
+				<span className="gd-key">{key("gun")}</span>
 				<span>Stances — sword is the default. Q and E by default.</span>
 			</div>
-			<div className="vd-how-row">
-				<span className="vd-key">{key("ultimate")}</span>
+			<div className="gd-how-row">
+				<span className="gd-key">{key("ultimate")}</span>
 				<span>
 					The black hole: hold to aim, release to cast. 707px is as far as it
 					can be thrown.
 				</span>
 			</div>
-			<div className="vd-how-row">
-				<span className="vd-key">Tab</span>
-				<span className="vd-key">Esc</span>
+			<div className="gd-how-row">
+				<span className="gd-key">Tab</span>
+				<span className="gd-key">Esc</span>
 				<span>Scoreboard · menu (rebinding lives there).</span>
 			</div>
-			<p className="vd-how-note">
+			<p className="gd-how-note">
 				Hold the slash about 420ms and release for a Massive Strike. Cancel a
 				slash into a block to guard between swings — that's the butterfly. A
 				guard only covers the side you face.
 			</p>
-			<div className="vd-row-actions">
-				<button className="vd-btn" type="button" onClick={onBack}>
+			<div className="gd-row-actions">
+				<button className="gd-btn" type="button" onClick={onBack}>
 					Back
 				</button>
 			</div>
@@ -719,9 +719,9 @@ function ServerStatus() {
 	}, []);
 
 	return (
-		<div className="vd-server">
+		<div className="gd-server">
 			<span
-				className={`vd-dot vd-dot-${status === "checking" ? "wait" : status === "online" ? "on" : "off"}`}
+				className={`gd-dot gd-dot-${status === "checking" ? "wait" : status === "online" ? "on" : "off"}`}
 			/>
 			<span>
 				{status === "checking"
@@ -730,7 +730,7 @@ function ServerStatus() {
 						? "Game server online"
 						: "Game server offline — matches can't start until it is."}
 			</span>
-			<span className="vd-room">rooms are shared by link</span>
+			<span className="gd-room">rooms are shared by link</span>
 		</div>
 	);
 }

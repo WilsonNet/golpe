@@ -34,7 +34,7 @@ export interface InputSettings {
 	deck: DeckSetting;
 }
 
-const STORAGE_KEY = "vento.input";
+const STORAGE_KEY = "golpe.input";
 
 /**
  * True when the primary pointer cannot hover and is imprecise — a finger.

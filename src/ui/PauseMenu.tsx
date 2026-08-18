@@ -89,33 +89,33 @@ export function PauseMenu({
 	if (!open) return null;
 
 	return (
-		<div className="vd-veil vd-menu-veil">
+		<div className="gd-veil gd-menu-veil">
 			<style>{HUD_CSS}</style>
-			<div className="vd-card vd-menu-card">
+			<div className="gd-card gd-menu-card">
 				{view === "menu" ? (
 					<>
-						<h2 className="vd-title">Menu</h2>
-						<p className="vd-sub">
+						<h2 className="gd-title">Menu</h2>
+						<p className="gd-sub">
 							The match keeps running — the server is the judge, and stepping
 							away from the keyboard does not stop the fight.
 						</p>
-						<div className="vd-menu-list">
+						<div className="gd-menu-list">
 							<button
-								className="vd-btn"
+								className="gd-btn"
 								type="button"
 								onClick={() => setOpen(false)}
 							>
 								Resume
 							</button>
 							<button
-								className="vd-btn"
+								className="gd-btn"
 								type="button"
 								onClick={() => setView("heroes")}
 							>
 								Heroes
 							</button>
 							<button
-								className="vd-btn"
+								className="gd-btn"
 								type="button"
 								onClick={() => setView("controls")}
 							>
@@ -123,19 +123,19 @@ export function PauseMenu({
 							</button>
 							{confirmExit ? (
 								<>
-									<p className="vd-sub vd-exit-note">
+									<p className="gd-sub gd-exit-note">
 										Your fighter leaves the room — the match keeps running for
 										everyone else.
 									</p>
 									<button
-										className="vd-btn vd-exit-yes"
+										className="gd-btn gd-exit-yes"
 										type="button"
 										onClick={onExitToMenu}
 									>
 										Exit to menu
 									</button>
 									<button
-										className="vd-btn"
+										className="gd-btn"
 										type="button"
 										onClick={() => setConfirmExit(false)}
 									>
@@ -144,7 +144,7 @@ export function PauseMenu({
 								</>
 							) : (
 								<button
-									className="vd-btn"
+									className="gd-btn"
 									type="button"
 									onClick={() => setConfirmExit(true)}
 								>
@@ -155,8 +155,8 @@ export function PauseMenu({
 					</>
 				) : view === "heroes" ? (
 					<>
-						<h2 className="vd-title">Heroes</h2>
-						<p className="vd-sub">
+						<h2 className="gd-title">Heroes</h2>
+						<p className="gd-sub">
 							Changing hero applies on the server's next snapshot — the ultimate
 							meter resets with it.
 						</p>
@@ -171,7 +171,7 @@ export function PauseMenu({
 							}}
 						/>
 						<button
-							className="vd-btn"
+							className="gd-btn"
 							type="button"
 							onClick={() => setView("menu")}
 						>
@@ -180,7 +180,7 @@ export function PauseMenu({
 					</>
 				) : (
 					<>
-						<h2 className="vd-title">Controls</h2>
+						<h2 className="gd-title">Controls</h2>
 						<ControlsDialog onClose={() => setView("menu")} />
 					</>
 				)}

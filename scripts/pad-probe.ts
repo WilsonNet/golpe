@@ -25,14 +25,14 @@
  * the cursor its say again.
  *
  *   tsx scripts/pad-probe.ts
- *   VENTO_URL=http://localhost:8084 tsx scripts/pad-probe.ts
+ *   GOLPE_URL=http://localhost:8084 tsx scripts/pad-probe.ts
  */
 import { randomUUID } from "node:crypto";
 import type { Browser, Page } from "playwright";
 import { chromium } from "playwright";
 import type { GameStateSnapshot } from "../src/types/global";
 
-const BASE_URL = process.env.VENTO_URL ?? "http://localhost:8084";
+const BASE_URL = process.env.GOLPE_URL ?? "http://localhost:8084";
 
 /** Angle error worth reporting. Well below what a player can see. */
 const ANGLE_TOLERANCE_DEG = 3;

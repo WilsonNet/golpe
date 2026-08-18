@@ -156,15 +156,15 @@ export function ControlsDialog({ onClose }: { onClose: () => void }) {
 
 	return (
 		<>
-			<div className="vd-setting">
-				<div className="vd-setting-head">
+			<div className="gd-setting">
+				<div className="gd-setting-head">
 					<span>Aiming</span>
-					<div className="vd-choice">
+					<div className="gd-choice">
 						{SCHEMES.map((s) => (
 							<button
 								key={s.value}
 								type="button"
-								className={`vd-chip${settings.scheme === s.value ? " vd-chip-on" : ""}`}
+								className={`gd-chip${settings.scheme === s.value ? " gd-chip-on" : ""}`}
 								onClick={() => inputSettings.setScheme(s.value)}
 							>
 								{s.label}
@@ -172,22 +172,22 @@ export function ControlsDialog({ onClose }: { onClose: () => void }) {
 						))}
 					</div>
 				</div>
-				<p className="vd-setting-hint">
+				<p className="gd-setting-hint">
 					{SCHEMES.find((s) => s.value === settings.scheme)?.hint} Switching is
 					safe mid-match — the simulation is handed an angle and never learns
 					which device made it.
 				</p>
 			</div>
 
-			<div className="vd-setting">
-				<div className="vd-setting-head">
+			<div className="gd-setting">
+				<div className="gd-setting-head">
 					<span>On-screen gamepad</span>
-					<div className="vd-choice">
+					<div className="gd-choice">
 						{DECKS.map((d) => (
 							<button
 								key={d.value}
 								type="button"
-								className={`vd-chip${settings.deck === d.value ? " vd-chip-on" : ""}`}
+								className={`gd-chip${settings.deck === d.value ? " gd-chip-on" : ""}`}
 								onClick={() => inputSettings.setDeck(d.value)}
 							>
 								{d.label}
@@ -195,14 +195,14 @@ export function ControlsDialog({ onClose }: { onClose: () => void }) {
 						))}
 					</div>
 				</div>
-				<p className="vd-setting-hint">
+				<p className="gd-setting-hint">
 					<strong>Auto</strong> draws it when a finger is the pointer and aiming
 					is set to Controller. Pair a keyboard to a phone and turn it{" "}
 					<strong>Off</strong>.
 				</p>
 			</div>
 
-			<p className="vd-sub">
+			<p className="gd-sub">
 				Click a slot, then press the key, mouse button or gamepad button you
 				want. <strong>Esc</strong> cancels. Double-tapping{" "}
 				<strong>{firstLabel(bindingsMap, "left")}</strong> or{" "}
@@ -211,7 +211,7 @@ export function ControlsDialog({ onClose }: { onClose: () => void }) {
 				<strong>aim down</strong> do nothing in Mouse aiming — the cursor
 				answers both axes there.
 			</p>
-			<table className="vd-bind-table">
+			<table className="gd-bind-table">
 				<tbody>
 					{ACTIONS.map((action) => (
 						<tr key={action}>
@@ -224,7 +224,7 @@ export function ControlsDialog({ onClose }: { onClose: () => void }) {
 									<td key={name}>
 										<button
 											type="button"
-											className={`vd-slot${listening ? " vd-slot-live" : ""}${code ? "" : " vd-slot-empty"}`}
+											className={`gd-slot${listening ? " gd-slot-live" : ""}${code ? "" : " gd-slot-empty"}`}
 											onClick={() => {
 												setNote("");
 												setCapture({ action, slot });
@@ -249,10 +249,10 @@ export function ControlsDialog({ onClose }: { onClose: () => void }) {
 					))}
 				</tbody>
 			</table>
-			<div className="vd-note">{note || "Right-click a slot to clear it."}</div>
-			<div className="vd-row-actions">
+			<div className="gd-note">{note || "Right-click a slot to clear it."}</div>
+			<div className="gd-row-actions">
 				<button
-					className="vd-btn"
+					className="gd-btn"
 					type="button"
 					disabled={isDefaultBindings(bindingsMap)}
 					onClick={() => {
@@ -262,7 +262,7 @@ export function ControlsDialog({ onClose }: { onClose: () => void }) {
 				>
 					Reset to defaults
 				</button>
-				<button className="vd-btn" type="button" onClick={onClose}>
+				<button className="gd-btn" type="button" onClick={onClose}>
 					Back
 				</button>
 			</div>

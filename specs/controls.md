@@ -308,8 +308,8 @@ press whose target *is the canvas* reaches the fighter.
   events — and the poll is seeded from what is already held, so a trigger still
   down from opening the menu does not bind itself.
 - **Reset to defaults** restores every action at once.
-- Bindings live in `localStorage` under `vento.bindings`, the aiming scheme and
-  the deck setting under `vento.input`. A stored value that is corrupt,
+- Bindings live in `localStorage` under `golpe.bindings`, the aiming scheme and
+  the deck setting under `golpe.input`. A stored value that is corrupt,
   incomplete, or names an action this build no longer has falls back per-action
   to the default rather than costing the player the rest of their bindings.
 

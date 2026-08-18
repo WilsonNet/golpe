@@ -915,7 +915,7 @@ export function SpriteSlicer() {
 				</select>
 				<button
 					type="button"
-					className="vd-btn vsw-btn"
+					className="gd-btn vsw-btn"
 					onClick={() => fileRef.current?.click()}
 				>
 					open…
@@ -934,13 +934,13 @@ export function SpriteSlicer() {
 				{boardEntry && (
 					<button
 						type="button"
-						className="vd-btn vsw-btn"
+						className="gd-btn vsw-btn"
 						onClick={() => loadBoard(boardEntry)}
 					>
 						reload
 					</button>
 				)}
-				<a className="vd-btn vsw-btn vsw-back" href=".">
+				<a className="gd-btn vsw-btn vsw-back" href=".">
 					← menu
 				</a>
 				<span className="vsw-status">{status}</span>
@@ -968,7 +968,7 @@ export function SpriteSlicer() {
 						<span className="vsw-zoom">
 							<button
 								type="button"
-								className="vd-btn vsw-mini"
+								className="gd-btn vsw-mini"
 								onClick={() => zoomAt(0.8, 300, 200)}
 							>
 								−
@@ -978,14 +978,14 @@ export function SpriteSlicer() {
 							</span>
 							<button
 								type="button"
-								className="vd-btn vsw-mini"
+								className="gd-btn vsw-mini"
 								onClick={() => zoomAt(1.25, 300, 200)}
 							>
 								+
 							</button>
 							<button
 								type="button"
-								className="vd-btn vsw-mini"
+								className="gd-btn vsw-mini"
 								onClick={fitView}
 							>
 								fit
@@ -1009,24 +1009,24 @@ export function SpriteSlicer() {
 				<aside className="vsw-side">
 					<section className="vsw-panel">
 						<h2 className="vsw-head">Slice</h2>
-						<div className="vd-choice vsw-chips">
+						<div className="gd-choice vsw-chips">
 							<button
 								type="button"
-								className={`vd-chip ${spec.mode === "grid" ? "vd-chip-on" : ""}`}
+								className={`gd-chip ${spec.mode === "grid" ? "gd-chip-on" : ""}`}
 								onClick={() => setSpecField("mode", "grid")}
 							>
 								grid
 							</button>
 							<button
 								type="button"
-								className={`vd-chip ${spec.mode === "rects" ? "vd-chip-on" : ""}`}
+								className={`gd-chip ${spec.mode === "rects" ? "gd-chip-on" : ""}`}
 								onClick={() => setSpecField("mode", "rects")}
 							>
 								rects
 							</button>
 							<button
 								type="button"
-								className={`vd-chip ${tool === "pick" ? "vd-chip-on" : ""}`}
+								className={`gd-chip ${tool === "pick" ? "gd-chip-on" : ""}`}
 								onClick={() => setTool(tool === "pick" ? "slice" : "pick")}
 							>
 								{tool === "pick" ? "click a colour…" : "erase colour"}
@@ -1208,7 +1208,7 @@ export function SpriteSlicer() {
 											</span>
 											<button
 												type="button"
-												className="vd-btn vsw-mini vsw-del"
+												className="gd-btn vsw-mini vsw-del"
 												onClick={(e) => {
 													e.stopPropagation();
 													setSpec((s) => ({
@@ -1225,7 +1225,7 @@ export function SpriteSlicer() {
 								</ul>
 								<button
 									type="button"
-									className="vd-btn vsw-btn"
+									className="gd-btn vsw-btn"
 									disabled={spec.rects.length === 0}
 									onClick={() => {
 										setSpecField("rects", []);
@@ -1292,12 +1292,12 @@ export function SpriteSlicer() {
 								/>
 							</label>
 						</div>
-						<div className="vd-choice vsw-chips">
+						<div className="gd-choice vsw-chips">
 							{(["bottom", "center", "top"] as const).map((a) => (
 								<button
 									key={a}
 									type="button"
-									className={`vd-chip ${spec.align === a ? "vd-chip-on" : ""}`}
+									className={`gd-chip ${spec.align === a ? "gd-chip-on" : ""}`}
 									onClick={() => setSpecField("align", a)}
 								>
 									{a}
@@ -1323,10 +1323,10 @@ export function SpriteSlicer() {
 
 					<section className="vsw-panel">
 						<h2 className="vsw-head">Clips</h2>
-						<div className="vd-choice vsw-chips">
+						<div className="gd-choice vsw-chips">
 							<button
 								type="button"
-								className="vd-chip"
+								className="gd-chip"
 								onClick={() => {
 									setClips((prev) => [
 										...prev,
@@ -1348,7 +1348,7 @@ export function SpriteSlicer() {
 									// biome-ignore lint/suspicious/noArrayIndexKey: clips append and filter, never reorder — the index is the clip's identity in the list.
 									key={i}
 									type="button"
-									className={`vd-chip ${i === activeClip ? "vd-chip-on" : ""}`}
+									className={`gd-chip ${i === activeClip ? "gd-chip-on" : ""}`}
 									onClick={() => {
 										setActiveClip(i);
 										setPlaying(false);
@@ -1426,10 +1426,10 @@ export function SpriteSlicer() {
 										mirror
 									</label>
 								</div>
-								<div className="vd-row-actions">
+								<div className="gd-row-actions">
 									<button
 										type="button"
-										className="vd-btn"
+										className="gd-btn"
 										onClick={() => {
 											const clip = clips[activeClip];
 											if (!clip) return;
@@ -1456,7 +1456,7 @@ export function SpriteSlicer() {
 									</button>
 									<button
 										type="button"
-										className="vd-btn"
+										className="gd-btn"
 										disabled={!playing}
 										onClick={() => setPlaying(false)}
 									>
@@ -1464,7 +1464,7 @@ export function SpriteSlicer() {
 									</button>
 									<button
 										type="button"
-										className="vd-btn"
+										className="gd-btn"
 										onClick={() => {
 											const clip = clips[activeClip];
 											if (!clip) {
@@ -1483,7 +1483,7 @@ export function SpriteSlicer() {
 									</button>
 									<button
 										type="button"
-										className="vd-btn vsw-del"
+										className="gd-btn vsw-del"
 										onClick={() => {
 											setClips((prev) =>
 												prev.filter((_, i) => i !== activeClip),
@@ -1503,7 +1503,7 @@ export function SpriteSlicer() {
 											<button
 												key={z}
 												type="button"
-												className={`vd-chip ${stageZoom === z ? "vd-chip-on" : ""}`}
+												className={`gd-chip ${stageZoom === z ? "gd-chip-on" : ""}`}
 												onClick={() => setStageZoom(z)}
 											>
 												×{z}
@@ -1531,10 +1531,10 @@ export function SpriteSlicer() {
 								onChange={(e) => setSheetOut(sheetName(e.target.value))}
 							/>
 						</label>
-						<div className="vd-row-actions">
+						<div className="gd-row-actions">
 							<button
 								type="button"
-								className="vd-btn"
+								className="gd-btn"
 								disabled={!strip}
 								onClick={exportStrip}
 							>
@@ -1542,7 +1542,7 @@ export function SpriteSlicer() {
 							</button>
 							<button
 								type="button"
-								className="vd-btn"
+								className="gd-btn"
 								disabled={!strip}
 								onClick={exportJson}
 							>
@@ -1550,7 +1550,7 @@ export function SpriteSlicer() {
 							</button>
 							<button
 								type="button"
-								className="vd-btn"
+								className="gd-btn"
 								disabled={!strip}
 								onClick={copyJson}
 							>

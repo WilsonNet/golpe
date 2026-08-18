@@ -29,7 +29,7 @@ const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const STATE_DIR = resolve(REPO, ".herdr");
 const STATE_FILE = resolve(STATE_DIR, "dev.json");
 
-const WORKSPACE_LABEL = "vento-aureo";
+const WORKSPACE_LABEL = "golpe";
 const TAB_LABEL = "dev";
 
 /** A herdr workspace, as the CLI's JSON envelope reports it. */

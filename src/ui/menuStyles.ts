@@ -4,7 +4,7 @@
  * The menu is a page, not an overlay on a fight — there is no game underneath
  * it — so where the overlays use a translucent veil, this one owns the whole
  * screen: a deep-teal gradient of the arena's sky with the gold codex card
- * centred on it. Everything else reuses the `vd-` language (card, title, chips,
+ * centred on it. Everything else reuses the `gd-` language (card, title, chips,
  * buttons, inputs) so the menu, the name prompt and the Esc menu read as one
  * system no matter where they appear.
  *
@@ -22,7 +22,7 @@
 import { HERO_SPRITE_CSS } from "./HeroSelect";
 
 export const MENU_CSS = `
-.vd-menu-page {
+.gd-menu-page {
 	position: fixed;
 	inset: 0;
 	display: flex;
@@ -43,7 +43,7 @@ export const MENU_CSS = `
 /* The menu card is the page's furniture, so it earns a slightly larger box and
    a golden codex border — the interruption tier, exactly like the podium. A
    touch wider than the overlay cards so the two-column rows breathe. */
-.vd-menu-page .vd-card {
+.gd-menu-page .gd-card {
 	margin: auto;
 	min-width: 440px;
 	/* An explicit width, not a shrink-to-fit flex item: without it the card
@@ -61,13 +61,13 @@ export const MENU_CSS = `
 	border-color: rgba(255, 209, 102, 0.4);
 	box-shadow: 0 24px 80px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 209, 102, 0.08);
 }
-.vd-menu-page .vd-title {
+.gd-menu-page .gd-title {
 	color: #ffd166;
 	font-size: 26px;
 	letter-spacing: 0.14em;
 	margin-bottom: 8px;
 }
-.vd-menu-page .vd-sub {
+.gd-menu-page .gd-sub {
 	font-size: 12px;
 	margin-bottom: 18px;
 }
@@ -80,15 +80,15 @@ export const MENU_CSS = `
    and its content and between every control inside the section. Without the
    inner gap the Quick match button, the Host/Join row and Practice met edge to
    edge, which read as one big block. */
-.vd-section {
+.gd-section {
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
 }
-.vd-section + .vd-section {
+.gd-section + .gd-section {
 	margin-top: 24px;
 }
-.vd-section-head {
+.gd-section-head {
 	display: flex;
 	align-items: center;
 	gap: 10px;
@@ -98,7 +98,7 @@ export const MENU_CSS = `
 	text-transform: uppercase;
 	color: rgba(255, 209, 102, 0.6);
 }
-.vd-section-head::after {
+.gd-section-head::after {
 	content: "";
 	flex: 1;
 	height: 1px;
@@ -109,9 +109,9 @@ export const MENU_CSS = `
    Each entry is a title and one short line of what it does. A player deciding
    what to click next should be able to read the answer off the button itself —
    nothing here depends on having read the docs. The section's flex gap spaces
-   the stacked buttons; this file's old .vd-menu-list was dead the moment the
+   the stacked buttons; this file's old .gd-menu-list was dead the moment the
    home screen became sections. */
-.vd-play-item {
+.gd-play-item {
 	display: flex;
 	flex-direction: column;
 	/* The title and its one-line description need more than 3px between them —
@@ -132,18 +132,18 @@ export const MENU_CSS = `
 	cursor: pointer;
 	transition: border-color 0.2s, color 0.2s, transform 0.15s, box-shadow 0.2s;
 }
-.vd-play-item:hover {
+.gd-play-item:hover {
 	border-color: #0ec3c9;
 }
-.vd-play-item:focus-visible {
+.gd-play-item:focus-visible {
 	outline: 2px solid #0ec3c9;
 	outline-offset: 2px;
 }
-.vd-play-item strong {
+.gd-play-item strong {
 	font-size: 15px;
 	letter-spacing: 0.06em;
 }
-.vd-play-item span {
+.gd-play-item span {
 	font-size: 12px;
 	opacity: 0.55;
 	line-height: 1.45;
@@ -151,22 +151,22 @@ export const MENU_CSS = `
 /* The one action a stranger should find first is the only filled button on the
    page: gold, dark text, lifted. Everything else is an outline, so the eye
    lands here before it reads anything else. */
-.vd-play-item-primary {
+.gd-play-item-primary {
 	background: linear-gradient(180deg, #ffd76b 0%, #f0b34a 100%);
 	border-color: #ffd166;
 	color: #1b1406;
 	padding: 17px 18px;
 	box-shadow: 0 4px 20px rgba(255, 209, 102, 0.22);
 }
-.vd-play-item-primary strong {
+.gd-play-item-primary strong {
 	color: #1b1406;
 	font-size: 17px;
 }
-.vd-play-item-primary span {
+.gd-play-item-primary span {
 	color: rgba(27, 20, 6, 0.78);
 	opacity: 1;
 }
-.vd-play-item-primary:hover {
+.gd-play-item-primary:hover {
 	border-color: #ffe6a8;
 	transform: translateY(-1px);
 	box-shadow: 0 8px 26px rgba(255, 209, 102, 0.32);
@@ -175,7 +175,7 @@ export const MENU_CSS = `
 /* Host and Join answer different questions and neither is a step toward the
    other, so they sit side by side as siblings rather than one above the
    other. The row collapses to a column on a phone. */
-.vd-two {
+.gd-two {
 	display: grid;
 	grid-template-columns: 1fr 1fr;
 	gap: 10px;
@@ -186,12 +186,12 @@ export const MENU_CSS = `
    name and kit, and the name field all in one panel. Picking rides every match
    started here, exactly as the old buried Heroes page did — this just shows
    the choice instead of hiding it a click away. */
-.vd-hero-pick {
+.gd-hero-pick {
 	display: grid;
 	grid-template-columns: 1fr 1fr;
 	gap: 10px;
 }
-.vd-hero-chip {
+.gd-hero-chip {
 	display: flex;
 	align-items: center;
 	gap: 12px;
@@ -205,15 +205,15 @@ export const MENU_CSS = `
 	text-align: left;
 	transition: border-color 0.15s, box-shadow 0.15s;
 }
-.vd-hero-chip:hover {
+.gd-hero-chip:hover {
 	border-color: #0ec3c9;
 }
-.vd-hero-chip:focus-visible {
+.gd-hero-chip:focus-visible {
 	outline: 2px solid #0ec3c9;
 	outline-offset: 2px;
 }
-.vd-hero-chip-on,
-.vd-hero-chip-on:hover {
+.gd-hero-chip-on,
+.gd-hero-chip-on:hover {
 	border-color: #ffd166;
 	box-shadow: 0 0 12px rgba(255, 209, 102, 0.3);
 }
@@ -222,7 +222,7 @@ export const MENU_CSS = `
    a compact picker, not the card grid of the Esc menu. Sized at 48x72 (the
    same as the phone) so the whole card fits a 778px window with the footer
    visible — the Esc menu's full-size cards stay the place for the big art. */
-.vd-hero-chip .hp-sprite {
+.gd-hero-chip .hp-sprite {
 	margin: 0;
 	flex: 0 0 auto;
 	width: 48px;
@@ -232,30 +232,30 @@ export const MENU_CSS = `
 }
 /* Anands' chip draws her own portrait, not a cell of the shared nine-cell
    strip — her sheets are hand-drawn with their own geometry. */
-.vd-hero-chip .hp-sprite-anands {
+.gd-hero-chip .hp-sprite-anands {
 	background-size: 48px 72px;
 	background-position: 0 0;
 }
-.vd-hero-chip-meta {
+.gd-hero-chip-meta {
 	display: flex;
 	flex-direction: column;
 	gap: 2px;
 	min-width: 0;
 }
-.vd-hero-chip-name {
+.gd-hero-chip-name {
 	font-size: 14px;
 	letter-spacing: 0.06em;
 }
-.vd-hero-chip-on .vd-hero-chip-name {
+.gd-hero-chip-on .gd-hero-chip-name {
 	color: #ffd166;
 }
-.vd-hero-chip-kit {
+.gd-hero-chip-kit {
 	font-size: 10px;
 	letter-spacing: 0.05em;
 	opacity: 0.55;
 	white-space: nowrap;
 }
-.vd-hero-blurb {
+.gd-hero-blurb {
 	font-size: 12px;
 	opacity: 0.6;
 	line-height: 1.5;
@@ -269,20 +269,20 @@ export const MENU_CSS = `
    The name the menu writes is the name the match reads, so a player who
    answers here never sees the in-game prompt — and the in-game prompt's share
    link is untouched, because it is the link that matters, not the name. */
-.vd-name-row {
+.gd-name-row {
 	display: flex;
 	gap: 10px;
 	align-items: center;
 	margin-bottom: 0;
 }
-.vd-name-row label {
+.gd-name-row label {
 	font-size: 11px;
 	opacity: 0.6;
 	text-transform: uppercase;
 	letter-spacing: 0.08em;
 	white-space: nowrap;
 }
-.vd-name-row input {
+.gd-name-row input {
 	flex: 1;
 	font-size: 15px;
 	padding: 9px 12px;
@@ -292,17 +292,17 @@ export const MENU_CSS = `
 /* The sub-views' primary action (Create match, Join) gets the same filled-gold
    treatment as Quick match on the home screen, so the one button that commits
    never reads as equal to Back. */
-.vd-btn-primary {
+.gd-btn-primary {
 	border-color: #ffd166;
 	color: #1b1406;
 	background: linear-gradient(180deg, #ffd76b 0%, #f0b34a 100%);
 	font-weight: 700;
 }
-.vd-btn-primary:hover:not(:disabled) {
+.gd-btn-primary:hover:not(:disabled) {
 	border-color: #ffe6a8;
 	color: #1b1406;
 }
-.vd-field {
+.gd-field {
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
@@ -310,10 +310,10 @@ export const MENU_CSS = `
 	margin-bottom: 10px;
 	font-size: 13px;
 }
-.vd-field-label {
+.gd-field-label {
 	opacity: 0.75;
 }
-.vd-field input[type="number"] {
+.gd-field input[type="number"] {
 	width: 74px;
 	box-sizing: border-box;
 	background: #000;
@@ -325,11 +325,11 @@ export const MENU_CSS = `
 	border-radius: 6px;
 	text-align: center;
 }
-.vd-field input[type="number"]:focus {
+.gd-field input[type="number"]:focus {
 	outline: none;
 	border-color: #0ec3c9;
 }
-.vd-field-note {
+.gd-field-note {
 	font-size: 11px;
 	opacity: 0.5;
 	line-height: 1.5;
@@ -339,12 +339,12 @@ export const MENU_CSS = `
 /* The advanced block hides behind a disclosure: the fields in it are for
    measuring and for hosts who already know what they are for, and showing them
    all makes the vanilla options harder to see. */
-.vd-advanced {
+.gd-advanced {
 	border-top: 1px dashed rgba(255, 255, 255, 0.16);
 	margin-top: 8px;
 	padding-top: 10px;
 }
-.vd-advanced-toggle {
+.gd-advanced-toggle {
 	background: none;
 	border: none;
 	color: #7ff0f4;
@@ -355,12 +355,12 @@ export const MENU_CSS = `
 	cursor: pointer;
 	padding: 0;
 }
-.vd-advanced-toggle:hover {
+.gd-advanced-toggle:hover {
 	color: #ffd166;
 }
 /* The summary line is the gulf of evaluation closed: before committing, a host
    sees exactly the match the button is about to create. */
-.vd-summary {
+.gd-summary {
 	font-size: 12px;
 	color: #ffd166;
 	line-height: 1.5;
@@ -369,19 +369,19 @@ export const MENU_CSS = `
 }
 
 /* ---- join ---- */
-.vd-join-hint {
+.gd-join-hint {
 	font-size: 12px;
 	opacity: 0.55;
 	line-height: 1.6;
 	margin: 0 0 14px;
 }
-.vd-join-example {
+.gd-join-example {
 	opacity: 0.75;
 	word-break: break-all;
 }
 
 /* ---- how to play ---- */
-.vd-how-row {
+.gd-how-row {
 	display: flex;
 	gap: 8px;
 	align-items: baseline;
@@ -389,7 +389,7 @@ export const MENU_CSS = `
 	font-size: 13px;
 	line-height: 1.5;
 }
-.vd-key {
+.gd-key {
 	display: inline-block;
 	min-width: 7ch;
 	background: rgba(255, 255, 255, 0.08);
@@ -400,7 +400,7 @@ export const MENU_CSS = `
 	text-align: center;
 	white-space: nowrap;
 }
-.vd-how-note {
+.gd-how-note {
 	font-size: 12px;
 	opacity: 0.6;
 	line-height: 1.6;
@@ -413,7 +413,7 @@ export const MENU_CSS = `
    Feedback for the most common failure: a page that loads fine with no game
    server behind it. Saying so here turns "Connecting..." forever inside the
    match into a sentence on the menu. */
-.vd-server {
+.gd-server {
 	margin-top: 22px;
 	padding-top: 12px;
 	border-top: 1px solid rgba(255, 255, 255, 0.14);
@@ -423,29 +423,29 @@ export const MENU_CSS = `
 	font-size: 12px;
 	opacity: 0.65;
 }
-.vd-server .vd-room {
+.gd-server .gd-room {
 	margin-left: auto;
 }
-.vd-dot {
+.gd-dot {
 	width: 8px;
 	height: 8px;
 	border-radius: 50%;
 	display: inline-block;
 	flex: 0 0 auto;
 }
-.vd-dot-on {
+.gd-dot-on {
 	background: #7ddf8a;
 	box-shadow: 0 0 6px rgba(125, 223, 138, 0.8);
 }
-.vd-dot-off {
+.gd-dot-off {
 	background: #ff8f6b;
 	box-shadow: 0 0 6px rgba(255, 143, 107, 0.8);
 }
-.vd-dot-wait {
+.gd-dot-wait {
 	background: #ffd166;
-	animation: vd-blink 1s steps(2) infinite;
+	animation: gd-blink 1s steps(2) infinite;
 }
-@keyframes vd-blink {
+@keyframes gd-blink {
 	50% {
 		opacity: 0.3;
 	}
@@ -457,14 +457,14 @@ export const MENU_CSS = `
    two-column rows stayed cramped side by side with the card overhanging the
    screen. */
 @media (max-width: 520px) {
-	.vd-menu-page .vd-card {
+	.gd-menu-page .gd-card {
 		min-width: 0;
 		width: calc(100% - 24px);
 	}
 	/* Two-column rows become one column so every button is a thumb-sized
 	   full-width target — a phone is the discoverability story too. */
-	.vd-two,
-	.vd-hero-pick {
+	.gd-two,
+	.gd-hero-pick {
 		grid-template-columns: 1fr;
 	}
 }

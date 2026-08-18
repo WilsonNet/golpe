@@ -1,4 +1,4 @@
-# Vento Áureo
+# Golpe
 
 A 2D sword-fighting game — GunZ: The Duel's K-Style rebuilt in two dimensions —
 on PixiJS 8 + React, with a custom deterministic AABB physics simulation shared
