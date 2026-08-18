@@ -82,6 +82,13 @@ longer exists.
   charge is spent wherever the press finds the fighter, and throwing from the
   air is the move — a trap dropped from a double-jump plants at the feet
   below.
+- **A mine honours its centre of gravity when it lands.** The canister's small
+  box can catch a ledge's edge while the mine's centre hangs over empty space;
+  there it does **not** plant — it slides off the edge and falls to a floor
+  that actually holds it. A mine plants only where its centre sits over solid
+  ground, so a trap never hovers half on, half off a ledge; once more than half
+  of it overhangs an edge, gravity takes it. Both sides run the same code, so
+  the dead-reckoned arc falls in exactly the place the server plants.
 - **Friendly traps are faded.** Your own traps and every teammate's are drawn
   at a fraction of full opacity, so "whose side is this mine on" is answered at
   a glance and a friendly trap never does the worrying for you. An enemy's trap

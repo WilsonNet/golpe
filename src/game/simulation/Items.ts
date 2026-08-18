@@ -54,6 +54,8 @@ import {
 	DEFAULT_WORLD,
 	PLAYER_HEIGHT,
 	PLAYER_WIDTH,
+	pointInAnyPlatform,
+	type Rect,
 	type World,
 } from "./Arena.js";
 import { type MovingBox, moveAndCollide } from "./Collision.js";
@@ -301,10 +303,70 @@ export function tickTrapCanister(
 	if (contacts.wall !== "none") c.vx = 0;
 	if (contacts.ceiling && c.vy < 0) c.vy = 0;
 	if (contacts.grounded) {
+		// A mine plants only where its centre of gravity is supported. The
+		// canister's tiny box can catch a ledge edge while the mine would hang
+		// more than half over empty space; there it must not plant — it slides
+		// off the edge and falls to a floor that actually holds it. Deterministic
+		// and shared, so the client's dead-reckon falls in the same place.
+		if (!trapCentreSupported(c, world)) {
+			slideTrapOffEdge(c, world);
+			return false;
+		}
 		c.vy = 0;
 		return true;
 	}
 	return false;
+}
+
+/**
+ * Is the mine's centre of gravity over solid ground?
+ *
+ * The planted mine's centre sits on the floor line the canister's box
+ * bottomed out on — `c.y + TRAP_COLLIDE_R`, the same "feet level" the server
+ * plants the trap at. A symmetric patch is stable only while its centre is
+ * supported: the moment more than half of it hangs over an edge the centre is
+ * over empty space and gravity should take it.
+ */
+function trapCentreSupported(
+	c: TrapCanisterState,
+	world: World = DEFAULT_WORLD,
+): boolean {
+	return pointInAnyPlatform(c.x, c.y + TRAP_COLLIDE_R, world);
+}
+
+/**
+ * Push the canister just past the ledge edge its box caught, so the next
+ * tick's gravity carries it down to a floor that supports the mine.
+ *
+ * The box is resting on a sliver of the ledge with its centre over empty
+ * space. Moving it clear of the ledge's edge removes the horizontal overlap
+ * that `moveAndCollide` would otherwise keep re-anchoring it to, and the fall
+ * resumes.
+ */
+function slideTrapOffEdge(
+	c: TrapCanisterState,
+	world: World = DEFAULT_WORLD,
+): void {
+	const r = TRAP_COLLIDE_R;
+	const floorY = c.y + r;
+	// The platform the box bottomed out on: the one whose top is the floor
+	// line and whose span overlaps the canister box. The widest overlap is the
+	// one actually holding the box.
+	let holding: Rect | null = null;
+	let widest = 0;
+	for (const p of world.platforms) {
+		if (p.y !== floorY) continue;
+		const overlap = Math.min(c.x + r, p.x + p.w) - Math.max(c.x - r, p.x);
+		if (overlap > widest) {
+			widest = overlap;
+			holding = p;
+		}
+	}
+	if (holding === null) return;
+	// Push the box clear of the edge its centre hangs over, in the direction of
+	// the overhang.
+	if (c.x > holding.x + holding.w) c.x = holding.x + holding.w + r;
+	else c.x = holding.x - r;
 }
 
 /**

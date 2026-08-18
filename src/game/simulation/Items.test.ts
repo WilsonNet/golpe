@@ -39,6 +39,7 @@ import {
 	TRAP_THROW_SPEED,
 	TRAP_TRIGGER_MS,
 	type Trap,
+	type TrapCanisterState,
 	tickHeGrenade,
 	tickSmokeGrenade,
 	tickTrapCanister,
@@ -211,6 +212,65 @@ describe("the trap", () => {
 		// Planted at the wall's base, not carried through it.
 		expect(c.x).toBeLessThan(DEFAULT_WORLD.right - 1);
 		expect(c.y + TRAP_COLLIDE_R).toBeCloseTo(DEFAULT_WORLD.bottom - 32, 0);
+	});
+
+	it("does not plant a mine whose centre hangs over a ledge edge: it slides off", () => {
+		// LOW_LEFT spans x 90..220 at y 450. Drop the canister straight down
+		// with its centre 4px past the ledge's right edge: the canister's 12px
+		// box catches a 2px sliver of the ledge, but the mine's centre of
+		// gravity hangs over empty space, so it must not plant there.
+		const c: TrapCanisterState = {
+			id: 10,
+			ownerId: "me",
+			ownerTeam: null,
+			x: 224,
+			y: 400,
+			vx: 0,
+			vy: 0,
+		};
+		let planted = false;
+		let floorY = 0;
+		let finalX = 0;
+		for (let i = 0; i < 60 * 8; i++) {
+			if (tickTrapCanister(c, 1 / 60, DEFAULT_WORLD)) {
+				planted = true;
+				floorY = c.y + TRAP_COLLIDE_R;
+				finalX = c.x;
+				break;
+			}
+		}
+		expect(planted).toBe(true);
+		// It never planted on the ledge's top (450): the fall kept going until
+		// the mine's centre had real ground under it — the arena floor.
+		expect(floorY).toBeCloseTo(DEFAULT_WORLD.bottom - 32, 0);
+		// It slid clear of LOW_LEFT's right edge (x 220) on its way down.
+		expect(finalX).toBeGreaterThan(220);
+	});
+
+	it("plants a mine whose centre stays over the ledge", () => {
+		// Centre 4px inside LOW_LEFT's right edge (x 220): the mine overhangs
+		// by less than half, its centre of gravity is still supported, and it
+		// plants on the ledge like a throw onto solid floor.
+		const c: TrapCanisterState = {
+			id: 11,
+			ownerId: "me",
+			ownerTeam: null,
+			x: 216,
+			y: 400,
+			vx: 0,
+			vy: 0,
+		};
+		let planted = false;
+		let floorY = 0;
+		for (let i = 0; i < 60 * 4; i++) {
+			if (tickTrapCanister(c, 1 / 60, DEFAULT_WORLD)) {
+				planted = true;
+				floorY = c.y + TRAP_COLLIDE_R;
+				break;
+			}
+		}
+		expect(planted).toBe(true);
+		expect(floorY).toBeCloseTo(450, 0);
 	});
 
 	it("catches by the feet, not the whole body", () => {
