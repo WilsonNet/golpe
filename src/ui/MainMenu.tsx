@@ -128,7 +128,7 @@ export function MainMenu({
 			<style>{HUD_CSS}</style>
 			<style>{MENU_CSS}</style>
 			<div className="gd-card">
-				<h1 className="gd-title">Golpe</h1>
+				<h1 className="gd-title">golpe</h1>
 				<p className="gd-sub">
 					A 2D swordfight, online first — the link is the invitation.
 				</p>

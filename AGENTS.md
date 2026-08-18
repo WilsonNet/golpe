@@ -1,4 +1,4 @@
-# Golpe
+# golpe
 
 An online-first 2D hero shooter: GunZ: The Duel's K-Style, rebuilt in two
 dimensions on a deterministic simulation shared by client and server. Every

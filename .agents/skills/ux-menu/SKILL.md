@@ -1,6 +1,6 @@
 ---
 name: ux-menu
-description: "Use when building, changing or reviewing any menu or pre-match screen in Golpe — the root menu, the name prompt, the Esc menu, the controls dialog, or any new flow a human walks before a fight starts. Covers the UX principles this project commits to (Don Norman's The Design of Everyday Things and Nielsen's 10 heuristics, applied), the URL-as-state model that makes the menu truthful, the nesting rules for host/join/practice flows, and how to verify a menu without breaking the agentic path. Triggers on: menu, root menu, main menu, UX, discoverability, host a match, join a match, quick match, how to play, options, pre-match screen, onboarding, first-time experience."
+description: "Use when building, changing or reviewing any menu or pre-match screen in golpe — the root menu, the name prompt, the Esc menu, the controls dialog, or any new flow a human walks before a fight starts. Covers the UX principles this project commits to (Don Norman's The Design of Everyday Things and Nielsen's 10 heuristics, applied), the URL-as-state model that makes the menu truthful, the nesting rules for host/join/practice flows, and how to verify a menu without breaking the agentic path. Triggers on: menu, root menu, main menu, UX, discoverability, host a match, join a match, quick match, how to play, options, pre-match screen, onboarding, first-time experience."
 license: MIT
 ---
 

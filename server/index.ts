@@ -461,7 +461,7 @@ function potgRequest(url: string | undefined): { body: string | null } | null {
 
 io.addServer(httpServer);
 httpServer.listen(PORT);
-console.log(`[SERVER] Golpe server listening on port ${PORT}`);
+console.log(`[SERVER] golpe server listening on port ${PORT}`);
 console.log(
 	"[SERVER] rooms are addressed by id — share the link to share a room",
 );

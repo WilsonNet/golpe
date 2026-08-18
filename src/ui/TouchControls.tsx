@@ -402,7 +402,7 @@ export function TouchControls() {
 		<div className="gg-deck">
 			<style>{DECK_CSS}</style>
 			<div className="gg-brand">
-				<span className="gg-brand-mark">Golpe</span>
+				<span className="gg-brand-mark">golpe</span>
 				<span className="gg-brand-sub">The strike</span>
 				{/* A phone has no Escape key, and the menu is where a player turns
 				    this deck off again — so without this, choosing the on-screen

@@ -1,6 +1,6 @@
 ---
 name: feedback-loop
-description: "CRITICAL: Use this skill when diagnosing physics jitter, network desync, projectile/bullet trajectory problems, or gameplay bugs in Golpe. The canonical test is ONLINE AI vs AI — this game is online first. Covers the __physicsDiagnostic() tool, Playwright test workflow, reading diagnostic JSON reports, fixed-timestep model, reconciliation snap logic, jitter thresholds, and the one-shot feedback loop pattern. Triggers on: jitter, diagnostic, physics bug, desync, reconciliation, teleport, rubber-banding, stutter, framerate issue, Playwright test, feedback loop."
+description: "CRITICAL: Use this skill when diagnosing physics jitter, network desync, projectile/bullet trajectory problems, or gameplay bugs in golpe. The canonical test is ONLINE AI vs AI — this game is online first. Covers the __physicsDiagnostic() tool, Playwright test workflow, reading diagnostic JSON reports, fixed-timestep model, reconciliation snap logic, jitter thresholds, and the one-shot feedback loop pattern. Triggers on: jitter, diagnostic, physics bug, desync, reconciliation, teleport, rubber-banding, stutter, framerate issue, Playwright test, feedback loop."
 license: MIT
 ---
 

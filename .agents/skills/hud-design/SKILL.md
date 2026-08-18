@@ -6,7 +6,7 @@ license: MIT
 
 # The Fight HUD
 
-The screen-space UI of Golpe, in **two tiers**:
+The screen-space UI of golpe, in **two tiers**:
 
 - **Gameplay** — fighter panels, clock, ultimate meter. Competitive minimal:
   slim translucent strips in the arena's own colours (dark teal over the teal

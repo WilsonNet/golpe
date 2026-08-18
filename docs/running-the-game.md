@@ -1,6 +1,6 @@
 # Running the Game
 
-Every way to launch Golpe, and what each one is for.
+Every way to launch golpe, and what each one is for.
 
 - [Prerequisites](#prerequisites)
 - [Starting the dev servers](#starting-the-dev-servers)

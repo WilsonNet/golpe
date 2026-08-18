@@ -80,7 +80,7 @@ export function NamePrompt() {
 		<div className="gd-veil">
 			<style>{HUD_CSS}</style>
 			<form className="gd-card" onSubmit={submit}>
-				<h2 className="gd-title">Golpe</h2>
+				<h2 className="gd-title">golpe</h2>
 				<p className="gd-sub">
 					Deathmatch — first to 21 frags, or the best score in five minutes.
 					<br />
