@@ -67,17 +67,23 @@ function gameUrl() {
  * The Gamepad API is polled rather than evented, so a stub is genuinely
  * equivalent to a real pad from the game's point of view: `readPads` gets the
  * same snapshot shape it would get from hardware, on the same schedule.
+ *
+ * Delivered as a *string*, like dash-probe's fake frame: esbuild's keepNames
+ * decorates every inner arrow with `__name(fn, "name")`, Playwright serializes
+ * that into the page, and the browser has no `__name` — the init script throws
+ * and `window.__pad` is never installed. A string is serialized verbatim.
  */
-const PAD_STUB = () => {
-	const state = { buttons: new Set<number>(), axes: [0, 0, 0, 0] };
+const PAD_STUB = `
+(() => {
+	const state = { buttons: new Set(), axes: [0, 0, 0, 0] };
 	window.__pad = {
-		press: (i: number) => state.buttons.add(i),
-		release: (i: number) => state.buttons.delete(i),
+		press: (i) => state.buttons.add(i),
+		release: (i) => state.buttons.delete(i),
 		clear: () => state.buttons.clear(),
-		axis: (i: number, v: number) => {
+		axis: (i, v) => {
 			state.axes[i] = v;
 		},
-		axes: (values: number[]) => {
+		axes: (values) => {
 			state.axes = values;
 		},
 	};
@@ -85,7 +91,7 @@ const PAD_STUB = () => {
 		id: "probe pad (STANDARD GAMEPAD)",
 		index: 0,
 		connected: true,
-		mapping: "standard" as const,
+		mapping: "standard",
 		timestamp: performance.now(),
 		vibrationActuator: null,
 		axes: [...state.axes],
@@ -96,12 +102,13 @@ const PAD_STUB = () => {
 		})),
 	});
 	navigator.getGamepads = () => [
-		snapshot() as unknown as Gamepad,
+		snapshot(),
 		null,
 		null,
 		null,
 	];
-};
+})();
+`;
 
 const inputState = (page: Page) => page.evaluate(() => window.__inputState!());
 const gameState = (page: Page) => page.evaluate(() => window.__gameState!());
@@ -259,7 +266,7 @@ async function runTouchDeck(browser: Browser, check: Check) {
 		`deckVisible=${state.deckVisible}`,
 	);
 
-	const deck = page.locator(".vg-deck");
+	const deck = page.locator(".gg-deck");
 	check("the deck is drawn", (await deck.count()) === 1, "");
 
 	// The screen and the controls each get a share of the phone. Neither may spill
@@ -288,7 +295,7 @@ async function runTouchDeck(browser: Browser, check: Check) {
 
 	// A thumb on the right arm of the cross. One control, eight sectors — so the
 	// touch point decides the direction, not which of four buttons was hit.
-	const cross = await page.locator(".vg-cross").boundingBox();
+	const cross = await page.locator(".gg-cross").boundingBox();
 	if (!cross) throw new Error("cross not laid out");
 	const before = await gameState(page);
 	const walking = await holdTouch(
@@ -302,8 +309,8 @@ async function runTouchDeck(browser: Browser, check: Check) {
 	);
 	check(
 		"the left stick is drawn as an analog pad, not a d-pad",
-		(await page.locator(".vg-cross-nub").count()) === 1 &&
-			(await page.locator(".vg-cross-arm").count()) === 0,
+		(await page.locator(".gg-cross-nub").count()) === 1 &&
+			(await page.locator(".gg-cross-arm").count()) === 0,
 		"",
 	);
 
@@ -359,7 +366,7 @@ async function runTouchDeck(browser: Browser, check: Check) {
 	 * Checked on Jump, because a button whose real action is obvious is the one
 	 * where a spurious second action hides.
 	 */
-	const jump = await page.locator(".vg-btn.jump").boundingBox();
+	const jump = await page.locator(".gg-btn.jump").boundingBox();
 	if (!jump) throw new Error("jump button not laid out");
 	await settle(page);
 	const jumping = await holdTouch(
@@ -403,7 +410,7 @@ async function runTouchDeck(browser: Browser, check: Check) {
 	// The thumb pad is the fine layer, and on a touchscreen it is the *only* fine
 	// layer: absolute, full 360, and it recentres. The deck is in sword stance by
 	// default, so a thumb on the pad must aim without slashing.
-	const stick = await page.locator(".vg-stick").boundingBox();
+	const stick = await page.locator(".gg-stick").boundingBox();
 	if (!stick) throw new Error("thumb pad not laid out");
 	await touch.start(stick.x + stick.width / 2, stick.y + stick.height / 2);
 	await touch.move(stick.x + stick.width / 2, stick.y - 40);
@@ -442,12 +449,12 @@ async function runTouchDeck(browser: Browser, check: Check) {
 	// should not be shown buttons that do nothing.
 	check(
 		"sword stance draws the sword-only buttons",
-		(await page.locator(".vg-btn.block").count()) === 1 &&
-			(await page.locator(".vg-btn.upper").count()) === 1,
+		(await page.locator(".gg-btn.block").count()) === 1 &&
+			(await page.locator(".gg-btn.upper").count()) === 1,
 		"",
 	);
 	await settle(page);
-	await page.locator(".vg-pill").filter({ hasText: "Gun" }).tap();
+	await page.locator(".gg-pill").filter({ hasText: "Gun" }).tap();
 	await page.waitForTimeout(300);
 	const gunBefore = await gameState(page);
 	check(
@@ -457,8 +464,8 @@ async function runTouchDeck(browser: Browser, check: Check) {
 	);
 	check(
 		"gun stance hides the sword-only buttons",
-		(await page.locator(".vg-btn.block").count()) === 0 &&
-			(await page.locator(".vg-btn.upper").count()) === 0,
+		(await page.locator(".gg-btn.block").count()) === 0 &&
+			(await page.locator(".gg-btn.upper").count()) === 0,
 		"",
 	);
 	await touch.start(stick.x + stick.width / 2, stick.y + stick.height / 2);
@@ -505,13 +512,13 @@ async function runTouchDeck(browser: Browser, check: Check) {
 	);
 
 	// And the whole thing has to be undoable, or choosing it on a phone is a trap.
-	await page.locator(".vg-menu").click();
+	await page.locator(".gg-menu").click();
 	await page.getByRole("button", { name: "Controls" }).click();
-	await page.locator(".vd-choice").first().getByText("Mouse").click();
+	await page.locator(".gd-choice").first().getByText("Mouse").click();
 	await page.waitForTimeout(150);
 	check(
 		"the deck's own menu button can send the deck away",
-		(await page.locator(".vg-deck").count()) === 0,
+		(await page.locator(".gg-deck").count()) === 0,
 		"a phone has no Escape key, so this is the only way back",
 	);
 

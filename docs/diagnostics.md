@@ -345,7 +345,7 @@ It plays a short AI-vs-AI match to a winner, then watches `__potgState()` at
 | Did the shake fire once per beat rather than once per frame? | `track[].shakes` vs the clip's beat count |
 | Did the replay draw anybody? | `drawn` |
 | Did the HUD and the podium stay down, and the overlay come up? | the DOM, while `active` |
-| Did the podium then arrive? | `.vd-veil` |
+| Did the podium then arrive? | `.gd-veil` |
 
 Three details are load-bearing.
 

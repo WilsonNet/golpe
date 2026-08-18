@@ -43,7 +43,7 @@ order of value:
 | 1 | Visibility of system status | Server status line; host form summary; the URL is visible state |
 | 2 | Match the real world | "Slash / fire" not "attack" or "Mouse0"; "Bots to fight", not "fill" |
 | 3 | User control and freedom | Back on every view; Esc steps back; Exit to menu asks first |
-| 4 | Consistency and standards | One `vd-` design language across menu, prompt and Esc menu; same wording everywhere ("frags to win" in the form and the HUD) |
+| 4 | Consistency and standards | One `gd-` design language across menu, prompt and Esc menu; same wording everywhere ("frags to win" in the form and the HUD) |
 | 5 | Error prevention | Constraints before validation: clamped fields, enforced team floor, join id checked against `ROOM_ID_RE` |
 | 6 | Recognition rather than recall | Options visible in the form, never remembered parameters; the share link is shown, not described |
 | 7 | Flexibility and efficiency | Query params stay the expert/agentic path; the menu is the novice path; both reach the same game |
@@ -80,7 +80,7 @@ Two CSS traps cost real time on this screen and both look like the layout
   with `width: auto` hugs its text. Every menu button needs an explicit
   `width: 100%` (plus `box-sizing: border-box`), or a full-width "Practice"
   renders 398px wide with a void to its right.
-- **A `.vd-two`/`.vd-hero-pick` @media rule that comes *before* the base rules
+- **A `.gd-two`/`.gd-hero-pick` @media rule that comes *before* the base rules
   is dead on arrival** — later rules of equal specificity beat it, so the
   phone kept two cramped columns and the card overhung the screen. Put the
   phone block last, and test at a real 390px viewport, not a wide one.
@@ -188,5 +188,5 @@ string. Rules that follow:
    heading-to-content and element-to-element gaps and confirm the 24px/10px/4px
    rhythm survived — a button at 0px from its neighbour is the exact bug that
    ships as "unpolished".
-6. Ground truth beats eyeballs: the probe asserts on `.vd-menu` presence and
+6. Ground truth beats eyeballs: the probe asserts on `.gd-menu` presence and
    the URL after commits, not on styling.

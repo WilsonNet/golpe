@@ -486,9 +486,9 @@ async function main() {
 				.evaluate(() => ({
 					active: window.__potgState?.().active ?? false,
 					victory: !!document.querySelector(".vv-root"),
-					overlay: !!document.querySelector(".vp-root"),
-					stats: !!document.querySelector(".vp-stats"),
-					podium: !!document.querySelector(".vd-veil"),
+					overlay: !!document.querySelector(".gp-root"),
+					stats: !!document.querySelector(".gp-stats"),
+					podium: !!document.querySelector(".gd-veil"),
 					hud: !!document.querySelector(".vdh-hud"),
 				}))
 				.catch(() => null);
@@ -531,7 +531,7 @@ async function main() {
 	// And the podium, which had to wait for its turn.
 	const podium = await poll(
 		page,
-		() => !!document.querySelector(".vd-veil"),
+		() => !!document.querySelector(".gd-veil"),
 		(seen) => seen === true,
 		8000,
 	);

@@ -98,22 +98,22 @@ async function jumpRise(page: Page, code: string) {
 
 async function openControls(page: Page) {
 	await page.keyboard.press("Escape");
-	await page.locator(".vd-menu-card").waitFor({ timeout: 3000 });
+	await page.locator(".gd-menu-card").waitFor({ timeout: 3000 });
 	await page.getByRole("button", { name: "Controls" }).click();
-	await page.locator(".vd-bind-table").waitFor({ timeout: 3000 });
+	await page.locator(".gd-bind-table").waitFor({ timeout: 3000 });
 }
 
 /** The slot buttons for one action row, as a player sees them. */
 function slots(page: Page, label: string) {
 	return page
-		.locator(".vd-bind-table tr")
+		.locator(".gd-bind-table tr")
 		.filter({ has: page.locator("th", { hasText: new RegExp(`^${label}$`) }) })
-		.locator(".vd-slot");
+		.locator(".gd-slot");
 }
 
 async function closeMenu(page: Page) {
 	await page.keyboard.press("Escape");
-	await page.locator(".vd-menu-card").waitFor({ state: "detached" });
+	await page.locator(".gd-menu-card").waitFor({ state: "detached" });
 	await page.waitForTimeout(120);
 }
 
@@ -194,7 +194,7 @@ async function run() {
 	// ---- the menu takes the keyboard ----
 	await settle(page);
 	await page.keyboard.press("Escape");
-	await page.locator(".vd-menu-card").waitFor({ timeout: 3000 });
+	await page.locator(".gd-menu-card").waitFor({ timeout: 3000 });
 	const menuOpen = await state(page);
 	await page.keyboard.down("KeyD");
 	await page.waitForTimeout(500);

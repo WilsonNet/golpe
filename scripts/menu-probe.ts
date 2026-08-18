@@ -46,16 +46,16 @@ const browser = await chromium.launch();
 	const ctx = await browser.newContext();
 	const page = await ctx.newPage();
 	await page.goto(BASE);
-	await page.waitForSelector(".vd-menu-page", { timeout: 10000 });
+	await page.waitForSelector(".gd-menu-page", { timeout: 10000 });
 	check("bare URL shows the menu", true);
 	check("menu has no launch keys", launchKeys(page.url()).length === 0);
 	// The server status line is the feedback the menu exists for — a game that
 	// loads with no server behind it must say so before a match is started.
-	await page.waitForSelector(".vd-server", { timeout: 5000 });
+	await page.waitForSelector(".gd-server", { timeout: 5000 });
 	await page.waitForFunction(
 		() =>
 			document
-				.querySelector(".vd-server")
+				.querySelector(".gd-server")
 				?.textContent?.includes("Game server online"),
 		{ timeout: 8000 },
 	);
@@ -68,12 +68,12 @@ const browser = await chromium.launch();
 	const ctx = await browser.newContext();
 	const page = await ctx.newPage();
 	await page.goto(BASE);
-	await page.waitForSelector(".vd-menu-page", { timeout: 10000 });
+	await page.waitForSelector(".gd-menu-page", { timeout: 10000 });
 
 	// The menu's name field writes the same store the in-game prompt reads, so
 	// a player named here must never be asked again.
-	await page.fill("#vd-name", "ProbeA");
-	await page.click(".vd-play-item-primary");
+	await page.fill("#gd-name", "ProbeA");
+	await page.click(".gd-play-item-primary");
 	await page.waitForFunction(() => typeof window.__gameState === "function", {
 		timeout: 20000,
 	});
@@ -96,8 +96,8 @@ const browser = await chromium.launch();
 	const ctx = await browser.newContext();
 	const page = await ctx.newPage();
 	await page.goto(BASE);
-	await page.waitForSelector(".vd-menu-page", { timeout: 10000 });
-	const items = await page.$$(".vd-play-item");
+	await page.waitForSelector(".gd-menu-page", { timeout: 10000 });
+	const items = await page.$$(".gd-play-item");
 	for (const el of items) {
 		if ((await el.textContent())?.includes("Practice")) {
 			await el.click();
@@ -121,17 +121,17 @@ const browser = await chromium.launch();
 	const ctx = await browser.newContext();
 	const page = await ctx.newPage();
 	await page.goto(BASE);
-	await page.waitForSelector(".vd-menu-page", { timeout: 10000 });
+	await page.waitForSelector(".gd-menu-page", { timeout: 10000 });
 	const room = `menu-probe-${Date.now().toString(36)}`;
-	const items = await page.$$(".vd-play-item");
+	const items = await page.$$(".gd-play-item");
 	for (const el of items) {
 		if ((await el.textContent())?.includes("Join a match")) {
 			await el.click();
 			break;
 		}
 	}
-	await page.fill(".vd-card input[placeholder='room id or link']", room);
-	await page.click(".vd-card button[type='submit']");
+	await page.fill(".gd-card input[placeholder='room id or link']", room);
+	await page.click(".gd-card button[type='submit']");
 	await page.waitForFunction(() => typeof window.__gameState === "function", {
 		timeout: 20000,
 	});
@@ -149,7 +149,7 @@ const browser = await chromium.launch();
 		timeout: 20000,
 	});
 	const menuVisible = await page.evaluate(
-		() => document.querySelector(".vd-menu-page") !== null,
+		() => document.querySelector(".gd-menu-page") !== null,
 	);
 	check("?bots=1 boots without the menu", !menuVisible);
 	await ctx.close();
@@ -160,29 +160,29 @@ const browser = await chromium.launch();
 	const ctx = await browser.newContext();
 	const page = await ctx.newPage();
 	await page.goto(BASE);
-	await page.waitForSelector(".vd-menu-page", { timeout: 10000 });
-	const items = await page.$$(".vd-play-item");
+	await page.waitForSelector(".gd-menu-page", { timeout: 10000 });
+	const items = await page.$$(".gd-play-item");
 	for (const el of items) {
 		if ((await el.textContent())?.includes("Host a match")) {
 			await el.click();
 			break;
 		}
 	}
-	await page.click(".vd-chip:has-text('Team deathmatch')");
+	await page.click(".gd-chip:has-text('Team deathmatch')");
 	// A team room's three-screen floor is a constraint the form must show, not a
 	// surprise the server delivers.
-	const summary = await page.textContent(".vd-summary");
+	const summary = await page.textContent(".gd-summary");
 	check(
 		"team mode floors the arena at 3 screens",
 		(summary ?? "").includes("3 screens"),
 		`summary="${summary?.trim()}"`,
 	);
-	const widthInput = await page.$(".vd-field input[type='number']");
+	const widthInput = await page.$(".gd-field input[type='number']");
 	const width = widthInput
 		? Number(await widthInput.getAttribute("value"))
 		: null;
 	check("arena width input shows the floor", width === 3, `width=${width}`);
-	await page.click(".vd-card button:has-text('Create match')");
+	await page.click(".gd-card button:has-text('Create match')");
 	await page.waitForFunction(() => typeof window.__gameState === "function", {
 		timeout: 20000,
 	});
