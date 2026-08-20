@@ -15,7 +15,7 @@
 import type { AIState } from "../game/characters/EnemyBrain";
 import type { AimReport } from "../game/input/Aim";
 import type { AimScheme, DeckSetting } from "../game/input/Scheme";
-import type { TeamStatus } from "../game/online/types";
+import type { RosterEntry, TeamStatus } from "../game/online/types";
 import type { PotgPhase } from "../game/potg/Director";
 import type { PotgAnnounce, PotgTrackEntry } from "../game/potg/types";
 import type {
@@ -337,6 +337,16 @@ declare global {
 		 * exercises the path a player takes instead of a bypass nobody plays.
 		 */
 		__setInputScheme?: (scheme: AimScheme) => void;
+		/** Live roster, with teams and admin flags — the Esc menu's Room panel. */
+		__rosterState?: () => RosterEntry[];
+		/** Switch side in a team room — same channel the Room panel uses. */
+		__sendTeam?: (team: TeamId) => void;
+		/** Add a server bot mid-match (admins only). */
+		__sendBotAdd?: (team?: TeamId | null) => void;
+		/** Remove a server bot mid-match (admins only). */
+		__sendBotRemove?: (team?: TeamId | null) => void;
+		/** Grant or revoke bot rights — creator only. */
+		__sendAdmin?: (targetId: string, admin: boolean) => void;
 		/**
 		 * The training room's controller: configure the dummy, drive the local
 		 * fighter, run a scenario, read a structured report.

@@ -113,7 +113,13 @@ join. The target is a floor on activity, never a cap on people.
   release) and climbs ledges a single jump cannot reach. `?ultCharge=N` lets a
   probe watch the casts without waiting out the ~285s passive.
 - **Each bot gets a fresh personality every match**, so sixteen of them do not
-  replay the same fight every five minutes.
+   replay the same fight every five minutes.
+- **Bots can be managed mid-match.** The room's creator is its first admin; any
+   admin may add or remove server bots from the Esc menu's **Room & Bots** (FFA)
+   or **Teams & Bots** (TDM) panel without leaving the match. A non-admin sees
+   the same roster but with disabled controls. The creator may promote any other
+   human to admin (and demote them) from the same panel; a leaving creator
+   passes the crown to the next human so the room never ends up admin-less.
 
 ## Names
 

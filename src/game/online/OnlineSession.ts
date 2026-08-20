@@ -33,6 +33,7 @@ import {
 import { hostile, type MatchMode, type TeamId } from "../simulation/Teams";
 import { NEUTRAL, TINT, teamTint } from "../teamPalette";
 import type { TrainingConfigMsg, TrainingStateMsg } from "../training/types";
+import { EventBus } from "../EventBus";
 import { ServerClock } from "./Interpolation";
 import { type JoinOptions, OnlineManager } from "./OnlineManager";
 import {
@@ -397,6 +398,38 @@ export class OnlineSession {
 		this.manager.sendHero(hero);
 	}
 
+	requestTeam(team: TeamId) {
+		this.manager.sendTeam(team);
+	}
+
+	requestBotAdd(team?: TeamId | null) {
+		this.manager.sendBots("add", team ?? null);
+	}
+
+	requestBotRemove(team?: TeamId | null) {
+		this.manager.sendBots("remove", team ?? null);
+	}
+
+	requestAdmin(targetId: string, admin: boolean) {
+		this.manager.sendAdmin(targetId, admin);
+	}
+
+	get roster(): RosterEntry[] {
+		return [...this.nameById.values()];
+	}
+
+	isAdmin(id: string): boolean {
+		return this.nameById.get(id)?.admin ?? false;
+	}
+
+	get isLocalAdmin(): boolean {
+		return this.isAdmin(this.manager.myId);
+	}
+
+	get isCreator(): boolean {
+		return this.nameById.get(this.manager.myId)?.creator ?? false;
+	}
+
 	/** Is this fighter up? Dead fighters are still simulated, just not scoring. */
 	aliveOf(id: string): boolean {
 		return this.info.get(id)?.alive ?? true;
@@ -697,6 +730,7 @@ export class OnlineSession {
 	private onRoster(entries: RosterEntry[]) {
 		this.nameById.clear();
 		for (const entry of entries) this.nameById.set(entry.id, entry);
+		EventBus.emit("roster", entries);
 	}
 
 	private dropFighter(id: string) {

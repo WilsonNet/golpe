@@ -522,6 +522,7 @@ export class Match {
 
 		EventBus.emit("current-scene-ready", this);
 		this.installHeroSelect();
+		this.installRoomControls();
 	}
 
 	// =========================================================
@@ -729,6 +730,26 @@ export class Match {
 			if (!isHeroId(hero)) return;
 			if (hero === this.hero) return;
 			this.online?.requestHero(hero);
+		}) as never);
+	}
+
+	private installRoomControls() {
+		EventBus.on("team-select", ((team: unknown) => {
+			if (team !== 0 && team !== 1) return;
+			this.online?.requestTeam(team as TeamId);
+		}) as never);
+		EventBus.on("bot-add", ((team: unknown) => {
+			if (team !== 0 && team !== 1 && team !== null && team !== undefined) return;
+			this.online?.requestBotAdd((team as TeamId | null) ?? null);
+		}) as never);
+		EventBus.on("bot-remove", ((team: unknown) => {
+			if (team !== 0 && team !== 1 && team !== null && team !== undefined) return;
+			this.online?.requestBotRemove((team as TeamId | null) ?? null);
+		}) as never);
+		EventBus.on("admin-toggle", ((data: unknown) => {
+			const m = data as { targetId?: unknown; admin?: unknown } | null;
+			if (typeof m?.targetId !== "string" || typeof m?.admin !== "boolean") return;
+			this.online?.requestAdmin(m.targetId, m.admin);
 		}) as never);
 	}
 
@@ -1316,6 +1337,17 @@ export class Match {
 		window.__setInputScheme = (scheme) => {
 			inputSettings.setScheme(scheme);
 		};
+		// Room controls for probes: team switching and mid-match bot management.
+		// Mirrors the Esc menu's Room panel, so a probe can drive the same path a
+		// player takes without synthesising clicks.
+		window.__rosterState = () => this.online?.roster ?? [];
+		window.__sendTeam = (t: number) => this.online?.requestTeam(t as TeamId);
+		window.__sendBotAdd = (t?: number | null) =>
+			this.online?.requestBotAdd((t as TeamId | null) ?? null);
+		window.__sendBotRemove = (t?: number | null) =>
+			this.online?.requestBotRemove((t as TeamId | null) ?? null);
+		window.__sendAdmin = (id: string, admin: boolean) =>
+			this.online?.requestAdmin(id, admin);
 	}
 
 	/** Local fighter's live projectiles with their headings, for the aim probe. */

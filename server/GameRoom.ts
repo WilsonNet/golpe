@@ -698,6 +698,11 @@ export class GameRoom {
 	 */
 	readonly world: World;
 
+	/** The room's creator — the first human to join. Null until someone does. */
+	private creatorId: string | null = null;
+	/** Who may manage bots mid-match. The creator is always one. */
+	private admins = new Set<string>();
+
 	constructor(
 		id: string,
 		rules: {
@@ -779,6 +784,98 @@ export class GameRoom {
 
 	get isFull(): boolean {
 		return this.channelIds.length >= MAX_PLAYERS;
+	}
+
+	private isAdmin(id: string): boolean {
+		return this.admins.has(id);
+	}
+
+	/**
+	 * Move a fighter to a new side mid-match.
+	 *
+	 * The request changes `team` immediately — the snapshot carries it, so every
+	 * client's next `tickPlayer` already uses the new friendly-fire rule. A live
+	 * fighter is teleported to its new side's spawn (kept alive, kept HP) so a
+	 * switch does not hand the old side's round to the new one by carrying the
+	 * fighter's old position across, and does not heal or kill them either.
+	 */
+	private switchTeam(playerId: string, team: TeamId): boolean {
+		if (this.mode !== "tdm") return false;
+		const p = this.players.get(playerId);
+		if (!p || p.team === team) return false;
+		const old = p.team;
+		p.team = team;
+		if (p.alive) {
+			const spawn = this.spawnFor(team);
+			p.state.x = spawn.x;
+			p.state.y = spawn.y;
+			p.state.vx = 0;
+			p.state.vy = 0;
+			p.state.facing = spawn.facing;
+			p.state.stunTimer = 0;
+			p.state.blocking = false;
+			p.state.meleeAction = "none";
+			p.state.meleeTimer = 0;
+			p.state.hitLatch = false;
+			p.state.chargeTimer = 0;
+			p.state.massiveReady = false;
+			p.state.parryMassiveTimer = 0;
+			p.state.freezeTimer = this.roundFreezeMs;
+			p.state.plunging = false;
+			p.state.plungeStuckTimer = 0;
+			p.state.plungeCarryTimer = 0;
+			p.state.dragonTimer = 0;
+			p.state.trapTimer = 0;
+		}
+		console.log(`[TEAM] ${p.name} switches ${old} -> ${team}`);
+		this.broadcastRoster();
+		return true;
+	}
+
+	private addBotOnTeam(team: TeamId | null): boolean {
+		if (this.isFull) return false;
+		let spawnTeam = team;
+		if (spawnTeam === null && this.mode === "tdm") spawnTeam = this.nextTeam();
+		else if (this.mode !== "tdm") spawnTeam = null;
+		const id = `bot-${this.id}-${this.channelIds.length}-${Date.now()}`;
+		this.channelIds.push(id);
+		const hero = this.botHeroFor();
+		const slot = this.newSlot(
+			id,
+			botName(this.names),
+			this.spawnFor(spawnTeam),
+			MAX_HP,
+			{ brain: new EnemyBrain(botConfig(), this.world, hero) },
+			spawnTeam,
+			hero,
+		);
+		slot.state.freezeTimer = this.roundFreezeMs;
+		this.players.set(id, slot);
+		this.broadcastRoster();
+		console.log(`[BOTS] added bot ${slot.name} to ${spawnTeam ?? "ffa"} (now ${this.playerCount})`);
+		return true;
+	}
+
+	private removeBotOnTeam(team: TeamId | null): boolean {
+		let bots = [...this.players.values()].filter((p) => p.brain !== null);
+		if (bots.length === 0) return false;
+		if (team !== null && this.mode === "tdm") {
+			const tBots = bots.filter((p) => p.team === team);
+			if (tBots.length > 0) bots = tBots;
+		} else if (this.mode === "tdm") {
+			// Prefer the larger side, so removal balances rather than empties one side.
+			const counts = teamCounts(this.members());
+			const larger = counts[0] !== counts[1] ? (counts[0]! > counts[1]! ? 0 : 1) : null;
+			if (larger !== null) {
+				const lBots = bots.filter((p) => p.team === larger);
+				if (lBots.length > 0) bots = lBots;
+			}
+		}
+		const victim = bots[0];
+		if (!victim) return false;
+		this.removePlayer(victim.id);
+		console.log(`[BOTS] removed bot ${victim.name} (now ${this.playerCount})`);
+		return true;
 	}
 
 	/**
@@ -927,6 +1024,10 @@ export class GameRoom {
 		);
 		slot.state.freezeTimer = this.roundFreezeMs;
 		this.players.set(id, slot);
+		if (this.creatorId === null) {
+			this.creatorId = id;
+			this.admins.add(id);
+		}
 
 		channel.join(this.id);
 		channel.userData = { roomId: this.id, hero: slot.hero };
@@ -990,6 +1091,59 @@ export class GameRoom {
 			this.applyTrainingConfig(data as TrainingConfigMsg | null);
 		});
 
+		// Team switching: any player in a TDM room may move themselves. The
+		// simulation carries `team` per fighter, so this is load-bearing for
+		// friendly fire — the snapshot will carry the new side on its next tick.
+		channel.on("team", (data: unknown) => {
+			const p = this.players.get(id);
+			if (!p || this.mode !== "tdm") return;
+			const raw = (data as { team?: unknown } | null)?.team;
+			if (raw !== 0 && raw !== 1) return;
+			this.switchTeam(id, raw as TeamId);
+		});
+
+		// Bot management: creator/admins may add or remove server bots mid-match.
+		channel.on("bots", (data: unknown) => {
+			if (!this.isAdmin(id)) return;
+			const msg = data as { op?: unknown; team?: unknown } | null;
+			const op = msg?.op;
+			if (op === "add") {
+				const teamRaw = msg?.team;
+				let team: TeamId | null = null;
+				if (teamRaw === 0 || teamRaw === 1) team = teamRaw as TeamId;
+				if (!this.addBotOnTeam(team)) {
+					channel.emit("bots-error", { reason: "full" }, RELIABLE);
+				}
+			} else if (op === "remove") {
+				const teamRaw = msg?.team;
+				let team: TeamId | null = null;
+				if (teamRaw === 0 || teamRaw === 1) team = teamRaw as TeamId;
+				if (!this.removeBotOnTeam(team)) {
+					channel.emit("bots-error", { reason: "no-bots" }, RELIABLE);
+				}
+			}
+		});
+
+		// Admin delegation: only the creator may grant or revoke.
+		channel.on("admin", (data: unknown) => {
+			if (id !== this.creatorId) return;
+			const msg = data as { targetId?: unknown; admin?: unknown } | null;
+			const targetId = msg?.targetId;
+			const admin = msg?.admin;
+			if (typeof targetId !== "string" || typeof admin !== "boolean") return;
+			const target = this.players.get(targetId);
+			if (!target || target.brain !== null || target.dummy !== null) return;
+			if (admin) {
+				this.admins.add(targetId);
+				console.log(`[ADMIN] ${target.name} promoted by ${this.players.get(id)?.name}`);
+			} else {
+				if (targetId === this.creatorId) return;
+				this.admins.delete(targetId);
+				console.log(`[ADMIN] ${target.name} demoted by ${this.players.get(id)?.name}`);
+			}
+			this.broadcastRoster();
+		});
+
 		channel.onDisconnect(() => {
 			this.removePlayer(id);
 		});
@@ -1041,25 +1195,7 @@ export class GameRoom {
 	 * instead of bypassing it. That is what makes a room full of AI a real test.
 	 */
 	addBot(): boolean {
-		if (this.isFull) return false;
-
-		const id = `bot-${this.id}-${this.channelIds.length}`;
-		this.channelIds.push(id);
-		const team = this.nextTeam();
-		const hero = this.botHeroFor();
-		const slot = this.newSlot(
-			id,
-			botName(this.names),
-			this.spawnFor(team),
-			MAX_HP,
-			{ brain: new EnemyBrain(botConfig(), this.world, hero) },
-			team,
-			hero,
-		);
-		slot.state.freezeTimer = this.roundFreezeMs;
-		this.players.set(id, slot);
-		this.broadcastRoster();
-		return true;
+		return this.addBotOnTeam(null);
 	}
 
 	/**
@@ -1412,6 +1548,21 @@ export class GameRoom {
 		player?.channel?.leave();
 		this.players.delete(id);
 		this.channelIds = this.channelIds.filter((c) => c !== id);
+		// Admin bookkeeping: leaving admins are removed, and a departing creator
+		// passes the crown to the next human so the room never ends up admin-less.
+		const wasCreator = id === this.creatorId;
+		this.admins.delete(id);
+		if (wasCreator) {
+			this.creatorId = null;
+			for (const p of this.players.values()) {
+				if (p.channel !== null) {
+					this.creatorId = p.id;
+					this.admins.add(p.id);
+					console.log(`[ADMIN] creator left, new creator ${p.name}`);
+					break;
+				}
+			}
+		}
 		// Bullets outlive their owner's slot otherwise, and one of them would
 		// eventually be credited to an id nobody holds.
 		this.bullets = this.bullets.filter((b) => b.ownerId !== id);
@@ -2067,6 +2218,9 @@ export class GameRoom {
 				id: p.id,
 				name: p.name,
 				bot: p.brain !== null,
+				team: p.team,
+				admin: this.admins.has(p.id),
+				creator: this.creatorId === p.id,
 			})),
 		};
 	}

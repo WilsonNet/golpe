@@ -129,10 +129,13 @@ in every client's queue.
 
 - **Assigned on arrival, to whichever side is smaller** (`balanceTeam`), ties to
   the lower id. Deterministic, so a room seated in the same order twice comes out
-  the same way and a probe can assert the split.
-- **Never reassigned mid-match.** Balancing a live match by moving somebody
-  across would hand the round they are standing in to the other side. Balance
-  comes from where the *next* joiner goes.
+  the same way and a probe can assert the split. A player may change their own
+  side at any time from the Esc menu's Teams & Bots panel (see *Choosing sides*
+  below) — the server moves them immediately and teleports a live fighter to the
+  new spawn, so the automatic balance only decides where the *next* joiner goes.
+- **The server never reassigns a side by itself.** Auto-balancing a live match
+  by moving somebody across would hand the round they are standing in to the
+  other side.
 - **A bot gives up its seat from the larger side.** The human taking it is
   assigned to the smaller one, so evicting at random would seat every arriving
   human beside the bot that just left and the room would drift 9v7.
@@ -337,11 +340,37 @@ legitimate.
 satisfies every correctness check above, and no wipe, no reset and no frag is a
 failure rather than a clean run.
 
+## Choosing sides and Player vs Bots
+
+**Sides are chosen, not assigned forever.** The server seats the next joiner on
+the smaller side (`balanceTeam`), but any player in a team room may switch sides
+at any time from the Esc menu's **Teams & Bots** panel — the same place that
+controls bots. A switch changes `team` immediately (the snapshot carries it, so
+every client's next `tickPlayer` already uses the new friendly-fire rule) and
+teleports a live fighter to its new side's spawn with the same HP, so a switch
+does not heal, kill, or carry the old position across. Use the freezetime
+between rounds to stack one side for a **Player vs Bots** match, then fill the
+other side with bots.
+
+**Bots are managed mid-match, by whoever the room trusts.** The room's creator
+is its first admin; only admins may add or remove server bots while the match
+runs. The creator may promote any other human to admin (and demote them) from
+the same panel; a leaving creator passes the crown to the next human so the
+room never ends up admin-less. Adding a bot respects the side you choose — `+`
+for auto (the smaller side), `+ AZURE` / `+ EMBER` for a specific one — so a
+3-human group can stack AZURE and add the opposition to EMBER without ever
+leaving the match. Removing a bot prefers the larger side, so `−` keeps the
+room balanced.
+
+Non-admins see the same panel but with disabled controls and the roster still
+readable, so everybody can see who is on which side and who can manage the
+room.
+
 ## Not implemented
 
 - More than two sides. `TEAM_COUNT` is 2 and the round rules are written over an
   array, but nothing chooses a third colour or a third spawn zone.
-- Team-chosen sides, switching teams, or party/pre-made grouping.
+- Party/pre-made grouping that survives across rooms.
 - Objectives: no flags, no control points, no bomb. The only objective is the
   other team.
 - Sides swapping ends between rounds (deliberately — see *The arena*).

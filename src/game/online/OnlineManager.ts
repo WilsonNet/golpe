@@ -301,6 +301,24 @@ export class OnlineManager {
 		}
 	}
 
+	sendTeam(team: number) {
+		if (this.channel && this._connected) {
+			this.channel.emit("team", { team }, RELIABLE);
+		}
+	}
+
+	sendBots(op: "add" | "remove", team?: number | null) {
+		if (this.channel && this._connected) {
+			this.channel.emit("bots", { op, team: team ?? null }, RELIABLE);
+		}
+	}
+
+	sendAdmin(targetId: string, admin: boolean) {
+		if (this.channel && this._connected) {
+			this.channel.emit("admin", { targetId, admin }, RELIABLE);
+		}
+	}
+
 	onTraining(handler: TrainingStateHandler) {
 		this.onTrainingState = handler;
 	}

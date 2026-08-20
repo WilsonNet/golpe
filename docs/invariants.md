@@ -660,12 +660,15 @@ the ways a *side* breaks things a free-for-all could not.
   not a quirk, it is the design: every fighter in a free-for-all carries `null`,
   so FFA falls out of the team rules with no `mode === "ffa"` test anywhere in
   the damage path. Deleting that property means branching every weapon.
-- **A team travels in the snapshot, beside `hp` — never in the roster.** Teams
-  are an argument to `tickPlayer`: the client applies the black hole's
-  friendly-fire rule for every fighter it predicts, and replays it on every
-  reconciliation. The roster is sent on change with a 2s heartbeat, so a client
-  that lost one would spend two seconds dragging its own side into a hole the
-  server is not pulling them into — with nothing in any metric to explain it.
+- **A team is authoritative in the snapshot, beside `hp`.** Teams are an
+  argument to `tickPlayer`: the client applies the black hole's friendly-fire
+  rule for every fighter it predicts, and replays it on every reconciliation.
+  The roster now *mirrors* `team` (plus `admin`/`creator`) so the Esc menu's
+  Room panel can show who is on which side without waiting for the next
+  snapshot, but the simulation never reads the roster's copy — a 2s heartbeat
+  that was dropped would otherwise leave a client dragging its own side into a
+  hole the server is not pulling them into, with nothing in any metric to
+  explain it.
 - **The hole carries its caster's side, copied from the grenade.** Looked up per
   fighter instead, a caster who left the room mid-flight would leave a hole that
   had forgotten whose side it was on and started eating its own team.
@@ -684,10 +687,16 @@ the ways a *side* breaks things a free-for-all could not.
 - **A bot is never told about a teammate.** `nearestFoe` filters them out, so
   friendly fire is not a decision `EnemyBrain` declines to make — it is a
   situation the brain cannot perceive. The brain gained no team concept at all.
-- **Never reassign a side mid-match.** Balance by where the *next* joiner goes;
-  moving somebody across hands the round they are standing in to the other side.
-  And evict bots from the **larger** side, or every arriving human is seated
-  beside the bot that just left and the room drifts 9v7.
+- **Never *auto*-reassign a side mid-match.** Balance only by where the *next*
+  joiner goes; the server moving somebody across hands the round they are in to
+  the other side. A *player* may still switch sides any time via the Esc menu's
+  Room panel — that is a deliberate, visible teleport to the new spawn, not a
+  silent balance. And evict bots from the **larger** side, or every arriving
+  human is seated beside the bot that just left and the room drifts 9v7.
+- **Only the creator and their admins may add or remove bots mid-match.** The
+  roster carries `admin`/`creator` so every client can show who can; the server
+  enforces the same rule on the `bots` channel, and a leaving creator passes the
+  crown to the next human so the room never ends up admin-less.
 - **A team tint blends toward the side's colour; it never replaces it.** Every
   combat colour in this game is frame data — white is the first slash, amber the
   finisher, cyan the uppercut, violet the ultimate. Painted flat you would know

@@ -108,6 +108,34 @@ menu never sees the prompt — and a script that answers `player-name` through
 `window.__setPlayerName` still walks the path a human walks. See
 [controls.md](controls.md) for the name rules.
 
+## The Esc menu — in-match room controls
+
+The Esc menu does not pause the match (the server is authoritative) — it takes
+the keyboard away via `input-suspended` so rebinding does not walk the fighter.
+
+Beyond Heroes and Controls it now holds the live room panel:
+
+- **Teams & Bots** (TDM) or **Room & Bots** (FFA) — the only place a match is
+  reconfigured without leaving it.
+- **Your team** (TDM only) — two chips, AZURE / EMBER, showing the live side.
+  Changing side teleports a live fighter to the new spawn with the same HP, so
+  stacking for Players vs Bots is done in the freezetime between rounds.
+- **Bots** — `+ Bot (auto)` / `− Bot` and, in TDM, per-side `+ AZURE` /
+  `+ EMBER` / `− AZURE` / `− EMBER`. The server seats a new bot on the side
+  you choose (or the smaller one for auto) and prefers the larger side when
+  removing, so the room stays balanced. Only the creator and their admins may
+  use these controls; everybody else sees them disabled but still readable.
+- **Admins** — the creator may promote any other human to admin (and demote
+  them) from the player list. Admins persist until they leave; a leaving
+  creator passes the crown to the next human so the room never ends up
+  admin-less. The same messages are exposed as `window.__sendTeam`,
+  `window.__sendBotAdd`, `window.__sendBotRemove` and `window.__sendAdmin` for
+  probes.
+
+The panel reads the live roster (`RosterEntry.team`, `admin`, `creator`) and the
+snapshot's `MatchStatus.mode`, so a client that joined by link learns the mode
+and who can manage the room rather than assuming its own URL.
+
 ## Leaving
 
 The Esc menu's *Exit to menu* destroys the client (the fighter leaves the room;

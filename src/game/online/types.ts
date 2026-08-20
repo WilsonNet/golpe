@@ -474,6 +474,12 @@ export interface RosterEntry {
 	name: string;
 	/** A server-hosted bot, so the scoreboard can say so. */
 	bot: boolean;
+	/** Which side in team deathmatch, or null in a free-for-all. */
+	team?: TeamId | null;
+	/** True if this fighter can manage bots mid-match. */
+	admin?: boolean;
+	/** True for the room's creator (the first human to join). */
+	creator?: boolean;
 }
 
 export interface RosterMsg {
