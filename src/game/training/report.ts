@@ -80,8 +80,8 @@ export interface TrainingReport {
 	denies: number;
 	/** HE blasts the server reported. */
 	explosions: number;
-	/** Times a trap caught somebody. */
-	trapped: number;
+	/** Times a trap rooted somebody. */
+	rooted: number;
 	outcomes: Record<MeleeOutcome, number>;
 	bullets: { fired: number; hits: number };
 	/** The melee half of `PhysicsDiagnostics` — not a second implementation. */

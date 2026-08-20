@@ -273,8 +273,8 @@ export interface MeleeTickState extends MeleeState {
 	blossomTimer?: number;
 	/** ms left of a plunge-bomb carry. Only `PlayerPosition` ever sets it. */
 	plungeCarryTimer?: number;
-	/** ms left of a trap lock. Only `PlayerPosition` ever sets it. */
-	trapTimer?: number;
+	/** ms left of a root (trap lock). Only `PlayerPosition` ever sets it. */
+	rootTimer?: number;
 }
 
 /** What `resolveMelee` needs of a fighter: melee state plus a body. */
@@ -286,8 +286,8 @@ export interface MeleeBody extends MeleeState {
 	grounded: boolean;
 	/** ms left of a Death Blossom channel. Only `PlayerPosition` ever sets it. */
 	blossomTimer?: number;
-	/** ms left of a trap lock. Only `PlayerPosition` ever sets it. */
-	trapTimer?: number;
+	/** ms left of a root (trap lock). Only `PlayerPosition` ever sets it. */
+	rootTimer?: number;
 }
 
 /** The melee half of a tick's input. `PlayerIntent` extends it. */
@@ -531,7 +531,7 @@ function endMove(s: MeleeState) {
 /**
  * Does this move relocate the fighter? The thrust lunges (`selfVx`) and the
  * shoryuken rises (`selfVy`) — today, only the dagger's two. A body-carrying
- * move is exactly the one thing the trap's lock refuses: the trap has the
+ * move is exactly the one thing the root refuses: the root has the
  * feet, and a move that needs them does not happen.
  */
 function moveCarriesBody(move: MeleeMove): boolean {
@@ -540,12 +540,12 @@ function moveCarriesBody(move: MeleeMove): boolean {
 }
 
 function startMove(s: MeleeTickState, move: MeleeMove) {
-	// A trap lock counters a body-carrying move at the door: the start is
+	// A root counters a body-carrying move at the door: the start is
 	// refused outright, so the lunge does not even begin. Gated here, at the
 	// one place every move passes through, so a future body-carrying move is
-	// refused while trapped by construction. The dragon-thrust *ride* is not a
-	// move — and not countered: a trapped Anands can still cast it.
-	if ((s.trapTimer ?? 0) > 0 && moveCarriesBody(move)) return;
+	// refused while rooted by construction. The dragon-thrust *ride* is not a
+	// move — and not countered: a rooted Anands can still cast it.
+	if ((s.rootTimer ?? 0) > 0 && moveCarriesBody(move)) return;
 	s.meleeAction = move;
 	s.meleeTimer = 0;
 	s.hitLatch = false;
@@ -1209,13 +1209,13 @@ export function sweptThrustBox(s: MeleeBody): Rect | null {
 	if (s.meleeAction !== "thrust" || s.hitLatch) return null;
 	if (meleePhase(s) !== "active") return null;
 	const def = MOVES.thrust;
-	// A trap lock freezes the lunge mid-flight: the body stopped on the catch
+	// A root freezes the lunge mid-flight: the body stopped on the catch
 	// (tickPlayer zeroed the velocity and stopped pinning `selfVx`), so the
 	// box is the reach ahead of the frozen body — never the rest of the arc
 	// the cast *would* have covered. Claiming the phantom travel would hand a
-	// trapped lunge a sweep it never earned.
+	// rooted lunge a sweep it never earned.
 	const travelled =
-		(s.trapTimer ?? 0) > 0
+		(s.rootTimer ?? 0) > 0
 			? 0
 			: (Math.max(0, s.meleeTimer - def.startupMs) / MS_PER_SECOND) *
 				(def.selfVx ?? 0);

@@ -72,10 +72,10 @@ import { DragonFx } from "./render/DragonFx";
 import { ItemFx } from "./render/ItemFx";
 import { type ImpactEvent, MeleeFx } from "./render/MeleeFx";
 import { Nameplates } from "./render/Nameplates";
+import { RootedFx } from "./render/RootedFx";
 import { Shadows } from "./render/Shadows";
 import { SpritePool } from "./render/SpritePool";
 import type { Stage } from "./render/Stage";
-import { TrappedFx } from "./render/TrappedFx";
 import { UltAimLine } from "./render/UltAimLine";
 import {
 	applyWorld,
@@ -239,7 +239,7 @@ export class Match {
 	private readonly aimLine: AimLine;
 	private readonly ultAim: UltAimLine;
 	private readonly denyFx: DenyFx;
-	private readonly trappedFx: TrappedFx;
+	private readonly rootedFx: RootedFx;
 	private readonly items: ItemFx;
 	private readonly input: Input;
 	private readonly diagnostics: PhysicsDiagnostics;
@@ -387,9 +387,9 @@ export class Match {
 		// fighter who denied the ultimate, and it must never be buried behind a
 		// sprite it is announcing.
 		this.denyFx = new DenyFx(stage.nameplates);
-		// And the TRAPPED caption, the Jumanji half of the same register — a trap
+		// And the ROOTED caption, the Jumanji half of the same register — a trap
 		// springing is a moment worth shouting over the fighter it just caught.
-		this.trappedFx = new TrappedFx(stage.nameplates);
+		this.rootedFx = new RootedFx(stage.nameplates);
 		// The items: HE grenades fly in the projectile layer, their blasts in the
 		// effects layer, and the traps sit on the floor under the fighters — a
 		// pad you can see is the whole of the counterplay.
@@ -739,16 +739,19 @@ export class Match {
 			this.online?.requestTeam(team as TeamId);
 		}) as never);
 		EventBus.on("bot-add", ((team: unknown) => {
-			if (team !== 0 && team !== 1 && team !== null && team !== undefined) return;
+			if (team !== 0 && team !== 1 && team !== null && team !== undefined)
+				return;
 			this.online?.requestBotAdd((team as TeamId | null) ?? null);
 		}) as never);
 		EventBus.on("bot-remove", ((team: unknown) => {
-			if (team !== 0 && team !== 1 && team !== null && team !== undefined) return;
+			if (team !== 0 && team !== 1 && team !== null && team !== undefined)
+				return;
 			this.online?.requestBotRemove((team as TeamId | null) ?? null);
 		}) as never);
 		EventBus.on("admin-toggle", ((data: unknown) => {
 			const m = data as { targetId?: unknown; admin?: unknown } | null;
-			if (typeof m?.targetId !== "string" || typeof m?.admin !== "boolean") return;
+			if (typeof m?.targetId !== "string" || typeof m?.admin !== "boolean")
+				return;
 			this.online?.requestAdmin(m.targetId, m.admin);
 		}) as never);
 	}
@@ -891,14 +894,14 @@ export class Match {
 					this.items.explode(event.x, event.y, event.radius);
 					this.training?.recordExplosion();
 				},
-				onTrapped: (event) => {
-					// The caption and the burst, and nothing else: the lock already
+				onRooted: (event) => {
+					// The caption and the burst, and nothing else: the root already
 					// travelled in the victim's state. The burst is the trap going
 					// off — it is single-use, and the server has already removed it
 					// from the world. Pure presentation, exactly like a deny.
-					this.trappedFx.trapped(event.x, event.y);
+					this.rootedFx.rooted(event.x, event.y);
 					this.items.trapBurst(event.x, event.y);
-					this.training?.recordTrapped();
+					this.training?.recordRooted();
 				},
 				onFighterAdded: (id) => this.addRemoteFighter(id),
 				onFighterRemoved: (id) => this.despawnFighter(id),
@@ -1411,7 +1414,7 @@ export class Match {
 		meleeFxSystem(this.queries, this.fx, dtMs, (id) => this.ultAuraVisible(id));
 		this.fx.update(dtMs);
 		this.denyFx.update(dtMs);
-		this.trappedFx.update(dtMs);
+		this.rootedFx.update(dtMs);
 		this.updateItems(dtMs);
 		this.updateUltimate(dtMs);
 		this.stage.update(dtMs);
@@ -2948,7 +2951,7 @@ export class Match {
 		this.blackHole.reset();
 		this.blossomFx.reset();
 		this.denyFx.reset();
-		this.trappedFx.reset();
+		this.rootedFx.reset();
 		this.items.reset();
 		this.aimLine.reset();
 		this.ultAim.reset();
@@ -2980,7 +2983,7 @@ export class Match {
 		this.aimLine.destroy();
 		this.ultAim.destroy();
 		this.denyFx.destroy();
-		this.trappedFx.destroy();
+		this.rootedFx.destroy();
 		this.items.destroy();
 		this.training?.destroy();
 		this.online?.disconnect();

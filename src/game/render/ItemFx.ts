@@ -287,7 +287,7 @@ export class ItemFx {
 	}
 
 	/**
-	 * A trap just sprang. One-shot, from the server's trapped event — the burst
+	 * A trap just sprang. One-shot, from the server's rooted event — the burst
 	 * *is* the trap going off, at the victim's feet.
 	 */
 	trapBurst(x: number, y: number) {

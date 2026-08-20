@@ -169,13 +169,13 @@ Full rules in [`specs/items.md`](../specs/items.md).
   and the charge count travels in the snapshot beside `ult`. The client never
   predicts a throw or a placement; it learns of them from the snapshot, exactly
   like bullets.
-- **The trap's lock is in `PlayerPosition`; the trap's consequences are not.**
-  `trapTimer` is set by the shared `tickPlayer` on both sides — the caller hands
+- **The trap's root is in `PlayerPosition`; the trap's consequences are not.**
+  `rootTimer` is set by the shared `tickPlayer` on both sides — the caller hands
   it the room's traps already filtered by `trapFor`, so a caught fighter's own
   client reels and reconciles to ~0px, exactly like the black hole's pull. The
   catch also zeroes the victim's velocity and burst state on that same shared
   tick, so a dash, tumble or lunge caught mid-flight stops dead and predicts so.
-  The trap's destruction, the damage, the burst and the "TRAPPED!" caption are
+  The trap's destruction, the damage, the burst and the "ROOTED!" caption are
   the server's alone.
 - **A trap is single-use.** Nothing can destroy it before it springs, but the
   server removes it from the world the tick it catches somebody — so a trap in
@@ -201,7 +201,7 @@ Full rules in [`specs/interactions.md`](../specs/interactions.md).
   the file and line. The near-miss was the trap fix: "the trap counters the
   thrust but not the dragon" reads as two hero cases, and the pair that almost
   shipped was `if (hero === "anands")`. It shipped as a predicate instead —
-  `startMove` refuses moves whose def carries the body while `trapTimer` runs,
+  `startMove` refuses moves whose def carries the body while `rootTimer` runs,
   and the ride is exempt because a ride is not a move. The exemption falling
   out of the classification is the whole system: a pairwise matrix is the
   O(n²) trap where adding a hero means editing every hero already in the game.

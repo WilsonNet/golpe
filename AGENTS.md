@@ -137,14 +137,14 @@ One line each; the war story behind every one is in
   charge.** A use spends one charge on the press edge — there is no aim phase —
   and the charges travel in the snapshot beside `ult`. They reset on respawn
   and round reset, never in between; a hero change spends them for the new kit.
-  The trap's *lock* is `trapTimer` in `PlayerPosition` (both sides simulate it,
+  The trap's *root* is `rootTimer` in `PlayerPosition` (both sides simulate it,
   like `freezeTimer`); the trap is single-use — the server destroys it the tick
-  it springs, and the burst and "TRAPPED!" caption are the server's alone. The
+  it springs, and the burst and "ROOTED!" caption are the server's alone. The
   catch zeroes the victim's velocity and burst state, so a dash, tumble or
   lunge caught mid-flight stops dead — no momentum carries a caught fighter
-  out of the patch — and the lock discards buffered jumps. It counters the
+  out of the patch — and the root discards buffered jumps. It counters the
   dagger's body-carrying moves (thrust, shoryuken) but not the dragon-thrust
-  ride: a trapped Anands can still cast her ultimate.
+  ride: a rooted Anands can still cast her ultimate.
   Friendly traps (your own and teammates') are drawn faded, so the side a mine
   belongs to is read at a glance.
 - **Systems read the simulation and write only presentation.** A system that

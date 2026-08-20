@@ -23,7 +23,7 @@ import {
 	type WallSide,
 } from "./Collision.js";
 import { type HeroKit, LIA_KIT } from "./Heroes.js";
-import { TRAP_TRIGGER_MS, type Trap, trapCatches } from "./Items.js";
+import { ROOT_MS, type Trap, trapCatches } from "./Items.js";
 import {
 	bombBlastFor,
 	bombFallHeight,
@@ -401,20 +401,21 @@ export interface PlayerPosition extends MeleeState {
 	dragonVX: number;
 	dragonVY: number;
 	/**
-	 * ms of **mobility lock** remaining: the fighter was caught in a trap.
+	 * ms of **mobility lock** remaining: the fighter is **rooted**, caught by
+	 * a trap.
 	 *
 	 * The trap's effect, carried in `PlayerPosition` for the same reason
 	 * `freezeTimer` is: it is a state both sides simulate, so a caught fighter's
-	 * own client predicts the lock exactly as it predicts a dash. While non-zero
+	 * own client predicts the root exactly as it predicts a dash. While non-zero
 	 * the fighter is rooted for movement — no walk, no dash, no jump — but
 	 * nothing else: they can still attack, block, use items and cast, which is
-	 * the whole difference between a trap and a stun. See specs/items.md.
+	 * the whole difference between a root and a stun. See specs/items.md.
 	 *
 	 * Deliberately **not** a stun: a stun is a state a fighter has been *put* in
 	 * by damage, and it is drawn that way. This says "your feet are gone", which
 	 * is a different read and a different escape (there is none but the timer).
 	 */
-	trapTimer: number;
+	rootTimer: number;
 	/**
 	 * ms left of a Death Blossom channel. While non-zero the fighter is
 	 * spinning in place: walk speed halved, no dash, no jump, and the whole
@@ -500,7 +501,7 @@ export function createPlayerState(
 		dragonTimer: 0,
 		dragonVX: 0,
 		dragonVY: 0,
-		trapTimer: 0,
+		rootTimer: 0,
 		blossomTimer: 0,
 		plungeCarryTimer: 0,
 		ammo: 0,
@@ -536,7 +537,7 @@ export function copyPlayerState(
 	target.dragonTimer = source.dragonTimer;
 	target.dragonVX = source.dragonVX;
 	target.dragonVY = source.dragonVY;
-	target.trapTimer = source.trapTimer;
+	target.rootTimer = source.rootTimer;
 	target.blossomTimer = source.blossomTimer;
 	target.plungeCarryTimer = source.plungeCarryTimer;
 	target.ammo = source.ammo;
@@ -603,7 +604,7 @@ export function isFrozen(s: PlayerPosition): boolean {
  * caller has already applied the friendly-fire rule with `trapFor`, so the
  * owner is simply handed `[]` and this function never needs to know whose trap
  * it is. Like `field`, it is an argument rather than something applied on top
- * of the result: a trap lock applied after the tick would be erased by the
+ * of the result: a root applied after the tick would be erased by the
  * next reconciliation. Defaults to no traps.
  */
 export function tickPlayer(
@@ -654,8 +655,8 @@ export function tickPlayer(
 	// a whiffed Massive or uppercut cannot be walked or jumped out of. A plunging
 	// fighter and a stuck one are rooted the same way — the bomb is a commitment
 	// from release to extraction. A dragon rider is cargo; the dragon steers.
-	// A trapped fighter is rooted for movement *only*: the lock takes the feet
-	// and nothing else, so the trapped fighter still attacks, blocks and casts.
+	// A rooted fighter is rooted for movement *only*: the root takes the feet
+	// and nothing else, so the rooted fighter still attacks, blocks and casts.
 	// A carried fighter is cargo of somebody else's dive — same root as the
 	// dive's own.
 	const rooted =
@@ -665,7 +666,7 @@ export function tickPlayer(
 		s.plungeStuckTimer > 0 ||
 		s.plungeCarryTimer > 0 ||
 		s.dragonTimer > 0 ||
-		s.trapTimer > 0;
+		s.rootTimer > 0;
 	// The charge roots the *walk* and nothing else. Dash, jump and block are the
 	// delivery tools a 4s commitment has to keep — see `isCharging`.
 	const charging = isCharging(s);
@@ -690,7 +691,7 @@ export function tickPlayer(
 	s.coyoteTimer = decay(s.coyoteTimer, dt);
 	s.jumpBufferTimer = decay(s.jumpBufferTimer, dt);
 	s.wallCoyoteTimer = decay(s.wallCoyoteTimer, dt);
-	s.trapTimer = decay(s.trapTimer, dt);
+	s.rootTimer = decay(s.rootTimer, dt);
 	// The carry rides the same clock as every other timer: the server sets it
 	// once per catch and both sides run the same number down. The pin is gated
 	// on being airborne, so the tail past the landing is inert.
@@ -916,7 +917,7 @@ export function tickPlayer(
 		s.vx = approach(s.vx, 0, PLUNGE_DECEL * dt);
 		s.jumping = false;
 	} else if (
-		s.trapTimer <= 0 &&
+		s.rootTimer <= 0 &&
 		s.meleeAction !== "none" &&
 		meleePhaseOf(s) === "active" &&
 		(s.meleeAction === "thrust" || s.meleeAction === "shoryuken")
@@ -928,9 +929,9 @@ export function tickPlayer(
 		// Both live here, in the shared simulation, so both sides compute the
 		// same line and the hitbox and the sweep agree with the body.
 		//
-		// A trap lock counters both: while `trapTimer` runs the body stays put
+		// A root counters both: while `rootTimer` runs the body stays put
 		// — the move plays in place, and `sweptThrustBox` freezes its sweep to
-		// match. A lunge is movement, and the trap has the feet.
+		// match. A lunge is movement, and the root has the feet.
 		const def = MOVES[s.meleeAction];
 		if (def.selfVx !== undefined) {
 			s.vx = s.facing >= 0 ? def.selfVx : -def.selfVx;
@@ -1048,10 +1049,10 @@ export function tickPlayer(
 	// ---- the trap ----
 	//
 	// Last, on the moved position, so the moment the feet cross a trap's patch
-	// the lock lands. Tested only while not already trapped, so a trap never
-	// *refreshes* a lock it is already holding — the 3s is a sentence, not a
+	// the root lands. Tested only while not already rooted, so a trap never
+	// *refreshes* a root it is already holding — the 3s is a sentence, not a
 	// re-arm. `trapCatches` is deterministic and both sides run it against the
-	// same traps, so the lock predicts exactly like the black hole's pull. The
+	// same traps, so the root predicts exactly like the black hole's pull. The
 	// trigger's *consequences* — the trap's destruction, the damage, the
 	// caption — are the server's alone; this function only sets the timer both
 	// sides share.
@@ -1060,18 +1061,18 @@ export function tickPlayer(
 	// and every teammate's are not here to catch them. A trap is single-use:
 	// the server removes it from the world the tick it springs, so a trap that
 	// is still in the list is still armed.
-	if (s.trapTimer <= 0) {
+	if (s.rootTimer <= 0) {
 		for (const t of traps) {
 			if (trapCatches(t, s.x, s.y)) {
-				s.trapTimer = TRAP_TRIGGER_MS;
+				s.rootTimer = ROOT_MS;
 				// The catch takes the velocity with it. Without this a fighter
 				// caught mid-dash or mid-tumble carried their burst's momentum
-				// ~170px out of the patch — the trapTimer ran, the fighter
+				// ~170px out of the patch — the rootTimer ran, the fighter
 				// left — so the trap read as having done nothing. The burst
 				// state dies with the velocity, so the flat line's `vy` pin
 				// and the roll's reduced hitbox do not outlive the catch
 				// either. The dragon thrust is deliberately untouched: the
-				// trap locks the feet, and the ride is not the feet.
+				// root has the feet, and the ride is not the feet.
 				s.vx = 0;
 				s.vy = 0;
 				s.dashActiveTimer = 0;

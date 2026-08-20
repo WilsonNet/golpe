@@ -93,32 +93,32 @@ longer exists.
   at a fraction of full opacity, so "whose side is this mine on" is answered at
   a glance and a friendly trap never does the worrying for you. An enemy's trap
   is full-strength until it springs.
-- When an enemy's feet cross its patch, it **springs**: the victim's mobility is
-  locked for **3 seconds** — no walk, no dash, no jump — but everything else
-  works. A trapped fighter can still attack, block, use their own items and cast
+- When an enemy's feet cross its patch, it **springs**: the victim is
+  **rooted** for **3 seconds** — no walk, no dash, no jump — but everything else
+  works. A rooted fighter can still attack, block, use their own items and cast
   their ultimate. It is a delay, not a disable; the counter is the timer, not a
   button.
 - **The spring stops the victim dead.** The catch zeroes their velocity on the
   tick it lands, so a dash, tumble or lunge caught mid-flight loses its momentum
-  right there — a caught fighter never slides out of the patch while the lock
+  right there — a caught fighter never slides out of the patch while the root
   runs. The burst state dies with the velocity: the airborne dash's flat line
   and the roll's reduced hitbox do not outlive the catch.
-- **The lock takes every voluntary movement.** Walking, dashing, tumbling and
+- **The root takes every voluntary movement.** Walking, dashing, tumbling and
   jumping are all gone for the full 3s — including a jump pressed *before* the
-  catch: a buffered jump does not fire through the lock, the press must be made
+  catch: a buffered jump does not fire through the root, the press must be made
   again. Gravity and knockback still apply; only intent is discarded.
 - **It counters the dagger's body-carrying moves.** The thrust and the shoryuken
-  are the two moves that relocate the fighter, and the trap has the feet: they
-  will not start while the lock holds, and one caught mid-lunge freezes in
+  are the two moves that relocate the fighter, and the root has the feet: they
+  will not start while the root holds, and one caught mid-lunge freezes in
   place — its swept box is the reach ahead of the frozen body, never the
   phantom arc the cast would have covered. The stab carries no body and still
   works, like every weapon that plays where the fighter stands.
-- **It does not counter the dragon thrust.** The ride is not the feet: a trapped
+- **It does not counter the dragon thrust.** The ride is not the feet: a rooted
   Anands can still cast her ultimate, and a rider caught as the trap springs
-  keeps riding — the one voluntary movement the trap lets through.
-- The lock is carried in `PlayerPosition.trapTimer`, set inside `tickPlayer` on
+  keeps riding — the one voluntary movement the root lets through.
+- The root is carried in `PlayerPosition.rootTimer`, set inside `tickPlayer` on
   **both** sides — the server's tick passes the same `trapFor`-filtered traps
-  the client's prediction does, so the lock is authoritative, not a client-side
+  the client's prediction does, so the root is authoritative, not a client-side
   hope that the next snapshot erases. A caught fighter's own client reels
   exactly as the server says — the same prediction property the black hole's
   pull relies on. The trap's *consequences* — its destruction, the damage, the
@@ -134,7 +134,7 @@ longer exists.
 
 A thrown canister that pops into a **vision cloud** — the trap's structural
 cousin: a server-placed world object, single-use, travelling in the snapshot in
-full every frame. Where the trap *locks* and the HE *kills*, the smoke *lies*:
+full every frame. Where the trap *roots* and the HE *kills*, the smoke *lies*:
 it changes what the enemy is allowed to know. See [jeffs.md](jeffs.md) for the
 full kit; the rules here are the wire and the general item rules.
 
@@ -159,10 +159,10 @@ full kit; the rules here are the wire and the general item rules.
   removed at respawn and at a round reset.
 - The cloud affects vision only. No damage, no collision, no bullet block.
 
-## The TRAPPED! caption and burst
+## The ROOTED! caption and burst
 
 When a trap springs, the trap **bursts** (a teal particle pop at the victim's
-feet) and a **TRAPPED!** caption pops over the victim — the Jumanji register to
+feet) and a **ROOTED!** caption pops over the victim — the Jumanji register to
 the DENY splash's Frank Miller: heavy, beveled, jungle-green. Both are events
 (effect only), carried in the snapshot beside the denies; a dropped datagram
 costs a caption, never the consequence, which is already in the victim's state.
@@ -180,7 +180,7 @@ its landing spot). HE grenades travel like bullets. Smoke canisters travel like
 HE grenades; smoke **clouds** travel in full every snapshot too — they are not
 fed into `tickPlayer` (they change no simulation state), but the concealment is
 re-derived from the list every snapshot, so a lost datagram costs a puff at
-most and never a false clear. The `trapped` and `explosions` event lists are
+most and never a false clear. The `rooted` and `explosions` event lists are
 one-shot effects, drained every snapshot.
 
 ## Bots

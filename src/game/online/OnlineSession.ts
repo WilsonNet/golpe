@@ -6,6 +6,7 @@ import {
 	CINEMATIC_LAUNCH_SUPPRESSION_FRAMES,
 	DRAGON_DROP_SUPPRESSION_FRAMES,
 } from "../diagnostics/PhysicsDiagnostics";
+import { EventBus } from "../EventBus";
 import type { PotgAnnounce } from "../potg/types";
 import { SpritePool } from "../render/SpritePool";
 import {
@@ -33,7 +34,6 @@ import {
 import { hostile, type MatchMode, type TeamId } from "../simulation/Teams";
 import { NEUTRAL, TINT, teamTint } from "../teamPalette";
 import type { TrainingConfigMsg, TrainingStateMsg } from "../training/types";
-import { EventBus } from "../EventBus";
 import { ServerClock } from "./Interpolation";
 import { type JoinOptions, OnlineManager } from "./OnlineManager";
 import {
@@ -54,6 +54,7 @@ import type {
 	MatchOverMsg,
 	MatchStatus,
 	MeleeEventMsg,
+	RootedMsg,
 	RosterEntry,
 	RoundLiveMsg,
 	RoundWonMsg,
@@ -66,7 +67,6 @@ import type {
 	SnapshotSmokeGrenade,
 	SnapshotTrap,
 	SnapshotTrapCanister,
-	TrappedMsg,
 } from "./types";
 import { GAME_SERVER_PORT } from "./types";
 import { unpackIntent, unpackState } from "./wire";
@@ -155,8 +155,8 @@ export interface OnlineCallbacks {
 	onDeny: (event: DenyEventMsg) => void;
 	/** An HE grenade went off, for the blast effect. */
 	onExplosion: (event: ExplosionMsg) => void;
-	/** A trap caught somebody, for the "TRAPPED!" caption. */
-	onTrapped: (event: TrappedMsg) => void;
+	/** A trap rooted somebody, for the "ROOTED!" caption. */
+	onRooted: (event: RootedMsg) => void;
 	/** A fighter appeared in the snapshot for the first time. */
 	onFighterAdded: (id: string) => void;
 	/** A fighter is no longer in the room. */
@@ -1069,8 +1069,8 @@ export class OnlineSession {
 		for (const event of snap.explosions ?? []) {
 			this.callbacks.onExplosion(event);
 		}
-		for (const event of snap.trapped ?? []) {
-			this.callbacks.onTrapped(event);
+		for (const event of snap.rooted ?? []) {
+			this.callbacks.onRooted(event);
 		}
 
 		this._matchStatus = snap.match;

@@ -137,7 +137,7 @@ an obstacle or a hostile black hole.
 The item half of the kit: a floor hazard laid one step in front of the fighter
 on F — a **landmine seen from the side**, drawn as a squat dome sitting on the
 floor. Where Lia's HE grenade *kills*, the trap *delays* — the dagger already
-hits first and runs the initiative, and a delay that locks a fleeing enemy in
+hits first and runs the initiative, and a delay that roots a fleeing enemy in
 place for the follow-up is the exact tool a storm of stabs wants.
 
 - **Three per life.** The trap is a mobility hindrance, not a kill tool, so it
@@ -157,19 +157,19 @@ place for the follow-up is the exact tool a storm of stabs wants.
   fraction of full opacity, so the side a mine belongs to is answered at a
   glance.
 - **The spring:** the first hostile fighter whose feet cross the patch is
-  mobility-locked for **3 seconds** — no walk, no dash, no jump, no buffered
-  jump through the lock — but can still attack, block, use items and cast. The
+  **rooted** for **3 seconds** — no walk, no dash, no jump, no buffered
+  jump through the root — but can still attack, block, use items and cast. The
   catch stops the victim dead: a dash, tumble or lunge caught mid-flight loses
-  its momentum on the tick. The lock is `trapTimer` in state, set by the shared
+  its momentum on the tick. The root is `rootTimer` in state, set by the shared
   `tickPlayer` on both sides, so a caught fighter's own client predicts it. It
   deals a little damage (10): not the point, but the reason a sprung trap reads
   as having done something. A full jump clears it.
 - **Counters the moves that need the feet, not the ones that don't.** The
   dagger's thrust and shoryuken — the only moves that relocate the body — will
-  not start while locked; the stab still works. The dragon-thrust ride is the
-  one exception: the trap does not counter it, so a trapped Anands can still
+  not start while rooted; the stab still works. The dragon-thrust ride is the
+  one exception: the trap does not counter it, so a rooted Anands can still
   cast her ultimate and a rider caught mid-ride keeps riding.
-- **The burst and caption:** the trap pops in teal particles and a **TRAPPED!**
+- **The burst and caption:** the trap pops in teal particles and a **ROOTED!**
   splash appears over the victim — Jumanji green to the DENY splash's Frank
   Miller black-and-white. See [items.md](items.md) for the wire and the full
   rules.

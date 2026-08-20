@@ -11,7 +11,7 @@
  * learns of them from the snapshot, exactly like bullets.
  *
  * The one thing the client *does* predict is a trap's effect. The trap is a
- * world object (like the black hole) whose trigger sets `trapTimer` in
+ * world object (like the black hole) whose trigger sets `rootTimer` in
  * `PlayerPosition` — inside `tickPlayer`, on both sides — so a caught fighter's
  * own client reels exactly as the server's does. The friendly-fire rule is the
  * same single predicate every weapon asks (`hostile`), and the caster's own
@@ -34,6 +34,7 @@ import {
 	HE_REST_VY,
 	HE_RESTITUTION,
 	ITEMS,
+	ROOT_MS,
 	SMOKE_COLLIDE_R,
 	SMOKE_DURATION_MS,
 	SMOKE_GRENADE_FUSE_MS,
@@ -48,7 +49,6 @@ import {
 	TRAP_RADIUS,
 	TRAP_THROW_GRAVITY,
 	TRAP_THROW_SPEED,
-	TRAP_TRIGGER_MS,
 } from "../../tweakables/items.js";
 import {
 	DEFAULT_WORLD,
@@ -74,6 +74,7 @@ export {
 	HE_GRENADE_RADIUS,
 	HE_GRENADE_SPEED,
 	ITEMS,
+	ROOT_MS,
 	SMOKE_DURATION_MS,
 	SMOKE_GRENADE_FUSE_MS,
 	SMOKE_GRENADE_GRAVITY,
@@ -85,7 +86,6 @@ export {
 	TRAP_RADIUS,
 	TRAP_THROW_GRAVITY,
 	TRAP_THROW_SPEED,
-	TRAP_TRIGGER_MS,
 };
 
 // ---------------------------------------------------------------------------

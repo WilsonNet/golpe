@@ -1,5 +1,5 @@
 /**
- * The "TRAPPED!" splash: a jungle-board-game caption that pops over a fighter
+ * The "ROOTED!" splash: a jungle-board-game caption that pops over a fighter
  * the moment a trap catches them.
  *
  * The DENY splash is Frank Miller — stark black on white, a comic caption
@@ -7,8 +7,8 @@
  * taken, it is a hunter's snare closing, so this one is the Jumanji register
  * instead: heavy, beveled, jungle-green, the typography of a board that wants
  * you to play its game. Same life as a deny, same one-shot contract: the
- * consequence (the mobility lock) is already in the victim's state; this is
- * the part a player gets to *see*.
+ * consequence (the root — the mobility lock) is already in the victim's state;
+ * this is the part a player gets to *see*.
  *
  * Presentation only, like everything in `render/`. World-space, on the
  * nameplates layer, above the actors.
@@ -39,7 +39,7 @@ interface Caption {
 
 const mkText = (): Text => {
 	const text = new Text({
-		text: "TRAPPED!",
+		text: "ROOTED!",
 		style: {
 			// The Jumanji register: heavy, condensed, beveled. What carries the
 			// look is the weight and the layered green — the exact font falling
@@ -61,17 +61,17 @@ const mkText = (): Text => {
 
 /**
  * One pooled, tilt-punched caption. Owned by `Match`, driven by the server's
- * `trapped` events — same shape as a deny, so a dropped datagram costs a
+ * `rooted` events — same shape as a deny, so a dropped datagram costs a
  * splash rather than a consequence.
  */
-export class TrappedFx {
+export class RootedFx {
 	private pool: Text[] = [];
 	private active: Caption[] = [];
 
 	constructor(private readonly layer: Container) {}
 
 	/** Play the splash at a world body position. */
-	trapped(x: number, y: number) {
+	rooted(x: number, y: number) {
 		const text =
 			this.pool.pop() ?? (this.active.length < POOL_SIZE ? mkText() : null);
 		if (!text) return;

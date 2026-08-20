@@ -160,8 +160,8 @@ const NUMBER_FIELDS = [
 	"dragonTimer",
 	"dragonVX",
 	"dragonVY",
-	// The trap's mobility lock, appended for the same reason.
-	"trapTimer",
+	// The trap's root (mobility lock), appended for the same reason.
+	"rootTimer",
 	// The Death Blossom channel, appended for the same reason.
 	"blossomTimer",
 	// The plunge-bomb carry: a fighter caught midair by a dive, appended for

@@ -24,7 +24,7 @@ allowed in the shared simulation.
 - `ITEMS` and `src/tweakables/`: charges, radii, durations
 
 **2. Statuses** — named, shared state in `PlayerPosition` that any system may
-read: `stunTimer`, `knockdownTimer`, `trapTimer`, `iframeTimer`, the
+read: `stunTimer`, `knockdownTimer`, `rootTimer`, `iframeTimer`, the
 singularity's `grip`, `dragonTimer`, `blossomTimer`, `freezeTimer`. A status is
 the same field on both sides of the wire, so a system that compares against it
 compares against the same truth everywhere.
@@ -36,7 +36,7 @@ everything: `hostile()` (friendly fire), `trapFor()`, `fieldAffects()`,
 An interaction is a predicate over state and attributes, living in the shared
 simulation. The model example: **the trap counters moves that carry the body.**
 `startMove` refuses a move when `moveCarriesBody(move)` — a declared attribute
-(`selfVx`/`selfVy`) — and `trapTimer > 0` — a status. And the counter-rule,
+(`selfVx`/`selfVy`) — and `rootTimer > 0` — a status. And the counter-rule,
 **the dragon thrust is not countered**, is not a second case at all: a ride is
 not a move, so no move gate applies. The exemption falls out of the
 classification, which is exactly why the system stays flat as heroes multiply.

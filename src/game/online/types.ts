@@ -342,8 +342,8 @@ export interface GameSnapshot {
 	smokeClouds: SnapshotSmokeCloud[];
 	/** HE blasts since the previous snapshot. Effects only. */
 	explosions: ExplosionMsg[];
-	/** A trap just caught somebody, for the caption. Effects only. */
-	trapped: TrappedMsg[];
+	/** A trap just rooted somebody, for the caption. Effects only. */
+	rooted: RootedMsg[];
 }
 
 /**
@@ -453,9 +453,9 @@ export interface ExplosionMsg {
 	radius: number;
 }
 
-/** A trap just caught somebody. Effects only, exactly like `denies`. */
-export interface TrappedMsg {
-	/** Who got caught, so the caption pops over the right fighter. */
+/** A trap just rooted somebody. Effects only, exactly like `denies`. */
+export interface RootedMsg {
+	/** Who got rooted, so the caption pops over the right fighter. */
 	victimId: string;
 	/** Where, in world body space, for the splash. */
 	x: number;

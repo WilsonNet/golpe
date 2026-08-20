@@ -1270,7 +1270,7 @@ const BATTERY: BatteryRow[] = [
 	// ---- the items ---------------------------------------------------------
 	// The item button is the third member of the kit, and each hero's item is
 	// measured the same way every other ability is: one press, one consequence,
-	// judged by the server. `explosions` and `trapped` are counters on the
+	// judged by the server. `explosions` and `rooted` are counters on the
 	// training report because a clean run where the item never fired would
 	// prove nothing.
 
@@ -1340,7 +1340,7 @@ const BATTERY: BatteryRow[] = [
 				let sprungX: number | null = null;
 				for (let i = 0; i < 60; i++) {
 					await new Promise((r) => setTimeout(r, 50));
-					if (window.__training!.report().trapped >= 1) {
+					if (window.__training!.report().rooted >= 1) {
 						sprungX = window.__training!.state().dummy.x;
 						break;
 					}
@@ -1363,7 +1363,7 @@ const BATTERY: BatteryRow[] = [
 		},
 		verify(report, { sprungX, lockedX, freeX }) {
 			const c = checks(report);
-			c.atLeast("trap springs", report.trapped, 1);
+			c.atLeast("trap roots", report.rooted, 1);
 			// The little bit of damage that makes a sprung trap read as having
 			// done something.
 			c.atLeast("trap damage", report.player.damageDealt, 10);

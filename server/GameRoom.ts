@@ -18,11 +18,11 @@ import {
 	type MeleeEventMsg,
 	type PlayerInput,
 	RELIABLE,
+	type RootedMsg,
 	type RosterMsg,
 	type SnapshotCinematic,
 	type SnapshotPlayer,
 	type TeamStatus,
-	type TrappedMsg,
 } from "../src/game/online/types.js";
 import { packIntent, packState } from "../src/game/online/wire.js";
 import {
@@ -590,8 +590,8 @@ export class GameRoom {
 	private nextItemId = 0;
 	/** HE blasts since the last broadcast, for the client's explosion effects. */
 	private explosions: ExplosionMsg[] = [];
-	/** Traps that just caught somebody, for the client's caption. */
-	private trappedEvents: TrappedMsg[] = [];
+	/** Traps that just rooted somebody, for the client's caption. */
+	private rootedEvents: RootedMsg[] = [];
 
 	// =========================================================
 	//  PLAY OF THE GAME
@@ -825,7 +825,7 @@ export class GameRoom {
 			p.state.plungeStuckTimer = 0;
 			p.state.plungeCarryTimer = 0;
 			p.state.dragonTimer = 0;
-			p.state.trapTimer = 0;
+			p.state.rootTimer = 0;
 		}
 		console.log(`[TEAM] ${p.name} switches ${old} -> ${team}`);
 		this.broadcastRoster();
@@ -852,7 +852,9 @@ export class GameRoom {
 		slot.state.freezeTimer = this.roundFreezeMs;
 		this.players.set(id, slot);
 		this.broadcastRoster();
-		console.log(`[BOTS] added bot ${slot.name} to ${spawnTeam ?? "ffa"} (now ${this.playerCount})`);
+		console.log(
+			`[BOTS] added bot ${slot.name} to ${spawnTeam ?? "ffa"} (now ${this.playerCount})`,
+		);
 		return true;
 	}
 
@@ -865,7 +867,8 @@ export class GameRoom {
 		} else if (this.mode === "tdm") {
 			// Prefer the larger side, so removal balances rather than empties one side.
 			const counts = teamCounts(this.members());
-			const larger = counts[0] !== counts[1] ? (counts[0]! > counts[1]! ? 0 : 1) : null;
+			const larger =
+				counts[0] !== counts[1] ? (counts[0]! > counts[1]! ? 0 : 1) : null;
 			if (larger !== null) {
 				const lBots = bots.filter((p) => p.team === larger);
 				if (lBots.length > 0) bots = lBots;
@@ -1135,11 +1138,15 @@ export class GameRoom {
 			if (!target || target.brain !== null || target.dummy !== null) return;
 			if (admin) {
 				this.admins.add(targetId);
-				console.log(`[ADMIN] ${target.name} promoted by ${this.players.get(id)?.name}`);
+				console.log(
+					`[ADMIN] ${target.name} promoted by ${this.players.get(id)?.name}`,
+				);
 			} else {
 				if (targetId === this.creatorId) return;
 				this.admins.delete(targetId);
-				console.log(`[ADMIN] ${target.name} demoted by ${this.players.get(id)?.name}`);
+				console.log(
+					`[ADMIN] ${target.name} demoted by ${this.players.get(id)?.name}`,
+				);
 			}
 			this.broadcastRoster();
 		});
@@ -2208,7 +2215,7 @@ export class GameRoom {
 			smokeClouds: this.smokeClouds.map((c) => ({ ...c })),
 			// One-shot effects, drained every snapshot like `melee` and `denies`.
 			explosions: this.explosions.slice(),
-			trapped: this.trappedEvents.slice(),
+			rooted: this.rootedEvents.slice(),
 		};
 	}
 
@@ -2342,8 +2349,8 @@ export class GameRoom {
 			// The kit is the hero's weapons: an argument, never state, so the two
 			// sides cannot disagree about which table a move belongs to. The traps
 			// are the same shape of argument — filtered by the same `trapFor` the
-			// client's prediction uses — because the lock is a timer both sides
-			// simulate. Without them the *server* never sets `trapTimer` and the
+			// client's prediction uses — because the root is a timer both sides
+			// simulate. Without them the *server* never sets `rootTimer` and the
 			// first snapshot after a spring erases the root the client predicted.
 			player.state = tickPlayer(
 				player.state,
@@ -3461,7 +3468,7 @@ export class GameRoom {
 				if (trapFor([trap], player.id, player.team).length === 0) continue;
 				if (!trapCatches(trap, player.state.x, player.state.y)) continue;
 				sprung = true;
-				this.trappedEvents.push({
+				this.rootedEvents.push({
 					victimId: player.id,
 					x: player.state.x,
 					y: player.state.y,
@@ -3719,7 +3726,7 @@ export class GameRoom {
 		this.smokeGrenades.length = 0;
 		this.smokeClouds.length = 0;
 		this.explosions.length = 0;
-		this.trappedEvents.length = 0;
+		this.rootedEvents.length = 0;
 		this.resetTimer = -1;
 		// The room's copy of the same countdown the fighters are carrying.
 		this.roundFreezeMs = this.freezeTimeMs;
@@ -3788,6 +3795,6 @@ export class GameRoom {
 		this.denies.length = 0;
 		// Item events are the same shape, and cleared for the same reason.
 		this.explosions.length = 0;
-		this.trappedEvents.length = 0;
+		this.rootedEvents.length = 0;
 	}
 }

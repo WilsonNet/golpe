@@ -4,7 +4,7 @@
  *
  * The server owns charges, damage and the trap's destruction; this file pins
  * the physics both sides must agree on — the same module `tickPlayer` uses to
- * predict a trap's lock on the client.
+ * predict a trap's root on the client.
  */
 
 import { describe, expect, it } from "vitest";
@@ -24,6 +24,7 @@ import {
 	launchHeGrenade,
 	launchSmokeGrenade,
 	launchTrapCanister,
+	ROOT_MS,
 	SMOKE_DURATION_MS,
 	SMOKE_GRENADE_FUSE_MS,
 	SMOKE_GRENADE_GRAVITY,
@@ -37,7 +38,6 @@ import {
 	TRAP_RADIUS,
 	TRAP_THROW_GRAVITY,
 	TRAP_THROW_SPEED,
-	TRAP_TRIGGER_MS,
 	type Trap,
 	type TrapCanisterState,
 	tickHeGrenade,
@@ -318,7 +318,7 @@ describe("the trap", () => {
 			kit,
 			[t],
 		);
-		expect(caught.trapTimer).toBeGreaterThan(0);
+		expect(caught.rootTimer).toBeGreaterThan(0);
 
 		// While locked, walking does not move the fighter...
 		const locked = tickPlayer(
@@ -332,7 +332,7 @@ describe("the trap", () => {
 		);
 		expect(locked.x).toBeCloseTo(caught.x, 1);
 
-		// ...but an attack is not refused.
+		// ...but an attack is not refused: the sword still swings from the spot.
 		const swing = tickPlayer(
 			caught,
 			{ ...neutral(), attack: true },
@@ -342,7 +342,30 @@ describe("the trap", () => {
 			kit,
 			[t],
 		);
-		expect(swing.meleeAction).not.toBe("none");
+		expect(swing.meleeAction).toBe("slash");
+		// ...and the guard still raises, and the stance still switches to the
+		// gun — the root takes the feet and nothing else, so a rooted fighter
+		// keeps the whole kit but the walk.
+		const guarded = tickPlayer(
+			caught,
+			{ ...neutral(), block: true },
+			1 / 60,
+			DEFAULT_WORLD,
+			null,
+			kit,
+			[t],
+		);
+		expect(guarded.blocking).toBe(true);
+		const switched = tickPlayer(
+			caught,
+			{ ...neutral(), swordStance: false },
+			1 / 60,
+			DEFAULT_WORLD,
+			null,
+			kit,
+			[t],
+		);
+		expect(switched.stance).toBe("gun");
 	});
 
 	it("does not re-trigger while already locked, and decays the lock", () => {
@@ -367,8 +390,8 @@ describe("the trap", () => {
 			kit,
 			[t],
 		);
-		expect(locked.trapTimer).toBeLessThan(caught.trapTimer);
-		expect(locked.trapTimer).toBeCloseTo(TRAP_TRIGGER_MS - 1000 / 60, 0);
+		expect(locked.rootTimer).toBeLessThan(caught.rootTimer);
+		expect(locked.rootTimer).toBeCloseTo(ROOT_MS - 1000 / 60, 0);
 	});
 
 	it("catches a dash dead: the burst's momentum dies with the catch", () => {
@@ -389,7 +412,7 @@ describe("the trap", () => {
 				kit,
 				[t],
 			);
-			if (next.trapTimer > 0) {
+			if (next.rootTimer > 0) {
 				caught = next;
 				break;
 			}
@@ -429,7 +452,7 @@ describe("the trap", () => {
 				kit,
 				[t],
 			);
-			if (next.trapTimer > 0) {
+			if (next.rootTimer > 0) {
 				caught = next;
 				break;
 			}
@@ -464,7 +487,7 @@ describe("the trap", () => {
 			kit,
 			[t],
 		);
-		expect(caught.trapTimer).toBeGreaterThan(0);
+		expect(caught.rootTimer).toBeGreaterThan(0);
 		// The jump was buffered the tick the trap caught the fighter: the lock
 		// discards it — no hop out of the trap; the press must be made again.
 		const buffered = { ...caught, jumpBufferTimer: JUMP_BUFFER_MS };
@@ -494,7 +517,7 @@ describe("the trap", () => {
 			kit,
 			[t],
 		);
-		expect(caught.trapTimer).toBeGreaterThan(0);
+		expect(caught.rootTimer).toBeGreaterThan(0);
 		// A shift press (the lunge) is refused while the lock holds...
 		const thrust = tickPlayer(
 			caught,
@@ -556,9 +579,9 @@ describe("the trap", () => {
 			kit,
 			[t],
 		);
-		expect(caught.trapTimer).toBeGreaterThan(0);
+		expect(caught.rootTimer).toBeGreaterThan(0);
 		// The ride is not the feet: a fighter caught mid-ride keeps riding, and
-		// a trapped fighter can still cast the dragon.
+		// a rooted fighter can still cast the dragon.
 		const riding = {
 			...caught,
 			dragonTimer: 500,
@@ -608,7 +631,7 @@ describe("the trap", () => {
 		expect(travelled).toBeGreaterThan(0);
 		expect(box?.w).toBeCloseTo(MOVES.thrust.reachPx + PLAYER_WIDTH);
 		// The same lunge without the lock sweeps the full arc.
-		const freeBox = sweptThrustBox({ ...midLunge, trapTimer: 0 });
+		const freeBox = sweptThrustBox({ ...midLunge, rootTimer: 0 });
 		expect(freeBox?.w).toBeCloseTo(
 			travelled + MOVES.thrust.reachPx + PLAYER_WIDTH,
 		);

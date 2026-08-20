@@ -136,13 +136,13 @@ export const TRAP_COLLIDE_R = 6;
 export const TRAP_RADIUS = 40;
 
 /**
- * How long a trapped fighter loses their mobility. Three seconds: longer than
- * a stun, deliberately — the trap is a *delay* that attacks cannot shorten,
- * and its whole value is buying the trapper a window. The trapped fighter can
- * still attack, block, use their own items and cast their ultimate; only the
- * feet are gone.
+ * How long a caught fighter is **rooted**. Three seconds: longer than a stun,
+ * deliberately — the trap is a *delay* that attacks cannot shorten, and its
+ * whole value is buying the trapper a window. A rooted fighter can still
+ * attack, block, use their own items and cast their ultimate; only the feet
+ * are gone.
  */
-export const TRAP_TRIGGER_MS = 3000;
+export const ROOT_MS = 3000;
 
 /**
  * The little bit of damage the trap deals. Not a kill tool — a reward for

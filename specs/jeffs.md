@@ -115,7 +115,7 @@ side that is looking at it.
   owner, which is the whole trade of the item: it is a *friendly* tool, not a
   neutral one.
 - **It stops nothing.** No damage, no bullets blocked, no movement. The smoke
-  is pure vision — the trap locks, the smoke *lies*.
+  is pure vision — the trap roots, the smoke *lies*.
 - The one-shot visual (the canister's bloom puff) is client-side, edge-detected
   on new cloud ids like the singularity's detonation; a dropped datagram costs
   a puff, never the concealment, which is re-derived from the cloud list every

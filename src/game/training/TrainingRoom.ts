@@ -187,7 +187,7 @@ export class TrainingRoom {
 	/** HE blasts observed since the last reset. */
 	private explosions = 0;
 	/** Traps that caught somebody since the last reset. */
-	private trapped = 0;
+	private rooted = 0;
 	private readonly watcher = new ExchangeWatcher();
 	private readonly echoWaiters: ((state: TrainingStateMsg) => void)[] = [];
 	private elapsedMs = 0;
@@ -236,9 +236,9 @@ export class TrainingRoom {
 		this.explosions++;
 	}
 
-	/** A trap caught somebody. Counted, because it is a first-class outcome. */
-	recordTrapped() {
-		this.trapped++;
+	/** A trap rooted somebody. Counted, because it is a first-class outcome. */
+	recordRooted() {
+		this.rooted++;
 	}
 
 	private onTrainingState(state: TrainingStateMsg) {
@@ -339,7 +339,7 @@ export class TrainingRoom {
 		this.events.length = 0;
 		this.denies = 0;
 		this.explosions = 0;
-		this.trapped = 0;
+		this.rooted = 0;
 		this.watcher.reset();
 		this.elapsedMs = 0;
 		this.deps.diagnostics.startOpen();
@@ -499,7 +499,7 @@ export class TrainingRoom {
 			events: this.events.slice(),
 			denies: this.denies,
 			explosions: this.explosions,
-			trapped: this.trapped,
+			rooted: this.rooted,
 			outcomes,
 			bullets: {
 				fired: stats.player.bulletsFired,
