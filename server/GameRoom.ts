@@ -246,6 +246,12 @@ interface ConnectedPlayer {
 	 * thrust would be a cheese.
 	 */
 	hero: HeroId;
+	/**
+	 * A hero the Esc menu picked mid-life. Takes effect on the next new life —
+	 * the next respawn (deathmatch) or the next round (team deathmatch) — never
+	 * mid-fight. `null` while nothing is pending.
+	 */
+	pendingHero: HeroId | null;
 	/** Full simulation state — never rebuilt per tick, or wall state is lost. */
 	state: PlayerPosition;
 	hp: number;
@@ -916,6 +922,7 @@ export class GameRoom {
 			name,
 			team,
 			hero,
+			pendingHero: null,
 			channel: sources.channel ?? null,
 			brain: sources.brain ?? null,
 			dummy: sources.dummy ?? null,
@@ -1052,37 +1059,28 @@ export class GameRoom {
 			}
 		});
 
-		// The Esc menu's hero select. Changing hero mid-match is allowed — the
-		// kit is a snapshot field, so every client rolls the change back and
-		// replays with the new weapons on the next snapshot — but it spends
-		// whatever the meter held, because ultimates are unique per hero.
+		// The Esc menu's hero select. A mid-match change is *queued*, not
+		// applied: it takes effect on the fighter's next new life — the next
+		// respawn (deathmatch) or the next round (team deathmatch) — so a switch
+		// never lands while a fight is live. The kit is a snapshot field, so
+		// every client rolls the change back and replays with the new weapons on
+		// the snapshot that carries it. Because it always spends the meter and
+		// the life's item charges (ultimates and items are unique per hero), the
+		// spend happens at the moment the new life actually starts, not when the
+		// button is pressed.
 		channel.on("hero", (data: unknown) => {
 			const player = this.players.get(id);
 			const hero = (data as { hero?: unknown } | null)?.hero;
 			if (!player || !isHeroId(hero)) return;
-			player.hero = hero;
-			// A different hero, a different ultimate: the meter is the old one's.
-			player.ult = this.startUltCharge;
-			player.ultHeld = false;
-			// And a different melee weapon: cancel the move that belonged to the
-			// old one, and any charge a sword was building.
-			player.state.meleeAction = "none";
-			player.state.meleeTimer = 0;
-			player.state.hitLatch = false;
-			player.state.blocking = false;
-			player.state.chargeTimer = 0;
-			player.state.massiveReady = false;
-			player.state.parryMassiveTimer = 0;
-			// And a different item: the old one's charges are meaningless to the
-			// new kit, and the old kit's traps stay on the floor for whoever
-			// placed them — a hero who leaves their traps behind is their own
-			// fault, but the charges cannot travel across kits.
-			player.itemCharges = kitFor(hero).item.maxCharges;
-			player.itemHeld = false;
-			// And a different magazine: the new kit's weapon starts full.
-			this.refillMagazine(player);
+			if (hero === player.hero) {
+				player.pendingHero = null;
+				return;
+			}
+			// Queue it for the next new life. A fresh pick overwrites an older
+			// pending one — only the most recent request survives.
+			player.pendingHero = hero;
 			console.log(
-				`[HERO] ${player.name} switches to ${kitFor(hero).melee.label} / ${kitFor(hero).ranged.label}`,
+				`[HERO] ${player.name} will switch to ${kitFor(hero).melee.label} / ${kitFor(hero).ranged.label} on the next life`,
 			);
 		});
 
@@ -1809,6 +1807,48 @@ export class GameRoom {
 	}
 
 	/**
+	 * Fold a queued hero change into a fighter at the start of a new life.
+	 *
+	 * Called from `respawn` (deathmatch) and `resetPlayers` (the team round
+	 * boundary) — the two places a new life actually begins. Does nothing when
+	 * nothing is pending. The switch spends the old kit's ultimate meter and
+	 * item charges *now*, exactly as an immediate change always did, but only
+	 * once the new kit is real — so a mid-fight pick never costs the meter or
+	 * the charges a fighter is still holding.
+	 */
+	private applyPendingHero(player: ConnectedPlayer) {
+		const hero = player.pendingHero;
+		if (!hero || hero === player.hero) {
+			player.pendingHero = null;
+			return;
+		}
+		player.hero = hero;
+		player.pendingHero = null;
+		// A different hero, a different ultimate: the meter is the old one's.
+		player.ult = this.startUltCharge;
+		player.ultHeld = false;
+		// And a different melee weapon: cancel the move that belonged to the
+		// old one, and any charge a sword was building.
+		player.state.meleeAction = "none";
+		player.state.meleeTimer = 0;
+		player.state.hitLatch = false;
+		player.state.blocking = false;
+		player.state.chargeTimer = 0;
+		player.state.massiveReady = false;
+		player.state.parryMassiveTimer = 0;
+		// A different item: the new kit's charges are the new kit's. The traps
+		// the old hero left on the floor stay for whoever placed them — a hero
+		// who leaves their traps behind is their own fault, but the charges
+		// cannot travel across kits. The caller refills the magazine against
+		// the (now new) hero, so no refill happens here.
+		player.itemCharges = kitFor(hero).item.maxCharges;
+		player.itemHeld = false;
+		console.log(
+			`[HERO] ${player.name} is now ${kitFor(hero).melee.label} / ${kitFor(hero).ranged.label}`,
+		);
+	}
+
+	/**
 	 * Put one fighter back in the arena.
 	 *
 	 * Announced, never inferred — the same rule the round reset follows. The
@@ -1818,6 +1858,10 @@ export class GameRoom {
 	 * immediately rather than a frame late.
 	 */
 	private respawn(player: ConnectedPlayer) {
+		// A hero change queued in the Esc menu lands here: a respawn is a new
+		// life, and the new life plays the new hero. The spend (meter, item
+		// charges) happens now, at the moment the new kit actually starts.
+		this.applyPendingHero(player);
 		const occupied = this.occupiedPoints().filter(
 			(p) => p.x !== player.state.x || p.y !== player.state.y,
 		);
@@ -3713,6 +3757,9 @@ export class GameRoom {
 			// that placed it.
 			p.itemCharges = kitFor(p.hero).item.maxCharges;
 			p.itemHeld = false;
+			// A hero change queued in the Esc menu lands at the round boundary:
+			// a new round is a new life, and the new life plays the new hero.
+			this.applyPendingHero(p);
 			this.refillMagazine(p);
 			p.potgBurst = { damage: 0, absorbed: 0 };
 			if (p.brain) p.brain = new EnemyBrain(botConfig(), this.world, p.hero);

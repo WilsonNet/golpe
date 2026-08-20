@@ -45,11 +45,19 @@ fighter (like their name), so nothing about it ever has to be replayed.
 - `?hero=lia|anands|jeffs` in the URL picks the hero a client boots with. **Per-client,
   never creator-only** — it is the answer to "who do you want to be", and the
   last person through the door still gets to pick.
-- The Esc menu's *Heroes* item changes the hero mid-match. The request is a
-  reliable one-shot (`hero` message); the change comes home in the next
-  snapshot's `hero` field, where the client swaps the sheet, the kit and the
-  HUD. Changing hero resets the ultimate meter — ultimates are unique per hero,
-  and a free dragon thrust would be a cheese.
+- The Esc menu's *Heroes* item changes the hero. The request is a reliable
+  one-shot (`hero` message), but the change is **queued for the next new life**
+  — the next respawn (deathmatch) or the next round (team deathmatch) — never
+  applied mid-fight, so a switch cannot land while the fighter is in combat.
+  It comes home in the next snapshot's `hero` field once it takes effect, where
+  the client swaps the sheet, the kit and the HUD. Because the spend belongs to
+  the new kit, changing hero spends the ultimate meter and the life's item
+  charges **at the moment the new life begins**, not when the button is pressed
+  — so a pick made mid-life costs nothing until the new life actually starts,
+  and the old kit's meter and charges stay with the fighter until then. A
+  fresh pick overwrites an older pending one; picking the current hero cancels
+  any pending switch. A hero change resets the ultimate meter — ultimates are
+  unique per hero, and a free dragon thrust would be a cheese.
 - The stance enum on the wire stays `"sword" | "gun"` because it is the *slot*:
   melee weapon out or ranged weapon out. Which weapon that slot means is the
   hero's business, so the wire format never changes when a hero does.

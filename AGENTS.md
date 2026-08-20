@@ -132,7 +132,9 @@ One line each; the war story behind every one is in
   and whether a charge exists.
 - **Changing hero resets the ultimate meter.** Ultimates are unique per hero,
   and a free dragon thrust would be a cheese. The Esc menu's hero change goes
-  to the server (reliable); the echo comes home in the snapshot's `hero`.
+  to the server (reliable) and is **queued for the next new life** — the next
+  respawn or the next round — never applied mid-fight; the echo comes home in
+  the snapshot's `hero` the life the new kit actually starts.
 - **Item charges are a per-life resource, server-owned like the ultimate's
   charge.** A use spends one charge on the press edge — there is no aim phase —
   and the charges travel in the snapshot beside `ult`. They reset on respawn
