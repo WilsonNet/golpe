@@ -136,6 +136,35 @@ The panel reads the live roster (`RosterEntry.team`, `admin`, `creator`) and the
 snapshot's `MatchStatus.mode`, so a client that joined by link learns the mode
 and who can manage the room rather than assuming its own URL.
 
+## The move list
+
+The Esc menu's **Moves** item opens a Guilty Gear-style command list for the
+hero the menu last picked (`readStoredHero`). It is a DOM overlay, one move at
+a time, with four parts:
+
+- **A category rail** up the left (System / Movement / Melee / Ranged / Item /
+  Ultimate) with a count per category and a dot per move, so a player sees the
+  whole kit at a glance and where they are in it.
+- **A card** with the hero's own sheet frame, the move's name, its tags
+  (UNBLOCKABLE · KNOCKDOWN · CANCELLABLE …), its command as live keycaps, a
+  prose explanation, and a stat card.
+- **A preview stage** below that fills the remaining space: the hero on a
+  ground line, with a frame-data timeline (startup/active/recovery) whose
+  animated cursor and swing effects track the move's *real* timings.
+- A **position indicator** ("2 / 5") for the move within its category.
+
+Navigation is keyboard-first: **Up/Down** (or W/S) walk the moves, **Left/Right**
+(or A/D) jump whole categories, **Esc** returns to the menu. The keycaps are
+read from the player's *actual* bindings (`codeLabel` over the live `bindings`
+store), so a rebind re-labels every command; the numbers are the real tuning
+constants from `tweakables/` and the shared `MOVES` table, so a retune rewrites
+the cards without a hand edit.
+
+This is a **presentation** module (`src/ui/moveData.ts`, `src/ui/MoveList.tsx`).
+Per-hero branching belongs here by the same rule that lets the HUD branch per
+hero: it never touches the simulation, and it must never drift from the tuning
+constants it reads.
+
 ## Leaving
 
 The Esc menu's *Exit to menu* destroys the client (the fighter leaves the room;

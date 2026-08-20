@@ -16,15 +16,16 @@ import { useEffect, useRef, useState } from "react";
 import { EventBus } from "../game/EventBus";
 import { readStoredHero, storeHero } from "../game/heroPref";
 import type { RosterEntry } from "../game/online/types";
-import { TEAM_NAMES, type TeamId } from "../game/simulation/Teams";
 import type { HeroId } from "../game/simulation/Heroes";
+import { TEAM_NAMES, type TeamId } from "../game/simulation/Teams";
 import { teamCss } from "../game/teamPalette";
 import { ControlsDialog } from "./ControlsDialog";
 import { HeroSelect } from "./HeroSelect";
 import { HUD_CSS } from "./hudStyles";
+import { MoveList } from "./MoveList";
 import { useMatch } from "./useMatch";
 
-type View = "menu" | "controls" | "heroes" | "room";
+type View = "menu" | "controls" | "heroes" | "room" | "moves";
 
 // Cache last roster so a menu opened after the last broadcast still has data.
 // Updated by the single global listener below — no component needs to request it.
@@ -125,12 +126,15 @@ export function PauseMenu({
 					<MainMenuView
 						onResume={() => setOpen(false)}
 						onHeroes={() => setView("heroes")}
+						onMoves={() => setView("moves")}
 						onControls={() => setView("controls")}
 						onRoom={() => setView("room")}
 						onExit={onExitToMenu}
 						confirmExit={confirmExit}
 						setConfirmExit={setConfirmExit}
 					/>
+				) : view === "moves" ? (
+					<MoveList hero={readStoredHero()} onClose={() => setView("menu")} />
 				) : view === "heroes" ? (
 					<>
 						<h2 className="gd-title">Heroes</h2>
@@ -172,6 +176,7 @@ export function PauseMenu({
 function MainMenuView({
 	onResume,
 	onHeroes,
+	onMoves,
 	onControls,
 	onRoom,
 	onExit,
@@ -180,6 +185,7 @@ function MainMenuView({
 }: {
 	onResume: () => void;
 	onHeroes: () => void;
+	onMoves: () => void;
 	onControls: () => void;
 	onRoom: () => void;
 	onExit: () => void;
@@ -201,6 +207,9 @@ function MainMenuView({
 				</button>
 				<button className="gd-btn" type="button" onClick={onHeroes}>
 					Heroes
+				</button>
+				<button className="gd-btn" type="button" onClick={onMoves}>
+					Moves
 				</button>
 				<button className="gd-btn" type="button" onClick={onRoom}>
 					{isTdm ? "Teams & Bots" : "Room & Bots"}
@@ -264,7 +273,9 @@ function RoomView({ onBack }: { onBack: () => void }) {
 		return (
 			<>
 				<h2 className="gd-title">{isTdm ? "Teams & Bots" : "Room"}</h2>
-				<p className="gd-sub">Connecting — room info will appear on the next roster.</p>
+				<p className="gd-sub">
+					Connecting — room info will appear on the next roster.
+				</p>
 				<button className="gd-btn" type="button" onClick={onBack}>
 					Back
 				</button>
@@ -287,10 +298,16 @@ function RoomView({ onBack }: { onBack: () => void }) {
 						<span>
 							Your team —{" "}
 							<span style={{ color: teamCss(myTeam), fontWeight: 700 }}>
-								{myTeam === 0 ? TEAM_NAMES[0] : myTeam === 1 ? TEAM_NAMES[1] : "—"}
+								{myTeam === 0
+									? TEAM_NAMES[0]
+									: myTeam === 1
+										? TEAM_NAMES[1]
+										: "—"}
 							</span>
 							{isCreator ? <span className="gd-tag"> HOST</span> : null}
-							{isAdmin && !isCreator ? <span className="gd-tag"> ADMIN</span> : null}
+							{isAdmin && !isCreator ? (
+								<span className="gd-tag"> ADMIN</span>
+							) : null}
 						</span>
 						<span className="gd-team-alive">
 							{azureCount} {TEAM_NAMES[0]} · {emberCount} {TEAM_NAMES[1]}
@@ -321,9 +338,9 @@ function RoomView({ onBack }: { onBack: () => void }) {
 						</button>
 					</div>
 					<p className="gd-setting-hint">
-						Switching teleports you to your new side's spawn with the same HP
-						— use the freezetime between rounds to stack your side for Player
-						vs Bots.
+						Switching teleports you to your new side's spawn with the same HP —
+						use the freezetime between rounds to stack your side for Player vs
+						Bots.
 					</p>
 				</div>
 			) : (
@@ -332,7 +349,9 @@ function RoomView({ onBack }: { onBack: () => void }) {
 						<span>
 							Room — {humans.length} humans · {bots.length} bots
 							{isCreator ? <span className="gd-tag"> HOST</span> : null}
-							{isAdmin && !isCreator ? <span className="gd-tag"> ADMIN</span> : null}
+							{isAdmin && !isCreator ? (
+								<span className="gd-tag"> ADMIN</span>
+							) : null}
 						</span>
 						<span className="gd-team-alive">{roster.length}/16 fighters</span>
 					</div>
@@ -342,18 +361,32 @@ function RoomView({ onBack }: { onBack: () => void }) {
 			<div className="gd-setting">
 				<div className="gd-setting-head">
 					<span>
-						Bots — {bots.length} total{bots.length > 0 ? ` · ${azureBots} ${TEAM_NAMES[0]} · ${emberBots} ${TEAM_NAMES[1]}` : ""}
+						Bots — {bots.length} total
+						{bots.length > 0
+							? ` · ${azureBots} ${TEAM_NAMES[0]} · ${emberBots} ${TEAM_NAMES[1]}`
+							: ""}
 					</span>
-					<span className="gd-team-alive">{humans.length + bots.length}/16</span>
+					<span className="gd-team-alive">
+						{humans.length + bots.length}/16
+					</span>
 				</div>
 				{isTdm ? (
 					<>
-						<div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
+						<div
+							style={{
+								display: "flex",
+								gap: 6,
+								flexWrap: "wrap",
+								marginTop: 10,
+							}}
+						>
 							<button
 								className="gd-btn"
 								type="button"
 								disabled={!isAdmin}
-								title={!isAdmin ? "Only host/admins can manage bots" : undefined}
+								title={
+									!isAdmin ? "Only host/admins can manage bots" : undefined
+								}
 								onClick={() => EventBus.emit("bot-add", null)}
 								style={{ flex: "1 1 110px" }}
 							>
@@ -369,7 +402,14 @@ function RoomView({ onBack }: { onBack: () => void }) {
 								− Bot
 							</button>
 						</div>
-						<div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+						<div
+							style={{
+								display: "flex",
+								gap: 6,
+								flexWrap: "wrap",
+								marginTop: 6,
+							}}
+						>
 							<button
 								className="gd-btn"
 								type="button"
@@ -410,7 +450,9 @@ function RoomView({ onBack }: { onBack: () => void }) {
 						</div>
 					</>
 				) : (
-					<div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
+					<div
+						style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}
+					>
 						<button
 							className="gd-btn"
 							type="button"
@@ -432,21 +474,34 @@ function RoomView({ onBack }: { onBack: () => void }) {
 					</div>
 				)}
 				{!isAdmin ? (
-					<p className="gd-setting-hint">Only the host and their admins can add or remove bots mid-match.</p>
+					<p className="gd-setting-hint">
+						Only the host and their admins can add or remove bots mid-match.
+					</p>
 				) : (
 					<p className="gd-setting-hint">
-						Bots fill the side you choose — stack your team first, then add the opposition for a Player vs Bots match.
+						Bots fill the side you choose — stack your team first, then add the
+						opposition for a Player vs Bots match.
 					</p>
 				)}
 			</div>
 
 			{isCreator ? (
-				<div className="gd-setting" style={{ borderBottom: "none", paddingBottom: 0 }}>
+				<div
+					className="gd-setting"
+					style={{ borderBottom: "none", paddingBottom: 0 }}
+				>
 					<div className="gd-setting-head">
 						<span>Admins — who can manage bots</span>
 						<span className="gd-team-alive">creator can promote/demote</span>
 					</div>
-					<div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+					<div
+						style={{
+							marginTop: 10,
+							display: "flex",
+							flexDirection: "column",
+							gap: 6,
+						}}
+					>
 						{humans.map((p) => (
 							<div
 								key={p.id}
@@ -457,16 +512,31 @@ function RoomView({ onBack }: { onBack: () => void }) {
 									gap: 8,
 									padding: "6px 8px",
 									borderRadius: 6,
-									background: p.id === myId ? "rgba(14,195,201,0.12)" : "rgba(255,255,255,0.04)",
+									background:
+										p.id === myId
+											? "rgba(14,195,201,0.12)"
+											: "rgba(255,255,255,0.04)",
 									border: `1px solid ${p.team !== null ? teamCss(p.team as TeamId) : "rgba(255,255,255,0.08)"}`,
 								}}
 							>
-								<span style={{ fontSize: 13, color: p.team !== null ? teamCss(p.team as TeamId) : undefined }}>
+								<span
+									style={{
+										fontSize: 13,
+										color:
+											p.team !== null ? teamCss(p.team as TeamId) : undefined,
+									}}
+								>
 									{p.name}
 									{p.creator ? <span className="gd-tag">HOST</span> : null}
-									{p.admin && !p.creator ? <span className="gd-tag">ADMIN</span> : null}
+									{p.admin && !p.creator ? (
+										<span className="gd-tag">ADMIN</span>
+									) : null}
 									{p.id === myId ? <span className="gd-tag">YOU</span> : null}
-									{p.team !== null ? <span className="gd-tag">{TEAM_NAMES[p.team as TeamId]}</span> : null}
+									{p.team !== null ? (
+										<span className="gd-tag">
+											{TEAM_NAMES[p.team as TeamId]}
+										</span>
+									) : null}
 								</span>
 								<button
 									type="button"
@@ -486,15 +556,28 @@ function RoomView({ onBack }: { onBack: () => void }) {
 							</div>
 						))}
 					</div>
-					<p className="gd-setting-hint">Admins persist until they leave; a leaving host passes the crown to the next human.</p>
+					<p className="gd-setting-hint">
+						Admins persist until they leave; a leaving host passes the crown to
+						the next human.
+					</p>
 				</div>
 			) : isAdmin ? (
-				<div className="gd-setting" style={{ borderBottom: "none", paddingBottom: 0 }}>
+				<div
+					className="gd-setting"
+					style={{ borderBottom: "none", paddingBottom: 0 }}
+				>
 					<div className="gd-setting-head">
 						<span>Players</span>
 						<span className="gd-team-alive">{humans.length} humans</span>
 					</div>
-					<div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+					<div
+						style={{
+							marginTop: 8,
+							display: "flex",
+							flexDirection: "column",
+							gap: 4,
+						}}
+					>
 						{humans.map((p) => (
 							<div
 								key={p.id}
@@ -504,7 +587,8 @@ function RoomView({ onBack }: { onBack: () => void }) {
 									fontSize: 13,
 									opacity: p.id === myId ? 1 : 0.85,
 									padding: "4px 6px",
-									background: p.id === myId ? "rgba(14,195,201,0.08)" : undefined,
+									background:
+										p.id === myId ? "rgba(14,195,201,0.08)" : undefined,
 									borderRadius: 4,
 								}}
 							>
@@ -514,7 +598,12 @@ function RoomView({ onBack }: { onBack: () => void }) {
 									{p.admin ? <span className="gd-tag">ADMIN</span> : null}
 									{p.id === myId ? <span className="gd-tag">YOU</span> : null}
 								</span>
-								<span style={{ color: p.team !== null ? teamCss(p.team as TeamId) : undefined }}>
+								<span
+									style={{
+										color:
+											p.team !== null ? teamCss(p.team as TeamId) : undefined,
+									}}
+								>
 									{p.team !== null ? TEAM_NAMES[p.team as TeamId] : ""}
 								</span>
 							</div>
@@ -523,7 +612,12 @@ function RoomView({ onBack }: { onBack: () => void }) {
 				</div>
 			) : null}
 
-			<button className="gd-btn" type="button" onClick={onBack} style={{ marginTop: 14 }}>
+			<button
+				className="gd-btn"
+				type="button"
+				onClick={onBack}
+				style={{ marginTop: 14 }}
+			>
 				Back
 			</button>
 		</>
