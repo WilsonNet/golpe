@@ -261,7 +261,7 @@ here says nothing about the netcode.
 
 | Input | Action |
 |---|---|
-| **W** / **Space** | Jump — hold for height, release early to cut the arc |
+| **Space** | Jump — hold for height, release early to cut the arc (again in the air = double jump) |
 | **A** / **D** | Move left / right |
 | Double-tap **A** / **D** | Dash |
 | **Mouse** | Aim — **you face where you aim**, which is how you keep your guard toward an attacker while retreating |
@@ -287,7 +287,8 @@ game, and the gun answers a range problem.
 | **Left click** (tap) | Slash | Fire |
 | **Left click** (hold ~2500ms, then release) | **Massive Strike** — a floor slam, or the plunge bomb if airborne | Fire |
 | **Shift** (hold) | **Block** | — |
-| **F** | **Uppercut** | — |
+| **W** | **Uppercut** | — |
+| **F** | **Item** | **Item** |
 
 The three things worth knowing before your first match:
 

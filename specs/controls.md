@@ -73,8 +73,10 @@ carries. See [anands.md](anands.md).
 
 **F is the item, and it is not a sword move.** The item is the third member of
 the kit (Lia's HE grenade, Anands' trap — see [items.md](items.md)), so it works
-in both stances, and the deck draws its button in both. The uppercut moved from
-F to Space to make room: Space is the other thumb, already parked under WASD.
+in both stances, and the deck draws its button in both. The uppercut lives on W
+— the top of the WASD movement hand — so the item took F for the same reason
+the uppercut used to live there: both are one-finger commitments, and the move
+hand's other fingers stay on walk and jump.
 The use is decided on the press — the aim angle of the press *is* the throw —
 so F is a tap, never a hold, unlike the ultimate's hold-to-release.
 
@@ -97,8 +99,11 @@ which one is under the hand depends on where the player's movement fingers live.
 The same argument puts block on the left trigger and the stances on the shoulders
 — the right thumb is busy on the face buttons.
 
-**Jump is W.** W keeps the WASD hand shape; Space moved to the uppercut when the
-item took F, so a double jump is W then W — or whatever a player binds it to.
+**Jump is Space.** Space is what every player's thumb reaches for without being
+told, and it is the one key the movement hand is not resting on. W — the top of
+the WASD hand — is the uppercut instead: a punch fired without leaving the
+hand's movement shape, so a double jump is Space then Space — or whatever a
+player binds it to.
 
 **The arrow keys are the keyboard's d-pad.** Left and right double up with A/D;
 up and down are the aim axis WASD has no room for.

@@ -314,11 +314,11 @@ part of what they must prove.
 
 ## Controls
 
-**WASD/Space** move/jump (**jump again in the air** = double jump) ·
+**A/D** move · **Space** jump (**jump again in the air** = double jump) ·
 **double-tap A/D** dash (melee stance) or tumble (gun stance) · **LMB** the
 melee weapon's attack (hold 1.6s then release = Massive Strike for Lia — a
 floor slam, or the plunge bomb if airborne) · **Shift** block (Lia) — or the
-**thrust**, a knockdown lunge (Anands: the dagger has no block) · **Space**
+**thrust**, a knockdown lunge (Anands: the dagger has no block) · **W**
 uppercut (Lia) — or the **shoryuken** anti-air (Anands) · **F** the item —
 Lia's HE grenade, Anands' floor trap (2 and 3 uses per life; see
 [specs/items.md](specs/items.md)) · **Q/E**

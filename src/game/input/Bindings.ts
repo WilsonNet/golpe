@@ -94,9 +94,11 @@ export const SLOTS = SLOT_NAMES.length;
  * the button the other half of the fight is fought with. Shift is under the hand
  * that is already holding a direction.
  *
- * **Jump is W and Space.** W keeps the WASD hand shape; Space is what every
- * player's thumb reaches for without being told. They are the same action, so a
- * double jump can even be W then Space.
+ * **Jump is Space.** Space is what every player's thumb reaches for without
+ * being told, and it is the one key the movement hand is not resting on. W —
+ * the top of the WASD hand shape — is the uppercut: a punch the other hand
+ * fires without ever leaving A/D on the floor, so walking, uppercutting and
+ * jumping can all happen in one hand motion.
  *
  * **The arrow keys are the keyboard's d-pad.** Left and right double up with
  * A/D, and up and down are the aim axis WASD has no room for — a keyboard in
@@ -112,7 +114,7 @@ export const DEFAULT_BINDINGS: Readonly<Record<Action, readonly string[]>> = {
 	right: ["KeyD", "ArrowRight", "PadRight"],
 	aimUp: ["ArrowUp", "PadUp"],
 	aimDown: ["ArrowDown", "PadDown"],
-	jump: ["KeyW", "Pad0"],
+	jump: ["Space", "Pad0"],
 	attack: ["Mouse0", "Pad2"],
 	// Both shifts, because which one is under the hand depends on which half of
 	// the keyboard the player's movement fingers live on.
@@ -122,9 +124,9 @@ export const DEFAULT_BINDINGS: Readonly<Record<Action, readonly string[]>> = {
 	// thumb hits deliberately rather than in passing, which is right for a button
 	// that spends sixty seconds of earned charge in one press.
 	ultimate: ["KeyR", "Pad1"],
-	// The uppercut moved from F to Space when the item took F: Space is the
-	// other thumb, already parked under WASD, and F is now the item's home.
-	uppercut: ["Space", "Pad3"],
+	// The uppercut is the top of the WASD hand: a punch fired off the move hand
+	// without leaving it — A/D walk, W uppercuts, Space jumps, all at once.
+	uppercut: ["KeyW", "Pad3"],
 	// F, because the first thing a player's index finger reaches for after the
 	// movement keys is the button the game put at the end of the WASD row. Pad7
 	// is the right trigger — a throw is a press-and-let-go, which is a trigger

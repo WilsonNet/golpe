@@ -26,11 +26,11 @@ describe("defaults", () => {
 		expect(DEFAULT_BINDINGS.block).not.toContain("Mouse2");
 	});
 
-	it("jumps on W and on the pad's bottom face button; Space is the uppercut", () => {
-		// Space moved from jump's alternate to the uppercut when the item took F —
-		// see specs/controls.md. Jump keeps W and the pad face button.
-		expect([...DEFAULT_BINDINGS.jump]).toEqual(["KeyW", "Pad0"]);
-		expect(DEFAULT_BINDINGS.uppercut).toContain("Space");
+	it("jumps on Space and on the pad's bottom face button; W is the uppercut", () => {
+		// Uppercut lives on the top of the WASD hand — see specs/controls.md —
+		// and Space is the jump a thumb reaches for without being told.
+		expect([...DEFAULT_BINDINGS.jump]).toEqual(["Space", "Pad0"]);
+		expect(DEFAULT_BINDINGS.uppercut).toContain("KeyW");
 		expect(DEFAULT_BINDINGS.item).toContain("KeyF");
 	});
 
@@ -65,7 +65,8 @@ describe("defaults", () => {
 describe("KeyBindings", () => {
 	it("resolves a code to the action it performs", () => {
 		const b = new KeyBindings();
-		expect(b.actionFor("Space")).toBe("uppercut");
+		expect(b.actionFor("Space")).toBe("jump");
+		expect(b.actionFor("KeyW")).toBe("uppercut");
 		expect(b.actionFor(mouseCode(0))).toBe("attack");
 		expect(b.actionFor("KeyZ")).toBeUndefined();
 	});
@@ -74,14 +75,14 @@ describe("KeyBindings", () => {
 		const b = new KeyBindings();
 		// A rebind that silently unbinds something else is how a player ends up
 		// unable to jump with no idea why.
-		expect(b.bind("block", 0, "KeyW")).toBe("jump");
-		expect(b.actionFor("KeyW")).toBe("block");
+		expect(b.bind("block", 0, "Space")).toBe("jump");
+		expect(b.actionFor("Space")).toBe("block");
 		expect([...b.codesFor("jump")]).toEqual(["Pad0"]);
 	});
 
 	it("does not report a displacement when the action already had the code", () => {
 		const b = new KeyBindings();
-		expect(b.bind("jump", 1, "KeyW")).toBeUndefined();
+		expect(b.bind("jump", 1, "Space")).toBeUndefined();
 	});
 
 	it("puts a code in the first free slot rather than leaving a hole", () => {
@@ -107,7 +108,7 @@ describe("KeyBindings", () => {
 		// Escape closes the dialog the rebind happens in — binding it would leave a
 		// player with a menu they cannot leave.
 		expect(b.actionFor("Escape")).toBeUndefined();
-		expect(b.codesFor("jump")).toContain("KeyW");
+		expect(b.codesFor("jump")).toContain("Space");
 	});
 
 	it("allows an action to be left unbound", () => {
@@ -124,7 +125,8 @@ describe("KeyBindings", () => {
 		expect(b.isDefault).toBe(false);
 		b.reset();
 		expect(b.isDefault).toBe(true);
-		expect(b.actionFor("KeyW")).toBe("jump");
+		expect(b.actionFor("Space")).toBe("jump");
+		expect(b.actionFor("KeyW")).toBe("uppercut");
 		expect(b.actionFor("KeyF")).toBe("item");
 	});
 
@@ -158,7 +160,7 @@ describe("sanitise", () => {
 	it("drops a default that a saved binding already claimed", () => {
 		const map = sanitise({ block: ["KeyW"] });
 		expect(map.block).toEqual(["KeyW"]);
-		expect(map.jump).toEqual(["Pad0"]);
+		expect(map.uppercut).toEqual(["Pad3"]);
 	});
 
 	it("refuses duplicates, reserved codes and junk entries", () => {
