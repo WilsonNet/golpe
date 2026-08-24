@@ -352,12 +352,13 @@ or the canvas keeps playing the game with keys meant for the dialog. Nothing in
 AI vs AI presses a key, so bindings are measured with
 `scripts/controls-probe.ts`. See [specs/controls.md](specs/controls.md).
 
-**The Esc menu's *Moves* item is a Guilty Gear-style command list** — one move
-at a time, a category rail, live-keycap commands from the player's *actual*
-bindings, a stat card, and a preview stage whose timeline tracks the move's
-real frame data. It is a presentation module (`src/ui/moveData.ts` +
-`src/ui/MoveList.tsx`) that reads the tuning constants and never touches the
-simulation. See [specs/menu.md](specs/menu.md).
+**The *Move list* is a Guilty Gear-style command list** — opened by the root
+menu's Learn & settings (for the hero picked there) and the Esc menu's *Moves*
+item: one move at a time, a category rail, live-keycap commands from the
+player's *actual* bindings, a stat card, and a preview stage whose timeline
+tracks the move's real frame data. It is a presentation module
+(`src/ui/moveData.ts` + `src/ui/MoveList.tsx`) that reads the tuning constants
+and never touches the simulation. See [specs/menu.md](specs/menu.md).
 
 **Aiming is a scheme, and there are two.** *Mouse* points at a place. *Controller*
 is two layers: the d-pad or left stick gives Contra directions with the

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { RANGED_WEAPONS } from "./Heroes.js";
 import type { RangedWeaponDef } from "../../tweakables/ranged.js";
+import { RANGED_WEAPONS } from "./Heroes.js";
 import {
 	type PlayerPosition,
 	reserveRoundsFor,

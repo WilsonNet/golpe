@@ -380,12 +380,16 @@ export const MENU_CSS = `
 	word-break: break-all;
 }
 
-/* ---- how to play ---- */
+/* ---- how to play ----
+   Rows sit inside .gd-section groups, so their rhythm (10px inside a section,
+   24px between groups) comes from the section gap — a row-level margin would
+   stack on it and read as doubled air between rows. The section heads are the
+   same ones the home screen uses, so this sub-view reads as one system. */
 .gd-how-row {
 	display: flex;
 	gap: 8px;
 	align-items: baseline;
-	margin-bottom: 8px;
+	margin-bottom: 0;
 	font-size: 13px;
 	line-height: 1.5;
 }
@@ -404,9 +408,16 @@ export const MENU_CSS = `
 	font-size: 12px;
 	opacity: 0.6;
 	line-height: 1.6;
-	margin: 10px 0 0;
+	margin: 20px 0 0;
 	border-top: 1px dashed rgba(255, 255, 255, 0.16);
-	padding-top: 10px;
+	padding-top: 12px;
+}
+.gd-how-note strong {
+	color: #ffd166;
+	opacity: 1;
+}
+.gd-how-actions {
+	margin-top: 24px;
 }
 
 /* ---- server status ----

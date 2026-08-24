@@ -16,7 +16,12 @@
  * - **Your fighter** — who you bring. The hero picker lives here, on the home
  *   screen, beside the name field: a hero shooter should show its heroes, and
  *   the choice rides every match started here.
- * - **Learn & settings** — the detours, smallest and quietest.
+ * - **Learn & settings** — the detours: How to play full-width (the primary
+ *   "how do I play" answer), then Move list and Options as siblings. The move
+ *   list is a top-level destination, not a chapter of How to play — it answers
+ *   "what does my fighter do" for the hero picked above, and it is a
+ *   full-screen feature (live preview, stats) that would drown a reference
+ *   page. The Esc menu's Moves item is the same module.
  *
  * The rules underneath stay the ones the whole screen is built on:
  *
@@ -36,7 +41,7 @@
 
 import { useEffect, useState } from "react";
 import { readStoredHero, storeHero } from "../game/heroPref";
-import { bindings, codeLabel } from "../game/input/Bindings";
+import { type Action, bindings, codeLabel } from "../game/input/Bindings";
 import type { LaunchParams } from "../game/online/launch";
 import { ROOM_ID_RE } from "../game/online/room";
 import { MAX_NAME, readStoredName, storeName } from "../game/playerName";
@@ -44,6 +49,7 @@ import { HERO_IDS, HEROES, type HeroId } from "../game/simulation/Heroes";
 import type { MatchMode } from "../game/simulation/Teams";
 import { ControlsDialog } from "./ControlsDialog";
 import { HUD_CSS } from "./hudStyles";
+import { MoveList } from "./MoveList";
 import { MENU_CSS } from "./menuStyles";
 
 /** The requested room's defaults, as the server would create them. */
@@ -52,7 +58,7 @@ const SCORE_LIMIT_TDM = 15;
 const TIME_LIMIT_SEC = 300;
 const FREEZE_TIME_SEC = 4;
 
-type View = "home" | "host" | "join" | "howto" | "controls";
+type View = "home" | "host" | "join" | "howto" | "controls" | "moves";
 
 interface HostSettings {
 	mode: MatchMode;
@@ -228,14 +234,25 @@ export function MainMenu({
 
 						<div className="gd-section">
 							<div className="gd-section-head">Learn &amp; settings</div>
+							<button
+								className="gd-play-item"
+								type="button"
+								onClick={() => setView("howto")}
+							>
+								<strong>How to play</strong>
+								<span>Movement, the sword chain, and the ultimate.</span>
+							</button>
 							<div className="gd-two">
 								<button
 									className="gd-play-item"
 									type="button"
-									onClick={() => setView("howto")}
+									onClick={() => setView("moves")}
 								>
-									<strong>How to play</strong>
-									<span>Movement, the sword chain, and the ultimate.</span>
+									<strong>Move list</strong>
+									<span>
+										Every command for {HEROES[hero].name} — stats and a live
+										preview.
+									</span>
 								</button>
 								<button
 									className="gd-play-item"
@@ -277,6 +294,9 @@ export function MainMenu({
 
 				<ServerStatus />
 			</div>
+			{view === "moves" ? (
+				<MoveList hero={hero} onClose={() => setView("home")} />
+			) : null}
 		</div>
 	);
 }
@@ -583,6 +603,13 @@ function JoinForm({
 /**
  * The controls reference.
  *
+ * Rows are grouped into three named sections — getting around, fighting, the
+ * match — because an ungrouped wall of key rows reads as clutter. Every row is
+ * one sentence at most, and the advanced tactics (the butterfly, the massive's
+ * frame data, the parry window's numbers) live in the Move list, whose full
+ * cards exist for each: this page is for what a stranger needs before the
+ * first fight, not for the whole manual.
+ *
  * The rows read the *live* bindings, so a player who has rebound something sees
  * their own layout, not the manual's — a hint that lies about the button is
  * worse than no hint, and this one is the same store the game plays by.
@@ -595,18 +622,7 @@ function HowToPlay({ onBack }: { onBack: () => void }) {
 	const [map, setMap] = useState(() => bindings.snapshot());
 	useEffect(() => bindings.subscribe(() => setMap(bindings.snapshot())), []);
 
-	const key = (
-		action:
-			| "left"
-			| "right"
-			| "jump"
-			| "attack"
-			| "block"
-			| "uppercut"
-			| "ultimate"
-			| "sword"
-			| "gun",
-	) => {
+	const key = (action: Action) => {
 		const code = map[action][0];
 		return code ? codeLabel(code) : "—";
 	};
@@ -614,60 +630,80 @@ function HowToPlay({ onBack }: { onBack: () => void }) {
 	return (
 		<>
 			<h2 className="gd-title">How to play</h2>
-			<div className="gd-how-row">
-				<span className="gd-key">{key("left")}</span>
-				<span className="gd-key">{key("right")}</span>
-				<span>
-					Move. Double-tap either to dash — a flat line, even in the air.
-				</span>
+
+			<div className="gd-section">
+				<div className="gd-section-head">Getting around</div>
+				<div className="gd-how-row">
+					<span className="gd-key">{key("left")}</span>
+					<span className="gd-key">{key("right")}</span>
+					<span>
+						Walk. Double-tap a direction to dash — a flat line that carries
+						across gaps and holds even in the air. In gun stance the same
+						gesture is a tumble.
+					</span>
+				</div>
+				<div className="gd-how-row">
+					<span className="gd-key">{key("jump")}</span>
+					<span>
+						Jump, and again in the air for a double jump — it refills on
+						landing. Jump off a wall to climb it.
+					</span>
+				</div>
+				<div className="gd-how-row">
+					<span className="gd-key">{key("sword")}</span>
+					<span className="gd-key">{key("gun")}</span>
+					<span>
+						Stance — which weapon is in your hand. Sword is the default.
+					</span>
+				</div>
 			</div>
-			<div className="gd-how-row">
-				<span className="gd-key">{key("jump")}</span>
-				<span>
-					Jump. Again in the air: double jump. Jump off a wall to climb it.
-				</span>
+
+			<div className="gd-section">
+				<div className="gd-section-head">Fighting</div>
+				<div className="gd-how-row">
+					<span className="gd-key">{key("attack")}</span>
+					<span>
+						Slash — or the gun's trigger, in gun stance. Tap again as each hit
+						lands for the three-hit chain; the finisher knocks down.
+					</span>
+				</div>
+				<div className="gd-how-row">
+					<span className="gd-key">{key("block")}</span>
+					<span>
+						Block. A fresh block parries a sword swing for 140ms and
+						guard-breaks the attacker — but only on the side you face.
+					</span>
+				</div>
+				<div className="gd-how-row">
+					<span className="gd-key">{key("uppercut")}</span>
+					<span>Uppercut — unblockable, launches the target.</span>
+				</div>
+				<div className="gd-how-row">
+					<span className="gd-key">{key("item")}</span>
+					<span>Item — your hero's throwable; uses are per life.</span>
+				</div>
 			</div>
-			<div className="gd-how-row">
-				<span className="gd-key">{key("attack")}</span>
-				<span>
-					Sword slash — or gunshot, in gun stance. Tap again as each swing lands
-					for the three-hit chain (finisher knocks down).
-				</span>
+
+			<div className="gd-section">
+				<div className="gd-section-head">The match</div>
+				<div className="gd-how-row">
+					<span className="gd-key">{key("ultimate")}</span>
+					<span>Ultimate — hold to aim, release to cast.</span>
+				</div>
+				<div className="gd-how-row">
+					<span className="gd-key">Tab</span>
+					<span className="gd-key">Esc</span>
+					<span>Scoreboard · menu — hero, moves, controls and the room.</span>
+				</div>
 			</div>
-			<div className="gd-how-row">
-				<span className="gd-key">{key("block")}</span>
-				<span>
-					Block. The first 140ms of a fresh block is a parry — absorb a swing
-					inside it and the attacker is yours.
-				</span>
-			</div>
-			<div className="gd-how-row">
-				<span className="gd-key">{key("uppercut")}</span>
-				<span>Uppercut: unblockable, launches the target.</span>
-			</div>
-			<div className="gd-how-row">
-				<span className="gd-key">{key("sword")}</span>
-				<span className="gd-key">{key("gun")}</span>
-				<span>Stances — sword is the default. Q and E by default.</span>
-			</div>
-			<div className="gd-how-row">
-				<span className="gd-key">{key("ultimate")}</span>
-				<span>
-					The black hole: hold to aim, release to cast. 707px is as far as it
-					can be thrown.
-				</span>
-			</div>
-			<div className="gd-how-row">
-				<span className="gd-key">Tab</span>
-				<span className="gd-key">Esc</span>
-				<span>Scoreboard · menu (rebinding lives there).</span>
-			</div>
+
 			<p className="gd-how-note">
-				Hold the slash about 420ms and release for a Massive Strike. Cancel a
-				slash into a block to guard between swings — that's the butterfly. A
-				guard only covers the side you face.
+				For the detail — the butterfly, the Massive Strike's window, the parry's
+				frame data — open the <strong>Move list</strong> back on the home
+				screen. Every card has stats and a live preview.
 			</p>
-			<div className="gd-row-actions">
+
+			<div className="gd-how-actions">
 				<button className="gd-btn" type="button" onClick={onBack}>
 					Back
 				</button>

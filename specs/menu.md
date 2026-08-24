@@ -45,9 +45,14 @@ made every choice look like every other choice:
   name field: a hero shooter should show its heroes, and the choice rides every
   match started here. There is no separate Heroes page; picking is the
   discoverable face of `golpe.hero`.
-- **Learn & settings** — How to play and Options, smallest and quietest.
+- **Learn & settings** — How to play full-width, then the Move list and Options
+  as a pair. How to play is the stranger's one-page answer to "how do I play";
+  the Move list is a *different question* — "what does my fighter do" — and a
+  full-screen feature of its own (live preview, stats, frame data), so it sits
+  beside not under How to play. Both read the current hero: the move list opens
+  for whoever the picker above has selected.
 
-Two-column rows (Host/Join, How to play/Options) collapse to a single column on
+Two-column rows (Host/Join, Move list/Options) collapse to a single column on
 a phone so every button is a thumb-sized target.
 
 ## The flows
@@ -59,7 +64,8 @@ a phone so every button is a thumb-sized target.
 | Host a match | `?mode=…&screen=N&bots=N&scoreLimit=N&timeLimit=N` (+ `fill`, `freezeTime`, `ultCharge`) | Every room-creator choice, defaults pre-filled to the server's own defaults. |
 | Join a match | `?room=<id>` | One field accepts the bare id *or* the whole link. |
 | Practice | `?training=true` | The training room, one click away. |
-| How to play | — | The controls reference, read from the *live* bindings — a hint that lies about the button is worse than no hint. |
+| How to play | — | The controls reference, **grouped into three sections** (getting around / fighting / the match) and read from the *live* bindings — a hint that lies about the button is worse than no hint. One sentence per row; the advanced tactics point to the Move list, which is where their full cards live. |
+| Move list | — | The Guilty Gear-style command list, for the hero the picker has selected — the same module the Esc menu's *Moves* item opens. |
 | Options | — | The same controls dialog as the Esc menu, so rebinding is possible before the first match. |
 
 The hero is **per-client**: the picker's choice rides every commit as
@@ -138,9 +144,11 @@ and who can manage the room rather than assuming its own URL.
 
 ## The move list
 
-The Esc menu's **Moves** item opens a Guilty Gear-style command list for the
-hero the menu last picked (`readStoredHero`). It is a DOM overlay, one move at
-a time, with four parts:
+The move list opens from **two places** — the root menu's *Move list* item
+(Learn & settings, using the hero picked on the home screen) and the Esc menu's
+*Moves* item (using `readStoredHero`). Both render the same module, so the two
+can never drift. It is a Guilty Gear-style command list for one hero, with four
+parts:
 
 - **A category rail** up the left (System / Movement / Melee / Ranged / Item /
   Ultimate) with a count per category and a dot per move, so a player sees the

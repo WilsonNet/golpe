@@ -197,6 +197,59 @@ const browser = await chromium.launch();
 	await ctx.close();
 }
 
+// --- 7. learn: how to play is grouped, move list opens for the pick ---------
+{
+	const ctx = await browser.newContext();
+	const page = await ctx.newPage();
+	await page.goto(BASE);
+	await page.waitForSelector(".gd-menu-page", { timeout: 10000 });
+
+	// How to play: one view, three named groups, nine one-line rows.
+	for (const el of await page.$$(".gd-play-item")) {
+		if ((await el.textContent())?.includes("How to play")) {
+			await el.click();
+			break;
+		}
+	}
+	await page.waitForSelector(".gd-how-row", { timeout: 5000 });
+	const heads = (await page.$$(".gd-section-head")).length;
+	const rows = (await page.$$(".gd-how-row")).length;
+	check("how to play groups into sections", heads >= 3, `heads=${heads}`);
+	check("how to play rows are one line each", rows === 9, `rows=${rows}`);
+	await page.click(".gd-how-actions button:has-text('Back')");
+
+	// The move list opens for the hero the picker has selected.
+	for (const el of await page.$$(".gd-hero-chip")) {
+		if ((await el.textContent())?.includes("Anands")) {
+			await el.click();
+			break;
+		}
+	}
+	for (const el of await page.$$(".gd-play-item")) {
+		if ((await el.textContent())?.includes("Move list")) {
+			await el.click();
+			break;
+		}
+	}
+	await page.waitForSelector(".ml-root", { timeout: 15000 });
+	const heroName = (await page.textContent(".ml-hero-name"))?.trim();
+	check("move list opens in the menu", true);
+	check(
+		"move list shows the picked hero",
+		heroName === "Anands",
+		`hero=${heroName}`,
+	);
+
+	// Esc returns to the home menu, and the move list is gone.
+	await page.keyboard.press("Escape");
+	await page.waitForSelector(".gd-menu-page", { timeout: 5000 });
+	await page.waitForFunction(() => !document.querySelector(".ml-root"), {
+		timeout: 5000,
+	});
+	check("esc returns from the move list to the menu", true);
+	await ctx.close();
+}
+
 await browser.close();
 console.log(
 	failures === 0 ? "MENU PROBE PASS" : `MENU PROBE FAIL (${failures})`,

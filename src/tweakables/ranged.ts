@@ -31,7 +31,8 @@ export const PELLET_ALPHA = 0.9;
  * manual key — and the magazine plus the reserve together are the economy,
  * which is what forces the fight back to the sword.
  */
-type RangedWeaponBase = {	id: RangedWeaponId;
+type RangedWeaponBase = {
+	id: RangedWeaponId;
 	label: string;
 	/** ms between shots. The machine gun is light, so it fires faster. */
 	cooldownMs: number;
@@ -69,7 +70,7 @@ type RangedWeaponBase = {	id: RangedWeaponId;
 	 * All three weapons ship at 4; tune per weapon, not globally.
 	 */
 	magazinesPerLife: number;
-}
+};
 
 /**
  * How the reload runs, one of the TF2 pair.
