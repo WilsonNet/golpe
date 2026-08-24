@@ -98,6 +98,47 @@ export interface DenyEventMsg {
 	y: number;
 }
 
+/**
+ * What dealt the killing blow, for the kill feed's icon and label.
+ *
+ * The melee moves name themselves; `"bullet"` is the killer's ranged weapon —
+ * the HUD names it from the killer's hero (rifle, machine gun, shotgun).
+ * `"bomb"` is the plunge, the airborne Massive Strike; `"massive"` the ground
+ * slam. The rest are items and ultimates, each its own story in the feed.
+ */
+export type KillCause =
+	| "slash"
+	| "slash2"
+	| "slash3"
+	| "uppercut"
+	| "massive"
+	| "bomb"
+	| "stab"
+	| "thrust"
+	| "shoryuken"
+	| "bullet"
+	| "grenade"
+	| "trap"
+	| "dragon"
+	| "hole"
+	| "blossom";
+
+/**
+ * A frag, for the turn-away kill feed.
+ *
+ * Events, not state: the scores themselves already travel in the snapshot, and
+ * this is only the "who beat whom, with what" narration — the single one-shot
+ * of a fight that already changed the whole scoreboard. Effects only, exactly
+ * like `melee` events: a dropped datagram costs a feed entry, never a frag.
+ */
+export interface KillEventMsg {
+	/** The fighter who dealt the killing blow, or null when nobody did. */
+	killerId: string | null;
+	victimId: string;
+	/** What actually killed the victim. */
+	cause: KillCause;
+}
+
 export interface SnapshotPlayer {
 	id: string;
 	hp: number;
@@ -316,6 +357,8 @@ export interface GameSnapshot {
 	melee: MeleeEventMsg[];
 	/** Ultimate denies since the previous snapshot. Effects only. */
 	denies: DenyEventMsg[];
+	/** Frags since the previous snapshot. Effects only, like `melee`. */
+	kills: KillEventMsg[];
 	match: MatchStatus;
 	/** Black hole grenades in flight. Usually empty; at most one per cast. */
 	grenades: SnapshotGrenade[];

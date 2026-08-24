@@ -51,6 +51,7 @@ import type {
 	DenyEventMsg,
 	ExplosionMsg,
 	GameSnapshot,
+	KillEventMsg,
 	MatchOverMsg,
 	MatchStatus,
 	MeleeEventMsg,
@@ -153,6 +154,8 @@ export interface OnlineCallbacks {
 	onMeleeEvent: (event: MeleeEventMsg) => void;
 	/** An ultimate was denied, for the "DENY" splash over the denier. */
 	onDeny: (event: DenyEventMsg) => void;
+	/** A frag, for the kill feed. Effects only, like a melee event. */
+	onKill: (event: KillEventMsg) => void;
 	/** An HE grenade went off, for the blast effect. */
 	onExplosion: (event: ExplosionMsg) => void;
 	/** A trap rooted somebody, for the "ROOTED!" caption. */
@@ -1062,6 +1065,10 @@ export class OnlineSession {
 		// Denies are the same shape: one-shot splashes, consequence in the meter.
 		for (const event of snap.denies ?? []) {
 			this.callbacks.onDeny(event);
+		}
+		// Frags are the same shape again: a feed entry, consequence in the score.
+		for (const event of snap.kills ?? []) {
+			this.callbacks.onKill(event);
 		}
 		// Item events are the same shape again: a blast and a caption, both with
 		// their consequence already in the state. A dropped datagram costs a

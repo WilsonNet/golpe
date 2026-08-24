@@ -14,6 +14,8 @@ import {
 	type DenyEventMsg,
 	type ExplosionMsg,
 	type GameSnapshot,
+	type KillCause,
+	type KillEventMsg,
 	type MatchStatus,
 	type MeleeEventMsg,
 	type PlayerInput,
@@ -277,6 +279,12 @@ interface ConnectedPlayer {
 	/** Who last damaged this fighter, for kill credit. */
 	lastHurtBy: string | null;
 	/**
+	 * What last damaged them, alongside the credit: the kill feed's means. Set
+	 * every time `damage()` lands, at the one point every weapon passes through,
+	 * so a feed entry can never disagree with the frag it narrates.
+	 */
+	lastHurtCause: KillCause;
+	/**
 	 * Whether the last damage came from an ultimate.
 	 *
 	 * The hole pays no charge, and a kill it scores pays no kill bonus either —
@@ -493,6 +501,8 @@ export class GameRoom {
 	private plungeCatches = new Map<string, Set<string>>();
 	/** Ultimate denies since the last broadcast, for the client's "DENY" splash. */
 	private denies: DenyEventMsg[] = [];
+	/** Frags since the last broadcast, for the client's kill feed. */
+	private killEvents: KillEventMsg[] = [];
 	private channelIds: string[] = [];
 	private tickAccumulator = 0;
 	private broadcastAccumulator = 0;
@@ -940,6 +950,7 @@ export class GameRoom {
 			alive: true,
 			respawnTimer: 0,
 			lastHurtBy: null,
+			lastHurtCause: "bullet",
 			lastHurtByUlt: false,
 			lastAttackTime: 0,
 			queue: [],
@@ -1721,6 +1732,15 @@ export class GameRoom {
 			this.potg.note(t, "kill", actor, target);
 		}
 
+		// The kill feed's entry. Effects only, like the melee events: the frag
+		// itself already travels in the score. Pushed before the credit fields
+		// below are cleared, because `lastHurtCause` is about to stop being true.
+		this.killEvents.push({
+			killerId: killer?.id ?? null,
+			victimId: victim.id,
+			cause: victim.lastHurtCause ?? "bullet",
+		});
+
 		victim.lastHurtBy = null;
 		victim.lastHurtByUlt = false;
 
@@ -1736,6 +1756,7 @@ export class GameRoom {
 		sourceId: string,
 		paysCharge = true,
 		source: "melee" | "bullet" | "singularity" | "dragon" = "bullet",
+		cause: KillCause = "bullet",
 	) {
 		if (!victim.alive || amount <= 0) return;
 		// Scores are frozen once the podium is decided; the fight is allowed to
@@ -1750,6 +1771,10 @@ export class GameRoom {
 		if (from && from !== victim && !hostile(from.team, victim.team)) return;
 
 		victim.lastHurtBy = sourceId;
+		// The means, beside the credit: the kill feed's icon is the weapon that
+		// actually killed them, and "actually" is decided here at the one point
+		// every weapon asks the same question.
+		victim.lastHurtCause = cause;
 		// The ultimate is the one weapon that does not feed the ultimate meter.
 		// The hole is already a reward — a held enemy is a free window for
 		// everyone else's weapons — and a caster whose own hole paid them charge
@@ -1874,6 +1899,7 @@ export class GameRoom {
 		player.alive = true;
 		player.respawnTimer = 0;
 		player.lastHurtBy = null;
+		player.lastHurtCause = "bullet";
 		player.queue.length = 0;
 		player.pendingInput = null;
 		player.tickInput = null;
@@ -2211,6 +2237,7 @@ export class GameRoom {
 			})),
 			melee: this.meleeEvents.slice(),
 			denies: this.denies.slice(),
+			kills: this.killEvents.slice(),
 			match: this.matchStatus(),
 			grenades: this.grenades.map((g) => ({
 				id: g.id,
@@ -2681,7 +2708,14 @@ export class GameRoom {
 				v.comboStep = 0;
 				v.comboTimer = 0;
 
-				this.damage(victim, blast.damage, bomber.id, true, "melee");
+				this.damage(
+					victim,
+					blast.damage,
+					bomber.id,
+					true,
+					"melee",
+					blast.knockupVy !== 0 ? "bomb" : "massive",
+				);
 			}
 
 			this.meleeEvents.push({
@@ -2735,9 +2769,9 @@ export class GameRoom {
 				if (result.outcome === "parried") {
 					this.absorbPotg(defender, MOVES[result.move].damage, attacker);
 				}
-
 				const damage = applyMeleeResult(attacker.state, defender.state, result);
-				this.damage(defender, damage, attacker.id, true, "melee");
+
+				this.damage(defender, damage, attacker.id, true, "melee", result.move);
 
 				this.meleeEvents.push({
 					attackerId: attacker.id,
@@ -2862,7 +2896,7 @@ export class GameRoom {
 					y: box.y + box.h / 2,
 					dir: attacker.state.facing >= 0 ? 1 : -1,
 				});
-				this.damage(defender, damage, attacker.id, true, "melee");
+				this.damage(defender, damage, attacker.id, true, "melee", "thrust");
 				this.meleeEvents.push({
 					attackerId: attacker.id,
 					victimId: defender.id,
@@ -2931,7 +2965,7 @@ export class GameRoom {
 				v.plungeStuckTimer = 0;
 				// The ultimate pays nobody — the dragon feeds no meter, like the
 				// hole.
-				this.damage(victim, DRAGON_DAMAGE, rider.id, false, "dragon");
+				this.damage(victim, DRAGON_DAMAGE, rider.id, false, "dragon", "dragon");
 				this.meleeEvents.push({
 					attackerId: rider.id,
 					victimId: victim.id,
@@ -3381,7 +3415,7 @@ export class GameRoom {
 			if (damage <= 0) continue;
 			// The HE feeds the meter like a bullet: it is an ordinary weapon, not
 			// an ultimate, and the Overwatch economy pays for participation.
-			this.damage(player, damage, g.ownerId, true, "bullet");
+			this.damage(player, damage, g.ownerId, true, "bullet", "grenade");
 		}
 	}
 
@@ -3484,7 +3518,14 @@ export class GameRoom {
 			// The storm feeds nobody — `paysCharge: false` skips the caster's
 			// charge and marks the kill credit non-paying too, exactly like the
 			// hole.
-			this.damage(player, BLOSSOM_TICK_DAMAGE, field.ownerId, false);
+			this.damage(
+				player,
+				BLOSSOM_TICK_DAMAGE,
+				field.ownerId,
+				false,
+				"bullet",
+				"blossom",
+			);
 		}
 	}
 
@@ -3517,7 +3558,7 @@ export class GameRoom {
 					x: player.state.x,
 					y: player.state.y,
 				});
-				this.damage(player, TRAP_DAMAGE, trap.ownerId, true, "bullet");
+				this.damage(player, TRAP_DAMAGE, trap.ownerId, true, "bullet", "trap");
 			}
 			if (sprung) {
 				console.log(`[ITEM] trap ${trap.id} springs and is spent`);
@@ -3694,7 +3735,14 @@ export class GameRoom {
 			}
 			// The hole does not feed the meter — `paysCharge: false` skips the
 			// caster's charge and marks the kill credit non-paying too.
-			this.damage(player, SINGULARITY_TICK_DAMAGE, field.ownerId, false);
+			this.damage(
+				player,
+				SINGULARITY_TICK_DAMAGE,
+				field.ownerId,
+				false,
+				"singularity",
+				"hole",
+			);
 		}
 	}
 
@@ -3747,6 +3795,7 @@ export class GameRoom {
 			p.alive = true;
 			p.respawnTimer = 0;
 			p.lastHurtBy = null;
+			p.lastHurtCause = "bullet";
 			p.lastAttackTime = 0;
 			p.queue.length = 0;
 			p.pendingInput = null;
@@ -3767,6 +3816,7 @@ export class GameRoom {
 		this.bullets = [];
 		this.meleeEvents.length = 0;
 		this.denies.length = 0;
+		this.killEvents.length = 0;
 		this.traps = [];
 		this.trapCanisters.length = 0;
 		this.heGrenades.length = 0;
@@ -3840,6 +3890,8 @@ export class GameRoom {
 		// listening humans does not accumulate them forever.
 		this.meleeEvents.length = 0;
 		this.denies.length = 0;
+		// Frags are the same shape, drained for the same reason.
+		this.killEvents.length = 0;
 		// Item events are the same shape, and cleared for the same reason.
 		this.explosions.length = 0;
 		this.rootedEvents.length = 0;

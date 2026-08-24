@@ -8,6 +8,28 @@
  * never emitted is a HUD feature that silently never appears.
  */
 
+import type { KillCause } from "./online/types";
+import type { HeroId } from "./simulation/Heroes";
+
+/**
+ * One frag, ready for the feed. `Match` resolves the ids to names and the
+ * killer's hero before emitting — the feed's presentation layer never touches
+ * a roster or an info map.
+ */
+export interface HudKillEvent {
+	killerId: string | null;
+	/** The killer's name, or "the arena" when nobody is credited. */
+	killer: string;
+	victimId: string;
+	victim: string;
+	/** What dealt the blow — the feed's icon and label. */
+	cause: KillCause;
+	/** The killer's kit, so the feed can name the gun or the ultimate. */
+	hero: HeroId | null;
+	/** The local fighter is one of the two — the row gets the accent. */
+	mine: boolean;
+}
+
 /** Health values in hit points; `ult` in 0..100 like the simulation. */
 export interface HudState {
 	hp: number;
@@ -72,4 +94,6 @@ export const HUD_EVENTS = {
 	 * Chrono Trigger message window. An empty string hides it.
 	 */
 	status: "hud-status",
+	/** A frag, for the turn-away kill feed. Effects only. */
+	kill: "hud-kill",
 } as const;

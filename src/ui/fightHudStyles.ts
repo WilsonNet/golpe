@@ -639,6 +639,97 @@ export const FIGHT_HUD_CSS = `
 	transform: translateX(-50%) translateY(0);
 }
 
+/* ---- the kill feed, top-right below the foe panel ----
+   Gameplay tier, wearing the fighter panels' register: the one thing on screen
+   whose job is to be picked up by an eye never pointed at it. Just the names,
+   the means icon and the means' name — then it is gone. The winner wears the
+   HUD's cyan, the loser a soft red, and the means sits in the killpop's gold:
+   the icon is what happened, the label is what to respect next fight.
+   A row one fighter in it is careful to read gets the brighter hairline. */
+.vdh-killfeed {
+	position: absolute;
+	top: 10cqh;
+	right: 1.4cqw;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	gap: 0.5cqh;
+	pointer-events: none;
+}
+.vdh-kill-row {
+	display: flex;
+	align-items: center;
+	gap: 0.7cqw;
+	padding: 0.4cqh 1cqw;
+	max-width: 36cqw;
+	background: linear-gradient(180deg, rgba(6, 18, 30, 0.52), rgba(6, 18, 30, 0.28));
+	border: 1px solid rgba(127, 240, 244, 0.18);
+	border-radius: 2px;
+	white-space: nowrap;
+	/* The enter completes in 260ms and the exit is a class flip at 5.58s:
+	   the animation ends on the row's resting state, so the transition owns
+	   everything after it. */
+	animation: vdh-kill-in 260ms ease-out;
+	transition: opacity 380ms ease-out, transform 380ms ease-out;
+}
+.vdh-kill-row.vdh-kill-mine {
+	border-color: rgba(127, 240, 244, 0.55);
+}
+.vdh-kill-row.vdh-kill-out {
+	opacity: 0;
+	transform: translateX(1.6cqw);
+}
+@keyframes vdh-kill-in {
+	from {
+		opacity: 0;
+		transform: translateX(1.6cqw);
+	}
+	to {
+		opacity: 1;
+		transform: translateX(0);
+	}
+}
+.vdh-kill-name {
+	/* A flex item's min-width is its content width by default; without this a
+	   long name overflows the row instead of ellipsizing. */
+	flex: 0 1 auto;
+	min-width: 0;
+	font-size: 1.3cqw;
+	color: #7ff0f4;
+	text-shadow: 0 0.2cqh 0 rgba(0, 0, 0, 0.75);
+	max-width: 12cqw;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.vdh-kill-means {
+	display: inline-flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 0.5cqw;
+}
+.vdh-kill-icon {
+	width: 2.3cqw;
+	height: 2.3cqw;
+	color: #ffd166;
+	filter: drop-shadow(0 0.2cqh 0 rgba(0, 0, 0, 0.65));
+}
+.vdh-kill-label {
+	font-size: 1.1cqw;
+	letter-spacing: 0.12em;
+	color: rgba(243, 212, 136, 0.95);
+	text-shadow: 0 0.2cqh 0 rgba(0, 0, 0, 0.75);
+}
+.vdh-kill-victim {
+	flex: 0 1 auto;
+	min-width: 0;
+	font-size: 1.3cqw;
+	color: #ffa3a3;
+	text-shadow: 0 0.2cqh 0 rgba(0, 0, 0, 0.75);
+	max-width: 12cqw;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
 /* ---- the controls hint ----
    Bottom-left corner, under the self panel: the two things a new player asks
    for, without ever covering the fight. */

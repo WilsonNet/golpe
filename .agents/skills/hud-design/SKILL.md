@@ -29,7 +29,7 @@ something wears the gold.
 | What | Where | Why |
 |---|---|---|
 | Fighter sprites, nameplates, aim beams, projectiles, effects | Pixi, inside the camera | They track moving fighters in world space |
-| Fighter panels, clock, ultimate meter, message window, scoreboard, podium, menus | React/DOM overlay | Ornate frames, subpixel-crisp text at any DPR, and CSS transitions/animations are exactly what canvas text is bad at |
+| Fighter panels, clock, ultimate meter, message window, kill feed, scoreboard, podium, menus | React/DOM overlay | Ornate frames, subpixel-crisp text at any DPR, and CSS transitions/animations are exactly what canvas text is bad at |
 | The Play of the Game ceremony: letterbox, title, name card, skip | React/DOM overlay (`PlayOfTheGame.tsx`) | The *camera* work is in Pixi; a tracked heading and a sliding card are not. It decides nothing — the replay plays identically if it never mounts |
 | HUD container (`stage.hud`) | **Deleted** | Nothing uses it anymore; the whole HUD is DOM |
 
@@ -134,6 +134,18 @@ measurement. Never mix in `px` for layout (hairlines at 1-2px are fine).
   lies about the button is worse than no hint.
 - Messages (`hud-status` + the "FIGHT — FIRST TO N" announcement on phase →
   live) auto-dismiss after 3.5s. The window hides on an empty string.
+- **The kill feed turns away frags.** Top-right under the foe panel
+  (`KillFeed.tsx`, gameplay tier: the same translucent strip the panels wear),
+  newest on top, five rows, gone after 6s. Anatomy: `KILLER [icon] LABEL
+  VICTIM` — winner in the HUD cyan, loser soft red, and the means (icon +
+  label) in the killpop's gold. The means is the *server's* verdict: the
+  snapshot carries `kills: KillEventMsg[]`, drained like `melee`, and `Match`
+  resolves names and the killer's hero before emitting `hud-kill` — the feed
+  never touches a roster or an info map. Rows are timers held in state (5.58s
+  → exit class, 6s → unmount), never a one-render condition; the exit is a
+  class flip on a transition, because an entrance keyframe with
+  `fill-mode: both` would hold its final keyframe over the exit — same rule
+  as any element that fades out after its own entrance.
 - Everything is `pointer-events: none`. The HUD never eats a click.
 
 ## Gotchas (each cost real debugging time)
@@ -178,6 +190,11 @@ measurement. Never mix in `px` for layout (hairlines at 1-2px are fine).
    footage from a minute ago is a second fight the player cannot distinguish from
    the one being replayed, and the podium arriving in the same breath as the
    announcement would sit on top of the replay of how it was won.
+9. **A flex item will not ellipsize below its content width without
+   `min-width: 0`.** The kill feed's names are flex items with
+   `text-overflow: ellipsis`; without `min-width: 0` (and `flex-shrink: 0`
+   on the means chip) a long name overflowed its row and the victim's letters
+   were drawn on top of the means label.
 
 ## Verifying a HUD change
 
@@ -187,9 +204,12 @@ measurement. Never mix in `px` for layout (hairlines at 1-2px are fine).
    ultimate; `?offline=true` for the no-server panels; `?screen=2` to confirm
    the HUD stays pinned while the camera scrolls).
 3. Ground truth beats eyeballs: probe `getComputedStyle`/`getBoundingClientRect`
-   of `.vdh-hp-fill` (width must match the number), the ghost mid-drain, and the
-   killpop's presence across a kill. A vision agent can review screenshots, but
-   a DOM probe cannot be fooled by a bar that is not there.
+   of `.vdh-hp-fill` (width must match the number), the ghost mid-drain, the
+   killpop's presence across a kill, and the kill feed's rows across a real
+   online frag (`?ai=true&bots=N` — a duel proves nothing about the feed, and
+   screenshot at the moment rows exist: they are gone six seconds later). A
+   vision agent can review screenshots, but a DOM probe cannot be fooled by a
+   bar that is not there.
 4. End with `node scripts/diagnose.mjs --mode=online --runs=3` — the HUD is DOM
    and cannot desync the game, but `Match.emitHud` lives in the match loop and
    a regression there would show up as fighting:false or a crash.

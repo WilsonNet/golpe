@@ -53,7 +53,7 @@ import { inputSettings } from "./input/Scheme";
 import { parseLaunchParams } from "./online/launch";
 import { OnlineSession } from "./online/OnlineSession";
 import { requestedRoomId, showRoomInUrl } from "./online/room";
-import type { MatchOverMsg } from "./online/types";
+import type { KillCause, MatchOverMsg } from "./online/types";
 import { readStoredName, storeName } from "./playerName";
 import { fetchPotgClip } from "./potg/clipSource";
 import { POTG_BAR_FRACTION, type PotgShot } from "./potg/Director";
@@ -892,6 +892,30 @@ export class Match {
 					// counts it, because a deny is a first-class outcome there.
 					this.denyFx.deny(event.x, event.y);
 					this.training?.recordDeny();
+				},
+				onKill: (event) => {
+					// The frag, for the feed. Names and the killer's kit are
+					// resolved here, so the DOM overlay never reaches into a roster
+					// or an info map. Effects only, like a deny: the score already
+					// travelled in the snapshot.
+					const killerId = event.killerId;
+					EventBus.emit(HUD_EVENTS.kill, {
+						killerId,
+						killer:
+							killerId === null
+								? "the arena"
+								: (this.online?.nameOf(killerId) ?? killerId),
+						victimId: event.victimId,
+						victim: this.online?.nameOf(event.victimId) ?? event.victimId,
+						cause: event.cause,
+						hero:
+							killerId === null
+								? null
+								: (this.online?.heroOf(killerId) ?? null),
+						mine:
+							killerId === this.online?.manager.myId ||
+							event.victimId === this.online?.manager.myId,
+					});
 				},
 				onExplosion: (event) => {
 					// The blast, and nothing else: the damage already travelled in
@@ -2963,7 +2987,8 @@ export class Match {
 					},
 					defender.fighter.id,
 				);
-				if (damage > 0) this.applyOfflineDamage(defender, damage, "sword");
+				if (damage > 0)
+					this.applyOfflineDamage(defender, damage, attacker, "thrust");
 				continue;
 			}
 
@@ -2972,7 +2997,8 @@ export class Match {
 
 			const damage = applyMeleeResult(attacker.body, defender.body, result);
 			this.fx.impact(result as ImpactEvent, defender.fighter.id);
-			if (damage > 0) this.applyOfflineDamage(defender, damage, "sword");
+			if (damage > 0)
+				this.applyOfflineDamage(defender, damage, attacker, result.move);
 		}
 	}
 
@@ -2993,6 +3019,7 @@ export class Match {
 					this.applyOfflineDamage(
 						foe,
 						pelletDamageAt(localRanged, bulletDistanceFromMuzzle(b)),
+						this.local,
 						"bullet",
 					),
 			},
@@ -3006,6 +3033,7 @@ export class Match {
 					this.applyOfflineDamage(
 						this.local,
 						pelletDamageAt(foeRanged, bulletDistanceFromMuzzle(b)),
+						foe,
 						"bullet",
 					),
 			},
@@ -3015,11 +3043,12 @@ export class Match {
 	private applyOfflineDamage(
 		victim: FighterEntity,
 		damage: number,
-		kind: string,
+		attacker: FighterEntity,
+		cause: KillCause,
 	) {
 		victim.fighter.hp = Math.max(0, victim.fighter.hp - damage);
 		const who = victim.fighter.local ? "Player" : "Enemy";
-		console.log(`[FIGHT] ${who} hit by ${kind}! HP: ${victim.fighter.hp}`);
+		console.log(`[FIGHT] ${who} hit by ${cause}! HP: ${victim.fighter.hp}`);
 
 		if (victim.fighter.local) {
 			this.emitHud(true);
@@ -3027,6 +3056,18 @@ export class Match {
 
 		if (victim.fighter.hp <= 0 && this.resetAt < 0) {
 			console.log(`[FIGHT] ${who} defeated!`);
+			// The escape hatch is a duel, so it can name the killer straight off
+			// the fighter entities — the same shape the online feed emits, so the
+			// HUD treats both modes the same way.
+			EventBus.emit(HUD_EVENTS.kill, {
+				killerId: attacker.fighter.id,
+				killer: attacker.fighter.name,
+				victimId: victim.fighter.id,
+				victim: victim.fighter.name,
+				cause,
+				hero: attacker.fighter.local ? this.hero : this.foeHero(),
+				mine: victim.fighter.local || attacker.fighter.local,
+			});
 			this.resetAt = RESET_DELAY_MS;
 		}
 	}

@@ -28,6 +28,7 @@ import { ULT_MAX_CHARGE } from "../game/simulation/Physics";
 import { TEAM_COUNT, TEAM_NAMES } from "../game/simulation/Teams";
 import { teamCss } from "../game/teamPalette";
 import { FIGHT_HUD_CSS } from "./fightHudStyles";
+import { KillFeed } from "./KillFeed";
 import { useEndgameCeremony } from "./PlayOfTheGame";
 import { formatClock, type MatchView, useMatch } from "./useMatch";
 
@@ -367,6 +368,9 @@ export function FightHud({ training = false }: { training?: boolean }) {
 			<style>{FIGHT_HUD_CSS}</style>
 			{hud ? <FighterPanel hud={hud} foe={false} training={training} /> : null}
 			{hud && duel ? <FighterPanel hud={hud} foe training={training} /> : null}
+
+			{/* Whoever fights in the corner of the eye: the frags nobody saw. */}
+			<KillFeed />
 
 			{clock ? (
 				<section
