@@ -18,6 +18,7 @@ const SPRITE_ANCHOR_CENTRE = 0.5;
  */
 
 import { Container, Sprite } from "pixi.js";
+import { SMOKE_REVEAL_MS } from "../tweakables/items.js";
 import { pelletDamageAt } from "../tweakables/ranged.js";
 import { type AIConfig, randomBotConfig } from "./characters/AIConfig";
 import { EnemyBrain } from "./characters/EnemyBrain";
@@ -113,6 +114,7 @@ import {
 	isKnockedDown,
 	isStunned,
 	MAX_HP,
+	type MeleeAction,
 	MOVES,
 	MS_PER_SECOND,
 	meleePhase,
@@ -1403,6 +1405,9 @@ export class Match {
 		// draws the clip it recorded and the clip records no smoke, so a
 		// replay never conceals anyone.
 		this.updateSmokeOcclusion();
+		// An attack lights a hidden fighter back up — same frame's occlusion,
+		// so the reveal only ever touches somebody actually concealed.
+		this.updateSmokeReveal(dtMs);
 
 		// Presentation, in dependency order: animation picks the frame, sync moves
 		// the sprites, effects read the same state, then the camera settles.
@@ -1562,6 +1567,124 @@ export class Match {
 
 	/** A render clock for the item effects in a replay, where there is no server. */
 	private itemClock = 0;
+
+	/** ms of attack-reveal left, per fighter id. Presentation only. */
+	private smokeRevealMs = new Map<string, number>();
+
+	/** The last frame's melee action, per fighter id — a change is a swing starting. */
+	private lastMeleeAction = new Map<string, MeleeAction>();
+
+	/** The last frame's plunge flag, per fighter id — a lift is a dive starting. */
+	private lastPlunging = new Map<string, boolean>();
+
+	/** The last frame's magazine, per fighter id — a drop is a shot. */
+	private lastAmmo = new Map<string, number>();
+
+	/**
+	 * Every item id the client has already seen, keyed `"kind:id"`. An id that
+	 * was not here last frame is an item that was just thrown — and the throw
+	 * is the attack item use counts as for smoke reveal.
+	 */
+	private itemIdsSeen = new Set<string>();
+
+	/**
+	 * Reveal a concealed fighter who just attacked, and run their reveal
+	 * timers out.
+	 *
+	 * A fighter hidden in their own side's smoke is invisible to the enemy
+	 * right up until they commit — a swing, a shot, an item use — and the
+	 * commit pops them back at the ghost alpha for `SMOKE_REVEAL_MS` (still
+	 * no shadow, nameplate, health bar or blade, exactly the look the
+	 * always-on ghost had). The attacks are read from the same states the
+	 * renderer is already reading: `meleeAction` for a swing (the chain's
+	 * three links are three different names, so each link reveals alone —
+	 * which is right, every link is a commit), `plunging` when the Massive's
+	 * dive starts, an ammo decrease for a shot, and a fresh canister in one
+	 * of the item lists for an item use.
+	 *
+	 * Presentation only, like the occlusion above: nothing here is written
+	 * back into the simulation. The enemy's client reads the same states
+	 * from the same snapshots, so its reveal for a remote fighter's swing is
+	 * as long as the swing the swing's owner committed to.
+	 */
+	private updateSmokeReveal(dtMs: number) {
+		// What was just thrown this frame, per owner's server id.
+		const freshItems = new Map<string, string[]>();
+		const session = this.online;
+		if (session) {
+			this.noteFreshItems(freshItems, "he", session.heGrenades);
+			this.noteFreshItems(freshItems, "trap", session.trapCanisters);
+			this.noteFreshItems(freshItems, "smoke", session.smokeGrenades);
+		}
+
+		for (const e of this.queries.drawnFighters) {
+			const id = e.fighter.id;
+			const attacked = this.attackedThisFrame(e, freshItems);
+			const left = (this.smokeRevealMs.get(id) ?? 0) - dtMs;
+			let revealed = left > 0;
+			if (attacked) {
+				this.smokeRevealMs.set(id, SMOKE_REVEAL_MS);
+				revealed = true;
+			} else if (revealed) {
+				this.smokeRevealMs.set(id, left);
+			} else {
+				this.smokeRevealMs.delete(id);
+			}
+			e.fighter.smokeRevealed = Boolean(e.fighter.smokeHidden) && revealed;
+		}
+	}
+
+	/**
+	 * Did this fighter commit an attack since the last frame?
+	 *
+	 * Every branch also advances that attack's tracker, so the edge is only
+	 * ever reported once. Asks nothing that is not already on this client:
+	 * a dead or stunned fighter's states never move here, so none of the
+	 * edges can fire for one.
+	 */
+	private attackedThisFrame(
+		e: { fighter: { id: string }; body: PlayerPosition },
+		freshItems: Map<string, string[]>,
+	): boolean {
+		const id = e.fighter.id;
+		const body = e.body;
+		let attacked = false;
+
+		const action = body.meleeAction;
+		if (action !== "none" && action !== this.lastMeleeAction.get(id)) {
+			attacked = true;
+		}
+		this.lastMeleeAction.set(id, action);
+
+		const plunging = body.plunging;
+		if (plunging && !this.lastPlunging.get(id)) attacked = true;
+		this.lastPlunging.set(id, plunging);
+
+		const ammo = body.ammo;
+		if (ammo < (this.lastAmmo.get(id) ?? ammo)) attacked = true;
+		this.lastAmmo.set(id, ammo);
+
+		if (freshItems.get(this.serverIdOf(id))?.length) attacked = true;
+
+		return attacked;
+	}
+
+	/** Register the item entries added to `out` that the client has not seen yet. */
+	private noteFreshItems(
+		out: Map<string, string[]>,
+		kind: string,
+		items: readonly { id: number; ownerId: string }[],
+	) {
+		for (const item of items) {
+			const key = `${kind}:${item.id}`;
+			if (this.itemIdsSeen.has(key)) continue;
+			this.itemIdsSeen.add(key);
+			const owned = out.get(item.ownerId);
+			if (owned) owned.push(key);
+			else out.set(item.ownerId, [key]);
+		}
+	}
+
 	private updateUltimate(dtMs: number) {
 		// A replay draws the hole *it recorded*, not whatever the live match is
 		// doing underneath — the room keeps playing during the ceremony, and a

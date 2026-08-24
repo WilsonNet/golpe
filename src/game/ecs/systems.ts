@@ -515,10 +515,18 @@ export function idleTexture(hero: HeroId, facing: number) {
 }
 
 /**
- * A fighter concealed in their own side's smoke, ghosted. Faded, not gone:
- * visible enough to know exactly where you are standing — the local fighter
- * sees their own ghost, which is the cue that they are invisible — and faded
- * enough that the enemy cannot read who is in the cloud or how hurt they are.
+ * A fighter concealed in their own side's smoke — the two faces of the cloud.
+ *
+ * **Hidden, not faded, for the enemy.** A concealed remote fighter is fully
+ * invisible while they do nothing; the moment they commit — a swing, a shot,
+ * an item use — the `smokeRevealed` flag lights them up at this alpha for
+ * `SMOKE_REVEAL_MS`, so the cloud breaks the "who is in here" question exactly
+ * on the answer the enemy hears, and no longer.
+ *
+ * The local fighter keeps the ghost as their cue: visible enough to know
+ * exactly where you are standing, faded enough that the enemy's client is the
+ * one that cannot see you. In a word: the fade is for you, the absence is for
+ * them.
  */
 const SMOKE_GHOST_ALPHA = 0.35;
 
@@ -536,12 +544,19 @@ export function spriteSyncSystem(queries: Queries) {
 		const at = e.renderPos ?? e.body;
 		syncSpriteToBody(e.sprite, at.x, at.y);
 		// A dead fighter fades rather than vanishing, so a KO reads as a KO. A
-		// fighter concealed in their own side's smoke ghosts out to a whisper —
-		// faded, not gone, so the fade itself is the "you are invisible right
-		// now" cue (your own fighter fades too), while the enemy still cannot
-		// read who is in the cloud or how hurt they are.
+		// fighter concealed in their own side's smoke is *gone*, not ghosted —
+		// the enemy has no way to know there is a fighter in the cloud at all.
+		// The moment they attack, `smokeRevealed` pops them back at the ghost
+		// alpha for `SMOKE_REVEAL_MS`. The local fighter is the exception: the
+		// ghost stays as the "you are invisible right now" cue.
 		e.sprite.alpha =
-			e.fighter.hp <= 0 ? 0.3 : e.fighter.smokeHidden ? SMOKE_GHOST_ALPHA : 1;
+			e.fighter.hp <= 0
+				? 0.3
+				: e.fighter.smokeHidden
+					? e.fighter.local || e.fighter.smokeRevealed
+						? SMOKE_GHOST_ALPHA
+						: 0
+					: 1;
 		// The blossom's spin and the dragon ride's rotation are accumulated by
 		// `animationSystem`; this is the one place the wind-down can live,
 		// because it runs after the animation step and before anything else

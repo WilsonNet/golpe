@@ -150,11 +150,14 @@ full kit; the rules here are the wire and the general item rules.
 - **Per-side drawing is the whole feature.** Your own and your teammates'
   clouds are drawn nearly transparent; hostile clouds are full-strength. The
   side test is the one `sameTeam` predicate the trap's friendly-fade uses.
-- **Ally smoke ghosts the people inside.** A fighter in a cloud belonging to
-  their own side is faded almost out to anyone hostile to them — a ghost, with
-  no shadow, no nameplate, no health bar. The local fighter ghosts too,
-  standing in their own smoke, so the fade is the cue that they are invisible
-  right now.
+- **Ally smoke hides the people inside.** A fighter in a cloud belonging to
+  their own side is fully invisible to anyone hostile to them — no sprite, no
+  shadow, no nameplate, no health bar, nothing to read. The concealment breaks
+  on a **commit**: a swing, a shot or an item use pops the attacker back at the
+  ghost's low opacity for **150ms** (still no shadow, nameplate, health bar or
+  blade — a glimpse of the attack, not a target to re-acquire). The local
+  fighter still sees their own ghost even while hidden, so the fade is the cue
+  that they are invisible to the enemy right now.
 - **A dead Jeffs' clouds leave the floor with him**, exactly like traps:
   removed at respawn and at a round reset.
 - The cloud affects vision only. No damage, no collision, no bullet block.

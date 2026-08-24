@@ -100,15 +100,19 @@ side that is looking at it.
   puffs of dark grey that read as *something is in there* and hide exactly
   what. It is the point of the item — the enemy cannot count you, cannot see
   whether you are still there, cannot read how many walked in.
-- **Ally smoke ghosts the people inside.** A fighter standing inside a cloud
-  that belongs to *their own side* is hidden from everyone hostile to them: a
-  faded ghost, with no shadow, no nameplate, no health bar — the enemy can
-  know *someone* is in the smoke, never who, never how hurt. "Who is in the
-  smoke" is the question the cloud exists to make unanswerable — the thrower
+- **Ally smoke hides the people inside.** A fighter standing inside a cloud
+  that belongs to *their own side* is invisible to everyone hostile to them:
+  no sprite, no shadow, no nameplate, no health bar — the enemy cannot know
+  *someone* is even in the smoke, never mind who. "Who is in the smoke" is
+  the question the cloud exists to make unanswerable — the thrower
   can walk into their own smoke to vanish, and a teammate caught mid-retreat
-  can be swallowed by a friendly cloud. The local fighter ghosts too, standing
-  in their own smoke: the fade is the cue that *you* are invisible right now,
-  and it leaves you exactly where you are standing.
+  can be swallowed by a friendly cloud. The concealment breaks on a
+  **commit**: a swing, a shot or an item use pops the fighter back at the
+  ghost's low opacity for **150ms**, still with no shadow or nameplate — a
+  glimpse of the attack, not a target to re-acquire. The local fighter
+  ghosts for themself, standing in their own smoke: the fade is the cue that
+  *you* are invisible right now, and it leaves you exactly where you are
+  standing.
 - **Enemy smoke hides nobody.** Walking into a cloud the *enemy* threw does
   not conceal you — you are in their smoke, their side can see you plainly,
   and your own side sees you too. The concealment belongs to the smoke's

@@ -216,3 +216,14 @@ export const SMOKE_PUFF_SCALE = SMOKE_RADIUS / SMOKE_PUFF_TEXTURE_RADIUS;
  * resource spent, not a permanent feature of the map.
  */
 export const SMOKE_DURATION_MS = 6500;
+
+/**
+ * How long an attack reveals a hidden fighter, in ms.
+ *
+ * A fight is won by the swing, the shot and the item use, and the smoke's
+ * "how many are in there" question must break on the answer the enemy hears —
+ * committing kills the cover. But the reveal is a *glimpse*: two solid swings
+ * at ~400ms apart each pop for a moment rather than keeping the fighter
+ * readable, so the cloud still answers a whole team behind it.
+ */
+export const SMOKE_REVEAL_MS = 150;

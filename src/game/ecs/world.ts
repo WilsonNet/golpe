@@ -77,8 +77,21 @@ interface Entity {
 		 * almost out, with no shadow, nameplate or health bar. The local
 		 * fighter is set too, so standing in your own smoke tells you that you
 		 * are invisible right now.
+		 *
+		 * **Hidden, not faded, for the enemy.** A concealed *remote* fighter
+		 * draws at alpha 0 until they attack — the sight of a swing, a shot or
+		 * an item use lights them up at the ghost alpha for `SMOKE_REVEAL_MS`
+		 * (they still have no shadow, nameplate or health bar even then). The
+		 * local fighter is the exception: the ghost stays as the cue.
 		 */
 		smokeHidden?: boolean;
+		/**
+		 * Is this concealed fighter currently revealed by having just
+		 * attacked, as this viewer sees it? Presentation-only, recomputed
+		 * every frame by the match: a swing, a shot or an item use sets it for
+		 * `SMOKE_REVEAL_MS`. Meaningless while `smokeHidden` is unset.
+		 */
+		smokeRevealed?: boolean;
 	};
 
 	/** A server-owned projectile, keyed by the id the server assigned. */
