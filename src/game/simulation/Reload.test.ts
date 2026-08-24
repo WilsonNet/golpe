@@ -1,10 +1,25 @@
 import { describe, expect, it } from "vitest";
 import { RANGED_WEAPONS } from "./Heroes.js";
+import type { RangedWeaponDef } from "../../tweakables/ranged.js";
 import {
 	type PlayerPosition,
 	reserveRoundsFor,
 	tickReload,
 } from "./Physics.js";
+
+/** The one-timer duration of a clip weapon — the test's dt divisor. */
+const clipMs = (def: RangedWeaponDef): number =>
+	def.reloadStyle === "clip" ? def.reloadMs : 0;
+
+/** The first-round (empty-magazine) duration of a shell weapon. */
+const firstShellMs = (def: RangedWeaponDef): number =>
+	def.reloadStyle === "shell"
+		? (def.reloadFirstRoundMs ?? def.reloadRoundMs)
+		: 0;
+
+/** The ordinary per-round duration of a shell weapon. */
+const shellMs = (def: RangedWeaponDef): number =>
+	def.reloadStyle === "shell" ? def.reloadRoundMs : 0;
 
 /** The slice of a fighter's state `tickReload` mutates. */
 type ReloadState = Pick<
@@ -20,59 +35,126 @@ const state = (ammo: number, reserveRounds = 999): ReloadState => ({
 	stance: "gun",
 });
 
-describe("the reload", () => {
-	it("every weapon loads one round at a time — never a whole magazine at once", () => {
+describe("the clip reload (rifle, machine gun)", () => {
+	it("is full magazine or nothing — the ammo does not move until the whole rack lands", () => {
 		const rifle = state(11);
-		// Half of a 70ms round has not landed yet.
+		// Halfway into the rack: nothing has landed yet.
 		tickReload(
 			rifle,
 			{ attack: false },
 			{ ranged: RANGED_WEAPONS.rifle } as never,
-			0.03,
+			clipMs(RANGED_WEAPONS.rifle) / 2000,
 		);
 		expect(rifle.ammo).toBe(11);
+		expect(rifle.reserveRounds).toBe(999);
 		expect(rifle.reloadTimer).toBeGreaterThan(0);
-		// The rest of the round lands: exactly one.
+		// The rest of the rack lands: the whole magazine at once, the reserve
+		// debited for only the round it was missing.
 		tickReload(
 			rifle,
 			{ attack: false },
 			{ ranged: RANGED_WEAPONS.rifle } as never,
-			0.05,
+			clipMs(RANGED_WEAPONS.rifle) / 2000,
 		);
 		expect(rifle.ammo).toBe(12);
 		expect(rifle.reserveRounds).toBe(998);
+		expect(rifle.reloadTimer).toBe(0);
 	});
 
-	it("a partial reload moves exactly one round from the reserve — 19/40 reloads to 20/39", () => {
-		const s = state(19, 40);
+	it("an interrupted rack contributes nothing — no partial reload worth shooting", () => {
+		const s = state(5);
 		tickReload(
 			s,
 			{ attack: false },
-			// The user's example is a 20-round weapon; ours are 12/30/5, so use
-			// the rifle's 12 and the same "one short, 40 behind" shape.
-			{ ranged: { ...RANGED_WEAPONS.rifle, magazine: 20 } } as never,
-			(RANGED_WEAPONS.rifle.reloadRoundMs + 1) / 1000,
+			{ ranged: RANGED_WEAPONS.rifle } as never,
+			0.4,
 		);
-		expect(s.ammo).toBe(20);
-		expect(s.reserveRounds).toBe(39);
-	});
-
-	it("a full magazine never reloads", () => {
-		const full = state(RANGED_WEAPONS.shotgun.magazine);
+		expect(s.reloadTimer).toBeGreaterThan(0);
+		// The trigger interrupts the rack mid-flight: the ammo and the
+		// reserve are exactly as they were before it started.
 		tickReload(
-			full,
-			{ attack: false },
-			{ ranged: RANGED_WEAPONS.shotgun } as never,
-			5,
+			s,
+			{ attack: true },
+			{ ranged: RANGED_WEAPONS.rifle } as never,
+			0.1,
 		);
-		expect(full.ammo).toBe(RANGED_WEAPONS.shotgun.magazine);
-		expect(full.reloadTimer).toBe(0);
+		expect(s.reloadTimer).toBe(0);
+		expect(s.ammo).toBe(5);
+		expect(s.reserveRounds).toBe(999);
 	});
 
-	it("the round that loads from empty is the slow one, the rounds after it fast", () => {
+	it("a one-round top-up costs the full rack — close to full is not cheaper", () => {
+		const s = state(11);
+		// The rack's timer comes up at the weapon's full `reloadMs` even
+		// though only one round is missing.
+		tickReload(
+			s,
+			{ attack: false },
+			{ ranged: RANGED_WEAPONS.rifle } as never,
+			clipMs(RANGED_WEAPONS.rifle) / 1000,
+		);
+		expect(s.ammo).toBe(12);
+		expect(s.reserveRounds).toBe(998);
+		const stream = state(11);
+		tickReload(
+			stream,
+			{ attack: false },
+			{ ranged: RANGED_WEAPONS.machinegun } as never,
+			clipMs(RANGED_WEAPONS.machinegun) / 1000,
+		);
+		expect(stream.ammo).toBe(30);
+		expect(stream.reserveRounds).toBe(980);
+	});
+
+	it("draws only what the reserve has left — a short reserve leaves the mag partially full", () => {
+		const s = state(10, 1);
+		tickReload(
+			s,
+			{ attack: false },
+			{ ranged: RANGED_WEAPONS.rifle } as never,
+			clipMs(RANGED_WEAPONS.rifle) / 1000,
+		);
+		expect(s.ammo).toBe(11);
+		expect(s.reserveRounds).toBe(0);
+	});
+
+	it("firing mid-reload aborts the load with the rounds it held, and an empty mag reloads even while held", () => {
+		const s = state(2);
+		tickReload(
+			s,
+			{ attack: false },
+			{ ranged: RANGED_WEAPONS.rifle } as never,
+			0.2,
+		);
+		expect(s.reloadTimer).toBeGreaterThan(0);
+		tickReload(
+			s,
+			{ attack: true },
+			{ ranged: RANGED_WEAPONS.rifle } as never,
+			0.1,
+		);
+		expect(s.reloadTimer).toBe(0);
+		expect(s.ammo).toBe(2);
+
+		// From empty there is nothing to abort with: the rack runs on under a
+		// held trigger, and lands the whole magazine.
+		const empty = state(0);
+		tickReload(
+			empty,
+			{ attack: true },
+			{ ranged: RANGED_WEAPONS.rifle } as never,
+			clipMs(RANGED_WEAPONS.rifle) / 1000,
+		);
+		expect(empty.ammo).toBe(12);
+		expect(empty.reserveRounds).toBe(987);
+	});
+});
+
+describe("the shell reload (shotgun)", () => {
+	it("loads one round per cycle — a partial reload that can shoot", () => {
 		const shotgun = state(0);
-		const firstMs = RANGED_WEAPONS.shotgun.reloadFirstRoundMs ?? 0;
-		const roundMs = RANGED_WEAPONS.shotgun.reloadRoundMs;
+		const firstMs = firstShellMs(RANGED_WEAPONS.shotgun);
+		const roundMs = shellMs(RANGED_WEAPONS.shotgun);
 		tickReload(
 			shotgun,
 			{ attack: false },
@@ -109,34 +191,7 @@ describe("the reload", () => {
 		expect(roundMs).toBeGreaterThan(RANGED_WEAPONS.shotgun.cooldownMs);
 	});
 
-	it("holding fire with rounds in the mag delays the reload", () => {
-		const s = state(4);
-		tickReload(
-			s,
-			{ attack: true },
-			{ ranged: RANGED_WEAPONS.rifle } as never,
-			1,
-		);
-		expect(s.reloadTimer).toBe(0);
-		expect(s.ammo).toBe(4);
-	});
-
-	it("an empty magazine reloads even while the trigger is held", () => {
-		const s = state(0);
-		tickReload(
-			s,
-			{ attack: true },
-			{ ranged: RANGED_WEAPONS.rifle } as never,
-			1.5,
-		);
-		// One round lands (a whole-magazine refill would land all twelve; a
-		// per-bullet reload lands one, and the held trigger fires it on the
-		// next frame, so the load starts again from empty).
-		expect(s.ammo).toBe(1);
-		expect(s.reserveRounds).toBe(998);
-	});
-
-	it("firing mid-reload cancels the load and keeps the loaded rounds", () => {
+	it("firing mid-reload cancels the pump and keeps the loaded shells", () => {
 		const s = state(2);
 		tickReload(
 			s,
@@ -145,7 +200,7 @@ describe("the reload", () => {
 			0.2,
 		);
 		expect(s.reloadTimer).toBeGreaterThan(0);
-		// The trigger comes back: the in-progress round is lost.
+		// The trigger comes back: the in-progress shell is lost.
 		tickReload(
 			s,
 			{ attack: true },
@@ -156,31 +211,9 @@ describe("the reload", () => {
 		expect(s.ammo).toBe(2);
 	});
 
-	it("a sword-stance fighter reloads nothing and drops any reload in progress", () => {
-		const s = state(4);
-		// Less than one 70ms round, so the reload is mid-load, not landed.
-		tickReload(
-			s,
-			{ attack: false },
-			{ ranged: RANGED_WEAPONS.rifle } as never,
-			0.04,
-		);
-		expect(s.reloadTimer).toBeGreaterThan(0);
-		// The gun is holstered: the load is dropped where it stands.
-		s.stance = "sword";
-		tickReload(
-			s,
-			{ attack: false },
-			{ ranged: RANGED_WEAPONS.rifle } as never,
-			1.5,
-		);
-		expect(s.reloadTimer).toBe(0);
-		expect(s.ammo).toBe(4);
-	});
-
-	it("a stance switch keeps the shotgun's loaded shells, only the round being loaded is lost", () => {
+	it("a stance switch keeps the loaded shells, only the shell being pumped is lost", () => {
 		const s = state(0);
-		const firstMs = RANGED_WEAPONS.shotgun.reloadFirstRoundMs ?? 0;
+		const firstMs = firstShellMs(RANGED_WEAPONS.shotgun);
 		// One shell lands, the next is mid-load.
 		tickReload(
 			s,
@@ -200,8 +233,7 @@ describe("the reload", () => {
 		);
 		expect(s.reloadTimer).toBe(0);
 		expect(s.ammo).toBe(1);
-		// Back on the gun, the reload restarts from the shell that was being
-		// loaded — the one that already landed stays loaded.
+		// Back on the gun, the reload restarts from the shells that landed.
 		s.stance = "gun";
 		tickReload(
 			s,
@@ -212,18 +244,66 @@ describe("the reload", () => {
 		expect(s.reloadTimer).toBeGreaterThan(0);
 		expect(s.ammo).toBe(1);
 	});
+});
+
+describe("the rules both styles share", () => {
+	it("a full magazine never reloads", () => {
+		const full = state(RANGED_WEAPONS.shotgun.magazine);
+		tickReload(
+			full,
+			{ attack: false },
+			{ ranged: RANGED_WEAPONS.shotgun } as never,
+			5,
+		);
+		expect(full.ammo).toBe(RANGED_WEAPONS.shotgun.magazine);
+		expect(full.reloadTimer).toBe(0);
+	});
+
+	it("holding fire with rounds in the mag delays the reload", () => {
+		const s = state(4);
+		tickReload(
+			s,
+			{ attack: true },
+			{ ranged: RANGED_WEAPONS.rifle } as never,
+			1,
+		);
+		expect(s.reloadTimer).toBe(0);
+		expect(s.ammo).toBe(4);
+	});
+
+	it("a sword-stance fighter reloads nothing and drops any reload in progress", () => {
+		const s = state(4);
+		tickReload(
+			s,
+			{ attack: false },
+			{ ranged: RANGED_WEAPONS.rifle } as never,
+			0.04,
+		);
+		expect(s.reloadTimer).toBeGreaterThan(0);
+		// The gun is holstered: the rack is dropped where it stands — all
+		// progress gone, nothing loaded.
+		s.stance = "sword";
+		tickReload(
+			s,
+			{ attack: false },
+			{ ranged: RANGED_WEAPONS.rifle } as never,
+			1.5,
+		);
+		expect(s.reloadTimer).toBe(0);
+		expect(s.ammo).toBe(4);
+		expect(s.reserveRounds).toBe(999);
+	});
 
 	it("the reload draws only what the reserve has left, then the gun is dry", () => {
 		const s = state(0, 5);
-		// Five rounds, one per call — a call with a huge dt lands exactly one.
-		for (let i = 0; i < 6; i++) {
-			tickReload(
-				s,
-				{ attack: false },
-				{ ranged: RANGED_WEAPONS.rifle } as never,
-				0.5,
-			);
-		}
+		// Five rounds in the reserve: a clip reload lands all five at once,
+		// then there is nothing left to draw.
+		tickReload(
+			s,
+			{ attack: false },
+			{ ranged: RANGED_WEAPONS.rifle } as never,
+			5,
+		);
 		expect(s.ammo).toBe(5);
 		expect(s.reserveRounds).toBe(0);
 		expect(s.reloadTimer).toBe(0);

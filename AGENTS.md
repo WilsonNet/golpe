@@ -318,18 +318,21 @@ menu. Sword is the default stance.
 magazines** (all three ship at 4, tuned in `tweakables/ranged.ts`): one loaded,
 the rest a reserve the reload draws from, so a **dry** gun (empty magazine, no
 reserve) is done until the next life — the game's way of forcing the fight back
-to the sword. **Every weapon reloads per bullet, never a whole magazine**
-(Valve/CS model): each cycle loads one round from the reserve, so a partial
-reload costs only the rounds it moves and an interruption loses only the round
-being loaded. The reload starts when the trigger is
-released (or instantly on an empty magazine, even while held — the moment a
-round lands, the held trigger fires it), firing cancels
-it (loaded rounds stay, the round being loaded is lost), and a stance switch,
-stun or death cancels it too — a switch drops the in-progress load, never the
-rounds that already landed, so the shotgun's loaded shells survive a stance
-switch and the reload restarts from them when the gun comes back out. Lia's rifle: 12 rounds, 70ms each (120ms first). Anands' machine
-gun: 30 rounds, 60ms each (120ms first). Jeffs' shotgun: 5 shells, one at a time — 1300ms for
-the rack from empty, 1200ms per shell after. The ammo
+to the sword. The reload is the **TF2 pair**. **Clip weapons reload the whole
+magazine in one action — full magazine or nothing** (the rifle's 890ms, the
+machine gun's 1860ms): a single timer runs and the ammo does not move until it
+completes, so an interruption produces nothing — a mid-reload stance switch
+*resets all progress*, and a one-round top-up costs the same rack an
+empty-to-full one does. **Shell weapons load one round per cycle** (the
+shotgun: 1300ms for the rack from empty, 1200ms per shell after), and a landed
+round is a real round — the partial reload that can shoot. The reload starts when the trigger is
+released (or instantly on an empty magazine, even while held — the held
+trigger fires the moment rounds land), firing aborts
+it (TF2's clip-abort-by-fire: the rounds the magazine holds stay and the shot
+goes, the load in progress is discarded), and a stance switch,
+stun or death cancels it too — for a clip weapon nothing is kept and the next
+reload starts from zero when the gun comes back out; the shotgun's loaded
+shells survive a stance switch and its reload restarts from them. The ammo
 count, reserve and reload bar live in the HUD's bottom-right corner — the count
 reads **loaded/behind** (`12/36`), and DRY flashes where it stood when both hit
 zero — and

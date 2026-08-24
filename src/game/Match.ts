@@ -615,9 +615,11 @@ export class Match {
 		const foeId = this.online?.primaryRemoteId ?? "";
 		// The magazine and the reload bar. Online, the local body carries the
 		// server's authoritative ammo (reconciled like everything else); the
-		// offline escape hatch keeps its own counters. Every weapon reloads
-		// per round, so the progress includes the round being loaded — the
-		// bar reads "how full is the gun becoming".
+		// offline escape hatch keeps its own counters. A clip reload fills the
+		// whole magazine in one action, so the bar runs against the single
+		// `reloadMs`; a shell reload loads a round per cycle, so the bar
+		// includes the round being pumped. Either way it reads "how full is
+		// the gun becoming".
 		const ranged = kitFor(this.hero).ranged;
 		const ammo = this.onlineMode ? this.local.body.ammo : this.localAmmo;
 		const reserve = this.onlineMode
@@ -626,12 +628,14 @@ export class Match {
 		const reloadTimer = this.onlineMode
 			? this.local.body.reloadTimer
 			: this.localReload;
-		const roundTotal =
-			ammo === 0
-				? (ranged.reloadFirstRoundMs ?? ranged.reloadRoundMs)
-				: ranged.reloadRoundMs;
+		const reloadTotal =
+			ranged.reloadStyle === "clip"
+				? ranged.reloadMs
+				: ammo === 0
+					? (ranged.reloadFirstRoundMs ?? ranged.reloadRoundMs)
+					: ranged.reloadRoundMs;
 		const roundProgress =
-			reloadTimer > 0 ? 1 - Math.max(0, reloadTimer) / roundTotal : 0;
+			reloadTimer > 0 ? 1 - Math.max(0, reloadTimer) / reloadTotal : 0;
 		const reloadProgress =
 			(ammo + roundProgress * (ranged.magazine - ammo)) / ranged.magazine;
 		const state: HudState = {

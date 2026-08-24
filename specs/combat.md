@@ -51,7 +51,8 @@ produced a second sprite nothing simulated — it froze on screen forever.
   [movement.md](movement.md), and `scripts/aim-probe.ts`, which measures the
   angle a bullet actually left with against the angle the cursor asked for.
 - Bullet speed **600 px/s**, damage **10** per hit, and a **12-round
-  magazine** that auto-reloads in **800ms** — see the reload section below.
+  magazine** whose whole-magazine **clip reload** takes **890ms** — see the
+  reload section below.
 - Attack cooldown **250ms**, shared by all attacks.
 - **Limited ammunition: `magazinesPerLife` magazines per life.** One is loaded
   at spawn; the rest are a reserve the reload draws from. When both run out the
@@ -97,51 +98,63 @@ produced a second sprite nothing simulated — it froze on screen forever.
 Every weapon carries **`magazinesPerLife` magazines per life** and an **auto**
 reload: there is no pick-up and no manual reload key (R is the ultimate). One
 magazine is loaded at spawn and the rest form the reserve — measured in rounds.
-**Every weapon reloads one round at a time** (the Valve/CS model): the reload
-is a per-bullet rhythm, never a whole-magazine refill, so a partial reload
-costs only the rounds it moves, an interruption loses only the round being
-loaded, and an empty magazine under a held trigger fires each round the moment
-it lands. A gun that has spent its last round is **dry** until the next life,
-which is the whole of how the game forces the fight back to the sword.
+The reload is the **TF2 pair**, and the two halves behave differently:
+
+- **`clip` weapons reload the whole magazine in one action — full magazine
+  or nothing.** One timer runs (`reloadMs`) and the ammo does not move until
+  it completes, so an interruption produces nothing: a mid-reload stance
+  switch resets all progress, and a one-round top-up costs the same rack an
+  empty-to-full one does — close to full is not cheaper. The reserve is
+  debited once, at completion, for only the rounds the magazine was missing.
+- **`shell` weapons reload one round per cycle**, and a landed round is a
+  real round: the partial reload that can shoot, and firing mid-reload keeps
+  the shells already loaded.
+
+A gun that has spent its last round is **dry** until the next life, which is
+the whole of how the game forces the fight back to the sword.
 
 | Weapon | Magazine | Magazines per life | Reload |
 |---|---|---|---|
-| Lia's rifle | 12 | 4 | **Per round** — 70ms each, 120ms for the first from empty (a full rack ~0.9s) |
-| Anands' machine gun | 30 | 4 | **Per round** — 60ms each, 120ms for the first from empty (a full rack ~1.9s) |
-| Jeffs' shotgun | 5 | 4 | **Per round** — 1200ms each, 1300ms for the rack from empty |
+| Lia's rifle | 12 | 4 | **Clip** — the whole magazine in **890ms** |
+| Anands' machine gun | 30 | 4 | **Clip** — the whole magazine in **1860ms** |
+| Jeffs' shotgun | 5 | 4 | **Shell** — 1200ms each, 1300ms for the rack from empty |
 
 The rules, in the order a player meets them:
 
 - **Holding fire delays the reload.** The fighter shoots until the trigger is
-  released — a burst that stops with rounds left does not reload until the
-  button is let go. An **empty** magazine is the exception: there is nothing
-  to do with the trigger, so the reload runs even while it is held, and the
-  moment a round lands the held trigger fires it.
-- **Firing mid-reload cancels the load.** The rounds already in the magazine
-  stay, the round being loaded is lost, and the reload restarts from the
-  rounds that are left. That is the whole "shoot in the middle of reload" —
-  the shotgun always has its next blast close, and the interruption is the
-  only cost: the round never left the reserve.
+  released — TF2's auto-reload waits for the button to stop. An **empty**
+  magazine is the exception: there is nothing to shoot, so the reload runs
+  even while it is held, and the held trigger fires the moment rounds land.
+- **Firing mid-reload aborts the load — TF2's clip-abort-by-fire.** The
+  rounds the magazine already holds stay and the shot goes, the load in
+  progress is discarded, and a fresh reload starts when the trigger stops
+  again. For a shell weapon that is the whole "shoot in the middle of
+  reload": the shotgun always has its next blast close, and the interruption
+  is the only cost — the round never left the reserve.
 - **The reload draws only what the reserve has left, and never wastes.**
-  Fire two rounds and reload and exactly two rounds come out of the reserve —
-  a partial reload costs only the two rounds' worth of insertions. When the
-  reserve is empty the gun has only what is in the magazine, and a **dry**
-  gun (empty magazine, no reserve) stays dry until the next life.
-- **Each reload cycle loads exactly one round**, after the weapon's
-  `reloadRoundMs` — or, from an empty magazine, after the slower
-  `reloadFirstRoundMs` (the rack from empty is the slow one, the rounds that
-  follow it the fast ones). The shotgun's rounds take *longer* than the 900ms
-  between its blasts, so an emptied shotgun is a long silence; the rifle and
-  the machine gun reload faster than they fire, so their magazine is never the
-  bottleneck — the reserve is.
+  A clip reload's reserve debit is sized to what the magazine was actually
+  missing (a close-to-full gun takes one), a shell reload's to the shell that
+  landed; a reload that runs the reserve short fills what it can and stops.
+  When the reserve is empty the gun has only what is in the magazine, and a
+  **dry** gun (empty magazine, no reserve) stays dry until the next life.
+- **A clip reload completes in one action**, after the weapon's `reloadMs` —
+  interrupt it and it contributes nothing. **A shell reload completes one
+  round per cycle**, after `reloadRoundMs` — or, from an empty magazine, after
+  the slower `reloadFirstRoundMs` (the rack from empty is the slow one, the
+  rounds that follow it the fast ones). The shotgun's rounds take *longer*
+  than the 900ms between its blasts, so an emptied shotgun is a long silence;
+  the rifle and the machine gun reload faster than they fire, so their
+  magazine is never the bottleneck — the reserve is.
 - **The reload only runs while the gun is out, and a stance switch cancels
-  it.** The gun left the hand, so the in-progress load is dropped where it
-  stands — and the rounds that already landed stay: the shotgun's loaded
-  shells survive a stance switch exactly as they survive a shot, and the
-  reload restarts from the shells that are left when the gun comes back out.
-  Death and stun cancel the reload the same way. A respawn, a round reset and
-  a hero change refill the magazine **and the reserve** — in deathmatch a
-  round is a life, so a dry gun is dry only until death.
+  it.** The gun left the hand, so the load in progress is dropped where it
+  stands. For a clip weapon that is the whole "resets all progress": nothing
+  had loaded yet, so nothing is kept, and the next reload starts from zero
+  when the gun comes back out. For a shell weapon the rounds that already
+  landed stay — the shotgun's loaded shells survive a stance switch exactly
+  as they survive a shot — and the reload restarts from the shells that are
+  left. Death and stun cancel the reload the same way. A respawn, a round
+  reset and a hero change refill the magazine **and the reserve** — in
+  deathmatch a round is a life, so a dry gun is dry only until death.
 - The state (`ammo`, `reserveRounds`, `reloadTimer`) rides the wire so every
   client draws the HUD's ammo count, reserve and reload bar, but **only the
   server ticks it** — the fire that spends a round is the server's decision,

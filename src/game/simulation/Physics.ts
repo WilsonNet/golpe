@@ -1103,15 +1103,29 @@ export function canFire(
 // Finite ammo, `magazinesPerLife` magazines per life, and an **auto** reload
 // that starts the moment the fighter is not firing: no manual key (R is the
 // ultimate), no pick-up. One magazine is loaded at spawn and the rest form
-// the reserve (`reserveRounds`), measured in rounds; the reload moves rounds
-// from the reserve into the magazine and stops when either is empty — a dry
-// gun stays dry until the next life.
+// the reserve (`reserveRounds`), measured in rounds; the reload draws the
+// reserve into the magazine and stops when either is empty — a dry gun stays
+// dry until the next life.
 //
-// **Every weapon reloads one round at a time** (the Valve/CS model): a reload
-// is a per-bullet rhythm, never a whole-magazine refill. A partial reload
-// costs only the rounds it moves, an interruption loses only the round being
-// loaded, and the rifle and the machine gun ride the same code as the
-// shotgun's rack — the only per-weapon difference is the per-round time.
+// The reload is the TF2 pair:
+//
+// - **Clip weapons** (the rifle, the machine gun) reload **a whole magazine
+//   at once** — full magazine or nothing. One timer runs
+//   (`RangedWeaponDef.reloadMs`) and the ammo does not move until it
+//   completes, so an interruption produces nothing: a mid-reload stance
+//   switch resets the whole thing, and a close-to-full top-up costs the same
+//   rack an empty-to-full one does. The reserve is debited once, at
+//   completion — for only the rounds the magazine was actually missing, so
+//   nothing is ever wasted.
+// - **Shell weapons** (the shotgun) load **one round per cycle**, and a
+//   landed round is a real round: the partial reload that can shoot, and
+//   firing mid-reload keeps the shells already loaded.
+//
+// Firing aborts a reload — both styles, exactly TF2's clip-abort-by-fire:
+// the rounds the magazine already holds stay, the load in progress is
+// discarded, and a fresh reload starts the moment the trigger is released
+// again. An **empty** magazine is the exception — there is nothing to abort
+// with, so the reload runs even under a held trigger.
 //
 // This is **server-ticked only**. The fire that spends a round is the
 // server's decision, so the reload that follows it is too — the client draws
@@ -1135,24 +1149,26 @@ export function reserveRoundsFor(r: RangedWeaponDef): number {
  *   cancelled — those gates live at the callers, which reset the timer
  *   without calling here.
  * - **Not holding the gun: no reload, and any reload in progress is
- *   cancelled — a stance switch *is* dropping the weapon.** The loaded
- *   rounds stay; only the in-progress load is lost, and the reload restarts
- *   from the rounds that are left when the gun comes back out.
+ *   cancelled — a stance switch *is* dropping the weapon.** For a clip
+ *   weapon that is the whole "resets all progress": nothing has loaded yet,
+ *   so nothing is kept, and the next reload starts from zero when the gun
+ *   comes back out. A shell weapon keeps what already landed (those rounds
+ *   are in the magazine, not in progress), and its reload restarts from them.
  * - A full magazine never reloads.
  * - **An empty reserve never reloads.** The gun has only what is left in the
  *   magazine, and a dry gun (both empty) stays dry until the next life.
- * - **Holding fire with rounds in the mag delays the reload.** The fighter
- *   shoots until the button is released — CS and TF2 both wait for the
- *   trigger to be let go. An empty magazine is the exception: there is
- *   nothing to do with the button, so the reload runs even while held, and
- *   the moment a round lands the held trigger fires it.
- * - Firing cancels the reload — the in-progress round is lost. That is the
- *   whole "shoot in the middle of reload": the loaded rounds stay, the one
- *   being loaded does not, and the reload restarts from the rounds that are
- *   left. The interruption is the cost — the round never left the reserve.
- * - **Each cycle loads one round**, after `reloadRoundMs` — or, from an empty
- *   magazine, after the slower `reloadFirstRoundMs` (the rack from empty is
- *   the slow one, and the rounds that follow it the fast ones).
+ * - **Holding fire delays the reload.** The fighter shoots until the button
+ *   is released — TF2's auto-reload waits for the trigger to stop — and
+ *   firing aborts any load in progress. An empty magazine is the exception:
+ *   there is nothing to abort with, so the reload runs even while held, and
+ *   the held trigger fires the moment rounds land.
+ * - **A clip reload completes in one action**, after `reloadMs`, moving the
+ *   whole magazine from the reserve at once — or exactly what the reserve
+ *   has left if it runs short. Interrupted, it contributes nothing.
+ * - **A shell reload completes one round per cycle**, after `reloadRoundMs`
+ *   — or, from an empty magazine, after the slower `reloadFirstRoundMs` (the
+ *   rack from empty is the slow one, the rounds that follow it the fast
+ *   ones).
  */
 export function tickReload(
 	s: Pick<PlayerPosition, "ammo" | "reserveRounds" | "reloadTimer" | "stance">,
@@ -1171,8 +1187,31 @@ export function tickReload(
 		s.reloadTimer = 0;
 		return;
 	}
+	// Firing aborts the load — TF2's clip weapons abort by firing, and the
+	// shell weapons always did. With rounds in the magazine the abort is the
+	// trigger doing what it was going to do anyway; from empty there is
+	// nothing to abort with, so the reload keeps running under a held
+	// trigger. The shot itself is the fire branch's business, and it runs
+	// before this on the server tick.
 	if (input.attack && s.ammo > 0) {
 		s.reloadTimer = 0;
+		return;
+	}
+
+	if (r.reloadStyle === "clip") {
+		// Full magazine or nothing: the ammo stays put until the timer runs
+		// out, then the whole magazine lands at once — and the reserve is
+		// debited for only the rounds the magazine was missing, never more
+		// than it holds.
+		if (s.reloadTimer <= 0) s.reloadTimer = r.reloadMs;
+		s.reloadTimer -= dtMs;
+		if (s.reloadTimer <= 0) {
+			const missing = r.magazine - s.ammo;
+			const loaded = Math.min(missing, s.reserveRounds);
+			s.ammo += loaded;
+			s.reserveRounds -= loaded;
+			s.reloadTimer = 0;
+		}
 		return;
 	}
 

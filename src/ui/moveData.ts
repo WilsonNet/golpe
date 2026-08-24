@@ -361,7 +361,7 @@ export const MOVE_LISTS: Record<HeroId, HeroMoveList> = {
 				name: "Machine Gun",
 				command: { label: "E, then LMB", actions: ["gun", "attack"] },
 				prose:
-					"Four shots where the rifle fires one. Lower per-shot damage so the stream does not out-kill the rifle by double, faster bullets so a stream can actually be landed, and a decent magazine with a per-bullet reload. The dagger is the lightest weapon in the game; this is its stream.",
+					"Four shots where the rifle fires one. Lower per-shot damage so the stream does not out-kill the rifle by double, faster bullets so a stream can actually be landed, and a decent magazine with a whole-magazine rack. The dagger is the lightest weapon in the game; this is its stream.",
 				stats: [
 					{ label: "DMG", value: "5 / shot" },
 					{ label: "SPEED", value: "780 px/s" },
