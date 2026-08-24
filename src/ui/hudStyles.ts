@@ -500,4 +500,84 @@ export const HUD_CSS = `
 	min-height: 1.2em;
 	margin-top: 12px;
 }
+/* ---- the sound mixer ----
+   Shared by the Esc menu's Sound item and the root menu's Sound button: one
+   component, one store, one look. Sliders are tiny, thumbed and gold — the
+   input that matters gets the colour everything else on the menu wears. */
+.gd-sound {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	min-width: 380px;
+}
+.gd-sound-row {
+	display: grid;
+	grid-template-columns: 110px 1fr 44px 46px;
+	gap: 14px;
+	align-items: center;
+}
+.gd-sound-row-label {
+	font-size: 13px;
+	opacity: 0.78;
+}
+.gd-sound-slider {
+	-webkit-appearance: none;
+	appearance: none;
+	width: 100%;
+	height: 4px;
+	border-radius: 2px;
+	background: rgba(255, 255, 255, 0.25);
+	outline: none;
+	cursor: pointer;
+}
+.gd-sound-slider:focus-visible {
+	outline: 2px solid #0ec3c9;
+	outline-offset: 2px;
+}
+.gd-sound-slider::-webkit-slider-thumb {
+	-webkit-appearance: none;
+	appearance: none;
+	width: 14px;
+	height: 14px;
+	border-radius: 50%;
+	background: #ffd166;
+	border: 1px solid rgba(0, 0, 0, 0.4);
+}
+.gd-sound-slider::-moz-range-thumb {
+	width: 14px;
+	height: 14px;
+	border-radius: 50%;
+	background: #ffd166;
+	border: 1px solid rgba(0, 0, 0, 0.4);
+}
+.gd-sound-val {
+	font-size: 12px;
+	text-align: right;
+	opacity: 0.7;
+	font-variant-numeric: tabular-nums;
+}
+.gd-sound-btn {
+	background: #000;
+	color: inherit;
+	font: inherit;
+	font-size: 11px;
+	padding: 4px 8px;
+	border: 1px solid rgba(255, 255, 255, 0.3);
+	border-radius: 6px;
+	cursor: pointer;
+	white-space: nowrap;
+}
+.gd-sound-btn:hover {
+	border-color: #0ec3c9;
+	color: #0ec3c9;
+}
+.gd-sound-btn-on,
+.gd-sound-btn-on:hover {
+	border-color: #ffd166;
+	color: #ffd166;
+}
+.gd-sound-foot {
+	display: flex;
+	gap: 10px;
+}
 `;

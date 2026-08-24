@@ -41,6 +41,7 @@
 			"includes": [
 				"src/game/render/**",
 				"src/game/preview/**",
+				"src/game/sound/**",
 				"src/ui/**",
 				"src/game/ecs/**",
 				"src/game/input/**",

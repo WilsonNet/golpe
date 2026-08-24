@@ -51,6 +51,7 @@ import { ControlsDialog } from "./ControlsDialog";
 import { HUD_CSS } from "./hudStyles";
 import { MoveList } from "./MoveList";
 import { MENU_CSS } from "./menuStyles";
+import { SoundMixer } from "./SoundMixer";
 
 /** The requested room's defaults, as the server would create them. */
 const SCORE_LIMIT_FFA = 21;
@@ -58,7 +59,7 @@ const SCORE_LIMIT_TDM = 15;
 const TIME_LIMIT_SEC = 300;
 const FREEZE_TIME_SEC = 4;
 
-type View = "home" | "host" | "join" | "howto" | "controls" | "moves";
+type View = "home" | "host" | "join" | "howto" | "controls" | "moves" | "sound";
 
 interface HostSettings {
 	mode: MatchMode;
@@ -263,6 +264,16 @@ export function MainMenu({
 									<span>Aiming scheme, on-screen gamepad, rebinding.</span>
 								</button>
 							</div>
+							<button
+								className="gd-play-item"
+								type="button"
+								onClick={() => setView("sound")}
+							>
+								<strong>Sound</strong>
+								<span>
+									Master, music and effects — set the mix before you play.
+								</span>
+							</button>
 						</div>
 					</>
 				) : null}
@@ -289,6 +300,25 @@ export function MainMenu({
 					<>
 						<h2 className="gd-title">Options</h2>
 						<ControlsDialog onClose={() => setView("home")} />
+					</>
+				) : null}
+
+				{view === "sound" ? (
+					<>
+						<h2 className="gd-title">Sound</h2>
+						<p className="gd-sub">
+							Set the mix now — it applies immediately and is remembered.
+						</p>
+						<SoundMixer />
+						<div className="gd-row-actions">
+							<button
+								className="gd-btn"
+								type="button"
+								onClick={() => setView("home")}
+							>
+								Back
+							</button>
+						</div>
 					</>
 				) : null}
 

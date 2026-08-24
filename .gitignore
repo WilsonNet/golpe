@@ -31,3 +31,6 @@ home/
 
 # Ad-hoc AI fight log dumps
 fight-logs*.txt
+audio/soundfonts/
+__pycache__/
+.venv-audio/

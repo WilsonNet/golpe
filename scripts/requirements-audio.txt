@@ -1,0 +1,2 @@
+tinysoundfont>=0.3.7
+numpy>=2.0

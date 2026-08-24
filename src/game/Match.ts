@@ -138,6 +138,7 @@ import {
 	type TeamId,
 	teamName,
 } from "./simulation/Teams";
+import { sound } from "./sound/facade";
 import { TrainingRoom } from "./training/TrainingRoom";
 
 /** Client physics runs at a fixed 60Hz to match the server, whatever the display does. */
@@ -149,6 +150,18 @@ const RESET_DELAY_MS = 2000;
 const MAX_FRAME_DT_S = 0.05;
 /** ms per second, for converting a wall-clock difference into dt. */
 const MILLIS_PER_SECOND = 1000;
+/** How far a sound carries from the local fighter, world px — a screen is 800. */
+const AUDIO_RANGE_PX = 900;
+/** The pan sweep: a sound this far sideways fully hard-pans. */
+const AUDIO_PAN_RANGE_PX = 700;
+/** The music's bow for an denied ultimate, ms. */
+const DUCK_DENY_MS = 400;
+/** The music's bow for a cast — the freeze is at least this long, ms. */
+const DUCK_ULTIMATE_MIN_MS = 1100;
+/** The match-over fanfare owns this many ms of lowered music. */
+const DUCK_MATCH_OVER_MS = 2600;
+/** The play-of-the-game fanfare ducks this long, ms. */
+const DUCK_POTG_MS = 1400;
 /** The offline reload's dt clamp: a stall cannot reload the whole magazine at once. */
 const MAX_RELOAD_STEP_SECONDS = 0.25;
 /** HUD state is throttled to this cadence; the snapshot itself is the truth. */
@@ -358,6 +371,10 @@ export class Match {
 		// values fall back to the default rather than failing to boot.
 		this.hero = isHeroId(launch.hero) ? launch.hero : DEFAULT_HERO;
 		this.botHero = launch.botHero;
+		// The hero picked the moment the match boots owns the music — each
+		// fighter has a theme. The menu's title theme hands off under the
+		// engine's crossfade; `onLocalHero` re-points it mid-match.
+		sound.setMusic(this.hero);
 		drawArena(stage.background, stage.arena, this.arena);
 
 		this.queries = createQueries(this.world);
@@ -789,7 +806,8 @@ export class Match {
 				onLocalHero: (hero) => {
 					// The server echoed a hero change (the URL's `?hero=`, or the
 					// Esc menu). Swap the sheet under the fighter, the kit the HUD
-					// describes, and the aim preview's shape.
+					// describes, the aim preview's shape — and the music: each
+					// hero has their own theme (see audio/README.md).
 					if (hero === this.hero) return;
 					this.hero = hero;
 					this.local.fighter.hero = hero;
@@ -797,6 +815,7 @@ export class Match {
 					const idleTex = idleTexture(hero, this.local.body.facing);
 					if (idleTex) this.local.sprite.texture = idleTex;
 					this.local.sprite.scale.set(sheetScale(HEROES[hero].sheet));
+					sound.setMusic(hero);
 					this.emitHud(true);
 				},
 				onReconcile: (result) => {
@@ -880,6 +899,19 @@ export class Match {
 						event,
 						event.attackerId === this.online?.manager.myId,
 					);
+					// The sound: a guard that stops a swing is a guard-break
+					// clang; the blast and the bomb's nudge are the heavy thump;
+					// a backstab is the extra-skinny foomp. Attenuated by where
+					// the exchange happened.
+					this.playAt(
+						event.outcome === "parried"
+							? "guardbreak"
+							: event.outcome === "hit"
+								? "hit"
+								: "hit-heavy",
+						event.x,
+						event.y,
+					);
 					// A hit is an announced discontinuity, exactly like a respawn. Only
 					// the server can know a swing connected, so the client necessarily
 					// mispredicts the stun and knockback and then rewinds into them —
@@ -892,6 +924,10 @@ export class Match {
 					// counts it, because a deny is a first-class outcome there.
 					this.denyFx.deny(event.x, event.y);
 					this.training?.recordDeny();
+					// The two-note drop, and a short duck: a denied ultimate is the
+					// fight's biggest anticlimax, and the music sits under it.
+					this.playAt("deny", event.x, event.y);
+					sound.duck(DUCK_DENY_MS);
 				},
 				onKill: (event) => {
 					// The frag, for the feed. Names and the killer's kit are
@@ -899,6 +935,11 @@ export class Match {
 					// or an info map. Effects only, like a deny: the score already
 					// travelled in the snapshot.
 					const killerId = event.killerId;
+					if (killerId === this.online?.manager.myId) {
+						// Your own frag earns one clear confirmation; other people's
+						// kills carry their own hit sounds and need no more.
+						sound.play("kill");
+					}
 					EventBus.emit(HUD_EVENTS.kill, {
 						killerId,
 						killer:
@@ -923,6 +964,7 @@ export class Match {
 					// a first-class outcome there.
 					this.items.explode(event.x, event.y, event.radius);
 					this.training?.recordExplosion();
+					this.playAt("explosion", event.x, event.y);
 				},
 				onRooted: (event) => {
 					// The caption and the burst, and nothing else: the root already
@@ -932,6 +974,7 @@ export class Match {
 					this.rootedFx.rooted(event.x, event.y);
 					this.items.trapBurst(event.x, event.y);
 					this.training?.recordRooted();
+					this.playAt("root", event.x, event.y);
 				},
 				onFighterAdded: (id) => this.addRemoteFighter(id),
 				onFighterRemoved: (id) => this.despawnFighter(id),
@@ -956,12 +999,17 @@ export class Match {
 					if (casterId === this.online?.manager.myId) {
 						this.diagnostics.recordUltimateCast();
 					}
+					// The boom and the song's bow out: the cinematic freeze is a
+					// held moment, and the music ducks under it exactly as long.
+					sound.play("ult-cast");
+					sound.duck(this.online?.cinematic?.totalMs ?? DUCK_ULTIMATE_MIN_MS);
 					console.log(
 						`[ULT] ${this.online?.nameOf(casterId) ?? casterId} casts`,
 					);
 				},
 				onSingularityOpened: (field) => {
 					this.blackHole.detonate(field.x, field.y, field.ownerTeam);
+					this.playAt("hole-open", field.x, field.y);
 					// An announced discontinuity, like a melee hit: the server has just
 					// started yanking fighters toward a point no client could have
 					// predicted, and the first frame of that is tens of pixels. Counting
@@ -973,6 +1021,7 @@ export class Match {
 					// the freeze's payload. The damage and the ring are full state and
 					// arrive with every snapshot; this is only the loud first beat.
 					this.blossomFx.open(field.x, field.y, field.ownerTeam);
+					this.playAt("blossom", field.x, field.y);
 					this.diagnostics.markTeleport(TELEPORT_GRACE_FRAMES);
 				},
 				onMatch: (status, standings) => {
@@ -999,6 +1048,16 @@ export class Match {
 						`${who} — ${msg.scores.join(" : ")}`,
 					);
 					EventBus.emit("round-won", msg);
+					// The judgment sting: won, lost, drawn — the music already
+					// knows which side this seat is on.
+					const myTeam = this.online?.myTeam ?? null;
+					const judgment =
+						msg.team === null
+							? "draw"
+							: msg.team === myTeam
+								? "round-win"
+								: "round-lose";
+					sound.play(judgment);
 					console.log(`[ROUND] ${msg.round}: ${who} (${msg.scores.join("-")})`);
 				},
 				onRoundLive: (msg) => {
@@ -1007,6 +1066,7 @@ export class Match {
 					// server saying "now", so no two screens can start on different
 					// frames because their clocks drifted.
 					EventBus.emit(HUD_EVENTS.status, "FIGHT!");
+					sound.play("fight");
 					console.log(`[ROUND] ${msg.round} live`);
 				},
 				onMatchOver: (msg) => {
@@ -1014,6 +1074,10 @@ export class Match {
 						`[MATCH] over by ${msg.reason}, winner ${msg.winnerId ?? "nobody"}`,
 					);
 					EventBus.emit("match-over", msg);
+					// The final verdict: a fanfare, and the music sits under it —
+					// the ceremony (card, reel, podium) owns this half-minute.
+					sound.play("match-over");
+					sound.duck(DUCK_MATCH_OVER_MS);
 					// The victory card's payload, filled in when it arrives — the
 					// announcement beats `match-over` onto the wire, so the window is
 					// scheduled here and the card is drawn from the freshest standings.
@@ -1021,6 +1085,9 @@ export class Match {
 					this.scheduleVictoryWindow();
 				},
 				onPotg: (msg) => {
+					// The sting that says a play of the game exists — before the
+					// reel itself has proved either.
+					sound.play("potg-announce");
 					// Parked until the victory window has closed: the ceremony must not
 					// cut the card (or the breathing) short. If the window is already
 					// over — a client that joined after the match ended — it begins
@@ -1436,6 +1503,9 @@ export class Match {
 		// An attack lights a hidden fighter back up — same frame's occlusion,
 		// so the reveal only ever touches somebody actually concealed.
 		this.updateSmokeReveal(dtMs);
+		// A swing, a shot, a step — the sounds ride the same edges the reveal
+		// reads, in the same frame, for the same state.
+		this.scrubAudioCues();
 
 		// Presentation, in dependency order: animation picks the frame, sync moves
 		// the sprites, effects read the same state, then the camera settles.
@@ -1599,6 +1669,19 @@ export class Match {
 	/** ms of attack-reveal left, per fighter id. Presentation only. */
 	private smokeRevealMs = new Map<string, number>();
 
+	// Audio cue edges: what each fighter's body was last frame, per id. A change
+	// between frames is the sound. Everything here is presentation — the state
+	// itself is the server's; this map is the client's memory of it.
+	private cueGrounded = new Map<string, boolean>();
+	private cueAirJumps = new Map<string, number>();
+	private cueDashing = new Map<string, boolean>();
+	private cueRolling = new Map<string, boolean>();
+	private cueMelee = new Map<string, string>();
+	private cuePlunging = new Map<string, boolean>();
+	private cueAmmo = new Map<string, number>();
+	private cueReloading = new Map<string, boolean>();
+	private cueDead = new Map<string, boolean>();
+
 	/** The last frame's melee action, per fighter id — a change is a swing starting. */
 	private lastMeleeAction = new Map<string, MeleeAction>();
 
@@ -1713,6 +1796,145 @@ export class Match {
 		}
 	}
 
+	// =========================================================
+	//  AUDIO CUES
+	// =========================================================
+
+	/**
+	 * How loud and how displaced a sound at `x,y` must be, from the local
+	 * fighter's seat. 1 and 0 at your own feet; silence past `AUDIO_RANGE_PX`.
+	 * A swing two screens away stays in the fight without the fight becoming a
+	 * single 25Hz roar.
+	 */
+	private soundAt(x: number, y: number): { gain: number; pan: number } {
+		const me = this.local.renderPos ?? this.local.body;
+		const dx = x - me.x;
+		const dy = y - me.y;
+		const gain = clamp(1 - Math.hypot(dx, dy) / AUDIO_RANGE_PX, 0, 1);
+		return { gain, pan: clamp(dx / AUDIO_PAN_RANGE_PX, -1, 1) };
+	}
+
+	/**
+	 * Play a sound at a world position, with distance falloff and panning.
+	 * Position-less sounds (UI, the FIGHT sting) go straight to the facade.
+	 */
+	private playAt(
+		name: string,
+		x: number,
+		y: number,
+		opts: { gain?: number } = {},
+	) {
+		const spot = this.soundAt(x, y);
+		if (spot.gain <= 0) return;
+		const gain = Math.max(0, spot.gain * (opts.gain ?? 1));
+		if (gain === 0) return;
+		sound.play(name, { gain, pan: spot.pan });
+	}
+
+	/**
+	 * The one movement/weapon sound per fighter, when his body's state changes.
+	 *
+	 * The same edges the smoke reveal reads — a change in `meleeAction` is a
+	 * swing starting, an ammo drop is a shot, a fresh item is a throw — plus
+	 * the locomotion edges (grounded, dash, tumble, reload, a death and a
+	 * life). A duel hears its own fight at full volume; a sixteen-fighter room
+	 * hears only what is near the camera, because `playAt` attenuates and
+	 * `sfx.ts` cooldowns per name.
+	 *
+	 * A replay does not make sound: the projector re-points the entities at
+	 * recorded frames, and the recorded clip is the *past*. Only the live room
+	 * makes noise.
+	 */
+	private scrubAudioCues() {
+		if (this.potgSample) return;
+		for (const e of this.queries.drawnFighters) {
+			const id = e.fighter.id;
+			const b = e.body;
+
+			const grounded = this.cueGrounded.get(id) ?? b.grounded;
+			if (grounded && !b.grounded) this.playAt("jump", b.x, b.y);
+			else if (!grounded && b.grounded) this.playAt("land", b.x, b.y);
+			this.cueGrounded.set(id, b.grounded);
+
+			const jumps = this.cueAirJumps.get(id) ?? b.airJumps;
+			if (jumps > b.airJumps) this.playAt("jump-air", b.x, b.y);
+			this.cueAirJumps.set(id, b.airJumps);
+
+			const dashing = this.cueDashing.get(id) ?? b.dashActiveTimer > 0;
+			if (!dashing && b.dashActiveTimer > 0) this.playAt("dash", b.x, b.y);
+			this.cueDashing.set(id, b.dashActiveTimer > 0);
+
+			const rolling = this.cueRolling.get(id) ?? b.tumbleActiveTimer > 0;
+			if (!rolling && b.tumbleActiveTimer > 0) this.playAt("roll", b.x, b.y);
+			this.cueRolling.set(id, b.tumbleActiveTimer > 0);
+
+			const move = b.meleeAction as string;
+			if (move !== "none" && move !== this.cueMelee.get(id)) {
+				this.playAt(this.swingSound(move), b.x, b.y);
+			}
+			this.cueMelee.set(id, move);
+
+			if (b.plunging && !this.cuePlunging.get(id)) {
+				this.playAt("massive-swing", b.x, b.y, { gain: 0.7 });
+			}
+			this.cuePlunging.set(id, b.plunging);
+
+			const ammo = b.ammo;
+			if (ammo < (this.cueAmmo.get(id) ?? ammo)) {
+				this.playAt(this.shotSound(e.fighter.hero), b.x, b.y, { gain: 0.8 });
+			}
+			this.cueAmmo.set(id, ammo);
+
+			const reloading = b.reloadTimer > 0;
+			if (reloading && !this.cueReloading.get(id)) {
+				this.playAt(this.reloadSound(e.fighter.hero), b.x, b.y, { gain: 0.8 });
+			}
+			this.cueReloading.set(id, reloading);
+
+			const dead = e.fighter.hp <= 0;
+			if (dead && !this.cueDead.get(id)) this.playAt("die", b.x, b.y);
+			else if (!dead && this.cueDead.get(id)) this.playAt("spawn", b.x, b.y);
+			this.cueDead.set(id, dead);
+		}
+	}
+
+	/** The swing's whoosh, by move: a slash; the chain links rise; nothing else. */
+	private swingSound(move: string): string {
+		switch (move) {
+			case "slash":
+				return "swing";
+			case "slash2":
+				return "swing";
+			case "slash3":
+				return "swing";
+			case "stab":
+				return "swing-stab";
+			case "thrust":
+				return "thrust";
+			case "uppercut":
+			case "shoryuken":
+				return "uppercut";
+			case "massive":
+				return "massive-swing";
+			default:
+				return "swing";
+		}
+	}
+
+	/**
+	 * The one-shot's name, by the hero's ranged weapon: the rifle barks, the
+	 * machine gun chatters, the shotgun booms. See specs/heroes.md.
+	 */
+	private shotSound(hero: string): string {
+		return hero === "jeffs" ? "shot-heavy" : "shot";
+	}
+
+	/** The reload's rack: a clip weapon reloads in one action; the shotgun
+	 * pumps a shell at a time. */
+	private reloadSound(hero: string): string {
+		return hero === "jeffs" ? "reload-shell" : "reload";
+	}
+
 	private updateUltimate(dtMs: number) {
 		// A replay draws the hole *it recorded*, not whatever the live match is
 		// doing underneath — the room keeps playing during the ceremony, and a
@@ -1756,6 +1978,7 @@ export class Match {
 		const readyNow = charge >= ULT_MAX_CHARGE;
 		if (readyNow !== this.ultReadyLast) {
 			this.ultReadyLast = readyNow;
+			if (readyNow) sound.play("ult-ready");
 			EventBus.emit("ult-charge", charge);
 		}
 
@@ -2109,6 +2332,10 @@ export class Match {
 		this.potgSample = null;
 		this.potgHidden.clear();
 		this.ensurePotgLayers();
+		// The reel's own theme: the announcement already stung; now the reel
+		// really starts, and the music clears the floor for it.
+		sound.play("potg");
+		sound.duck(DUCK_POTG_MS);
 		// The live projectiles belong to a match that is still running underneath
 		// this. Hidden as a layer rather than released one by one: the session owns
 		// that pool and will keep filling it.
@@ -3155,5 +3382,8 @@ export class Match {
 		this.items.destroy();
 		this.training?.destroy();
 		this.online?.disconnect();
+		// Leaving a match returns the title screen's music to the page even
+		// though the page itself never changes — the menu reappears after.
+		sound.setMusic("title");
 	}
 }

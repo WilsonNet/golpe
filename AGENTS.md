@@ -47,12 +47,16 @@ skill({ name: "feedback-loop" })    # the full workflow
 | What are items, and how do charges work? | [`specs/items.md`](specs/items.md) |
 | What should the menu do? | [`specs/menu.md`](specs/menu.md) — when it shows, and how choices become URLs |
 | What happens when a match ends? | [`specs/play-of-the-game.md`](specs/play-of-the-game.md) — the reel, the camera edit, then the podium |
+| What should the game sound like, and where does the music come from? | [`specs/audio.md`](specs/audio.md) · [`audio/README.md`](audio/README.md) — MIDI sources, the soundfont per track, the mixer |
 | What rule will I break if I'm careless? | [`docs/invariants.md`](docs/invariants.md) |
 | Where does this code live, and who owns it? | [`docs/architecture.md`](docs/architecture.md) |
 | How do I measure anything? | [`docs/diagnostics.md`](docs/diagnostics.md) + the `feedback-loop` skill |
 | How do I run the game? | [`docs/running-the-game.md`](docs/running-the-game.md) |
 | How do I slice a raw art board into a game sheet? | [`docs/sprite-slicer.md`](docs/sprite-slicer.md) — the `?slicer=true` workshop |
 | Why are there symlinks everywhere? | [`docs/agent-config.md`](docs/agent-config.md) |
+
+# The same rules do not apply to every file — read the section that matches
+# what you are about to touch. This is the index for the rest of the repo.
 
 **`specs/` is the source of truth for behaviour.** Code is volatile; intent
 stated in English survives. **Change behaviour, change the spec, in the same
@@ -275,6 +279,8 @@ tsx scripts/dash-probe.ts                            # double-tap dash delivery,
 tsx scripts/screens-probe.ts                         # ?screen=N room: spawn spread + follow camera
 tsx scripts/ultimate-probe.ts                        # the black hole: hold to aim, release to cast, freeze, capture
 tsx scripts/potg-probe.ts                            # play of the game: the reel, the camera edit, the podium waiting
+tsx scripts/audio-probe.ts                           # the sound loop: music latches, combat sfx fire, the mixer persists
+python3 scripts/make-audio.py                        # re-render the music loops from their MIDI sources (→ public/audio/)
 python3 scripts/make-potg-art.py                       # regenerate the ceremony's sunburst and medal
 python3 scripts/make-anands-art.py                       # compose the second hero's hand-drawn art into the shipped sheets
 python3 scripts/make-roll-art.py                      # regenerate the tumble strip from a hero sheet
@@ -581,6 +587,43 @@ while stunned; the gun fires along the same angle. See
 Buttons are passed to the simulation raw — it does its own press-edge detection,
 and edge-detecting in the scene too would desync client and server.
 
+## Sound
+
+Four music loops — the title theme plus one per hero — and one synthesized
+SFX bank, mixed on three channels in the **Sound** menu (root menu *and* Esc
+menu — one component, one store, one `localStorage`). See
+[specs/audio.md](specs/audio.md) and
+[`audio/README.md`](audio/README.md).
+
+- **The music is edit-and-render, never hand-tuned in the browser.** The
+  source is a set of MIDI files (one per theme) in `audio/midi/`;
+  `scripts/make-audio.py` renders each through the manifest's soundfont
+  (`MuseScore_General.sf3`, MIT) **per stem, then mixes and masters in code**
+  (mix sheet in dB, bus compression, ≈ −20 LUFS target, ≤ −1 dBFS true
+  peak) into `public/audio/*.wav`. Want a new drum sound or a different
+  voice? Swap the soundfont or edit the MIDI — never the WAV. The manifest's
+  instrument table tells you exactly which synth voices each track.
+- **The loop's seam is a composed thing.** 16-bar arrangements: intro, A, B,
+  a crest, and a dominant hand-off bar that the wrap resolves (see the
+  manifest's structure rules). Fills sit on section boundaries, never on the
+  wrap.
+- **A match plays the local fighter's theme** — `?hero=` (or the Esc menu
+  hero change) picks it, like the kit. The title theme belongs to the root
+  menu.
+- **Combat sounds detect state edges, exactly like the smoke reveal.**
+  `Match.scrubAudioCues` reads `meleeAction`, ammo, reload, grounded, dash and
+  tumble transitions from the same snapshots the renderer reads; server events
+  supply the rest (hits, blocks, explosions, ultimates, rounds). Every
+  world-positioned sound is distance-attenuated and panned — the mixer never
+  skips the fight, it mixes it.
+- **The SFX bank is art-tuned code** (`src/game/sound/sfx.ts`) — that is why
+  `biome.json` scopes `noMagicNumbers` off for `src/game/sound/**`, the same
+  scope `render/` gets for colours. A sound is a recipe, not numbers to name.
+- **The audio loop is measured** by `scripts/audio-probe.ts` (context reaches
+  running after a gesture, the title theme and the hero theme both latch, real
+  combat sounds fire, the mixer write persists across reload). Load the
+  `game-audio` skill before touching the soundtrack.
+
 ## Skills
 
 Every skill lives in `.agents/skills/<name>/SKILL.md` and is loaded with
@@ -590,6 +633,9 @@ skill verifies it.
 - **`feedback-loop`** — Diagnosing physics jitter, network desync, projectile or
   combat bugs. The canonical test is online AI vs AI; the training probe is the
   scalpel for a single interaction.
+- **`game-audio`** — The soundtrack: editing the MIDI source, the per-stem
+  render/mix/master pipeline (LUFS targets, seam rules), retuning the SFX bank
+  and the client engine, verified with the audio probe.
 - **`herdr-dev-workspace`** — Starting, inspecting or stopping the dev servers in
   visible herdr panes instead of background processes.
 - **`hud-design`** — The in-match HUD: the canvas/DOM split, the Chrono Trigger /

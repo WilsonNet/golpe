@@ -23,9 +23,10 @@ import { ControlsDialog } from "./ControlsDialog";
 import { HeroSelect } from "./HeroSelect";
 import { HUD_CSS } from "./hudStyles";
 import { MoveList } from "./MoveList";
+import { SoundMixer } from "./SoundMixer";
 import { useMatch } from "./useMatch";
 
-type View = "menu" | "controls" | "heroes" | "room" | "moves";
+type View = "menu" | "controls" | "heroes" | "room" | "moves" | "sound";
 
 // Cache last roster so a menu opened after the last broadcast still has data.
 // Updated by the single global listener below — no component needs to request it.
@@ -128,6 +129,7 @@ export function PauseMenu({
 						onHeroes={() => setView("heroes")}
 						onMoves={() => setView("moves")}
 						onControls={() => setView("controls")}
+						onSound={() => setView("sound")}
 						onRoom={() => setView("room")}
 						onExit={onExitToMenu}
 						confirmExit={confirmExit}
@@ -135,6 +137,21 @@ export function PauseMenu({
 					/>
 				) : view === "moves" ? (
 					<MoveList hero={readStoredHero()} onClose={() => setView("menu")} />
+				) : view === "sound" ? (
+					<>
+						<h2 className="gd-title">Sound</h2>
+						<p className="gd-sub">
+							Set the mix now — it applies immediately and is remembered.
+						</p>
+						<SoundMixer />
+						<button
+							className="gd-btn"
+							type="button"
+							onClick={() => setView("menu")}
+						>
+							Back
+						</button>
+					</>
 				) : view === "heroes" ? (
 					<>
 						<h2 className="gd-title">Heroes</h2>
@@ -178,6 +195,7 @@ function MainMenuView({
 	onHeroes,
 	onMoves,
 	onControls,
+	onSound,
 	onRoom,
 	onExit,
 	confirmExit,
@@ -187,6 +205,7 @@ function MainMenuView({
 	onHeroes: () => void;
 	onMoves: () => void;
 	onControls: () => void;
+	onSound: () => void;
 	onRoom: () => void;
 	onExit: () => void;
 	confirmExit: boolean;
@@ -216,6 +235,9 @@ function MainMenuView({
 				</button>
 				<button className="gd-btn" type="button" onClick={onControls}>
 					Controls
+				</button>
+				<button className="gd-btn" type="button" onClick={onSound}>
+					Sound
 				</button>
 				{confirmExit ? (
 					<>

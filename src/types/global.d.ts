@@ -25,6 +25,8 @@ import type {
 } from "../game/simulation/Deathmatch";
 import type { MeleePhase, PlayerPosition } from "../game/simulation/Physics";
 import type { MatchMode, TeamId } from "../game/simulation/Teams";
+import type { AudioKitState } from "../game/sound/engine";
+import type { AudioChannel } from "../game/sound/mixer";
 import type { TrainingApi } from "../game/training/report";
 
 export interface GameStateSnapshot {
@@ -380,5 +382,19 @@ declare global {
 		};
 		/** Study a preview frame by frame: 1 is real time, 0.25 is a quarter. */
 		__previewSpeed?: (speed: number) => void;
+		/**
+		 * Every sound that has played, which music track is latched, the
+		 * context state and the mixer preferences — the audio feedback loop's
+		 * eye. `scripts/audio-probe.ts` reads exactly this.
+		 */
+		__audioState?: () => AudioKitState;
+		/** Play one SFX by bank name — the same path the game uses. */
+		__audioPlay?: (name: string) => void;
+		/**
+		 * Write a mixer channel's volume — deliberately the same store the
+		 * Sound menu writes, so an automated run exercises the path a player
+		 * takes instead of a bypass nobody plays.
+		 */
+		__audioSetVolume?: (channel: AudioChannel, value: number) => void;
 	}
 }

@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { GameCanvas } from "./GameCanvas";
 import {
 	isMenuShape,
 	type LaunchParams,
 	serializeLaunchParams,
 } from "./game/online/launch";
+import { installUiSounds, sound } from "./game/sound/facade";
 import { FightHud } from "./ui/FightHud";
 import { MainMenu } from "./ui/MainMenu";
 import { MatchOver } from "./ui/MatchOver";
@@ -66,6 +67,13 @@ function App() {
 	const [started, setStarted] = useState(
 		() => !isMenuShape(window.location.search),
 	);
+
+	// The soundtrack follows the page: the root menu is the title theme; a
+	// match hands the music to the local fighter's theme (Match re-points it).
+	useEffect(() => {
+		installUiSounds();
+		sound.setMusic("title");
+	}, []);
 
 	/** Commit a menu choice: make the URL the launch request, then boot. */
 	const launch = (params: LaunchParams) => {
