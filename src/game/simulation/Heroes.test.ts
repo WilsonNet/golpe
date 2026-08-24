@@ -432,6 +432,27 @@ describe("the dragon thrust", () => {
 		expect(s.x).toBeLessThanOrEqual(WORLD.right);
 	});
 
+	it("endures the commitment when launched into the floor at its feet", () => {
+		// A grounded caster releasing into the floor is already in contact with
+		// the obstacle at launch. Without the minimum the ride ended on the
+		// launch's own first tick: zero ticks long, no lunge, no flight — a
+		// spent ultimate with no visible cast at all. The minimum keeps the
+		// ride alive past the first tick, and the obstacle claims it once it
+		// has flown.
+		let s = dagger({
+			dragonTimer: DRAGON_RIDE_MS,
+			dragonVX: 0,
+			dragonVY: DRAGON_SPEED,
+		});
+		s = ticks(s, {}, 1);
+		expect(s.dragonTimer).toBeGreaterThan(0);
+		// 200ms of commitment: 12 ticks at 60Hz, 14 covers the clock jitter.
+		s = ticks(s, {}, 14);
+		expect(s.dragonTimer).toBe(0);
+		expect(s.vx).toBe(0);
+		expect(s.vy).toBe(0);
+	});
+
 	it("sweeps the whole path: the swept box reaches back to the launch point", () => {
 		const s = {
 			x: 400,

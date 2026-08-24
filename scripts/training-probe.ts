@@ -23,6 +23,7 @@ import type { Page } from "playwright";
 import { chromium } from "playwright";
 import type { MeleeEventMsg } from "../src/game/online/types";
 import type { MeleeMove, MeleeOutcome } from "../src/game/simulation/Physics";
+import { DRAGON_DAMAGE } from "../src/tweakables/ultimate";
 import type {
 	TrainingReport,
 	TrainingScenario,
@@ -1247,7 +1248,7 @@ const BATTERY: BatteryRow[] = [
 	},
 
 	{
-		name: "the dragon thrust sweeps the line",
+		name: "the dragon thrust sweeps the line once — one hit per cast",
 		dagger: true,
 		scenario: {
 			name: "dragon thrust",
@@ -1257,11 +1258,11 @@ const BATTERY: BatteryRow[] = [
 		},
 		verify(report) {
 			const c = checks(report);
-			c.atLeast(
-				"dummy took the dragon's damage",
-				report.player.damageDealt,
-				30,
-			);
+			// One hit per cast, not per tick: the swept box keeps the knocked
+			// victim inside it for the whole run, so the latch is what separates
+			// a line sweep from a shredder.
+			c.eq("dragon damage", report.player.damageDealt, DRAGON_DAMAGE);
+			c.eq("dragon events", report.events.length, 1);
 			c.atLeast("melee events", report.events.length, 1);
 			return c.fails;
 		},

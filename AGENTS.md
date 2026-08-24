@@ -183,6 +183,12 @@ One line each; the war story behind every one is in
 - **The black hole's pull is an argument to `tickPlayer`**, and the friendly-fire
   rule is one predicate (`fieldAffects`). A pull applied on top of predicted
   state is erased by the next reconciliation.
+- **A dragon cast is never zero ticks long, and each sweep latch belongs to one
+  move.** The obstacle-end is committed to 200ms (`DRAGON_MIN_RIDE_MS`) in
+  `tickPlayer`, so a release into the floor at your feet is a dug-in slam, not a
+  spent ultimate that never fired; and the thrust's and dragon's one-hit-per-cast
+  latches live apart, because sharing one meant each resolver deleted the other's
+  the tick it was born and the dragon hit at 30 damage a tick.
 - **Friendly fire is one predicate too, and every weapon asks it.** `hostile()`
   in `simulation/Teams.ts`. A weapon that compares teams itself is a weapon that
   disagrees with the sword the day the rule changes — and `team: null` is hostile

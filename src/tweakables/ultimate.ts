@@ -185,6 +185,28 @@ export const DRAGON_SPEED = 1500;
  */
 export const DRAGON_RIDE_MS = 900;
 
+/**
+ * The ride's **lower** bound: an obstacle cannot end the ride until it has
+ * flown this long.
+ *
+ * The cast ends on the moment the rider is *already touching* an obstacle in
+ * the launch direction — a grounded caster releasing into the floor, or a
+ * fighter backed against the wall — the obstacle-end condition would fire on
+ * the launch's own first tick, the ride would be zero ticks long, the rider
+ * would never visibly thrust at all, and a spent ultimate would read as
+ * "the dragon did not fire". The floor is exactly where an Anands player's
+ * cursor rests between fights (the dagger's range is the body), so this was
+ * not an edge case. With the floor in place the launch always shows: the
+ * dragon's lunge and the start of its flight play, and a line into an
+ * obstacle reads as the dragon slamming into it full tilt and stopping.
+ *
+ * 200ms is the ride strip's first two cells at 10fps (the lunge into the
+ * dragon, then the first flight frame) — the smallest window in which the
+ * move visibly happened. The swept box follows the ride, so a dug-in slam
+ * still sweeps everything on its floor-level path.
+ */
+export const DRAGON_MIN_RIDE_MS = 200;
+
 /** Damage per fighter the dragon passes through. Big: it can hit several. */
 export const DRAGON_DAMAGE = 30;
 

@@ -24,6 +24,7 @@ import {
 } from "./Collision.js";
 import { type HeroKit, LIA_KIT } from "./Heroes.js";
 import { ROOT_MS, type Trap, trapCatches } from "./Items.js";
+import { DRAGON_MIN_RIDE_MS, DRAGON_RIDE_MS } from "../../tweakables/ultimate.js";
 import {
 	bombBlastFor,
 	bombFallHeight,
@@ -176,6 +177,7 @@ export {
 	// with.
 	DRAGON_DAMAGE,
 	DRAGON_KNOCKBACK_PX_S,
+	DRAGON_MIN_RIDE_MS,
 	DRAGON_RIDE_MS,
 	DRAGON_SPEED,
 	DRAGON_STUN_MS,
@@ -1012,11 +1014,21 @@ export function tickPlayer(
 	// floor, which is a line the dragon is allowed to sweep. Ending the ride
 	// also ends whatever move the rider was making when the ride began — the
 	// cast's cancel, delivered here on both sides of the wire.
+	//
+	// **The obstacle cannot end the ride it begins on.** A grounded caster
+	// releasing into the floor, or a fighter launched into the wall at their
+	// back, is *already in contact* with the obstacle at the launch — the end
+	// would fire on the first tick, the ride would be zero ticks long, and a
+	// spent ultimate would look like the dragon never fired. `DRAGON_MIN_RIDE_MS`
+	// is the commitment every cast gets: the launch always shows the lunge and
+	// the start of the flight, then the obstacle claims the rider.
 	if (s.dragonTimer > 0) {
+		const rideElapsedMs = DRAGON_RIDE_MS - s.dragonTimer;
 		if (
-			contacts.wall !== "none" ||
-			contacts.ceiling ||
-			(contacts.grounded && s.dragonVY > 0)
+			rideElapsedMs >= DRAGON_MIN_RIDE_MS &&
+			(contacts.wall !== "none" ||
+				contacts.ceiling ||
+				(contacts.grounded && s.dragonVY > 0))
 		) {
 			s.dragonTimer = 0;
 			s.vx = 0;

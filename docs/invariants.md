@@ -159,6 +159,23 @@ Full rules in [`specs/ultimate.md`](../specs/ultimate.md).
 - **Ult charge is not in `PlayerPosition`.** It is paid out of damage, which only
   the server sees, and the simulation never reads it — so it travels beside `hp`
   in the snapshot rather than on the replay path.
+- **A sweeping latch is owned by one move, not by one fighter.** The thrust's and
+  the dragon's "one hit per cast" latches used to share one map keyed by the
+  attacking fighter, and each resolver cleared the entry whenever the fighter was
+  *not* doing its own move — so the thrust pass deleted the dragon's latch on the
+  very tick it was created, and the dragon's one-hit rule silently became one hit
+  per tick. The knockback the dragon applies keeps the victim drifting inside the
+  swept box, so the multi-hit was not a blip: a dig into the floor shredded
+  fighters at 30 damage a tick. It was invisible because the probe row asserted
+  `>= 30` damage, which a per-tick shredder satisfies — the row now asserts the
+  exact number and event count.
+- **An obstacle cannot end a ride on the launch tick it produced.** A grounded
+  rider releasing into the floor is already touching it: the first tick's contact
+  ended the dragon thrust instantly, the ride was zero ticks long, and a spent
+  ultimate read as "the dragon never fired" — common, because the cursor naturally
+  rests near the feet. The ride commits `DRAGON_MIN_RIDE_MS` (200ms, two strip
+  cells: the lunge and the first flight frame) before an obstacle may claim it,
+  in `tickPlayer`, so both sides dig in and stop together.
 
 ## Items
 

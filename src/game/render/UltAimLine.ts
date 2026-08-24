@@ -21,6 +21,7 @@
 import { type Container, Graphics } from "pixi.js";
 import { pointInAnyPlatform, type World } from "../simulation/Arena";
 import {
+	DRAGON_MIN_RIDE_MS,
 	DRAGON_RIDE_MS,
 	DRAGON_SPEED,
 	GRENADE_FUSE_MS,
@@ -225,6 +226,13 @@ function traceRing(cx: number, cy: number): { x: number; y: number }[] {
  * the preview walks the line step by step and stops at the first solid. The
  * ride's 900ms cap is the same cap the simulation has, so a line across an
  * open arena ends where the ride would.
+ *
+ * The **minimum commitment** is the same one the ride has: a launch that
+ * starts against the obstacle in its own direction (a grounded caster aiming
+ * at the floor, a fighter against the wall) cannot be a zero-length cast —
+ * the dragon always shows the lunge before the solid claims it. The preview
+ * draws that too, so the beam never promises a stop earlier than the cast
+ * delivers.
  */
 function traceBeam(
 	x0: number,
@@ -245,10 +253,15 @@ function traceBeam(
 		x += vx * TRACE_DT;
 		y += vy * TRACE_DT;
 		rideMs -= TRACE_DT * 1000;
+		const elapsedMs = DRAGON_RIDE_MS - rideMs;
+		const hitSolid =
+			pointInAnyPlatform(x, y, world) ||
+			x < world.left ||
+			x > world.right ||
+			y < world.top ||
+			y > world.bottom;
 		points.push({ x, y });
-		if (pointInAnyPlatform(x, y, world)) break;
-		if (x < world.left || x > world.right) break;
-		if (y < world.top || y > world.bottom) break;
+		if (hitSolid && elapsedMs >= DRAGON_MIN_RIDE_MS) break;
 	}
 	return points;
 }

@@ -118,6 +118,17 @@ an obstacle or a hostile black hole.
   It flies at **1500 px/s** for up to **900ms**, and it stops at the first
   obstacle: a wall, the ceiling, or a floor met while moving downward. The
   range *is* "until it is blocked".
+- **The commitment:** a cast is **never zero ticks long**. An obstacle the
+  launch direction meets *immediately* — a grounded caster releasing into the
+  floor, a fighter aimed into the wall at their back, a launch under a low
+  ceiling — is already a contact at the launch, so the ride must outlive its
+  first tick: the dragon always shows the lunge and the start of the flight
+  (**200ms**, two strip cells) before the obstacle claims it. Without it the
+  launch would end on its own first tick, and a spent ultimate that showed
+  nothing at all read as "the dragon did not fire" — the floor is exactly
+  where an Anands player's cursor rests between fights. The aim preview draws
+  the same commitment, so the beam never stops earlier than the cast
+  delivers.
 - **The hit:** everyone on the swept line is hit once per cast — **30 damage**,
   a **650 px/s knockback along the dragon's direction**, and a brief 300ms
   stun so the shove reads. It goes **through sword blocks**: `blocksUltimate`

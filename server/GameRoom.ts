@@ -485,8 +485,17 @@ export class GameRoom {
 	 * latch: keyed by the sweeper, cleared the moment their move ends. Server
 	 * only, exactly like `pendingBlasts` — the consequence travels in the
 	 * victims' state, and a client never needs to know who was caught.
+	 *
+	 * Two maps, deliberately. Both sweep resolvers used to share one and each
+	 * cleared the *other* move's entry every tick — a riding fighter is not
+	 * thrusting, so the thrust pass deleted the dragon's latch the tick it was
+	 * created, and the dragon's "one hit per cast" became one hit per tick. The
+	 * knockback the dragon applies keeps the victim drifting inside the swept
+	 * box, so the repeat and the duration were coupled: a dig into the floor
+	 * shredded a fighter standing in the path for 30 damage a tick.
 	 */
-	private sweepLatches = new Map<string, Set<string>>();
+	private thrustSweepLatches = new Map<string, Set<string>>();
+	private dragonSweepLatches = new Map<string, Set<string>>();
 	/**
 	 * Who each diver has already caught, this dive.
 	 *
@@ -495,7 +504,7 @@ export class GameRoom {
 	 * without the latch the server would re-catch — and re-stun — every tick
 	 * of the dive, and a timer that keeps resetting would make the client's
 	 * replay disagree with the server's by exactly the snapshot interval.
-	 * Same shape as `sweepLatches`: keyed by the bomber, cleared the moment
+	 * Same shape as the sweep latches: keyed by the bomber, cleared the moment
 	 * the dive ends, server only.
 	 */
 	private plungeCatches = new Map<string, Set<string>>();
@@ -2858,23 +2867,24 @@ export class GameRoom {
 	 * knockdowns — so it cannot go through `resolveMelee`, whose `hitLatch`
 	 * closes on the first connection. Instead the swept box (the path the dash
 	 * has covered so far, derivable from state alone) is tested against every
-	 * foe, and `sweepLatches` keeps each fighter at one hit per cast. The latch
-	 * clears the moment the thrust ends, so a second thrust is a fresh sweep.
+	 * foe, and `thrustSweepLatches` keeps each fighter at one hit per cast. The
+	 * latch clears the moment the thrust ends, so a second thrust is a fresh
+	 * sweep.
 	 */
 	private resolveThrusts() {
 		for (const attacker of this.players.values()) {
 			if (!attacker.alive) continue;
 			const moving = attacker.state.meleeAction === "thrust";
 			if (!moving || meleePhase(attacker.state) !== "active") {
-				if (!moving) this.sweepLatches.delete(attacker.id);
+				if (!moving) this.thrustSweepLatches.delete(attacker.id);
 				continue;
 			}
 			const box = sweptThrustBox(attacker.state);
 			if (!box) continue;
-			let latched = this.sweepLatches.get(attacker.id);
+			let latched = this.thrustSweepLatches.get(attacker.id);
 			if (!latched) {
 				latched = new Set();
-				this.sweepLatches.set(attacker.id, latched);
+				this.thrustSweepLatches.set(attacker.id, latched);
 			}
 			for (const defender of this.players.values()) {
 				if (defender === attacker || !defender.alive) continue;
@@ -2926,15 +2936,15 @@ export class GameRoom {
 			if (!rider.alive) continue;
 			const riding = rider.state.dragonTimer > 0;
 			if (!riding) {
-				this.sweepLatches.delete(rider.id);
+				this.dragonSweepLatches.delete(rider.id);
 				continue;
 			}
 			const box = dragonSweptRect(rider.state);
 			if (!box) continue;
-			let latched = this.sweepLatches.get(rider.id);
+			let latched = this.dragonSweepLatches.get(rider.id);
 			if (!latched) {
 				latched = new Set();
-				this.sweepLatches.set(rider.id, latched);
+				this.dragonSweepLatches.set(rider.id, latched);
 			}
 			const nx = rider.state.dragonVX / DRAGON_SPEED;
 			const ny = rider.state.dragonVY / DRAGON_SPEED;
@@ -3209,7 +3219,8 @@ export class GameRoom {
 		rider.state.dragonTimer = DRAGON_RIDE_MS;
 		rider.state.vx = 0;
 		rider.state.vy = 0;
-		this.sweepLatches.delete(rider.id);
+		this.dragonSweepLatches.delete(rider.id);
+		this.thrustSweepLatches.delete(rider.id);
 	}
 
 	/**
