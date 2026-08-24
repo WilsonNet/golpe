@@ -62,11 +62,17 @@ CELLS: dict[str, dict[str, tuple[int, int, int, int]]] = {
         "fly4": (165, 885, 455, 995),
         "fly5": (440, 880, 735, 1000),
     },
-    "misc": {
-        "gun3": (318, 290, 425, 402),
-        "gun4": (430, 291, 521, 405),
-        "gun6": (702, 296, 794, 407),
-        "gun7": (804, 293, 895, 407),
+	"misc": {
+		# The gun row, re-measured against the board's own frames: the hold
+		# figure stands at ~285-378, the firing figure (casings + muzzle
+		# flash) at ~195-278, and the two run figures at ~665-755 and
+		# ~765-855. The old rects straddled the board's cell boundaries and
+		# cut every gun frame in half — two half-figures per cell, which the
+		# move list's close-up preview is what finally made visible.
+		"gun3": (296, 292, 372, 398),
+		"gun4": (200, 292, 268, 398),
+		"gun6": (672, 292, 748, 400),
+		"gun7": (772, 292, 844, 400),
         "dagger2": (266, 410, 366, 513),
         "dagger3": (381, 410, 495, 513),
         "shoryu1": (150, 510, 250, 639),

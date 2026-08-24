@@ -9,6 +9,7 @@
 
 import {
 	Assets,
+	CanvasSource,
 	Container,
 	Graphics,
 	Rectangle,
@@ -364,6 +365,26 @@ async function loadAtlasSheet(
 }
 
 /**
+ * Bake a display object into a texture **any renderer on the page can draw**.
+ *
+ * `generateTexture` alone produces a RenderTexture whose GPU resource lives in
+ * the baking renderer's own context. A second Pixi application on the page —
+ * the move list's preview stage — handed the same texture reads another
+ * context's GPU memory and draws nothing, silently. Pulling the render back to
+ * a 2D canvas makes it a `CanvasSource`, which every renderer uploads
+ * independently; the one-time copy buys a page that can run two apps.
+ */
+function bakeShared(renderer: Renderer, node: Container): Texture {
+	const rendered = renderer.generateTexture(node);
+	const canvas = renderer.extract.canvas(rendered);
+	const texture = new Texture({
+		source: new CanvasSource({ resource: canvas }),
+	});
+	rendered.destroy(true);
+	return texture;
+}
+
+/**
  * Render a display object to a texture and keep it under `key`.
  *
  * Takes a `Container` rather than a `Graphics` so a generated texture can be a
@@ -372,7 +393,7 @@ async function loadAtlasSheet(
  * `destroy({ children: true })` because the composed ones own their contents.
  */
 function bake(renderer: Renderer, key: string, node: Container) {
-	generated.set(key, renderer.generateTexture(node));
+	generated.set(key, bakeShared(renderer, node));
 	node.destroy({ children: true });
 }
 
@@ -824,7 +845,7 @@ function createHeroPoses(
 			.fill({ color: 0x000000, alpha: 0 });
 
 	const pose = (name: HeroPose, node: Container) => {
-		const texture = renderer.generateTexture(node);
+		const texture = bakeShared(renderer, node);
 		poseTextures.set(`${sheet}:${name}`, texture);
 		node.destroy({ children: true });
 		// The dude's poses keep their old TEX keys, so the pre-hero callers

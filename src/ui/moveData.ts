@@ -96,6 +96,14 @@ export interface MoveEntry {
 	tags?: string;
 	/** A melee move id — derive frame data from `MOVES`. */
 	move?: MeleeMove;
+	/**
+	 * A story id override for the preview stage. **The default is the entry's
+	 * own id** — `MovePreview` looks up `entry.preview ?? entry.id`, so an
+	 * entry and its story share one name and neither can drift. Only set this
+	 * when the story cannot share the id: the melee entries, whose ids are
+	 * `melee-<move>`, project the shared `MOVES` id instead.
+	 */
+	preview?: string;
 	/** Hand-rolled stat rows for non-melee entries. */
 	stats?: MoveStat[];
 }
@@ -220,6 +228,7 @@ function meleeEntry(move: MeleeMove): MoveEntry {
 		category: "melee",
 		name: moveName(move),
 		move,
+		preview: move,
 		command: meleeCommand(move),
 		prose: MELEE_PROSE[move] ?? "",
 		tags: meleeTags(move),

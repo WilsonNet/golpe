@@ -25,6 +25,7 @@ import { HEROES, type HeroId } from "../game/simulation/Heroes";
 import { type MeleeMove, MOVES } from "../game/simulation/Melee";
 import { HERO_SPRITE_CSS } from "./HeroSelect";
 import { HUD_CSS } from "./hudStyles";
+import { MovePreview } from "./MovePreview";
 import {
 	CATEGORY_LABELS,
 	CATEGORY_ORDER,
@@ -34,11 +35,6 @@ import {
 	type MoveCategory,
 	type MoveEntry,
 } from "./moveData";
-
-/** How long the idle beat before a melee movie restarts, in ms. */
-const MOVIE_IDLE_MS = 700;
-/** Total loop time (idle + move) for the phase animations. */
-const MOVIE_LOOP_MS = 3200;
 
 // ---------------------------------------------------------------------------
 // Keycaps — a live binding rendered as a key-shaped chip
@@ -73,99 +69,6 @@ function CommandChips({
 				</span>
 			))}
 		</span>
-	);
-}
-
-// ---------------------------------------------------------------------------
-// The "movie": a timed phase visualisation driven by real frame data
-// ---------------------------------------------------------------------------
-
-/**
- * For a melee move, derive the phase durations and build the keyframe
- * timeline. The cursor sweeps startup → active → recovery exactly as long as
- * the move actually lasts, then rests.
- */
-function usePhaseTimeline(entry: MoveEntry) {
-	return useMemo(() => {
-		if (!entry.move) return null;
-		const d = MOVES[entry.move];
-		const total = d.startupMs + d.activeMs + d.recoveryMs;
-		// Percentages are measured against the whole loop (idle + move), so the
-		// idle beat at the front of the loop holds the cursor at rest.
-		const start = (MOVIE_IDLE_MS / MOVIE_LOOP_MS) * 100;
-		const s = (d.startupMs / MOVIE_LOOP_MS) * 100;
-		const a = (d.activeMs / MOVIE_LOOP_MS) * 100;
-		const r = (d.recoveryMs / MOVIE_LOOP_MS) * 100;
-		return { total, d, start, s, a, r };
-	}, [entry]);
-}
-
-/** The keyframes the frame-data cursor follows, driven by real timings. */
-function cursorKeyframes(
-	phase: NonNullable<ReturnType<typeof usePhaseTimeline>>,
-) {
-	const t = phase.start + phase.s + phase.a + phase.r;
-	return `
-@keyframes ml-cursor {
-	0% { left: 0%; }
-	${phase.start}% { left: 0%; }
-	${phase.start + phase.s}% { left: 18%; }
-	${phase.start + phase.s + phase.a}% { left: 58%; }
-	${t}% { left: 100%; }
-	100% { left: 100%; }
-}`;
-}
-
-function MoveMovie({ entry, hero }: { entry: MoveEntry; hero: HeroId }) {
-	const phase = usePhaseTimeline(entry);
-	const isMelee = phase !== null;
-
-	return (
-		<div className="ml-stage" key={entry.id}>
-			{phase && <style>{cursorKeyframes(phase)}</style>}
-			{isMelee ? (
-				<>
-					<div className="ml-stage-bg" />
-					<div className="ml-shadow" />
-					<div className="ml-swing" />
-					<div className="ml-swing ml-swing-rev" />
-					<div className={`ml-fighter hp-sprite hp-sprite-${hero}`} />
-					<div className="ml-ground" />
-					<div className="ml-hitbox" />
-					<div className="ml-impact" />
-					<div className="ml-tl">
-						<div
-							className="ml-tl-seg ml-tl-startup"
-							style={{ flexGrow: phase.d.startupMs }}
-						/>
-						<div
-							className="ml-tl-seg ml-tl-active"
-							style={{ flexGrow: phase.d.activeMs }}
-						/>
-						<div
-							className="ml-tl-seg ml-tl-recovery"
-							style={{ flexGrow: phase.d.recoveryMs }}
-						/>
-						<div className="ml-tl-cursor" />
-					</div>
-					<div className="ml-tl-labels">
-						<span>STARTUP {phase.d.startupMs}</span>
-						<span>ACTIVE {phase.d.activeMs}</span>
-						<span>RECOVERY {phase.d.recoveryMs}</span>
-					</div>
-				</>
-			) : (
-				<>
-					<div className="ml-stage-bg" />
-					<div className="ml-shadow" />
-					<div
-						className={`ml-fighter ml-fighter-idle hp-sprite hp-sprite-${hero}`}
-					/>
-					<div className="ml-ground" />
-					<div className="ml-stage-note">preview</div>
-				</>
-			)}
-		</div>
 	);
 }
 
@@ -362,7 +265,7 @@ export function MoveList({
 						</div>
 					</div>
 
-					{/* ---- the movie: a live preview filling the rest ---- */}
+					{/* ---- the preview: a live stage filling the rest ---- */}
 					<div className="ml-movie-wrap">
 						<div className="ml-movie-head">
 							<span>PREVIEW</span>
@@ -370,7 +273,7 @@ export function MoveList({
 								{currentInCategory} / {currentCategoryCount}
 							</span>
 						</div>
-						<MoveMovie entry={current} hero={hero} />
+						<MovePreview entry={current} hero={hero} />
 					</div>
 				</div>
 			</div>
@@ -737,7 +640,7 @@ const ML_CSS = `
 	border-radius: 5px;
 }
 
-/* ---- movie: a live preview filling the rest ---- */
+/* ---- preview: a live stage filling the rest ---- */
 .ml-movie-wrap {
 	flex: 1;
 	display: flex;
@@ -757,188 +660,6 @@ const ML_CSS = `
 }
 .ml-position {
 	color: #ffd166;
-}
-.ml-stage {
-	position: relative;
-	flex: 1;
-	min-height: 170px;
-	overflow: hidden;
-	border-radius: 10px;
-	border: 1px solid rgba(255, 255, 255, 0.12);
-}
-.ml-stage-bg {
-	position: absolute;
-	inset: 0;
-	background:
-		radial-gradient(600px 300px at 50% 20%, rgba(14, 195, 201, 0.14), rgba(0, 0, 0, 0) 70%),
-		linear-gradient(180deg, #0a1520 0%, #06070c 60%, #04040a 100%);
-}
-.ml-ground {
-	position: absolute;
-	left: 0;
-	right: 0;
-	bottom: 56px;
-	height: 3px;
-	background: linear-gradient(90deg, transparent, rgba(255, 209, 102, 0.45), transparent);
-}
-.ml-stage .hp-sprite {
-	position: absolute;
-	left: 50%;
-	bottom: 56px;
-	transform: translateX(-50%) scale(2.6);
-	transform-origin: bottom center;
-	z-index: 2;
-	filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.7));
-}
-/* The fighter lives: a breathing bob at rest, then a committed lunge toward
-   the hitbox during the active window — so the still reads as a move, not a
-   portrait. */
-.ml-stage .hp-sprite {
-	animation: ml-fighter 3.2s ease-in-out infinite;
-}
-.ml-fighter-idle {
-	animation: ml-bob 2.6s ease-in-out infinite !important;
-}
-@keyframes ml-fighter {
-	0%, 22% { transform: translateX(-50%) scale(2.6) translateY(0); }
-	27%, 32% { transform: translateX(-34%) scale(2.6) translateY(2px) rotate(-3deg); }
-	44%, 52% { transform: translateX(-14%) scale(2.6) translateY(-2px) rotate(4deg); }
-	60%, 100% { transform: translateX(-50%) scale(2.6) translateY(0) rotate(0); }
-}
-@keyframes ml-bob {
-	0%, 100% { transform: translateX(-50%) scale(2.6) translateY(0); }
-	50% { transform: translateX(-50%) scale(2.6) translateY(-5px); }
-}
-/* The shadow anchors the fighter to the floor. */
-.ml-shadow {
-	position: absolute;
-	left: 50%;
-	bottom: 56px;
-	width: 70px;
-	height: 14px;
-	transform: translateX(-50%);
-	border-radius: 50%;
-	background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0) 70%);
-	z-index: 1;
-}
-/* The swing arc: a broad slash that flares across the active window. */
-.ml-swing {
-	position: absolute;
-	left: 50%;
-	bottom: 56px;
-	width: 300px;
-	height: 260px;
-	transform: translateX(-6%);
-	z-index: 1;
-	opacity: 0;
-	background:
-		radial-gradient(ellipse at 8% 82%, rgba(255, 209, 102, 0.55) 0%, rgba(255, 209, 102, 0) 58%);
-	filter: blur(1px);
-	animation: ml-swing 3.2s ease-in-out infinite;
-}
-.ml-swing-rev {
-	transform: translateX(6%) scaleX(-1);
-	animation-name: ml-swing-rev;
-	opacity: 0;
-}
-@keyframes ml-swing {
-	0%, 20% { opacity: 0; transform: translateX(-6%) scaleX(0.25); }
-	30%, 55% { opacity: 0.95; transform: translateX(-6%) scaleX(1.05); }
-	62%, 100% { opacity: 0; transform: translateX(-6%) scaleX(0.25); }
-}
-@keyframes ml-swing-rev {
-	0%, 20% { opacity: 0; transform: translateX(6%) scaleX(-0.25); }
-	30%, 55% { opacity: 0.75; transform: translateX(6%) scaleX(-1.05); }
-	62%, 100% { opacity: 0; transform: translateX(6%) scaleX(-0.25); }
-}
-.ml-hitbox {
-	position: absolute;
-	bottom: 66px;
-	left: 50%;
-	width: 120px;
-	height: 48px;
-	border: 2px solid rgba(255, 209, 102, 0.95);
-	background: rgba(255, 209, 102, 0.25);
-	border-radius: 5px;
-	z-index: 3;
-	transform: translateX(12%);
-	opacity: 0;
-	animation: ml-hit 3.2s ease-in-out infinite;
-}
-@keyframes ml-hit {
-	0%, 24% { opacity: 0; transform: translateX(12%) scaleX(0.3); }
-	34%, 50% { opacity: 1; transform: translateX(12%) scaleX(1); }
-	60%, 100% { opacity: 0; transform: translateX(12%) scaleX(0.3); }
-}
-.ml-impact {
-	position: absolute;
-	left: 50%;
-	bottom: 56px;
-	width: 8px;
-	height: 8px;
-	border-radius: 50%;
-	background: #fff;
-	box-shadow: 0 0 16px 4px rgba(255, 209, 102, 0.9);
-	z-index: 4;
-	opacity: 0;
-	animation: ml-impact 3.2s ease-in-out infinite;
-}
-@keyframes ml-impact {
-	0%, 33% { opacity: 0; transform: translate(110px, -10px) scale(0.4); }
-	40%, 46% { opacity: 1; transform: translate(110px, -10px) scale(1.4); }
-	54%, 100% { opacity: 0; transform: translate(110px, -10px) scale(0.4); }
-}
-.ml-tl {
-	position: absolute;
-	left: 60px;
-	right: 60px;
-	bottom: 26px;
-	height: 10px;
-	display: flex;
-	background: rgba(255, 255, 255, 0.08);
-	border-radius: 5px;
-	overflow: visible;
-	box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.4);
-	z-index: 5;
-}
-.ml-tl-seg { height: 100%; }
-.ml-tl-startup { background: #3d6b8f; }
-.ml-tl-active { background: #ffd166; }
-.ml-tl-recovery { background: #6a4a92; }
-.ml-tl-cursor {
-	position: absolute;
-	top: -5px;
-	width: 3px;
-	height: 20px;
-	background: #fff;
-	border-radius: 2px;
-	box-shadow: 0 0 8px #fff;
-	animation: ml-cursor 3.2s linear infinite;
-}
-.ml-tl-labels {
-	position: absolute;
-	left: 60px;
-	right: 60px;
-	bottom: 10px;
-	display: flex;
-	justify-content: space-between;
-	font-size: 10px;
-	font-weight: 700;
-	letter-spacing: 0.08em;
-	color: rgba(255, 255, 255, 0.6);
-	z-index: 5;
-}
-.ml-stage-note {
-	position: absolute;
-	inset: 0;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	font-size: 12px;
-	letter-spacing: 0.14em;
-	color: rgba(255, 255, 255, 0.35);
-	text-transform: uppercase;
-	z-index: 6;
 }
 
 .ml-hint {

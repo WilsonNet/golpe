@@ -40,6 +40,7 @@
 		{
 			"includes": [
 				"src/game/render/**",
+				"src/game/preview/**",
 				"src/ui/**",
 				"src/game/ecs/**",
 				"src/game/input/**",

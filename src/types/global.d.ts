@@ -358,5 +358,27 @@ declare global {
 		 * rather than something inferred from watching two brains fight.
 		 */
 		__training?: TrainingApi;
+		/**
+		 * The move-list preview's fighter, while a preview stage is mounted:
+		 * the story clock, the fighter's position and its live melee state.
+		 * What a preview must prove is that the scripted intent reached the
+		 * simulation — a story whose attack never fired would otherwise
+		 * preview as a fighter standing still.
+		 */
+		__previewState?: () => {
+			t: number;
+			story: number;
+			speed: number;
+			x?: number;
+			y?: number;
+			meleeAction?: string;
+			meleeTimer?: number;
+			dragonTimer?: number;
+			stance?: string;
+			vx?: number;
+			grounded?: boolean;
+		};
+		/** Study a preview frame by frame: 1 is real time, 0.25 is a quarter. */
+		__previewSpeed?: (speed: number) => void;
 	}
 }

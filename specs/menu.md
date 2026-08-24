@@ -148,10 +148,57 @@ a time, with four parts:
 - **A card** with the hero's own sheet frame, the move's name, its tags
   (UNBLOCKABLE · KNOCKDOWN · CANCELLABLE …), its command as live keycaps, a
   prose explanation, and a stat card.
-- **A preview stage** below that fills the remaining space: the hero on a
-  ground line, with a frame-data timeline (startup/active/recovery) whose
-  animated cursor and swing effects track the move's *real* timings.
+- **A preview stage** below that fills the remaining space: a *live* fighter
+  playing the move on the hero's own sheet, with a frame-data timeline
+  (startup/active/recovery) whose cursor and phase chip track the move's
+  *real* timings.
 - A **position indicator** ("2 / 5") for the move within its category.
+
+### The preview is the game, one fighter wide
+
+The preview is not a video and not a CSS puppet show (the first version was
+both — a static sheet frame lunging on keyframes while a gold smear stood in
+for the swing, and it could never show a slash because the slash *is* the
+arc `MeleeFx` draws). It is a **`FighterStage`** (`src/game/preview/`): a
+one-fighter match that feeds a scripted story through the real `tickPlayer`
+at the fixed 60Hz step and renders with the real animation and melee-effect
+systems. A retune re-times every preview for free; a new hero's previews
+exist the moment its sheet and clip table do; there is nothing to re-render.
+
+The pieces:
+
+- **`preview/stories.ts`** — the story registry: declarative timelines of
+  `PlayerIntent` presses (the same intents a keyboard produces) plus at most
+  two scripted-server cues. The entry id *is* the story id — `MovePreview`
+  looks up `entry.preview ?? entry.id`, so an entry and its story share one
+  name and cannot drift; the field is an override only, used by the melee
+  entries to project the shared `MOVES` id. Frame-data-derived holds read the
+  tuning constant (the massive holds `MASSIVE_CHARGE_MS + 50`, not a literal).
+- **`preview/FighterStage.ts`** — the stage. It stands in for the **server**
+  for the two decisions a lone fighter cannot make alone (an item throw, an
+  ultimate cast) by running the same simulation functions the server runs and
+  feeding the results to the same presentation modules a match feeds
+  (`ItemFx`, `BlackHoleFx`, `DragonFx`, `BlossomFx`). Gun ammo is mirrored on
+  firing edges exactly like the `?offline=true` hatch, so the gun-fire clip
+  plays off the same evidence the wire provides. `window.__previewState` and
+  `window.__previewSpeed` are its probe surface, in the spirit of the match's
+  own `window.__*` handles.
+- **`ui/MovePreview.tsx`** — the React shell: one stage for the panel's
+  lifetime (walking the list calls `setStory`, it does not tear the renderer
+  down per move), and a timeline whose cursor is written straight to the DOM
+  from the stage's frame callback — never through state.
+
+Two rules the stage lives by:
+
+- **One renderer's textures are its own.** The generated combat art is baked
+  through a 2D canvas (`CanvasSource`), because a `generateTexture`
+  RenderTexture is GPU-bound to the renderer that made it — a second Pixi app
+  on the page handed one draws nothing, silently. The same rule in reverse
+  means a preview teardown passes `releaseGlobalResources: false`: releasing
+  global resources would strip the shared batch and texture state out from
+  under the match rendering behind the menu.
+- **The preview never writes the simulation** except through `tickPlayer` and
+  the scripted-server cues, which write exactly the fields the server writes.
 
 Navigation is keyboard-first: **Up/Down** (or W/S) walk the moves, **Left/Right**
 (or A/D) jump whole categories, **Esc** returns to the menu. The keycaps are
@@ -160,7 +207,8 @@ store), so a rebind re-labels every command; the numbers are the real tuning
 constants from `tweakables/` and the shared `MOVES` table, so a retune rewrites
 the cards without a hand edit.
 
-This is a **presentation** module (`src/ui/moveData.ts`, `src/ui/MoveList.tsx`).
+This is a **presentation** module group (`src/ui/moveData.ts`,
+`src/ui/MoveList.tsx`, `src/ui/MovePreview.tsx`, `src/game/preview/`).
 Per-hero branching belongs here by the same rule that lets the HUD branch per
 hero: it never touches the simulation, and it must never drift from the tuning
 constants it reads.
