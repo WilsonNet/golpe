@@ -632,6 +632,14 @@ menu — one component, one store, one `localStorage`). See
   running after a gesture, the title theme and the hero theme both latch, real
   combat sounds fire, the mixer write persists across reload). Load the
   `game-audio` skill before touching the soundtrack.
+- **`?mute` in the URL starts the game silent** — presence is the signal,
+  like a launch key, but it is deliberately not one, so `?mute=1` on the bare
+  root URL still shows the menu. Every Playwright probe (except
+  `audio-probe.ts`, which must *hear*) boots its pages with `&mute=1`, so a
+  verification run never plays over whatever else the machine is doing; a
+  one-off browser test can just add it to the URL. It applies at load and
+  never writes back to `localStorage` — nothing a probe silences is
+  persisted.
 
 ## Skills
 

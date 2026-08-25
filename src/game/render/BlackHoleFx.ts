@@ -40,6 +40,7 @@ import {
 	type Singularity,
 } from "../simulation/Physics";
 import type { TeamId } from "../simulation/Teams";
+import { fieldAffects } from "../simulation/Ultimate";
 import { TINT, teamTint } from "../teamPalette";
 import { TEX, tex } from "./assets";
 import { ParticleSystem } from "./Particles";
@@ -53,6 +54,7 @@ const COLOR = {
 	tear: 0xff6bd6,
 	flash: 0xffffff,
 	grenade: 0xb98bff,
+	hostile: 0xff4d4d,
 } as const;
 
 /** How long the collapse takes to reach full size, in ms. */
@@ -88,14 +90,24 @@ export class BlackHoleFx {
 	private tearAccMs = 0;
 	private open = false;
 
+	/** Would the field on screen drag the viewer? Set in `update`. */
+	private hostile = false;
+	/** The texture the ring is currently drawn with, so the swap happens once. */
+	private hostileDrawn = false;
+
 	/**
-	 * The side that cast whatever is currently on screen.
+	 * The side that cast whatever is currently on screen, and whether it would
+	 * drag the viewer.
 	 *
 	 * The hole takes a **light** team wash and no more. It is the one object in
 	 * the arena that is defined by its own colours — a core that emits nothing
 	 * against a disk that is far too bright — and painting it team-blue would turn
-	 * an event into a decoration. What the tint has to answer is narrower: whose
-	 * hole is this, i.e. am I the one who is safe standing in it.
+	 * an event into a decoration. "Whose hole is this" is answered by the team
+	 * wash; **"does this one hurt me" is answered by the event-horizon ring**,
+	 * which turns danger red when the field is hostile to the local fighter and
+	 * keeps its violet when it is the caster's or a teammate's. One hole at a
+	 * time in a room means there is no second hole to cross-check against, so
+	 * the ring has to carry the whole read.
 	 */
 	private casterTeam: TeamId | null = null;
 
@@ -294,6 +306,8 @@ export class BlackHoleFx {
 		field: Singularity | null,
 		victims: readonly PlayerPosition[],
 		dtMs: number,
+		viewerId = "",
+		viewerTeam: TeamId | null = null,
 	) {
 		this.particles.update(dtMs);
 
@@ -303,8 +317,10 @@ export class BlackHoleFx {
 				this.ageMs = 0;
 				this.infallAccMs = 0;
 				this.tearAccMs = 0;
+				this.hostileDrawn = false;
 			}
 			this.ageMs += dtMs;
+			this.hostile = fieldAffects(field, viewerId, viewerTeam);
 			this.drawField(field, victims, dtMs);
 			return;
 		}
@@ -371,12 +387,30 @@ export class BlackHoleFx {
 		// part of the effect a player has to be able to read at a glance. It
 		// breathes slightly, which is the only slow rhythm on the hole and what
 		// keeps two seconds of it from reading as a looping GIF.
+		//
+		// **A hostile hole's ring is red.** One hole at a time in a room means a
+		// player cannot cross-check colour against the team gate — they have to
+		// know from the ring itself whether *this* one would drag them. The red is
+		// baked (not tinted), the same register the blossom's ring uses, so it
+		// holds over the bright sky; a friendly ring keeps the violet.
 		const pulse = 1 + 0.035 * Math.sin(this.ageMs / 150);
 		this.horizon.scale.set((SINGULARITY_RADIUS / 60) * pulse);
 		this.horizon.alpha = 0.78 + 0.16 * Math.sin(this.ageMs / 150 + 1);
+		if (this.hostile !== this.hostileDrawn) {
+			this.hostileDrawn = this.hostile;
+			this.horizon.texture = tex(
+				this.hostile ? TEX.horizonHostile : TEX.horizon,
+			);
+		}
 		// The event horizon is the one line a player has to read exactly — inside it
 		// you are cargo — so it takes the lightest wash of all and keeps its violet.
-		this.horizon.tint = this.tint(COLOR.horizon);
+		// A hostile ring needs none: the red *is* the message, and it is **painted,
+		// not added** — additive red over the bright sky washes toward lavender-
+		// white (the same trap BlossomFx's ring avoids), while a painted red stays
+		// red. The friendly ring stays additive, matching the old look.
+		this.horizon.tint = this.hostile ? 0xffffff : this.tint(COLOR.horizon);
+		const blend: "add" | "normal" = this.hostile ? "normal" : "add";
+		if (this.horizon.blendMode !== blend) this.horizon.blendMode = blend;
 
 		this.emitInfall(field, dtMs);
 		this.emitTearing(field, victims, dtMs);

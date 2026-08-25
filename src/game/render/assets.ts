@@ -91,6 +91,12 @@ export const TEX = {
 	/** The black hole's own art — see `createUltimateTextures`. */
 	singularity: "fx_singularity",
 	horizon: "fx_horizon",
+	/**
+	 * The same horizon ring, baked in danger red: a *hostile* hole draws this
+	 * instead, so "will this one drag me" is read in one glance. See
+	 * `createUltimateTextures` and `BlackHoleFx.drawField`.
+	 */
+	horizonHostile: "fx_horizon_hostile",
 	accretion: "fx_accretion",
 	grenade: "fx_grenade",
 	halo: "fx_halo",
@@ -654,6 +660,23 @@ function createUltimateTextures(renderer: Renderer): void {
 	horizon.circle(64, 64, 56).stroke({ width: 6, color: 0x9a5cff, alpha: 0.45 });
 	horizon.circle(64, 64, 51).stroke({ width: 10, color: 0x6a2fd0, alpha: 0.2 });
 	bake(renderer, TEX.horizon, horizon);
+
+	// The same geometry in danger red, for a hostile hole. Red is the one colour
+	// outside the mode's palette that is already in the game's vocabulary as
+	// "that will hurt you" (the blossom's ring), and it is deliberately *not*
+	// the team colour: a hostile hole has a side, and the question it must
+	// answer is "does this one hurt *me*", not "whose is it".
+	const horizonHostile = new Graphics();
+	horizonHostile
+		.circle(64, 64, 60)
+		.stroke({ width: 3, color: 0xffd6d6, alpha: 0.95 });
+	horizonHostile
+		.circle(64, 64, 56)
+		.stroke({ width: 6, color: 0xff4d4d, alpha: 0.45 });
+	horizonHostile
+		.circle(64, 64, 51)
+		.stroke({ width: 10, color: 0xa71f2b, alpha: 0.2 });
+	bake(renderer, TEX.horizonHostile, horizonHostile);
 
 	// ---- the accretion disk ----
 	//

@@ -379,7 +379,10 @@ export class FighterStage {
 		const blackHole = this.blackHole;
 		if (blackHole) {
 			blackHole.syncGrenades(this.grenade ? [this.grenade] : [], dtMs);
-			blackHole.update(this.singularity, [], dtMs);
+			// The hole in a preview is the hero's own cast, so the ring reads as
+			// the caster sees it: violet, not the hostile red a match shows for
+			// somebody else's. The preview teaches the move, not the threat.
+			blackHole.update(this.singularity, [], dtMs, "preview", null);
 		}
 		this.blossomFx?.update(this.blossom, dtMs);
 		this.dragonFx?.update(this.dragonRider(), dtMs);

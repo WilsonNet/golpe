@@ -95,6 +95,14 @@ persists across a reload. It is the only thing that can hear anything: the
 other probes stop reading at the frame the match ends and never listen at
 all.
 
+**Every other probe must boot with `&mute=1`.** The URL param is the one
+knob: it starts all three mixer channels muted at load, it is not a launch
+key (so `?mute=1` on the bare root URL still shows the menu), and it never
+writes to `localStorage` — a verification run never plays over the machine,
+and never leaves a pause in a player's own sound state behind. If a probe
+you touch boots a page, check it passes `mute=1`; the one legitimate
+exception is `audio-probe.ts` itself, and it is sole because it must hear.
+
 For music content itself: re-render, look at the printed LUFS/peak and the
 per-second RMS stability (no dead seconds, no clipping), listen through the
 game page, and only ship if the manuscript still matches the audible result.

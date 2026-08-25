@@ -21,7 +21,7 @@ import { chromium } from "playwright";
 
 const BASE = "http://localhost:8084";
 const ROOM = `screenprobe-${Date.now().toString(36)}`;
-const WIDE_URL = `${BASE}/?online=true&ai=true&room=${ROOM}&screen=3`;
+const WIDE_URL = `${BASE}/?online=true&ai=true&room=${ROOM}&screen=3&mute=1`;
 
 function sink(page: Page) {
 	const errors: string[] = [];
@@ -106,7 +106,7 @@ if (wide.cameraMax > 1600)
 // --- Check 2: the latecomer's world is the room's, not its URL's ---
 const c = await ctx.newPage();
 const errorsC = sink(c);
-await c.goto(`${BASE}/?online=true&ai=true&room=${ROOM}&screen=1`);
+await c.goto(`${BASE}/?online=true&ai=true&room=${ROOM}&screen=1&mute=1`);
 await c.waitForFunction(() => typeof window.__gameState === "function");
 await c.waitForTimeout(4000);
 const latecomer = await gameState(c);

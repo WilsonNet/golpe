@@ -129,15 +129,45 @@ export class AudioMixer {
 	}
 }
 
+/**
+ * Does this page ask for silence?
+ *
+ * `?mute` presence is the signal, exactly like a launch key's presence — that
+ * is how a Playwright probe runs a whole match without the game's music and
+ * combat sounds playing over whatever else the machine is doing. It starts
+ * every channel muted at load and, being an `AudioMixer.constructor` input
+ * rather than a `setMuted` write, it never touches `golpe.audio` — nothing a
+ * test mutes is something it persists.
+ *
+ * Deliberately **not** a launch key: `?mute=1` on the bare root URL must still
+ * show the menu, not seat a stranger in an arena.
+ */
+function urlMuted(): boolean {
+	try {
+		if (typeof window === "undefined") return false;
+		return new URLSearchParams(window.location.search).has("mute");
+	} catch {
+		return false;
+	}
+}
+
 function load(): AudioPreferences {
+	let prefs: AudioPreferences;
 	try {
 		const raw = window.localStorage.getItem(STORAGE_KEY);
-		return raw ? sanitiseAudio(JSON.parse(raw)) : DEFAULTS;
+		prefs = raw ? sanitiseAudio(JSON.parse(raw)) : DEFAULTS;
 	} catch {
 		// Private browsing, disabled storage, or a corrupted value. The defaults
 		// are a far better failure than a game that starts muted or silent.
-		return DEFAULTS;
+		prefs = DEFAULTS;
 	}
+	if (urlMuted()) {
+		prefs = {
+			volumes: { ...prefs.volumes },
+			muted: { master: true, music: true, sfx: true },
+		};
+	}
+	return prefs;
 }
 
 /** The instance the engine and the mixer UI share. */

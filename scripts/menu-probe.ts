@@ -45,7 +45,7 @@ const browser = await chromium.launch();
 {
 	const ctx = await browser.newContext();
 	const page = await ctx.newPage();
-	await page.goto(BASE);
+	await page.goto(`${BASE}/?mute=1`);
 	await page.waitForSelector(".gd-menu-page", { timeout: 10000 });
 	check("bare URL shows the menu", true);
 	check("menu has no launch keys", launchKeys(page.url()).length === 0);
@@ -67,7 +67,7 @@ const browser = await chromium.launch();
 {
 	const ctx = await browser.newContext();
 	const page = await ctx.newPage();
-	await page.goto(BASE);
+	await page.goto(`${BASE}/?mute=1`);
 	await page.waitForSelector(".gd-menu-page", { timeout: 10000 });
 
 	// The menu's name field writes the same store the in-game prompt reads, so
@@ -95,7 +95,7 @@ const browser = await chromium.launch();
 {
 	const ctx = await browser.newContext();
 	const page = await ctx.newPage();
-	await page.goto(BASE);
+	await page.goto(`${BASE}/?mute=1`);
 	await page.waitForSelector(".gd-menu-page", { timeout: 10000 });
 	const items = await page.$$(".gd-play-item");
 	for (const el of items) {
@@ -120,7 +120,7 @@ const browser = await chromium.launch();
 {
 	const ctx = await browser.newContext();
 	const page = await ctx.newPage();
-	await page.goto(BASE);
+	await page.goto(`${BASE}/?mute=1`);
 	await page.waitForSelector(".gd-menu-page", { timeout: 10000 });
 	const room = `menu-probe-${Date.now().toString(36)}`;
 	const items = await page.$$(".gd-play-item");
@@ -144,7 +144,7 @@ const browser = await chromium.launch();
 {
 	const ctx = await browser.newContext();
 	const page = await ctx.newPage();
-	await page.goto(`${BASE}/?bots=1`);
+	await page.goto(`${BASE}/?bots=1&mute=1`);
 	await page.waitForFunction(() => typeof window.__gameState === "function", {
 		timeout: 20000,
 	});
@@ -159,7 +159,7 @@ const browser = await chromium.launch();
 {
 	const ctx = await browser.newContext();
 	const page = await ctx.newPage();
-	await page.goto(BASE);
+	await page.goto(`${BASE}/?mute=1`);
 	await page.waitForSelector(".gd-menu-page", { timeout: 10000 });
 	const items = await page.$$(".gd-play-item");
 	for (const el of items) {
@@ -201,7 +201,7 @@ const browser = await chromium.launch();
 {
 	const ctx = await browser.newContext();
 	const page = await ctx.newPage();
-	await page.goto(BASE);
+	await page.goto(`${BASE}/?mute=1`);
 	await page.waitForSelector(".gd-menu-page", { timeout: 10000 });
 
 	// How to play: one view, three named groups, nine one-line rows.

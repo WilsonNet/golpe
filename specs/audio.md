@@ -25,6 +25,12 @@ three mixer channels.
   a 0..1 volume and a mute, persisted to `localStorage` under `golpe.audio`.
   Defaults: master 1, music 0.5, sfx 0.9, nothing muted. The Sound menu (root
   menu and Esc menu, one shared component) writes it; the engine applies.
+- **`?mute` in the URL starts every channel muted** — the knob Playwright
+  probes use, so a match can be measured without the game playing over the
+  machine. Presence is the signal, like a launch key; it is deliberately *not*
+  a launch key itself, so `?mute=1` on the bare root URL still shows the
+  menu. It is applied at load as constructor preference and never written back
+  to `localStorage`: nothing a probe silences is something it persists.
 
 ## The page's music
 

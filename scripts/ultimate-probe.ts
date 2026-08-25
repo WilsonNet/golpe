@@ -242,7 +242,7 @@ const witness = await ctx.newPage();
 const errorsA = [...sink(caster), ...sink(witness)];
 const witnessConsole = consoleSink(witness);
 
-const url = `${BASE}/?online=true&room=${ROOM}&bots=0&ultCharge=100&timeLimit=600`;
+const url = `${BASE}/?online=true&room=${ROOM}&bots=0&ultCharge=100&timeLimit=600&mute=1`;
 
 await caster.goto(url);
 await caster.waitForFunction(() => typeof window.__ultState === "function");
@@ -539,7 +539,7 @@ if (CAST) {
 	// The training room places the two fighters 60px apart on the clear stretch of
 	// ground between the pillars — see `DEFAULT_TRAINING_SPAWN`. That is the whole
 	// reason this scenario exists: nothing to walk around and nothing overhead.
-	await room.goto(`${BASE}/?training=true&ultCharge=100`);
+	await room.goto(`${BASE}/?training=true&ultCharge=100&mute=1`);
 	await room.waitForFunction(() => typeof window.__training === "object");
 	await room.evaluate(() => window.__training!.ready(15000));
 	// Both mortal: an invincible dummy would make the damage check vacuous, and an

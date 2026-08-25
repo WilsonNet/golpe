@@ -143,7 +143,7 @@ for (const [modeIndex, mode] of MODES.entries()) {
 
 	for (let i = 0; i < mode.tabs; i++) {
 		const p = await ctx.newPage();
-		await p.goto(`${BASE + mode.url + separator}room=${room}`);
+		await p.goto(`${BASE + mode.url + separator}room=${room}&mute=1`);
 		await p.waitForFunction(() => typeof window.__gameState === "function", {
 			timeout: 20000,
 		});

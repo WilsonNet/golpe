@@ -39,7 +39,7 @@ const IDLE_DRIFT_PX = 2;
  * per run.
  */
 function gameUrl() {
-	return `${BASE_URL}/?bots=0&room=${randomUUID()}`;
+	return `${BASE_URL}/?bots=0&room=${randomUUID()}&mute=1`;
 }
 
 const state = (page: Page) => page.evaluate(() => window.__gameState!());

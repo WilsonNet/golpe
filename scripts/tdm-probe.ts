@@ -391,7 +391,7 @@ async function main() {
 	// **No `screen=`, deliberately.** The three-screen floor is the mode's job,
 	// and asking for it here would test the URL rather than the rule.
 	const url =
-		`${BASE_URL}/?ai=true&mode=tdm&bots=${FIGHTERS - 1}` +
+		`${BASE_URL}/?ai=true&mode=tdm&bots=${FIGHTERS - 1}&mute=1` +
 		`&scoreLimit=${SCORE_LIMIT}&timeLimit=${TIME_LIMIT_SEC}` +
 		`&freezeTime=${FREEZE_SEC}` +
 		(ULT_CHARGE > 0 ? `&ultCharge=${ULT_CHARGE}` : "") +

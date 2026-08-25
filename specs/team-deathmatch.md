@@ -278,6 +278,12 @@ world that must be understood instantly and never second-guessed, and a bar that
 was blue on one fighter and orange on another would take that away to say
 something the name already says. The bar's *surround* carries the side instead.
 
+The one deliberate rejection of "blend, never replace" is the black hole's
+event-horizon ring: a **hostile** hole's ring is danger red, a safe one's stays
+violet. There is exactly one hole in a room at a time, so there is no second
+hole to cross-check — the ring has to carry the whole read. See
+[ultimate.md](ultimate.md).
+
 ### Cast shadows
 
 Every fighter throws a **team-tinted shadow onto the surface below them**

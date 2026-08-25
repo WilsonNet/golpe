@@ -7,7 +7,7 @@ const ctx = await browser.newContext();
 // two never meet, which reads as a netcode failure and is a URL mistake. No
 // `fill` — bots are opt-in, so two clients in one room are two fighters.
 const room = `probe-${Date.now().toString(36)}`;
-const url = `http://localhost:8084/?online=true&ai=true&room=${room}`;
+const url = `http://localhost:8084/?online=true&ai=true&room=${room}&mute=1`;
 const lines: string[] = [];
 
 const a = await ctx.newPage();

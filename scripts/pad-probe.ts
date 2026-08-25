@@ -58,7 +58,7 @@ function angleGap(a: number, b: number): number {
  * scheme. Two runs sharing a room id would land in the same match.
  */
 function gameUrl() {
-	return `${BASE_URL}/?bots=0&room=${randomUUID()}`;
+	return `${BASE_URL}/?bots=0&room=${randomUUID()}&mute=1`;
 }
 
 /**

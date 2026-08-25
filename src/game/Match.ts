@@ -1959,7 +1959,13 @@ export class Match {
 				}
 			}
 			this.blackHole.syncGrenades(replay.grenades, dtMs);
-			this.blackHole.update(replay.singularity, held, dtMs);
+			this.blackHole.update(
+				replay.singularity,
+				held,
+				dtMs,
+				this.online?.manager.myId ?? "",
+				this.online?.myTeam ?? null,
+			);
 			return;
 		}
 
@@ -2021,7 +2027,13 @@ export class Match {
 		}
 
 		this.blackHole.syncGrenades(session.grenades, dtMs);
-		this.blackHole.update(field, victims, dtMs);
+		this.blackHole.update(
+			field,
+			victims,
+			dtMs,
+			session.manager.myId,
+			session.myTeam,
+		);
 
 		// The storm: a spinning field of gunfire around whoever is channelling.
 		// The field is the *area* — the caster's own spin is already on their

@@ -1432,7 +1432,7 @@ async function main() {
 	// and at the real 0.35 charge/s the probe would be waiting out ~285s to
 	// measure one interaction.
 	await page.goto(
-		`${BASE_URL}/?training=true&ultCharge=100${HERO !== "lia" ? `&hero=${HERO}` : ""}`,
+		`${BASE_URL}/?training=true&ultCharge=100&mute=1${HERO !== "lia" ? `&hero=${HERO}` : ""}`,
 	);
 	await page.waitForFunction(() => !!window.__training, { timeout: 20000 });
 	const seated = await page.evaluate(() => window.__training!.ready(20000));

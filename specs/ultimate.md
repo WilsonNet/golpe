@@ -378,12 +378,21 @@ The renderer's job, none of it authoritative:
   lensing ring, matter streams spiralling inward from the whole outer reach, and
   a per-victim stream of torn-off particles. This is the most expensive effect
   in the game and it is meant to be.
+- **The hostility read**: a hole that is hostile to the local fighter — not the
+  caster, and not a teammate's — draws its **event-horizon ring in danger
+  red**, the same register as the blossom's ring; a hole you are safe in keeps
+  the violet. The team wash alone is not enough, because there is exactly one
+  hole at a time in a room and no second hole to cross-check it against: the
+  ring itself has to answer "will this one drag me". One hole, one question,
+  one colour.
 
 ## Not implemented
 
 - Any friendly-fire relationship other than "the caster and their side". No
   allied casters sharing a hole's credit, no team-coloured horizon beyond the
-  light tint the mode applies to everything.
+  light tint the mode applies to everything — and the hostile red ring (see
+  *What is drawn*) is an exception to the blend-only rule by design: it is a
+  boundary marking "this hole will drag you", not a team colour.
 - More than one ultimate. `ultimate` is one action, not a per-character slot.
 - Per-character portraits: every fighter uses the same sheet, so the portrait
   is tinted by a hash of the fighter's id to keep two casters distinguishable.

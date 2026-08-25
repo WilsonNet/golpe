@@ -446,7 +446,7 @@ async function main() {
 	// `ai=true` makes the local fighter a bot and skips the name prompt.
 	const room = randomUUID();
 	const url =
-		`${BASE_URL}/?ai=true&room=${room}&bots=${FIGHTERS - 1}` +
+		`${BASE_URL}/?ai=true&room=${room}&bots=${FIGHTERS - 1}&mute=1` +
 		`&scoreLimit=${SCORE_LIMIT}&timeLimit=${TIME_LIMIT_SEC}` +
 		(MODE === "tdm" ? "&mode=tdm&freezeTime=1" : "") +
 		(ULT_CHARGE ? `&ultCharge=${ULT_CHARGE}` : "");

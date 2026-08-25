@@ -55,7 +55,7 @@ const lines: string[] = [];
 page.on("console", (m) => lines.push(m.text()));
 page.on("pageerror", (e) => lines.push(`[PAGEERROR] ${e.message}`));
 
-await page.goto(`${BASE_URL}/?offline=true`);
+await page.goto(`${BASE_URL}/?offline=true&mute=1`);
 for (
 	let i = 0;
 	i < 60 &&

@@ -199,7 +199,7 @@ async function main() {
 	// makes the local fighter a bot too, so the whole room is AI — and skips the
 	// name prompt, which is gated on exactly that.
 	const url =
-		`${BASE_URL}/?ai=true&bots=${FIGHTERS - 1}` +
+		`${BASE_URL}/?ai=true&bots=${FIGHTERS - 1}&mute=1` +
 		`&scoreLimit=${SCORE_LIMIT}&timeLimit=${TIME_LIMIT_SEC}` +
 		(SCREENS > 1 ? `&screen=${SCREENS}` : "") +
 		(HERO ? `&hero=${HERO}` : "") +

@@ -190,7 +190,7 @@ async function offlineRun(browser: Browser, durationMs: number) {
 	// menu and never boots a match, so the probe must ask for one. `ai=true`
 	// starts the AI-vs-AI brains at boot (the `__toggleAIVsAI` call below would
 	// toggle them back off, so it is not made here).
-	await page.goto(`${BASE_URL}/?offline=true&ai=true`);
+	await page.goto(`${BASE_URL}/?offline=true&ai=true&mute=1`);
 	await waitForGame(page);
 
 	const report = await runDiagnostic(page, lines, durationMs);
@@ -231,7 +231,7 @@ async function onlineRun(browser: Browser, durationMs: number) {
 	// reconciliation and projectiles are cleanest to read against one opponent.
 	// `scripts/deathmatch-probe.ts` is the sixteen-fighter measurement.
 	const room = `diag-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-	const url = `${BASE_URL}/?online=true&ai=true&room=${room}${URL_PARAMS}`;
+	const url = `${BASE_URL}/?online=true&ai=true&room=${room}&mute=1${URL_PARAMS}`;
 
 	const a = await ctx.newPage();
 	const linesA = sinkConsole(a);

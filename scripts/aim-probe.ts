@@ -324,7 +324,10 @@ async function runOne(browser: Browser, dpr: number) {
 	// shots this probe needs to see leave — half the runs used to fail for reasons
 	// that had nothing to do with aim. An empty room removes the noise and none of
 	// the netcode: it is still served, predicted and reconciled.
-	const url = MODE === "offline" ? `${BASE_URL}/?offline=true` : BASE_URL;
+	const url =
+		MODE === "offline"
+			? `${BASE_URL}/?offline=true&mute=1`
+			: `${BASE_URL}/?mute=1`;
 	await page.goto(url);
 	await waitForGame(page);
 	// A human-controlled client is asked for a name before it connects, and the
