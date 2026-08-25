@@ -132,8 +132,25 @@ export interface AIInput {
 	enemyGrounded: boolean;
 	/** Air jumps left. `AIR_JUMPS` means a double jump is still available. */
 	selfAirJumps: number;
-	/** Ultimate charge, 0..100. `ULT_MAX_CHARGE` means the ult is armed. */
+	/** Ultimate charge, 0..cap. The hero's armed threshold, so a brain never
+	 * hard-codes a full meter. */
 	selfUltCharge: number;
+	/**
+	 * The charge at which this fighter's ultimate arms (100 for the hole and
+	 * the dragon, lower for the blossom). The blossom is the cheap one — it
+	 * needs less charge, so it *charges faster* — and the brain reads armed
+	 * against this, not a constant.
+	 */
+	selfUltCap: number;
+	/**
+	 * A hostile round is heading at this fighter — the read that turns the
+	 * guard into a *proactive* anti-spam tool. A raised guard blocks bullets
+	 * and feeds a little ultimate charge, so a bot that knows it is being shot
+	 * at can choose to eat the stream and farm the meter instead of dodging it.
+	 * True while any bullet fired by a foe is on a line that reaches this
+	 * fighter's body within the perception's corridor.
+	 */
+	incomingFire: boolean;
 	/** The enemy's velocity, for leading a shot to where it will be. */
 	enemyVX: number;
 	enemyVY: number;

@@ -203,11 +203,14 @@ export {
 	singularityGrip,
 	tickGrenade,
 	ULT_CHARGE_MELEE_MULTIPLIER,
+	ULT_CHARGE_PER_BLOCKED_BULLET,
 	ULT_CHARGE_PER_DAMAGE,
 	ULT_CHARGE_PER_KILL,
 	ULT_CINEMATIC_MS,
 	ULT_MAX_CHARGE,
 	ULT_PASSIVE_PER_SEC,
+	ultCap,
+	ultChargeMultiplier,
 	ultReady,
 } from "./Ultimate.js";
 

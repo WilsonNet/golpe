@@ -36,6 +36,8 @@ function perception(overrides: Partial<AIInput> = {}): AIInput {
 		enemyGrounded: true,
 		selfAirJumps: 1,
 		selfUltCharge: 0,
+		selfUltCap: 100,
+		incomingFire: false,
 		enemyVX: 0,
 		enemyVY: 0,
 		selfTeam: null,
@@ -146,5 +148,38 @@ describe("MeleeBrain", () => {
 		);
 		expect(output.moveLeft).toBe(false);
 		expect(output.moveRight).toBe(false);
+	});
+
+	it("holds the guard under incoming fire to build ultimate charge", () => {
+		// A hostile round is heading in and the meter is not yet armed: the
+		// bot stands behind the guard and farms the charge the guard pays,
+		// instead of dodging the stream.
+		const output = decide(
+			perception({
+				incomingFire: true,
+				selfUltCharge: 40,
+				selfUltCap: 100,
+				distanceToPlayer: 160,
+			}),
+			0,
+			0.5,
+		);
+		expect(output.block).toBe(true);
+	});
+
+	it("does not turtle under fire once the ultimate is already armed", () => {
+		// Nothing left to farm: with the meter full, guarding a stream is just
+		// standing still, so the bot does not bother.
+		const output = decide(
+			perception({
+				incomingFire: true,
+				selfUltCharge: 100,
+				selfUltCap: 100,
+				distanceToPlayer: 160,
+			}),
+			0,
+			0.5,
+		);
+		expect(output.block).toBe(false);
 	});
 });

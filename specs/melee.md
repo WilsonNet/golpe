@@ -306,6 +306,17 @@ after.
   it serves (`blocksUltimate`), so every future ultimate that arrives as
   something throwable inherits the counterplay for free. See
   [ultimate.md](ultimate.md).
+- **Eating bullets feeds the meter.** A guard that stops a bullet grants the
+  defender a little ultimate charge (`ULT_CHARGE_PER_BLOCKED_BULLET`), paid
+  once per round and drawn as **purple sparks** where the bullet died. It is
+  a small, flat grant — a single rifle shot is a rounding error, but a
+  machine gun or a shotgun emptied into a read guard is real charge. This is
+  the guard's anti-spam job: a fighter who holds block against a streamer
+  is being paid to, and the counter is what makes *mindless* spam feed the
+  defender rather than the shooter. The purple is the one colour nothing else
+  in a fight uses, so a defender reading a stream sees the reward it is
+  paying. (It is deliberately not a parry — no guard break, no free Massive —
+  because that would make holding block strictly dominant against a gunner.)
 - **Front only.** A block covers the side the fighter faces. An attack landing
   from behind is not blocked at all — see *Backstab* below.
 - **Every sword attack a guard stops is a guard break.** There is no

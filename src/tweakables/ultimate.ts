@@ -12,6 +12,35 @@
 export const ULT_MAX_CHARGE = 100;
 
 /**
+ * The charge at which each ultimate arms, by ultimate id.
+ *
+ * The black hole and the dragon need a full meter; the Death Blossom is the
+ * cheap one — it needs **less** charge to cast, which is what makes it "charge
+ * faster": a jeffs fighter is armed sooner from the same damage, and the HUD
+ * shows the smaller target so a player can see it at a glance. `ULT_MAX_CHARGE`
+ * (100) is the universal bar scale and the default; only the blossom opts down.
+ */
+export const ULT_CAP: Record<string, number> = {
+	"black-hole": 100,
+	"dragon-thrust": 100,
+	"death-blossom": 65,
+};
+
+/**
+ * Charge multiplier applied to every source, by ultimate id.
+ *
+ * The second lever of "the blossom charges faster": even per point of damage,
+ * a jeffs fighter fills toward the (already smaller) cap more quickly. Only
+ * the blossom differs; everything else is 1, so the shared economy is the
+ * default and the exception is one map.
+ */
+export const ULT_CHARGE_MULTIPLIER: Record<string, number> = {
+	"black-hole": 1,
+	"dragon-thrust": 1,
+	"death-blossom": 1.3,
+};
+
+/**
  * Charge for simply being alive, per second.
  *
  * Overwatch's passive exists so that a fight nobody is winning still eventually
@@ -50,6 +79,20 @@ export const ULT_CHARGE_MELEE_MULTIPLIER = 2;
 
 /** A finishing blow is worth a little more than the damage that did it. */
 export const ULT_CHARGE_PER_KILL = 3;
+
+/**
+ * Charge granted for blocking one bullet with the sword guard.
+ *
+ * The guard already absorbs bullets for free; this is the small extra that
+ * makes it *also* feed the meter. Deliberately a flat grant per bullet, not a
+ * fraction of the damage — a shotgun's six pellets are six bullets, and a
+ * stream's only relevance is how many rounds it throws at the guard. It is
+ * tuned to be **only relevant against a spammer**: a single rifle shot is a
+ * rounding error, but a machine gun or a shotgun emptied into a read guard
+ * is real charge. The guard is the anti-spam tool, and the meter is what it
+ * is paid for taking the spam.
+ */
+export const ULT_CHARGE_PER_BLOCKED_BULLET = 1.2;
 
 // ---------------------------------------------------------------------------
 // The cinematic

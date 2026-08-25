@@ -46,7 +46,10 @@ import {
 	SINGULARITY_REACH,
 	SINGULARITY_TICK_DAMAGE,
 	SINGULARITY_TUG_ACCEL,
+	ULT_CAP,
 	ULT_CHARGE_MELEE_MULTIPLIER,
+	ULT_CHARGE_MULTIPLIER,
+	ULT_CHARGE_PER_BLOCKED_BULLET,
 	ULT_CHARGE_PER_DAMAGE,
 	ULT_CHARGE_PER_KILL,
 	ULT_CINEMATIC_MS,
@@ -86,6 +89,7 @@ export {
 	SINGULARITY_REACH,
 	SINGULARITY_TICK_DAMAGE,
 	ULT_CHARGE_MELEE_MULTIPLIER,
+	ULT_CHARGE_PER_BLOCKED_BULLET,
 	ULT_CHARGE_PER_DAMAGE,
 	ULT_CHARGE_PER_KILL,
 	ULT_CINEMATIC_MS,
@@ -94,8 +98,21 @@ export {
 };
 
 /** Cheap predicate so "is it armed" is spelled the same way everywhere. */
-export function ultReady(charge: number): boolean {
-	return charge >= ULT_MAX_CHARGE;
+export function ultReady(
+	charge: number,
+	cap: number = ULT_MAX_CHARGE,
+): boolean {
+	return charge >= cap;
+}
+
+/** The charge at which a given ultimate arms. Defaults to the universal 100. */
+export function ultCap(ultimateId: string | undefined): number {
+	return ULT_CAP[ultimateId ?? ""] ?? ULT_MAX_CHARGE;
+}
+
+/** How fast this ultimate's meter fills, per point of charge. Defaults to 1. */
+export function ultChargeMultiplier(ultimateId: string | undefined): number {
+	return ULT_CHARGE_MULTIPLIER[ultimateId ?? ""] ?? 1;
 }
 
 /** Samples the blossom's line-of-sight check — cheaper than the AI's default. */
@@ -103,8 +120,12 @@ const BLOSSOM_LOS_SAMPLES = 16;
 /** The caster's sprite does one revolution every this many ms. */
 const BLOSSOM_SPIN_MS = 360;
 
-export function addCharge(charge: number, amount: number): number {
-	return Math.max(0, Math.min(ULT_MAX_CHARGE, charge + amount));
+export function addCharge(
+	charge: number,
+	amount: number,
+	cap: number = ULT_MAX_CHARGE,
+): number {
+	return Math.max(0, Math.min(cap, charge + amount));
 }
 
 /**

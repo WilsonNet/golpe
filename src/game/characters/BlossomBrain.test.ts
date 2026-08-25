@@ -34,6 +34,8 @@ function input(over: Partial<AIInput> = {}): AIInput {
 		enemyGrounded: true,
 		selfAirJumps: 1,
 		selfUltCharge: 100,
+		selfUltCap: 100,
+		incomingFire: false,
 		enemyVX: 0,
 		enemyVY: 0,
 		selfTeam: null,

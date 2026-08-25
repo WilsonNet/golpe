@@ -30,12 +30,19 @@ export interface HudKillEvent {
 	mine: boolean;
 }
 
-/** Health values in hit points; `ult` in 0..100 like the simulation. */
+/** Health values in hit points; `ult` in 0..`ultCap` like the simulation. */
 export interface HudState {
 	hp: number;
 	maxHp: number;
-	/** Ultimate charge, 0..100. */
+	/** Ultimate charge, 0..`ultCap`. The hero's own meter. */
 	ult: number;
+	/**
+	 * The charge at which the local hero's ultimate arms (100 for the hole and
+	 * the dragon, lower for the blossom). Carried so the HUD can show the
+	 * absolute value and its target — the blossom's smaller number is what
+	 * tells a player it charges faster.
+	 */
+	ultCap: number;
 	/** Item charges left this life, server-counted. */
 	itemCharges: number;
 	/** The kit's full charge count, so the HUD can draw the pips. */

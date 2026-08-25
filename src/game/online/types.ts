@@ -387,6 +387,12 @@ export interface GameSnapshot {
 	explosions: ExplosionMsg[];
 	/** A trap just rooted somebody, for the caption. Effects only. */
 	rooted: RootedMsg[];
+	/**
+	 * Bullets the guard turned away since the previous snapshot. Effects only —
+	 * the charge it earned already travels in the meter — so a dropped datagram
+	 * costs the purple sparks, never the reward.
+	 */
+	blockedBullets: BlockedBulletMsg[];
 }
 
 /**
@@ -501,6 +507,19 @@ export interface RootedMsg {
 	/** Who got rooted, so the caption pops over the right fighter. */
 	victimId: string;
 	/** Where, in world body space, for the splash. */
+	x: number;
+	y: number;
+}
+
+/**
+ * A bullet the sword guard turned away. Effects only, exactly like a melee
+ * impact: a dropped datagram costs the purple sparks, never the reward, which
+ * travels in the meter itself.
+ */
+export interface BlockedBulletMsg {
+	/** The fighter whose guard stopped it, so the sparks play on the right body. */
+	victimId: string;
+	/** Where the bullet died, in world body space. */
 	x: number;
 	y: number;
 }

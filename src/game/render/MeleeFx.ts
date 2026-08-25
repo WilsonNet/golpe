@@ -69,6 +69,11 @@ const COLOR = {
 	block: 0xffe066,
 	backstab: 0xc471ff,
 	stun: 0xffe066,
+	/**
+	 * The guard turning a bullet away: a violet no other combat colour uses, so
+	 * a defender eating a stream sees the reward it is paying.
+	 */
+	bulletBlock: 0x9b59ff,
 } as const satisfies Record<MeleeMove | string, number>;
 
 /**
@@ -1158,6 +1163,33 @@ export class MeleeFx {
 				break;
 			}
 		}
+	}
+
+	/**
+	 * One bullet the guard turned away.
+	 *
+	 * Purple sparks — the one colour nothing else in the fight uses, so a
+	 * defender reading a stream sees the reward it is paying. The charge it
+	 * earned already travelled in the meter; this is the tell.
+	 */
+	blockBullet(x: number, y: number, victimKey?: string) {
+		const team = victimKey
+			? (this.fighters.get(victimKey)?.team ?? null)
+			: null;
+		const tint = teamTint(COLOR.bulletBlock, team, TINT.medium);
+		// A tight, low-speed pop — the round dies against the guard, it does not
+		// explode. Enough sparks to read, light enough to read as "absorbed".
+		this.particles.burst({
+			texture: TEX.spark,
+			count: 7,
+			x,
+			y,
+			tint,
+			speed: [70, 180],
+			lifeMs: 260,
+			scale: [1, 0],
+			gravity: 300,
+		});
 	}
 
 	/** An upward cone, sold as the target leaving the ground. */

@@ -13,11 +13,7 @@
  * freeze) costs nothing because the charge is spent on success only.
  */
 
-import {
-	GRENADE_GRAVITY,
-	GRENADE_SPEED,
-	ULT_MAX_CHARGE,
-} from "../simulation/Ultimate.js";
+import { GRENADE_GRAVITY, GRENADE_SPEED } from "../simulation/Ultimate.js";
 import type { AIInput, TeamRole } from "./types.js";
 
 /**
@@ -202,7 +198,7 @@ export class UltimateBrain {
 			this.lastDecline = "cooldown";
 			return;
 		}
-		if (input.selfUltCharge < ULT_MAX_CHARGE) {
+		if (input.selfUltCharge < input.selfUltCap) {
 			this.armedTimer = 0;
 			this.lastDecline = "not-armed";
 			return;

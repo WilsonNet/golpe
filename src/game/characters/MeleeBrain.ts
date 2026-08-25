@@ -613,6 +613,22 @@ export class MeleeBrain {
 	): MeleeBeat[] | null {
 		const skill = this.skill / 10;
 
+		// Being shot at is a *guard* read, not a swing read. A raised guard
+		// blocks bullets and feeds a little ultimate charge, so a bot that knows
+		// it is under fire can stand behind the guard and farm the meter instead
+		// of dodging it — the anti-spam tactic that makes a streamer hand out an
+		// ultimate. Only worth it when there is still meter to build, the foe is
+		// not in sword range (a swing answer is better up close), and the guard
+		// can actually reach the rounds (they are already in the corridor).
+		if (
+			input.incomingFire &&
+			input.selfUltCharge < input.selfUltCap &&
+			distance > STRIKE_RANGE_PX &&
+			!input.selfCharging
+		) {
+			return TURTLE;
+		}
+
 		if (distance < STRIKE_RANGE_PX) {
 			// Hurt fighters cover up. This is the only way a guard gets held past
 			// the parry window, so it is also the only thing that makes the

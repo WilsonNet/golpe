@@ -56,15 +56,31 @@ The Overwatch model: charge is a currency you are paid for participating.
 | Damage dealt by a bullet | **0.2 charge per point** |
 | Damage dealt by a sword | **0.4 charge per point** — the sword pays double |
 | A kill | **3 charge** |
+| A bullet blocked by the sword guard | **1.2 charge per bullet** — the anti-spam read |
 
 - The meter is **0..100**. It is **server-owned** — the client displays it and
   never decides it, because charge is paid out of damage and only the server
   knows a hit landed.
+- **Every ultimate arms at its own cap, and the blossom is the cheap one.** The
+  black hole and the dragon need a full 100; the Death Blossom arms at **65**
+  and fills **1.3× as fast** per source (`ULT_CAP` / `ULT_CHARGE_MULTIPLIER`).
+  A jeffs fighter is armed sooner from the same damage — the blossom is a
+  shorter fight's worth of commitment, so it needs less of one to earn. The
+  HUD shows the absolute value out of the hero's cap (`37/65`), so a player
+  reads "this one needs less" from the number itself, not a percentage that
+  hides it.
 - **The meter is won by hits, and the ultimate is the one weapon that cannot
   pay.** The hole's damage feeds nobody: no charge for the caster, no kill
   bonus for a hole that scores. A caster whose own hole paid them would never
   have to land a sword hit again, and a hold that rearmed itself would be an
   infinite loop wearing a cinematic. Sword and gun only.
+- **Blocking bullets is the one defensive source.** The guard's 1.2 per bullet
+  is flat, not a fraction of the damage — a shotgun's six pellets are six
+  bullets, and a stream's only relevance is how many rounds it throws at the
+  guard. Tuned so it is only relevant against a *spammer*: one rifle shot is
+  a rounding error, a machine gun or a shotgun emptied into a read guard is
+  real charge. This is the answer to mindless gunfire — a streamer hands a
+  guard an ultimate, which is what keeps the fight coming back to the sword.
 - **Death does not spend it — except the one death that is a deny.** Carrying
   an ult through a respawn is what makes it a plan rather than a lottery
   ticket; dying *while holding the button* is the aim phase's risk, and that
@@ -347,7 +363,10 @@ than a puddle bots stand in.
 
 The renderer's job, none of it authoritative:
 
-- **The meter**, bottom-centre, filling; a pulse and a colour change at 100.
+- **The meter**, bottom-centre, filling; a pulse and a colour change at its
+  armed value. It reads as an **absolute number out of the hero's cap**
+  (`37/65`), not a percentage, so the blossom's smaller target is visible as
+  a fact — a player can tell at a glance which ultimate charges faster.
 - **The aim arc**: while the ultimate button is held and a cast is legal, the
   grenade's own trajectory drawn from the caster's chest — the same speed,
   gravity and fuse the simulation will use, stopped where the grenade would

@@ -351,8 +351,9 @@ export function FightHud({ training = false }: { training?: boolean }) {
 	const [map, setMap] = useState(() => bindings.snapshot());
 	useEffect(() => bindings.subscribe(() => setMap(bindings.snapshot())), []);
 	const ultKey = codeLabel(map.ultimate[0] ?? "");
-	const ult = hud ? Math.max(0, Math.min(ULT_MAX_CHARGE, hud.ult)) : 0;
-	const ultReady = ult >= ULT_MAX_CHARGE;
+	const ultCap = hud?.ultCap ?? ULT_MAX_CHARGE;
+	const ult = hud ? Math.max(0, Math.min(ultCap, hud.ult)) : 0;
+	const ultReady = ult >= ultCap;
 	const itemKey = codeLabel(map.item[0] ?? "");
 	const item = hud?.itemCharges ?? 0;
 	const itemMax = hud?.itemMaxCharges ?? 0;
@@ -436,16 +437,16 @@ export function FightHud({ training = false }: { training?: boolean }) {
 					<div
 						className="vdh-ult-fill"
 						style={{
-							width: `${(ult / ULT_MAX_CHARGE) * 100}%`,
+							width: `${(ult / ultCap) * 100}%`,
 							background: ultReady ? "#b06bff" : "#5a8fd0",
 						}}
 					/>
 				</div>
-				{/* The percentage is the readable part: the bar is thin by design,
-				    but the number answers "how close am I" exactly. When armed it
-				    becomes the READY tell, in the hole's violet. */}
+				{/* The absolute value and its target: the blossom's smaller cap is the
+				    whole of "this one charges faster", shown as a number, not a
+				    percentage that would hide it. */}
 				<span className="vdh-ult-pct">
-					{ultReady ? "READY" : `${Math.round(ult)}%`}
+					{ultReady ? "READY" : `${Math.round(ult)}/${Math.round(ultCap)}`}
 				</span>
 				{ultKey ? <span className="vdh-ult-key">{ultKey}</span> : null}
 			</section>

@@ -27,8 +27,6 @@ const ARMED_PATIENCE_MS = 10000;
 const PATIENCE_RANGE_PX = 560;
 /** The support's self-defence: a rushed support blasts the dragon point-blank. */
 const POINT_BLANK_RANGE_PX = 200;
-/** A full ultimate meter. */
-const FULL_ULT_CHARGE = 100;
 
 export class DragonBrain {
 	private holdMs = 0;
@@ -80,7 +78,7 @@ export class DragonBrain {
 			return;
 		}
 
-		if (input.selfUltCharge < FULL_ULT_CHARGE) {
+		if (input.selfUltCharge < input.selfUltCap) {
 			this.armedTimer = 0;
 			return;
 		}

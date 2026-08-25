@@ -346,8 +346,11 @@ export function TouchControls() {
 	// the stance does; `Match` emits it, rounded, only when the integer changes.
 	const [ultReadyNow, setUltReady] = useState(false);
 	useEffect(() => {
-		const off = EventBus.on("ult-charge", ((charge: number) => {
-			setUltReady(charge >= 100);
+		const off = EventBus.on("ult-charge", ((m: {
+			charge: number;
+			cap: number;
+		}) => {
+			setUltReady(m.charge >= m.cap);
 		}) as never);
 		return off;
 	}, []);

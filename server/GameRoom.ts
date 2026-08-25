@@ -11,6 +11,7 @@ import type {
 	FoeInfo,
 } from "../src/game/characters/types.js";
 import {
+	type BlockedBulletMsg,
 	type DenyEventMsg,
 	type ExplosionMsg,
 	type GameSnapshot,
@@ -176,11 +177,14 @@ import {
 	trapCatches,
 	trapFor,
 	ULT_CHARGE_MELEE_MULTIPLIER,
+	ULT_CHARGE_PER_BLOCKED_BULLET,
 	ULT_CHARGE_PER_DAMAGE,
 	ULT_CHARGE_PER_KILL,
 	ULT_CINEMATIC_MS,
 	ULT_MAX_CHARGE,
 	ULT_PASSIVE_PER_SEC,
+	ultCap,
+	ultChargeMultiplier,
 	ultReady,
 } from "./physics.js";
 import { TrainingDummy } from "./TrainingDummy.js";
@@ -513,6 +517,8 @@ export class GameRoom {
 	private denies: DenyEventMsg[] = [];
 	/** Frags since the last broadcast, for the client's kill feed. */
 	private killEvents: KillEventMsg[] = [];
+	/** Bullets the guard turned away, for the purple sparks. Effects only. */
+	private blockedBullets: BlockedBulletMsg[] = [];
 	private channelIds: string[] = [];
 	private tickAccumulator = 0;
 	private broadcastAccumulator = 0;
@@ -970,7 +976,7 @@ export class GameRoom {
 			tickInput: null,
 			pendingInput: null,
 			simulatedIntent: null,
-			ult: this.startUltCharge,
+			ult: Math.min(this.startUltCharge, ultCap(kitFor(hero).ultimate)),
 			ultHeld: false,
 			ultAimAngle: 0,
 			itemCharges: kitFor(hero).item.maxCharges,
@@ -1315,7 +1321,10 @@ export class GameRoom {
 			// the same fighter. The meter is the old hero's — reset it.
 			if (slot && isHeroId(dummy.config.hero)) {
 				slot.hero = dummy.config.hero;
-				slot.ult = this.startUltCharge;
+				slot.ult = Math.min(
+					this.startUltCharge,
+					ultCap(kitFor(slot.hero).ultimate),
+				);
 			}
 		}
 		if (msg.clearRecording) dummy.clearRecording();
@@ -1564,6 +1573,8 @@ export class GameRoom {
 			enemyGrounded: foe.state.grounded,
 			selfAirJumps: bot.state.airJumps,
 			selfUltCharge: bot.ult,
+			selfUltCap: ultCap(kitFor(bot.hero).ultimate),
+			incomingFire: this.incomingFire(bot),
 			enemyVX: foe.state.vx,
 			enemyVY: foe.state.vy,
 			selfTeam: bot.team,
@@ -1591,6 +1602,43 @@ export class GameRoom {
 					]
 				: [],
 		};
+	}
+
+	/**
+	 * Is a hostile round heading at this fighter right now?
+	 *
+	 * The read behind the guard's anti-spam play: a bullet fired by a foe
+	 * travelling on a line that reaches the fighter's body within a generous
+	 * corridor. The corridor is wide because the point is not to promise a hit
+	 * (the server owns that) but to tell a bot "you are being shot at" so it
+	 * can choose to eat the stream and farm the meter. Only the bot's own
+	 * side's shots are ignored — a teammate's round is not a threat.
+	 */
+	private incomingFire(bot: ConnectedPlayer): boolean {
+		const cx = bot.state.x + PLAYER_WIDTH / 2;
+		const cy = bot.state.y + PLAYER_HEIGHT / 2;
+		const CORRIDOR = 26;
+		const REACH_AHEAD = 30;
+		for (const b of this.bullets) {
+			const owner = this.players.get(b.ownerId);
+			if (!owner || owner === bot || !hostile(owner.team, bot.team)) continue;
+			// The round must be moving toward the fighter's general line: its
+			// velocity and the direction from the round to the fighter must not
+			// point the same way (that would be a round already past them).
+			const dx = cx - b.x;
+			const dy = cy - b.y;
+			if (dx * b.vx + dy * b.vy < 0) continue;
+			const speed = Math.hypot(b.vx, b.vy);
+			if (speed < 1) continue;
+			// Distance from the round's line to the fighter's centre.
+			const cross = Math.abs(b.vx * dy - b.vy * dx) / speed;
+			if (cross > CORRIDOR) continue;
+			// And it must be roughly ahead of the round, not behind it.
+			const along = (dx * b.vx + dy * b.vy) / speed;
+			if (along < -REACH_AHEAD) continue;
+			return true;
+		}
+		return false;
 	}
 
 	private removePlayer(id: string) {
@@ -1703,7 +1751,12 @@ export class GameRoom {
 			// The kill bonus is a weapon's payment, and the ultimate is the one
 			// weapon that does not pay: a hole that kills somebody fed nobody.
 			if (!victim.lastHurtByUlt) {
-				killer.ult = addCharge(killer.ult, ULT_CHARGE_PER_KILL);
+				killer.ult = addCharge(
+					killer.ult,
+					ULT_CHARGE_PER_KILL *
+						ultChargeMultiplier(kitFor(killer.hero).ultimate),
+					ultCap(kitFor(killer.hero).ultimate),
+				);
 			}
 		}
 		// The ultimate survives death — except the one death that is a deny.
@@ -1834,7 +1887,14 @@ export class GameRoom {
 					source === "melee"
 						? ULT_CHARGE_PER_DAMAGE * ULT_CHARGE_MELEE_MULTIPLIER
 						: ULT_CHARGE_PER_DAMAGE;
-				from.ult = addCharge(from.ult, amount * rate);
+				// The per-ultimate multiplier is the blossom's second lever: even
+				// per point of damage a jeffs fighter fills toward its smaller cap
+				// faster than anyone else fills the full meter.
+				from.ult = addCharge(
+					from.ult,
+					amount * rate * ultChargeMultiplier(kitFor(from.hero).ultimate),
+					ultCap(kitFor(from.hero).ultimate),
+				);
 				// The reel's own economy rides the same gate: the ultimate is the
 				// one weapon that feeds nothing — not the meter, not the highlight.
 				// Banked in bursts so the tracker hears about a health bar's worth
@@ -1884,7 +1944,7 @@ export class GameRoom {
 		player.hero = hero;
 		player.pendingHero = null;
 		// A different hero, a different ultimate: the meter is the old one's.
-		player.ult = this.startUltCharge;
+		player.ult = Math.min(this.startUltCharge, ultCap(kitFor(hero).ultimate));
 		player.ultHeld = false;
 		// And a different melee weapon: cancel the move that belonged to the
 		// old one, and any charge a sword was building.
@@ -1942,7 +2002,10 @@ export class GameRoom {
 		// The floor only applies in a room that asked for one (`?ultCharge=N`),
 		// where it is there so a probe or a practising player gets more than one
 		// throw per run.
-		player.ult = Math.max(player.ult, this.startUltCharge);
+		player.ult = Math.min(
+			Math.max(player.ult, this.startUltCharge),
+			ultCap(kitFor(player.hero).ultimate),
+		);
 		// Items, though, are a per-life resource: dying is the price of the
 		// second grenade, so a respawn grants the full kit again — and takes
 		// the dead fighter's traps off the floor with them, so a player cannot
@@ -2184,7 +2247,10 @@ export class GameRoom {
 			// A new match starts everybody at zero. Charge survives a death but not a
 			// scoreboard wipe — carrying one over would hand the previous match's
 			// winner an ultimate before the new one has begun.
-			player.ult = this.startUltCharge;
+			player.ult = Math.min(
+				this.startUltCharge,
+				ultCap(kitFor(player.hero).ultimate),
+			);
 			player.ultHeld = false;
 			player.ultAimAngle = 0;
 			player.itemHeld = false;
@@ -2321,6 +2387,7 @@ export class GameRoom {
 			// One-shot effects, drained every snapshot like `melee` and `denies`.
 			explosions: this.explosions.slice(),
 			rooted: this.rootedEvents.slice(),
+			blockedBullets: this.blockedBullets.slice(),
 		};
 	}
 
@@ -3052,9 +3119,23 @@ export class GameRoom {
 
 				// A guard covers the side you face, bullets included. The shot is
 				// consumed either way — it hit something — but an absorbed one deals
-				// nothing and is not counted as a hit against the shooter.
+				// nothing and is not counted as a hit against the shooter. The
+				// defender is paid a little meter for it: eating bullets is the
+				// guard's anti-spam job, and a read guard against a stream is the
+				// one time blocking actually feeds an ultimate.
 				if (blocksBullet(player.state, b.vx)) {
 					this.absorbPotg(player, shotDamage, shooter ?? null);
+					player.ult = addCharge(
+						player.ult,
+						ULT_CHARGE_PER_BLOCKED_BULLET *
+							ultChargeMultiplier(kitFor(player.hero).ultimate),
+						ultCap(kitFor(player.hero).ultimate),
+					);
+					this.blockedBullets.push({
+						victimId: player.id,
+						x: b.x,
+						y: b.y,
+					});
 					consumed = true;
 					break;
 				}
@@ -3131,7 +3212,7 @@ export class GameRoom {
 	 * something the first one already did.
 	 */
 	private tryCastUltimate(player: ConnectedPlayer) {
-		if (!ultReady(player.ult)) return;
+		if (!ultReady(player.ult, ultCap(kitFor(player.hero).ultimate))) return;
 		if (!player.alive || this.phase !== "live") return;
 		if (isFrozen(player.state)) return;
 		if (isStunned(player.state) || isKnockedDown(player.state)) return;
@@ -3642,9 +3723,18 @@ export class GameRoom {
 		// where the damage is counted, in `damage`.
 		const passive = ULT_PASSIVE_PER_SEC * dt;
 		for (const player of this.players.values()) {
-			if (player.alive) player.ult = addCharge(player.ult, passive);
+			if (player.alive)
+				player.ult = addCharge(
+					player.ult,
+					passive * ultChargeMultiplier(kitFor(player.hero).ultimate),
+					ultCap(kitFor(player.hero).ultimate),
+				);
 			// The practice-room floor. No-op in a real match, where it is zero.
-			if (player.ult < this.startUltCharge) player.ult = this.startUltCharge;
+			if (player.ult < this.startUltCharge)
+				player.ult = Math.min(
+					this.startUltCharge,
+					ultCap(kitFor(player.hero).ultimate),
+				);
 		}
 	}
 
@@ -3860,6 +3950,7 @@ export class GameRoom {
 		this.smokeClouds.length = 0;
 		this.explosions.length = 0;
 		this.rootedEvents.length = 0;
+		this.blockedBullets.length = 0;
 		this.resetTimer = -1;
 		// The room's copy of the same countdown the fighters are carrying.
 		this.roundFreezeMs = this.freezeTimeMs;
@@ -3931,5 +4022,7 @@ export class GameRoom {
 		// Item events are the same shape, and cleared for the same reason.
 		this.explosions.length = 0;
 		this.rootedEvents.length = 0;
+		// The guard's bullet blocks are the same shape again, cleared here too.
+		this.blockedBullets.length = 0;
 	}
 }

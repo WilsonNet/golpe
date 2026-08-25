@@ -129,7 +129,7 @@ import {
 	sweptThrustBox,
 	tickPlayer,
 	tickReload,
-	ULT_MAX_CHARGE,
+	ultCap,
 } from "./simulation/Physics";
 import {
 	hostile,
@@ -659,6 +659,7 @@ export class Match {
 			hp: this.local.fighter.hp,
 			maxHp: this.local.fighter.maxHp,
 			ult: session ? session.localUlt : 0,
+			ultCap: ultCap(kitFor(this.hero).ultimate),
 			itemCharges: session ? session.localItemCharges : 0,
 			itemMaxCharges: kitFor(this.hero).item.maxCharges,
 			itemLabel: kitFor(this.hero).item.label,
@@ -975,6 +976,12 @@ export class Match {
 					this.items.trapBurst(event.x, event.y);
 					this.training?.recordRooted();
 					this.playAt("root", event.x, event.y);
+				},
+				onBlockedBullet: (event) => {
+					// The purple sparks are the reward's tell, and nothing else: the
+					// charge the guard earned already travelled in the meter. A
+					// dropped datagram costs the sparks, never the reward.
+					this.fx.blockBullet(event.x, event.y, event.victimId);
 				},
 				onFighterAdded: (id) => this.addRemoteFighter(id),
 				onFighterRemoved: (id) => this.despawnFighter(id),
@@ -1330,7 +1337,7 @@ export class Match {
 			return {
 				myId: me,
 				charge: session?.localUlt ?? 0,
-				ready: (session?.localUlt ?? 0) >= ULT_MAX_CHARGE,
+				ready: (session?.localUlt ?? 0) >= ultCap(kitFor(this.hero).ultimate),
 				/** True while the ultimate button is held and a cast is legal. */
 				aiming: this.ultAimVisible(),
 				frozen: session?.frozen ?? false,
@@ -1980,12 +1987,16 @@ export class Match {
 
 		const charge = session.localUlt;
 		// The deck draws its ultimate button only when the meter is full, so it is
-		// told on the integer boundary rather than on every frame.
-		const readyNow = charge >= ULT_MAX_CHARGE;
+		// told on the armed boundary rather than on every frame. Armed is the
+		// hero's own cap — the blossom needs less.
+		const readyNow = charge >= ultCap(kitFor(this.hero).ultimate);
 		if (readyNow !== this.ultReadyLast) {
 			this.ultReadyLast = readyNow;
 			if (readyNow) sound.play("ult-ready");
-			EventBus.emit("ult-charge", charge);
+			EventBus.emit("ult-charge", {
+				charge,
+				cap: ultCap(kitFor(this.hero).ultimate),
+			});
 		}
 
 		// The aim phase: while the ultimate button is held and a cast is legal,
@@ -2096,7 +2107,7 @@ export class Match {
 		if (isStunned(this.local.body) || isKnockedDown(this.local.body)) {
 			return false;
 		}
-		return session.localUlt >= ULT_MAX_CHARGE;
+		return session.localUlt >= ultCap(kitFor(this.hero).ultimate);
 	}
 
 	/** Last value pushed over `ult-charge`, so the deck is told only on a change. */
@@ -2128,7 +2139,8 @@ export class Match {
 		if (!entity) return false;
 		if (entity.fighter.hp <= 0) return false;
 		if (isStunned(entity.body) || isKnockedDown(entity.body)) return false;
-		if (session.ultOf(id) < ULT_MAX_CHARGE) return false;
+		const remoteCap = ultCap(kitFor(session.heroOf(id) ?? this.hero).ultimate);
+		if (session.ultOf(id) < remoteCap) return false;
 		return session.ultHeldBy(id);
 	}
 
@@ -2807,6 +2819,8 @@ export class Match {
 			enemyGrounded,
 			selfAirJumps: self.airJumps,
 			selfUltCharge,
+			selfUltCap: ultCap(kitFor(this.hero).ultimate),
+			incomingFire: this.localIncomingFire(session),
 			enemyVX: foe.vx,
 			enemyVY: foe.vy,
 			selfTeam,
@@ -2828,6 +2842,53 @@ export class Match {
 	// =========================================================
 	//  ONLINE
 	// =========================================================
+
+	/**
+	 * Is a hostile round heading at the local fighter right now? Same corridor
+	 * test the server's bots use, asked of the bullets this client can see —
+	 * the server's authoritative stream online, the escape hatch's own bullets
+	 * off.
+	 */
+	private localIncomingFire(session: OnlineSession | undefined): boolean {
+		const body = this.local.body;
+		const cx = body.x + PLAYER_WIDTH / 2;
+		const cy = body.y + PLAYER_HEIGHT / 2;
+		const CORRIDOR = 26;
+		const REACH_AHEAD = 30;
+		// Online: the server's authoritative rounds carry their owner id, so a
+		// round is a threat only when it is not the local fighter's own. Offline:
+		// the escape hatch's bullets are owned as "player"/"enemy".
+		const myId = session?.manager.myId ?? "";
+		const rounds = session?.connected
+			? session.bulletVectors.map((b) => ({
+					x: b.x,
+					y: b.y,
+					vx: b.vx,
+					vy: b.vy,
+					mine: b.ownerId === myId,
+				}))
+			: this.bullets.vectors().map((b) => ({
+					x: b.x,
+					y: b.y,
+					vx: b.vx,
+					vy: b.vy,
+					mine: b.owner === "player",
+				}));
+		for (const b of rounds) {
+			if (b.mine) continue;
+			const dx = cx - b.x;
+			const dy = cy - b.y;
+			if (dx * b.vx + dy * b.vy < 0) continue;
+			const speed = Math.hypot(b.vx, b.vy);
+			if (speed < 1) continue;
+			const cross = Math.abs(b.vx * dy - b.vy * dx) / speed;
+			if (cross > CORRIDOR) continue;
+			const along = (dx * b.vx + dy * b.vy) / speed;
+			if (along < -REACH_AHEAD) continue;
+			return true;
+		}
+		return false;
+	}
 
 	private updateOnline(dtSec: number) {
 		const session = this.online;

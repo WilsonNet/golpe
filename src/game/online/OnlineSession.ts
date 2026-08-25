@@ -48,6 +48,7 @@ import {
 	RollbackStats,
 } from "./Rollback";
 import type {
+	BlockedBulletMsg,
 	DenyEventMsg,
 	ExplosionMsg,
 	GameSnapshot,
@@ -160,6 +161,8 @@ export interface OnlineCallbacks {
 	onExplosion: (event: ExplosionMsg) => void;
 	/** A trap rooted somebody, for the "ROOTED!" caption. */
 	onRooted: (event: RootedMsg) => void;
+	/** A bullet the guard turned away, for the purple sparks. Effects only. */
+	onBlockedBullet: (event: BlockedBulletMsg) => void;
 	/** A fighter appeared in the snapshot for the first time. */
 	onFighterAdded: (id: string) => void;
 	/** A fighter is no longer in the room. */
@@ -1078,6 +1081,9 @@ export class OnlineSession {
 		}
 		for (const event of snap.rooted ?? []) {
 			this.callbacks.onRooted(event);
+		}
+		for (const event of snap.blockedBullets ?? []) {
+			this.callbacks.onBlockedBullet(event);
 		}
 
 		this._matchStatus = snap.match;

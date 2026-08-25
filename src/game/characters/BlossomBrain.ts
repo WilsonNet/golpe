@@ -12,7 +12,7 @@
  * stun, a freeze) costs nothing because the charge is spent on success only.
  */
 
-import { BLOSSOM_RADIUS_PX, ULT_MAX_CHARGE } from "../simulation/Ultimate.js";
+import { BLOSSOM_RADIUS_PX } from "../simulation/Ultimate.js";
 import type { AIInput, TeamRole } from "./types.js";
 
 /**
@@ -111,7 +111,7 @@ export class BlossomBrain {
 			this.lastDecline = "cooldown";
 			return;
 		}
-		if (input.selfUltCharge < ULT_MAX_CHARGE) {
+		if (input.selfUltCharge < input.selfUltCap) {
 			this.armedTimer = 0;
 			this.lastDecline = "not-armed";
 			return;

@@ -44,6 +44,8 @@ import {
 	singularityGrip,
 	tickGrenade,
 	ULT_MAX_CHARGE,
+	ultCap,
+	ultChargeMultiplier,
 	ultReady,
 } from "./Ultimate.js";
 
@@ -236,6 +238,29 @@ describe("charge", () => {
 	it("is only ready at a full meter", () => {
 		expect(ultReady(ULT_MAX_CHARGE - 0.01)).toBe(false);
 		expect(ultReady(ULT_MAX_CHARGE)).toBe(true);
+	});
+
+	it("arms each ultimate at its own cap — the blossom is the cheap one", () => {
+		expect(ultCap("black-hole")).toBe(ULT_MAX_CHARGE);
+		expect(ultCap("dragon-thrust")).toBe(ULT_MAX_CHARGE);
+		expect(ultCap("death-blossom")).toBeLessThan(ULT_MAX_CHARGE);
+		// Armed is the hero's own cap, not a hard-coded full meter.
+		expect(
+			ultReady(ultCap("death-blossom") - 0.01, ultCap("death-blossom")),
+		).toBe(false);
+		expect(ultReady(ultCap("death-blossom"), ultCap("death-blossom"))).toBe(
+			true,
+		);
+		// And the cap bounds the meter, so a blossom cannot overfill past it.
+		expect(addCharge(0, 1000, ultCap("death-blossom"))).toBe(
+			ultCap("death-blossom"),
+		);
+	});
+
+	it("charges the blossom faster per source, and everything else at parity", () => {
+		expect(ultChargeMultiplier("black-hole")).toBe(1);
+		expect(ultChargeMultiplier("dragon-thrust")).toBe(1);
+		expect(ultChargeMultiplier("death-blossom")).toBeGreaterThan(1);
 	});
 });
 

@@ -60,6 +60,8 @@ function perception(overrides: Partial<AIInput> = {}): AIInput {
 		enemyGrounded: true,
 		selfAirJumps: 1,
 		selfUltCharge: 0,
+		selfUltCap: 100,
+		incomingFire: false,
 		enemyVX: 0,
 		enemyVY: 0,
 		selfTeam: null,

@@ -131,6 +131,11 @@ Reaper's Death Blossom, at this game's scale: the caster stops, and for two
 seconds the world around them is a storm of gunfire. **Every ultimate gets the
 announcement** — the same 1100ms freeze and portrait card the black hole has.
 
+- **It is the cheap ultimate.** The blossom arms at **65** charge instead of a
+  full 100 and fills **1.3×** as fast per source — a jeffs fighter is armed
+  sooner from the same damage. A point-blank, interruptible, self-centred storm
+  is a shorter commitment than a lob or a ride, so it earns faster; the HUD
+  shows the smaller target (`37/65`), which is how a player reads it.
 - **Casting:** hold R to aim. There is nothing to aim — the preview is a
   pulsing **ring at the blast radius** around the caster, because for a radial
   ultimate the radius is the information. Release to cast.
@@ -201,6 +206,13 @@ the coordinator.
   (3) *The panic button:* hurt or outnumbered, the bot smokes its own feet
   and vanishes while still seeing everything. The aim is straight down for
   the self-smokes and a solved lob (`smokeLobAngle`) for the team play.
+
+Every hero's bot knows the anti-spam guard too: when a hostile round is
+heading at it (`incomingFire`) and the meter is not yet armed, the melee
+module holds a guard instead of dodging — eating the stream and farming the
+charge the guard now pays. The blossom's low cap makes this tactic pay off
+soonest, which is the point: a jeffs bot baits a streamer into handing it a
+storm.
 
 ## The art budget
 
