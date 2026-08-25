@@ -8,6 +8,7 @@
  * feature proves only that the unit is fine.
  */
 
+import { fc, test } from "@fast-check/vitest";
 import { describe, expect, it } from "vitest";
 import { buildWorld } from "./Arena.js";
 import { kitFor } from "./Heroes.js";
@@ -15,7 +16,9 @@ import { applyHitToDefender, type MeleeResult } from "./Melee.js";
 import {
 	createPlayerState,
 	NEUTRAL_INTENT,
+	PLAYER_HEIGHT,
 	PLAYER_WALK_SPEED,
+	PLAYER_WIDTH,
 	type PlayerIntent,
 	type PlayerPosition,
 	tickPlayer,
@@ -278,6 +281,46 @@ describe("friendly fire", () => {
 		expect(singularityGrip(fieldFor(field, "me"), 384, 276)).toBe("clear");
 		expect(singularityGrip(fieldFor(field, "them"), 384, 276)).toBe("held");
 	});
+
+	/**
+	 * The friendly-fire rule is written once — never the caster, never a
+	 * teammate — and every weapon asks it. Swept over arbitrary ids and teams,
+	 * the hole, the blossom and the grenade must all agree about whose side a
+	 * fighter is on; the one place the rule lives keeps them from drifting.
+	 */
+	test.prop([
+		fc.constantFrom("me", "them", "ally", "enemy"),
+		fc.constantFrom(null, 0 as TeamId, 1 as TeamId),
+		fc.constantFrom("me", "them", "ally", "enemy"),
+		fc.constantFrom(null, 0 as TeamId, 1 as TeamId),
+	])(
+		"the hole, the blossom and the grenade agree about hostility",
+		(ownerId, ownerTeam, fighterId, fighterTeam) => {
+			const field = hole(400, 300, ownerId, ownerTeam);
+			const hostile = fieldAffects(field, fighterId, fighterTeam);
+
+			// The blossom is pure hostility — no geometry to confound it.
+			expect(
+				blossomAffects(
+					{
+						id: 1,
+						ownerId,
+						ownerTeam,
+						x: 400,
+						y: 300,
+						remainingMs: BLOSSOM_DURATION_MS,
+					},
+					fighterId,
+					fighterTeam,
+				),
+			).toBe(hostile);
+
+			// The grenade, dead-centre on the fighter so only the side rule can
+			// change the answer.
+			const g = launchGrenade(0, ownerId, 400, 300, 0, ownerTeam);
+			expect(grenadeTouches(g, fighterId, 400, 300, fighterTeam)).toBe(hostile);
+		},
+	);
 });
 
 describe("grip bands", () => {
@@ -307,6 +350,34 @@ describe("grip bands", () => {
 		const body = { x: 400 - SINGULARITY_RADIUS - 10, y: 300 - 24 };
 		expect(Math.abs(body.x - 400)).toBeGreaterThan(SINGULARITY_RADIUS);
 		expect(singularityGrip(field, body.x, body.y)).toBe("held");
+	});
+
+	/**
+	 * The bands are a pure partition of the plane by distance from the centre:
+	 * held inside the horizon, fringe between the horizon and the outer reach,
+	 * clear beyond. Swept over arbitrary body offsets, this catches an off-by-one
+	 * or a gap where a fighter is neither held nor clearly free.
+	 */
+	test.prop([
+		fc.integer({ min: -500, max: 500 }),
+		fc.integer({ min: -500, max: 500 }),
+	])("is a contiguous partition by distance from the centre", (ox, oy) => {
+		// A body whose top-left is offset (ox, oy) from the hole's centre — the
+		// same coordinate the grip function measures from (its own centre).
+		const bodyX = field.x + ox - PLAYER_WIDTH / 2;
+		const bodyY = field.y + oy - PLAYER_HEIGHT / 2;
+		const cx = bodyX + PLAYER_WIDTH / 2;
+		const cy = bodyY + PLAYER_HEIGHT / 2;
+		const distSq = (field.x - cx) ** 2 + (field.y - cy) ** 2;
+
+		const grip = singularityGrip(field, bodyX, bodyY);
+		if (distSq <= SINGULARITY_RADIUS * SINGULARITY_RADIUS) {
+			expect(grip).toBe("held");
+		} else if (distSq <= SINGULARITY_REACH * SINGULARITY_REACH) {
+			expect(grip).toBe("fringe");
+		} else {
+			expect(grip).toBe("clear");
+		}
 	});
 });
 

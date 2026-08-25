@@ -7,6 +7,7 @@
  * which is the logical size times the pixel ratio — cannot come back silently.
  */
 
+import { fc, test } from "@fast-check/vitest";
 import { describe, expect, it } from "vitest";
 import { NEUTRAL_INTENT } from "../simulation/Physics";
 import {
@@ -41,6 +42,37 @@ describe("normalisePointer", () => {
 			normalisePointer(10, 10, { left: 0, top: 0, width: 0, height: 0 }),
 		).toEqual({ u: 0, v: 0 });
 	});
+
+	/**
+	 * The ratio is the one quantity no pixel ratio can distort: a point at a
+	 * fraction of the canvas maps to that same fraction no matter how big the
+	 * canvas is drawn, and stays bounded to [0,1] for a point inside it. Swept
+	 * over arbitrary canvas geometries and fractions.
+	 */
+	test.prop([
+		fc.integer({ min: 0, max: 20000 }),
+		fc.integer({ min: 0, max: 20000 }),
+		fc.integer({ min: 1, max: 5000 }),
+		fc.integer({ min: 1, max: 5000 }),
+		fc.float({ min: 0, max: 1, noNaN: true }),
+		fc.float({ min: 0, max: 1, noNaN: true }),
+	])(
+		"is scale-invariant and bounded to [0,1]",
+		(left, top, width, height, fu, fv) => {
+			const rect = { left, top, width, height };
+			const { u, v } = normalisePointer(
+				left + fu * width,
+				top + fv * height,
+				rect,
+			);
+			expect(u).toBeCloseTo(fu, 5);
+			expect(v).toBeCloseTo(fv, 5);
+			expect(u).toBeGreaterThanOrEqual(0);
+			expect(u).toBeLessThanOrEqual(1);
+			expect(v).toBeGreaterThanOrEqual(0);
+			expect(v).toBeLessThanOrEqual(1);
+		},
+	);
 });
 
 describe("viewToWorld", () => {
@@ -60,6 +92,27 @@ describe("viewToWorld", () => {
 		const p = viewToWorld(1, 0.5, VIEW);
 		expect(Math.atan2(p.y - 300, p.x - 400)).toBeCloseTo(0, 10);
 	});
+
+	/**
+	 * The fraction is scaled by the logical world and offset by the camera —
+	 * swept over arbitrary fractions and scroll offsets, so a regression that
+	 * divides by the backing store (the one this file exists to catch) surfaces
+	 * as a mismatch rather than a single hand-picked example.
+	 */
+	test.prop([
+		fc.float({ min: 0, max: 1, noNaN: true }),
+		fc.float({ min: 0, max: 1, noNaN: true }),
+		fc.integer({ min: -2000, max: 2000 }),
+		fc.integer({ min: -2000, max: 2000 }),
+	])(
+		"maps a fraction onto the world, offset by the camera",
+		(u, v, cameraX, cameraY) => {
+			const view: Viewport = { width: 800, height: 600, cameraX, cameraY };
+			const p = viewToWorld(u, v, view);
+			expect(p.x).toBeCloseTo(u * 800 + cameraX, 5);
+			expect(p.y).toBeCloseTo(v * 600 + cameraY, 5);
+		},
+	);
 });
 
 /**

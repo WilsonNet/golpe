@@ -1,3 +1,4 @@
+import { fc, test } from "@fast-check/vitest";
 import { describe, expect, it } from "vitest";
 import { pickSpawn, SPAWN_POINTS } from "./Arena.js";
 import {
@@ -29,6 +30,23 @@ function entry(id: string, kills: number, deaths = 0, name = id): ScoreEntry {
 	};
 }
 
+/**
+ * A generated scoreboard row. Deaths are kept small relative to frags so ties
+ * are common — the whole point is to exercise the tie-break chain, which only
+ * fires when two rows agree on everything before it.
+ */
+const scoreEntryArb: fc.Arbitrary<ScoreEntry> = fc
+	.record({
+		id: fc.string({ minLength: 1, maxLength: 8 }),
+		name: fc.string({ minLength: 1, maxLength: 8 }),
+		kills: fc.nat({ max: 6 }),
+		deaths: fc.nat({ max: 6 }),
+		damage: fc.nat({ max: 4000 }),
+		denies: fc.nat({ max: 3 }),
+		blocked: fc.nat({ max: 2000 }),
+	})
+	.map((r) => ({ ...r, bot: false }));
+
 describe("rankScores", () => {
 	it("ranks by frags, most first", () => {
 		const ranked = rankScores([entry("a", 3), entry("b", 9), entry("c", 5)]);
@@ -47,16 +65,40 @@ describe("rankScores", () => {
 	 * server's Map and whatever a client rebuilt from a snapshot — so two clients
 	 * would draw two different podiums from identical data.
 	 */
-	it("is independent of input order", () => {
-		const entries = [
-			entry("a", 4, 4, "Ana"),
-			entry("b", 4, 4, "Bo"),
-			entry("c", 4, 4, "Cy"),
-		];
-		const forwards = rankScores(entries).map((r) => r.id);
-		const backwards = rankScores([...entries].reverse()).map((r) => r.id);
-		expect(backwards).toEqual(forwards);
-	});
+	test.prop([fc.array(scoreEntryArb, { minLength: 0, maxLength: 16 })])(
+		"is independent of input order, for any scoreboard",
+		(entries) => {
+			const forwards = rankScores(entries).map((r) => r.id);
+			// Reordering the rows must never change who finishes where. A reversal
+			// and a rotation cover the orderings most likely to expose an
+			// iteration-order dependency, over scoreboards fast-check varies
+			// widely.
+			expect(rankScores([...entries].reverse()).map((r) => r.id)).toEqual(
+				forwards,
+			);
+			if (entries.length > 1) {
+				const rotated = [...entries.slice(1), entries[0] as ScoreEntry];
+				expect(rankScores(rotated).map((r) => r.id)).toEqual(forwards);
+			}
+		},
+	);
+
+	/**
+	 * A total order means exactly one of each place: no ties left in the output
+	 * for any generated scoreboard. That is what keeps a podium unambiguous.
+	 */
+	test.prop([fc.array(scoreEntryArb, { minLength: 0, maxLength: 16 })])(
+		"hands out each place exactly once",
+		(entries) => {
+			const ranked = rankScores(entries);
+			const places = ranked.map((r) => r.place);
+			expect([...new Set(places)].length).toBe(places.length);
+			if (ranked.length > 0) {
+				expect(Math.min(...places)).toBe(1);
+				expect(Math.max(...places)).toBe(ranked.length);
+			}
+		},
+	);
 
 	it("does not mutate what it was given", () => {
 		const entries = [entry("a", 1), entry("b", 2)];
@@ -102,14 +144,22 @@ describe("mvpScore", () => {
 		expect(Number.isInteger(score)).toBe(true);
 	});
 
-	it("is independent of input order, like rankScores", () => {
-		const entries = [
-			{ ...entry("a", 4, 4, "Ana"), damage: 900, denies: 2, blocked: 300 },
-			{ ...entry("b", 5, 5, "Bo"), damage: 300, blocked: 900 },
-			{ ...entry("c", 4, 3, "Cy"), denies: 1, blocked: 100 },
-		];
-		expect(mvpOf(entries)?.id).toBe(mvpOf([...entries].reverse())?.id);
-	});
+	/**
+	 * `mvpOf` uses the same total order as `rankScores`, so the winner must not
+	 * depend on the order the rows arrived in — two clients rebuilt from the
+	 * same data would otherwise name two different MVPs.
+	 */
+	test.prop([fc.array(scoreEntryArb, { minLength: 1, maxLength: 16 })])(
+		"is independent of input order, like rankScores",
+		(entries) => {
+			const winner = mvpOf(entries)?.id;
+			expect(mvpOf([...entries].reverse())?.id).toBe(winner);
+			if (entries.length > 1) {
+				const rotated = [...entries.slice(1), entries[0] as ScoreEntry];
+				expect(mvpOf(rotated)?.id).toBe(winner);
+			}
+		},
+	);
 });
 
 describe("matchEndReason", () => {

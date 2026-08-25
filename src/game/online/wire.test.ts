@@ -4,9 +4,13 @@
  * A packer that quietly drops a field lands as unexplained reconciliation error
  * on one client and nothing at all on the server, which is the hardest class of
  * bug this project has. The compiler proves every field is *mentioned*
- * (`STATE_FIELDS`); these tests prove the values survive the round trip.
+ * (`STATE_FIELDS`); these property tests prove the values survive the round trip
+ * over generated inputs — fast-check's arbitraries sweep more of the input space
+ * than hand-picked examples, and shrink a failure to the smallest intent that
+ * loses data.
  */
 
+import { fc, test } from "@fast-check/vitest";
 import { describe, expect, it } from "vitest";
 import {
 	createPlayerState,
@@ -17,69 +21,68 @@ import {
 } from "../simulation/Physics";
 import { packIntent, packState, unpackIntent, unpackState } from "./wire";
 
-/** A deterministic pseudo-random generator, so a failure is reproducible. */
-function lcg(seed: number) {
-	let s = seed;
-	return () => {
-		s = (s * 1664525 + 1013904223) % 4294967296;
-		return s / 4294967296;
-	};
-}
-
 /**
  * -1, 0 or 1 — and never `-0`.
  *
  * `Math.round` hands back `-0` for anything in (-0.5, 0], which the simulation
  * treats as 0 (`-0 !== 0` is false) but `toEqual` treats as a different value.
- * Generating it here would fail a test about the packer for a reason that has
- * nothing to do with the packer.
+ * This arbitrary pins the two axes to the sign values the packer is lossless
+ * for, so a round-trip property tests the packer and nothing else.
  */
-function axis(rand: () => number): number {
-	return Math.floor(rand() * 3) - 1;
-}
-
-function randomIntent(rand: () => number): PlayerIntent {
-	return {
-		left: rand() < 0.4,
-		right: rand() < 0.4,
-		up: rand() < 0.3,
-		attack: rand() < 0.3,
-		block: rand() < 0.2,
-		uppercut: rand() < 0.1,
-		swordStance: rand() < 0.8,
-		face: axis(rand),
-		dash: axis(rand),
-		ultimate: rand() < 0.05,
-		item: rand() < 0.1,
-	};
-}
+const axis = fc.constantFrom(-1, 0, 1);
 
 /**
- * States that have actually been *lived in*, not hand-built.
+ * A boolean that is true `p` of the time, so generated intents stay lived-in
+ * rather than wild. The simulation *can* be handed contradictory input, but a
+ * chain that spams every button has nothing left to vary — matching the old
+ * hand-rolled generator's feel keeps states realistic enough to be meaningful.
+ */
+const bool = (p: number) =>
+	fc.integer({ min: 0, max: 99 }).map((n) => n < p * 100);
+
+/** A full, arbitrary intent the simulation can be handed, lossless on the wire. */
+const intentArb: fc.Arbitrary<PlayerIntent> = fc.record({
+	left: bool(0.4),
+	right: bool(0.4),
+	up: bool(0.3),
+	attack: bool(0.3),
+	block: bool(0.2),
+	uppercut: bool(0.1),
+	swordStance: bool(0.8),
+	face: axis,
+	dash: axis,
+	ultimate: bool(0.05),
+	item: bool(0.1),
+});
+
+/** A chain of intents to live through — a generated match's raw input. */
+const intentChain: fc.Arbitrary<PlayerIntent[]> = fc.array(intentArb, {
+	minLength: 0,
+	maxLength: 40,
+});
+
+/**
+ * A `PlayerPosition` that has actually been *lived in*, not hand-built.
  *
  * A fresh `createPlayerState` has every timer at zero and every flag false, so
- * it round-trips through a packer that forgot half the fields. Simulating a few
- * hundred random ticks is what puts non-zero values in the corners.
+ * it round-trips through a packer that forgot half the fields. Simulating a
+ * chain of generated intents is what puts non-zero values in the corners — and
+ * when a round-trip fails, fast-check shrinks the chain to the fewest ticks
+ * that expose it.
  */
-function livedStates(count: number): PlayerPosition[] {
-	const rand = lcg(20260729);
-	const out: PlayerPosition[] = [];
+const livedState: fc.Arbitrary<PlayerPosition> = intentChain.map((chain) => {
 	let state = createPlayerState(120, 400, 1);
-	for (let i = 0; i < count * 4; i++) {
-		state = tickPlayer(state, randomIntent(rand), 1 / 60);
-		if (i % 4 === 0) out.push(state);
-	}
-	return out;
-}
+	for (const intent of chain) state = tickPlayer(state, intent, 1 / 60);
+	return state;
+});
 
 describe("packIntent", () => {
-	it("round-trips every intent the simulation can be handed", () => {
-		const rand = lcg(7);
-		for (let i = 0; i < 500; i++) {
-			const intent = randomIntent(rand);
+	test.prop([intentArb])(
+		"round-trips every intent the simulation can be handed",
+		(intent) => {
 			expect(unpackIntent(packIntent(intent))).toEqual(intent);
-		}
-	});
+		},
+	);
 
 	it("round-trips the neutral intent", () => {
 		expect(unpackIntent(packIntent({ ...NEUTRAL_INTENT }))).toEqual({
@@ -87,33 +90,40 @@ describe("packIntent", () => {
 		});
 	});
 
-	it("keeps only the sign of the analogue axes, which is all the simulation reads", () => {
-		const packed = packIntent({ ...NEUTRAL_INTENT, face: 7, dash: -3 });
-		expect(unpackIntent(packed).face).toBe(1);
-		expect(unpackIntent(packed).dash).toBe(-1);
-	});
+	test.prop([fc.integer(), fc.integer()])(
+		"keeps only the sign of the analogue axes, which is all the simulation reads",
+		(face, dash) => {
+			const packed = packIntent({ ...NEUTRAL_INTENT, face, dash });
+			expect(unpackIntent(packed).face).toBe(Math.sign(face));
+			expect(unpackIntent(packed).dash).toBe(Math.sign(dash));
+		},
+	);
 });
 
 describe("packState", () => {
-	it("round-trips states reached by actually simulating", () => {
-		for (const state of livedStates(120)) {
+	test.prop([livedState])(
+		"round-trips states reached by actually simulating",
+		(state) => {
 			expect(unpackState(packState(state))).toEqual(state);
-		}
-	});
+		},
+	);
 
-	it("survives a second trip unchanged, so a relayed snapshot cannot drift", () => {
-		for (const state of livedStates(40)) {
+	test.prop([livedState])(
+		"survives a second trip unchanged, so a relayed snapshot cannot drift",
+		(state) => {
 			const once = unpackState(packState(state));
 			expect(unpackState(packState(once))).toEqual(once);
-		}
-	});
+		},
+	);
 
-	it("replays identically from an unpacked state", () => {
-		// The property that actually matters: a client that unpacks a snapshot and
-		// re-simulates must land exactly where the server did. Anything lossy shows
-		// up here as divergence, even if the round trip above looked fine.
-		const intent = { ...NEUTRAL_INTENT, right: true, up: true };
-		for (const state of livedStates(30)) {
+	test.prop([livedState])(
+		"replays identically from an unpacked state",
+		(state) => {
+			// The property that actually matters: a client that unpacks a snapshot
+			// and re-simulates must land exactly where the server did. Anything
+			// lossy shows up here as divergence, even if the round trip above
+			// looked fine.
+			const intent = { ...NEUTRAL_INTENT, right: true, up: true };
 			let direct = state;
 			let viaWire = unpackState(packState(state));
 			for (let i = 0; i < 30; i++) {
@@ -121,8 +131,8 @@ describe("packState", () => {
 				viaWire = tickPlayer(viaWire, intent, 1 / 60);
 			}
 			expect(viaWire).toEqual(direct);
-		}
-	});
+		},
+	);
 
 	it("is materially smaller than the object it replaces", () => {
 		// The whole reason this file exists. Sixteen fighters of verbatim JSON is a

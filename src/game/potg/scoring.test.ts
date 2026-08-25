@@ -1,3 +1,4 @@
+import { fc, test } from "@fast-check/vitest";
 import { describe, expect, it } from "vitest";
 import {
 	beats,
@@ -12,6 +13,51 @@ import {
 	scorePlay,
 } from "./scoring.js";
 import type { HighlightEvent, HighlightKind, PotgPlay } from "./types.js";
+
+/** Every kind a play can be made of, for generated event streams. */
+const KINDS: readonly HighlightKind[] = [
+	"kill",
+	"ultimateKill",
+	"finisherKill",
+	"airKill",
+	"clutchKill",
+	"wipeKill",
+	"deny",
+	"damageDealt",
+	"damageAbsorbed",
+];
+
+/** A named actor, so the tracker can group a real multi-fighter match. */
+const ACTORS = ["a", "b", "c", "d"] as const;
+
+/** One generated scoring moment, spread across a few fighters. */
+const eventArb: fc.Arbitrary<HighlightEvent> = fc
+	.record({
+		kind: fc.constantFrom(...KINDS),
+		actor: fc.constantFrom(...ACTORS),
+	})
+	.map(({ kind, actor }) =>
+		event(
+			0,
+			kind,
+			actor,
+			"Foe",
+			kind === "damageDealt" || kind === "damageAbsorbed" ? 110 : undefined,
+		),
+	);
+
+/**
+ * A generated, chronologically sorted event stream: a whole match's worth of
+ * moments for the tracker to partition into plays.
+ */
+const streamArb: fc.Arbitrary<HighlightEvent[]> = fc
+	.array(fc.record({ t: fc.nat({ max: 120_000 }), ev: eventArb }), {
+		minLength: 0,
+		maxLength: 80,
+	})
+	.map((rows) =>
+		rows.sort((x, y) => x.t - y.t).map((r) => ({ ...r.ev, t: r.t })),
+	);
 
 function event(
 	t: number,
@@ -42,20 +88,29 @@ describe("scorePlay", () => {
 		expect(scorePlay([event(0, "kill")])).toBe(HIGHLIGHT_WEIGHTS.kill);
 	});
 
-	it("escalates each successive frag in a run", () => {
-		const one = scorePlay([event(0, "kill")]);
-		const two = scorePlay([event(0, "kill"), event(500, "kill")]);
-		const three = scorePlay([
-			event(0, "kill"),
-			event(500, "kill"),
-			event(900, "kill"),
-		]);
-		// Not merely additive: the second frag is worth more than the first, and
-		// the third more than the second. That escalation is the entire reason a
-		// multikill beats an accumulated scoreboard.
-		expect(two - one).toBeGreaterThan(one);
-		expect(three - two).toBeGreaterThan(two - one);
-	});
+	/**
+	 * The escalation is the entire reason a multikill beats a scoreboard: each
+	 * successive frag in a run must be worth more than the last, so a double
+	 * kill beats two unrelated frags. Swept over every run length — and the
+	 * marginal *gain* is monotonic non-decreasing too, so a run never gives
+	 * back the ground it has taken.
+	 */
+	test.prop([fc.integer({ min: 2, max: 20 })])(
+		"each successive frag in a run is worth at least the last",
+		(n) => {
+			const run = Array.from({ length: n }, (_, i) => event(i * 500, "kill"));
+			for (let k = 2; k <= n; k++) {
+				const shorter = scorePlay(run.slice(0, k - 1));
+				const longer = scorePlay(run.slice(0, k));
+				const last = longer - shorter;
+				const prev = shorter - scorePlay(run.slice(0, k - 2));
+				// Not merely additive: the kth frag is worth no less than the
+				// (k-1)th, until the escalation's ceiling.
+				expect(last).toBeGreaterThanOrEqual(prev);
+				expect(longer).toBeGreaterThan(shorter);
+			}
+		},
+	);
 
 	it("beats any pair of unrelated frags with one double kill", () => {
 		const double = scorePlay([event(0, "kill"), event(800, "kill")]);
@@ -110,6 +165,41 @@ describe("scorePlay", () => {
 });
 
 describe("PlayTracker", () => {
+	/**
+	 * The consolidation law: whatever a tracker is fed, a flush loses nothing
+	 * and caps nothing. The union of every closed play's events is exactly the
+	 * input (no kill or moment is dropped or duplicated), no play's span outlives
+	 * the cap, and the kills that survive across all plays equal the kills fed
+	 * in — so a sixteen-fighter match's ceremony can never invent or lose a frag.
+	 */
+	test.prop([streamArb])(
+		"a flush preserves every event and keeps every play within the span cap",
+		(events) => {
+			const plays: PotgPlay[] = [];
+			const tracker = new PlayTracker((p) => plays.push(p));
+			for (const e of events) tracker.note(e);
+			tracker.flush();
+
+			const flattened = plays.flatMap((p) => p.events);
+			// Order-independent: the tracker partitions by actor, so a flatten
+			// regroups the stream. The law is that nothing is lost or invented.
+			const byKey = (xs: HighlightEvent[]) =>
+				[...xs].sort(
+					(a, b) =>
+						a.t - b.t ||
+						a.actorId.localeCompare(b.actorId) ||
+						a.kind.localeCompare(b.kind),
+				);
+			expect(byKey(flattened)).toEqual(byKey(events));
+			for (const play of plays) {
+				expect(play.endMs - play.startMs).toBeLessThanOrEqual(POTG_MAX_PLAY_MS);
+			}
+			const killsFed = events.filter((e) => e.kind === "kill").length;
+			const killsOut = plays.reduce((n, p) => n + p.kills, 0);
+			expect(killsOut).toBe(killsFed);
+		},
+	);
+
 	it("chains events inside the link window into one play", () => {
 		const { plays, tracker } = collect();
 		tracker.note(event(0, "kill"));

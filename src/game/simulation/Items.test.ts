@@ -7,6 +7,7 @@
  * predict a trap's root on the client.
  */
 
+import { fc, test } from "@fast-check/vitest";
 import { describe, expect, it } from "vitest";
 import { DRAGON_SPEED } from "../../tweakables/ultimate.js";
 import { DEFAULT_WORLD, PLAYER_HEIGHT, PLAYER_WIDTH } from "./Arena.js";
@@ -734,22 +735,25 @@ describe("the smoke grenade", () => {
 		).toBe(false);
 	});
 
-	it("smokeLobAngle lands the canister where it is aimed", () => {
-		// A flat 30px drop at 300px range.
-		const a = smokeLobAngle(300, 0);
-		const t = 300 / (SMOKE_GRENADE_SPEED * Math.cos(a));
+	/**
+	 * A lob is a solved quadratic: the returned angle's arc must land the
+	 * canister on the aimed point. Swept over arbitrary horizontal ranges and
+	 * target heights within the canister's reach, this pins the ballistics
+	 * solver itself rather than the two distances a human would sample.
+	 */
+	test.prop([
+		fc.integer({ min: 20, max: 400 }),
+		fc.integer({ min: -300, max: 0 }),
+	])("smokeLobAngle lands the canister where it is aimed", (dx, dy) => {
+		const a = smokeLobAngle(dx, dy);
+		const t = dx / (SMOKE_GRENADE_SPEED * Math.cos(a));
 		const landed =
 			SMOKE_GRENADE_SPEED * Math.sin(a) * t -
 			0.5 * SMOKE_GRENADE_GRAVITY * t * t;
-		expect(landed).toBeCloseTo(0, 0);
-		// A lob to a ledge 240px away and 120px up.
-		const b = smokeLobAngle(240, -120);
-		const t2 = 240 / (SMOKE_GRENADE_SPEED * Math.cos(b));
-		const landed2 =
-			SMOKE_GRENADE_SPEED * Math.sin(b) * t2 -
-			0.5 * SMOKE_GRENADE_GRAVITY * t2 * t2;
-		expect(landed2).toBeCloseTo(-120, 0);
-		// Straight up when the target is directly overhead.
+		expect(landed).toBeCloseTo(dy, 0);
+	});
+
+	it("throws straight up when the target is directly overhead", () => {
 		expect(smokeLobAngle(0, -50)).toBeCloseTo(Math.PI / 2, 4);
 	});
 });

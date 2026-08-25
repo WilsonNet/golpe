@@ -1,3 +1,4 @@
+import { fc, test } from "@fast-check/vitest";
 import { describe, expect, it } from "vitest";
 import {
 	AUDIO_CHANNELS,
@@ -5,6 +6,25 @@ import {
 	isDefaultAudio,
 	sanitiseAudio,
 } from "./mixer";
+
+/**
+ * Whatever was in storage, `sanitiseAudio` must produce preferences that are
+ * *usable*: every volume finite and clamped to [0,1], every muted flag a real
+ * boolean. A NaN or out-of-range volume would either throw in the Web Audio
+ * graph or pin a channel silently wrong.
+ */
+test.prop([fc.anything()])(
+	"sanitiseAudio always yields finite, in-range volumes and boolean mutes",
+	(raw) => {
+		const prefs = sanitiseAudio(raw);
+		for (const ch of AUDIO_CHANNELS) {
+			expect(Number.isFinite(prefs.volumes[ch])).toBe(true);
+			expect(prefs.volumes[ch]).toBeGreaterThanOrEqual(0);
+			expect(prefs.volumes[ch]).toBeLessThanOrEqual(1);
+			expect(typeof prefs.muted[ch]).toBe("boolean");
+		}
+	},
+);
 
 describe("sanitiseAudio", () => {
 	it("keeps good values and clamps out-of-range ones", () => {

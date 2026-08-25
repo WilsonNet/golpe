@@ -4,9 +4,16 @@
  * link asks for must be read exactly as `Match` used to read it. A parse that
  * silently drops a field would ship a menu that commits a match the player did
  * not configure.
+ *
+ * The parser's edge cases stay as examples — `?ai=false`, `?bots=garbage` and
+ * the `team`/`training-room` spellings are deliberate behaviours worth pinning.
+ * The *round trip* is a property: any well-formed request serialises and parses
+ * back to itself, swept over generated params by fast-check.
  */
 
+import { fc, test } from "@fast-check/vitest";
 import { describe, expect, it } from "vitest";
+import { HERO_IDS } from "../simulation/Heroes";
 import {
 	isMenuShape,
 	type LaunchParams,
@@ -32,6 +39,53 @@ const NOTHING: LaunchParams = {
 	freezeTime: undefined,
 	screens: undefined,
 };
+
+/** A room id — the kind of string the menu and shared links actually produce. */
+const roomArb = fc.oneof(
+	fc.constant(null),
+	fc.string({ minLength: 1, maxLength: 64 }),
+);
+
+/** A hero id, or null when not asked for. */
+const heroArb = fc.oneof(fc.constant(null), fc.constantFrom(...HERO_IDS));
+
+/** `?mode=` — `null` (deathmatch by default) or an explicit name. */
+const modeArb = fc.oneof(
+	fc.constant(null),
+	fc.constantFrom("ffa" as const, "tdm" as const),
+);
+
+/**
+ * A well-formed `LaunchParams`: every field at a value the serialiser can write
+ * and the parser can read back exactly. The counts that allow zero (`bots`,
+ * `ultCharge`, `freezeTime`) come from non-negative integers; the positive
+ * counts (`fill`, `scoreLimit`, `timeLimit`, `screen`) from positive ones.
+ */
+/**
+ * An optional numeric field — `undefined` when not asked, which is what the
+ * serialiser's `!== undefined` guard keys on. (`fc.option` yields `null`, so
+ * it is mapped to `undefined` to match the type.)
+ */
+const optNum = (a: fc.Arbitrary<number>) =>
+	fc.option(a).map((v) => v ?? undefined);
+
+const validParams: fc.Arbitrary<LaunchParams> = fc.record({
+	room: roomArb,
+	ai: fc.boolean(),
+	online: fc.boolean(),
+	offline: fc.boolean(),
+	training: fc.boolean(),
+	hero: heroArb,
+	botHero: heroArb,
+	bots: optNum(fc.nat({ max: 16 })),
+	fill: optNum(fc.integer({ min: 1, max: 16 })),
+	scoreLimit: optNum(fc.integer({ min: 1, max: 999 })),
+	timeLimitSec: optNum(fc.integer({ min: 1, max: 3600 })),
+	ultCharge: optNum(fc.nat({ max: 100 })),
+	mode: modeArb,
+	freezeTime: optNum(fc.nat({ max: 60 })),
+	screens: optNum(fc.integer({ min: 1, max: 8 })),
+});
 
 describe("parseLaunchParams", () => {
 	it("reads nothing from an empty search", () => {
@@ -129,24 +183,11 @@ describe("isMenuShape", () => {
 });
 
 describe("serialize → parse round trip", () => {
-	it("keeps every field stable", () => {
-		const request: LaunchParams = {
-			room: "r-1",
-			ai: true,
-			online: false,
-			offline: false,
-			training: false,
-			hero: "anands",
-			botHero: "anands",
-			bots: 0,
-			fill: undefined,
-			scoreLimit: 21,
-			timeLimitSec: 300,
-			ultCharge: 100,
-			mode: "ffa",
-			freezeTime: undefined,
-			screens: 2,
-		};
+	test.prop([validParams])("keeps every field stable", (request) => {
+		// A menu that serialises a request and a boot that parses it must agree
+		// on every field — a lossy trip here ships a match the player did not
+		// configure. fast-check sweeps the whole field space and shrinks a
+		// failure to the smallest request that loses data.
 		expect(parseLaunchParams(serializeLaunchParams(request))).toEqual(request);
 	});
 
