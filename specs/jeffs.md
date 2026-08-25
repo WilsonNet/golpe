@@ -36,7 +36,7 @@ cone-spread burst.
 | Spread | ±16°, six fixed angles |
 | Falloff | full ≤ 60px → 3 per pellet by 200px |
 | Magazine | 5 shells |
-| Magazines per life | 6 |
+| Magazines per life | 5 |
 | Reload | shell-by-shell — 1300ms for the rack from empty, 1200ms per shell after |
 
 - **The delay is the whole weapon.** Nine hundred milliseconds between shots
@@ -73,9 +73,9 @@ cone-spread burst.
   an emptied shotgun is a long silence, and a shell loaded mid-fight is a
   shell that can be fired the moment it lands. See [combat.md](combat.md) for
   the reload rules every weapon shares.
-- **Six magazines per life — two more than the other guns.** The shotgun
+- **Five magazines per life — one more than the other guns.** The shotgun
   spends a whole blast (all five shells) to whiff, and the shell-by-shell
-  reload is the longest silence in the game, so the extra racks are how a
+  reload is the longest silence in the game, so the extra rack is how a
   point-blank finisher stays a real option after a couple of missed blasts —
   the one-shot stays lethal, it just does not run dry as fast. See
   [combat.md](combat.md) for the magazine economy.
