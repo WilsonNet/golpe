@@ -51,6 +51,7 @@ skill({ name: "feedback-loop" })    # the full workflow
 | What rule will I break if I'm careless? | [`docs/invariants.md`](docs/invariants.md) |
 | Where does this code live, and who owns it? | [`docs/architecture.md`](docs/architecture.md) |
 | How do I measure anything? | [`docs/diagnostics.md`](docs/diagnostics.md) + the `feedback-loop` skill |
+| How do I write a unit test — example or property? | the `property-testing` skill — when fast-check's `.prop` beats a hand-picked example, and the traps |
 | How do I run the game? | [`docs/running-the-game.md`](docs/running-the-game.md) |
 | How do I slice a raw art board into a game sheet? | [`docs/sprite-slicer.md`](docs/sprite-slicer.md) — the `?slicer=true` workshop |
 | Why are there symlinks everywhere? | [`docs/agent-config.md`](docs/agent-config.md) |
@@ -650,6 +651,9 @@ skill verifies it.
 - **`feedback-loop`** — Diagnosing physics jitter, network desync, projectile or
   combat bugs. The canonical test is online AI vs AI; the training probe is the
   scalpel for a single interaction.
+- **`property-testing`** — fast-check in the unit suite: when a property beats an
+  example, the `.prop` syntax, and the traps (NaN floats, `fc.option` nulls, the
+  sanitise fallback, order-independent grouping).
 - **`game-audio`** — The soundtrack: editing the MIDI source, the per-stem
   render/mix/master pipeline (LUFS targets, seam rules), retuning the SFX bank
   and the client engine, verified with the audio probe.
