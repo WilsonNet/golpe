@@ -328,7 +328,7 @@ menu. Sword is the default stance.
 
 **Every gun has a magazine and an auto-reload, and ammo is finite per life**
 — no manual key (R is the ultimate). Every weapon carries **`magazinesPerLife`
-magazines** (all three ship at 4, tuned in `tweakables/ranged.ts`): one loaded,
+magazines** (the rifle and the machine gun ship at 4, the shotgun at 6, tuned in `tweakables/ranged.ts`): one loaded,
 the rest a reserve the reload draws from, so a **dry** gun (empty magazine, no
 reserve) is done until the next life — the game's way of forcing the fight back
 to the sword. The reload is the **TF2 pair**. **Clip weapons reload the whole

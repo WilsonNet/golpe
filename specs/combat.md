@@ -117,7 +117,7 @@ the whole of how the game forces the fight back to the sword.
 |---|---|---|---|
 | Lia's rifle | 12 | 4 | **Clip** — the whole magazine in **890ms** |
 | Anands' machine gun | 30 | 4 | **Clip** — the whole magazine in **1860ms** |
-| Jeffs' shotgun | 5 | 4 | **Shell** — 1200ms each, 1300ms for the rack from empty |
+| Jeffs' shotgun | 5 | 6 | **Shell** — 1200ms each, 1300ms for the rack from empty |
 
 The rules, in the order a player meets them:
 

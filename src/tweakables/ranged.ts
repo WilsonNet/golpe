@@ -67,7 +67,10 @@ type RangedWeaponBase = {
 	 * loaded at spawn; the rest form the reserve the reload draws from. When
 	 * the reserve and the magazine are both empty the gun is dry until the
 	 * next life — this is the lever that forces the fight back to melee.
-	 * All three weapons ship at 4; tune per weapon, not globally.
+	 * The rifle and the machine gun ship at 4; the shotgun at 6 — its
+	 * shell-by-shell reload is the longest silence in the game, so the
+	 * extra racks are how a point-blank finisher stays in the fight after
+	 * a few whiffed blasts. Tune per weapon, not globally.
 	 */
 	magazinesPerLife: number;
 };
@@ -163,9 +166,13 @@ export const RANGED_WEAPONS: Record<RangedWeaponId, RangedWeaponDef> = {
 		// Five shells, TF2's slow shell-by-shell reload: a blast is precious,
 		// and each shell takes *longer* than the 900ms between blasts — the
 		// gun can never keep up with its own trigger, so an emptied shotgun
-		// is a long silence. The rack from empty is the slowest shell.
+		// is a long silence. The rack from empty is the slowest shell. It
+		// carries two more magazines than the other guns: a slow shell reload
+		// is a long silence, and a point-blank finisher spends a whole blast
+		// to miss — the six racks are the weapon's way of staying in the
+		// fight after the one-shot has been whiffed a few times.
 		magazine: 5,
-		magazinesPerLife: 4,
+		magazinesPerLife: 6,
 		reloadStyle: "shell",
 		reloadRoundMs: 1200,
 		reloadFirstRoundMs: 1300,
