@@ -83,7 +83,7 @@ On hit:
   [melee.md](melee.md#the-catch--the-dive-carries-its-victims)). The dagger
   reads the dive as distance, not as a jump-in.
 - **The double-tap dash is the dagger's own**: a little faster than the
-  sword's (1100 vs 1000 px/s), a little shorter, ready a little sooner. The
+  sword's (1100 vs 900 px/s), a little shorter, ready a little sooner. The
   difference is a feel, not a gap the sword cannot close — the thrust is where
   the dagger's real speed lives.
 

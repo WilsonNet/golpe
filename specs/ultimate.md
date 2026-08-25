@@ -205,7 +205,7 @@ Two bands, and the difference between them is the counterplay:
 - **Between the horizon and the outer reach you are only pulled.** Gravity,
   steering, jumping, dashing and swinging all still work — the tug is an
   acceleration you fight, strongest at the horizon and zero at the edge. A dash
-  (1000 px/s) beats it comfortably; walking (220 px/s) does not, near the lip.
+  (900 px/s) beats it comfortably; walking (220 px/s) does not, near the lip.
 
 Other rules:
 
@@ -344,7 +344,7 @@ is the one moment a bot's own ultimate cannot happen, so it waits it out.
 open singularities with `hostile` already applied, and the coordinator treats a
 hostile field inside its outer reach as a shelve-everything emergency, exactly
 like a diving bomb: move away and dash — the dash is the designed escape, the
-tug is beatable at 1000px/s. The escape only saves what can still be saved: a
+tug is beatable at 900px/s. The escape only saves what can still be saved: a
 fighter inside the event horizon is caught, stunned, and past steering. A bot
 that kept fighting beside a hostile hole stood in the pull for the whole 4.4s
 hold; the rule is what makes the hole a threat the room plays around rather

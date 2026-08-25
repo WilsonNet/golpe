@@ -116,8 +116,11 @@ rise against the ground jump's 136px.
 - Double-tap **A** or **D** to dash that direction — or the d-pad, or flick the
   left stick, since the gesture is on the *action* and every device reaches it
   through the same four direction codes.
-- Dash speed **1000 px/s**; double-tap window **300ms**; travel **160ms**;
-  lockout **250ms**.
+- Dash speed **900 px/s**; double-tap window **300ms**; travel **178ms**;
+  lockout **250ms**. (The dash used to run 1000 px/s for 160ms; it is now 10%
+  slower for the same ~160px of line — the extra 18ms in the line is time a
+  swing thrown out of the dash keeps its hitbox alive, which is the room to
+  land the combo.)
 - A dash is an *impulse on the shared simulation* — it sets velocity, then
   normal physics and collision carry it. It is not a separate movement path.
 - **The stance decides which burst the gesture is.** Double-tap with the sword
@@ -139,7 +142,7 @@ fighter ends the dash at exactly the Y it started.
   paper: unable to jump, with coyote time never starting because it never
   registered as grounded to begin with. A ground dash that carries off a ledge
   flattens out the moment it leaves.
-- **Travel is deliberately shorter than the lockout.** The 90ms between them is
+- **Travel is deliberately shorter than the lockout.** The 72ms between them is
   the window gravity always gets, so no amount of chained dashing is level
   flight. Raise travel past the lockout and the fighter never comes down.
 - **A jump, a wall, or being hit all end it.** Each sets or needs a vertical
@@ -197,7 +200,7 @@ ranged weapon out and the fighter rolls that way. One gesture, two tools —
 which burst it is lives entirely on the simulation's stance, so switching
 stances mid-match cannot desync the gesture.
 
-- Tumble speed **720 px/s** (72% of the dash); travel **320ms**; lockout
+- Tumble speed **720 px/s** (80% of the dash); travel **320ms**; lockout
   **450ms**.
 - **Slower than the dash, and locked out longer, on purpose.** This is the
   whole balance: a roll buys the gunner a beat to fire while keeping distance,
@@ -283,7 +286,7 @@ them like any other physics. See [melee.md](melee.md) for what applies them and
   collision on `!grounded` is what once let a walking player pass through every
   platform.
 - Movement is sub-stepped at **12px** maximum, so nothing tunnels even at dash
-  speed (1000 px/s) or at 20fps.
+  speed (900 px/s) or at 20fps.
 - A body must never end a tick inside solid geometry; the diagnostic asserts
   `collisionSummary.penetrationFrames == 0`.
 

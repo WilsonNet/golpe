@@ -396,9 +396,9 @@ Installed by `Match` alongside `__toggleAIVsAI` and `__gameState`. The function:
 Calibrate with Python:
 ```python
 PHYSICS_DT = 1/60
-DASH_SPEED = 1000
+DASH_SPEED = 900
 GRAVITY = 300
-max_x = DASH_SPEED * PHYSICS_DT * 2  # 33.3px (2 steps at 30fps)
+max_x = DASH_SPEED * PHYSICS_DT * 2  # 30px (2 steps at 30fps)
 max_y = GRAVITY * 2 * PHYSICS_DT * 2 # 20px (2 steps falling at 30fps)
 ```
 
@@ -522,7 +522,7 @@ import math
 
 PHYSICS_DT = 1/60
 WALK_SPEED = 160
-DASH_SPEED = 1000
+DASH_SPEED = 900
 JUMP_VEL = -330
 GRAVITY = 300
 

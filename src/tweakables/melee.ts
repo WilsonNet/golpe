@@ -415,7 +415,7 @@ export const MOVES: Record<MeleeMove, MoveDef> = {
  * because a tumble is what the gun *stance* does and the gun stance never
  * changes weapon.
  */
-export const DASH_SPEED = 1000;
+export const DASH_SPEED = 900;
 
 /** Minimum gap between dashes, so it cannot be held down as a speed boost. */
 export const DASH_LOCKOUT_MS = 250;
@@ -430,15 +430,20 @@ export const DASH_LOCKOUT_MS = 250;
  *
  * **Deliberately shorter than `DASH_LOCKOUT_MS`.** The gap between the two is the
  * window in which gravity always gets a say, so no amount of dashing is level
- * flight: at 160 against a 250ms lockout, a chained dasher still falls for 90ms in
+ * flight: at 178 against a 250ms lockout, a chained dasher still falls for 72ms in
  * every 250. Raise this past the lockout and the fighter simply never comes down.
+ *
+ * The dash is **slower than it used to be but travels the same line**: 900 px/s
+ * for 178ms covers the same ~160px as 1000 px/s for 160ms, and the extra 18ms
+ * in the line is time a swing thrown out of the dash keeps its hitbox alive —
+ * the dash-slash trail reads longer, which is the room to land the combo.
  */
-export const DASH_DURATION_MS = 160;
+export const DASH_DURATION_MS = 178;
 
 /**
  * The dagger's double-tap dash: lighter weapon, faster burst.
  *
- * The sword dashes at `DASH_SPEED` (1000) for 160ms with a 250ms lockout; the
+ * The sword dashes at `DASH_SPEED` (900) for 178ms with a 250ms lockout; the
  * dagger weighs nothing, so its burst is a little faster, a little shorter and
  * ready a little sooner. The difference is a feel, not a gap the sword cannot
  * close — the thrust is where the dagger's real speed lives.
