@@ -2,6 +2,7 @@ import { TRAP_RADIUS } from "../../tweakables/items.js";
 import { SINGULARITY_REACH } from "../../tweakables/ultimate.js";
 import {
 	DEFAULT_WORLD,
+	hasLineOfSight,
 	PLAYER_HEIGHT,
 	PLAYER_WIDTH,
 	type Rect,
@@ -21,7 +22,7 @@ import {
 	SWORD_DISENGAGE_PX,
 } from "./MeleeBrain.js";
 import { TeamBrain } from "./TeamBrain.js";
-import type { AIInput, AIOutput } from "./types.js";
+import type { AIInput, AIOutput, FoeInfo } from "./types.js";
 import { UltimateBrain } from "./UltimateBrain.js";
 
 /** The melee module, whichever hero's it is. See `EnemyBrain.constructor`. */
@@ -115,6 +116,40 @@ const ATTACK_RANGE_PX = 280;
 const CHASE_RANGE_PX = 400;
 /** In attack range, a fighter this aggressive holds the chase instead of attacking. */
 const STAY_BIAS = 0.3;
+// ---- the thirst: isolated low-HP kills ----
+/**
+ * A foe at or below this is one decisive exchange from dead — the thirst's
+ * threshold. Low enough that "finish it" is the only reasonable read, high
+ * enough that the pick is usually visible before the match ends.
+ */
+const THIRST_HP = 25;
+/**
+ * A foe with no other enemy inside this much is alone — its side's line is
+ * over there, so a run at it is the pick of a flank, not a head-on. The
+ * vanguard/support line put the pair about `LINE_OFFSET_PX` apart, so a
+ * fighter in formation is never "isolated" at this radius; a support whose
+ * vanguard is dead is very much it.
+ */
+const THIRST_ISOLATED_PX = 300;
+/** The pick may be a run, not a marathon: beyond one screen it is somebody else's fight. */
+const THIRST_HUNT_MAX_PX = 900;
+/**
+ * The standoff gate. A pick only overrides the current fight when that fight
+ * is *not at melee*: abandoning a duel at point-blank to cross the arena is
+ * not a thirst, it is running away, and the ordinary `isEnemyLow` execution
+ * already covers a pick in an actual exchange.
+ */
+const THIRST_STANDOFF_PX = STRIKE_RANGE_PX + 60;
+// ---- the team press ----
+/**
+ * A pushing side's break-away roll is scaled by this: the side that decided
+ * to go at them does not suddenly take a tempo off to go climb the ledges.
+ * Kept above zero at all — zoning is sometimes still the right answer even
+ * when the press is on, and zero measured as "exactly one tool, always".
+ */
+const PUSH_ZONE_FACTOR = 0.2;
+/** A pushing side's hurt-and-pressed fighters fight it out this often instead of peeling. */
+const PUSH_FIGHT_CHANCE = 0.8;
 /** Reaction time worsens by this per point of missing skill, plus this jitter. */
 const REACTION_SKILL_STEP_MS = 40;
 const REACTION_JITTER_MS = 100;
@@ -323,6 +358,8 @@ export class EnemyBrain {
 	private corneredTimer = 0;
 	/** ms until the bot may dodge again, so evades cannot be chained. */
 	private dodgeCooldownMs = 0;
+	/** Was the last decision a thirst hunt after an isolated low-HP foe? */
+	private huntingActive = false;
 
 	/** The sword game: techniques, rhythms, stance hysteresis. */
 	private readonly melee: MeleeModule;
@@ -386,6 +423,7 @@ export class EnemyBrain {
 		this.zoneCooldown = 0;
 		this.corneredTimer = 0;
 		this.dodgeCooldownMs = 0;
+		this.huntingActive = false;
 		this.melee.reset();
 		this.jump.reset();
 		this.ultimate.reset();
@@ -411,6 +449,7 @@ export class EnemyBrain {
 			state: this.state,
 			...this.team.insight,
 			ultimate: this.ultimate.insight,
+			hunting: this.huntingActive,
 			// The perception itself, so a probe can tell "the brain decided not
 			// to cast" from "the brain never saw a target".
 			foes: i?.foes.length ?? 0,
@@ -425,20 +464,36 @@ export class EnemyBrain {
 	}
 
 	decide(input: AIInput, _time: number, delta: number): AIOutput {
+		// ---- the round's shape, then the kill, then the tick ----
+		//
+		// The team module decides which side presses (`pushDecision`), and the
+		// thirst chooses the fight this brain would rather be in: an isolated
+		// low-HP enemy is the pick, and when one exists and the current
+		// exchange is a standoff, the *whole* decision runs against the pick as
+		// "the player" (`perceptionFor`), so the state machine, the melee
+		// module, the ultimate and the aim all look at it — one brain, one
+		// target, no module fighting another over who to chase.
+		const pushing = this.team.pushDecision(input);
+		const pick = this.pickTarget(input);
+		const hunting = pick !== null;
+		const perception = hunting ? this.perceptionFor(input, pick) : input;
+
 		this.lastInput = input;
 		this.decisionCooldown -= delta;
 		this.stateTimer += delta;
 		this.zoneCooldown = Math.max(0, this.zoneCooldown - delta);
 		this.corneredTimer = Math.max(0, this.corneredTimer - delta);
 		this.dodgeCooldownMs = Math.max(0, this.dodgeCooldownMs - delta);
-		this.trackStuck(input, delta);
+		this.trackStuck(perception, delta);
 
-		const isLowHP = input.selfHP <= LOW_HP;
-		const isHighHP = input.selfHP >= HIGH_HP;
-		const isEnemyLow = input.enemyHP <= LOW_HP;
+		const isLowHP = perception.selfHP <= LOW_HP;
+		const isHighHP = perception.selfHP >= HIGH_HP;
+		const isEnemyLow = perception.enemyHP <= LOW_HP;
 
 		const playerFacesMe =
-			input.playerFacingDirection * (input.selfX - input.playerX) > 0;
+			perception.playerFacingDirection *
+				(perception.selfX - perception.playerX) >
+			0;
 
 		const dodgeRoll = Math.random();
 		const dodgeMultiplier = isLowHP
@@ -454,7 +509,7 @@ export class EnemyBrain {
 		const shouldEvade =
 			this.dodgeCooldownMs <= 0 &&
 			playerFacesMe &&
-			input.distanceToPlayer < DODGE_RANGE_PX &&
+			perception.distanceToPlayer < DODGE_RANGE_PX &&
 			dodgeRoll < dodgeThreshold;
 
 		if (this.decisionCooldown <= 0) {
@@ -463,7 +518,13 @@ export class EnemyBrain {
 				this.stateTimer = 0;
 				this.dodgeCooldownMs = DODGE_COOLDOWN_MS;
 			} else {
-				const newState = this.evaluateState(input, isLowHP, isEnemyLow);
+				const newState = this.evaluateState(
+					perception,
+					isLowHP,
+					isEnemyLow,
+					pushing,
+					hunting,
+				);
 				if (newState !== this.state) {
 					this.stateTimer = 0;
 				}
@@ -472,11 +533,11 @@ export class EnemyBrain {
 			this.decisionCooldown = this.getReactionTime();
 		}
 
-		if (this.isStuck() && input.touchingDown) {
+		if (this.isStuck() && perception.touchingDown) {
 			this.stuckCount = 0;
 		}
 
-		const output = this.executeState(input, isLowHP, isEnemyLow);
+		const output = this.executeState(perception, isLowHP, isEnemyLow);
 
 		// ---- the weapon modules ----
 		//
@@ -485,19 +546,20 @@ export class EnemyBrain {
 		// reshapes movement around the side, and the ultimate module asks for the
 		// hole last — each layer may override the last, exactly like a human
 		// reconsidering.
-		const role = this.team.roleFor(input);
-		this.melee.decide(input, output, delta, {
+		const role = this.team.roleFor(perception);
+		this.melee.decide(perception, output, delta, {
 			role,
 			skill: this.config.skillLevel,
 			aggressiveness: this.config.aggressiveness,
+			dry: !this.gunLive(perception),
 		});
-		this.team.decide(input, output, this.melee, role, delta);
-		this.ultimate.decide(input, delta, role);
+		this.team.decide(perception, output, this.melee, role, hunting, delta);
+		this.ultimate.decide(perception, delta, role);
 		output.ultimate = this.ultimate.hold;
 		if (this.ultimate.aimOverride !== null) {
 			output.aimAngle = this.ultimate.aimOverride;
 		} else {
-			output.aimAngle = this.aimAt(input);
+			output.aimAngle = this.aimAt(perception);
 		}
 
 		// ---- the bomb ----
@@ -507,7 +569,9 @@ export class EnemyBrain {
 		// While the enemy is coming down, every plan the state machine made is
 		// shelved: run. Dash, even — the dive is short, and one dash is the
 		// whole escape. Last on purpose, after the team module, so the bomb
-		// beats even a cover order.
+		// beats even a cover order. **Asked against the true world**, not the
+		// hunt's perception: self-preservation reflexes never go blind chasing
+		// a pick a screen away.
 		if (input.enemyPlunging && input.distanceToPlayer < BOMB_DANGER_PX) {
 			output.moveLeft = input.playerX > input.selfX;
 			output.moveRight = input.playerX <= input.selfX;
@@ -585,12 +649,13 @@ export class EnemyBrain {
 
 		// ---- the jump ----
 		output.jump = this.jump.resolve(
-			input,
+			perception,
 			output.jump,
-			this.wantsHeight(input),
+			this.wantsHeight(perception),
 			delta,
 		);
 		this.decideItem(input, output, delta);
+		this.huntingActive = hunting;
 		return output;
 	}
 
@@ -729,6 +794,88 @@ export class EnemyBrain {
 	}
 
 	/**
+	 * The isolated low-HP foe this brain wants, or null.
+	 *
+	 * The thirst: a fighter at `THIRST_HP` or below, no other enemy within
+	 * `THIRST_ISOLATED_PX` (its side's line is over there — this is the flank,
+	 * not a head-on), not concealed in smoke, within a screen's run. When
+	 * several, the nearest; the closest weak target is the one a human would
+	 * pick first and the one easiest to die to quietly.
+	 *
+	 * Gated on the current fight being a *standoff*: inside `THIRST_STANDOFF_PX`
+	 * of the enemy already fought, the duel in hand wins — the ordinary
+	 * `isEnemyLow` execution covers a pick inside an actual exchange, and
+	 * abandoning a knife fight to cross the arena is escape, not thirst.
+	 */
+	private pickTarget(input: AIInput): FoeInfo | null {
+		if (input.distanceToPlayer < THIRST_STANDOFF_PX) return null;
+		let best: FoeInfo | null = null;
+		for (const foe of input.foes) {
+			if (foe.concealed) continue;
+			if (foe.hp > THIRST_HP) continue;
+			if (foe.distance > THIRST_HUNT_MAX_PX) continue;
+			let isolated = true;
+			for (const other of input.foes) {
+				if (other.id === foe.id) continue;
+				if (Math.hypot(other.x - foe.x, other.y - foe.y) < THIRST_ISOLATED_PX) {
+					isolated = false;
+					break;
+				}
+			}
+			if (!isolated) continue;
+			if (!best || foe.distance < best.distance) best = foe;
+		}
+		return best;
+	}
+
+	/**
+	 * Re-point the decision at the pick.
+	 *
+	 * Everything that reasons about "the enemy" in one tick — the state machine,
+	 * the melee module, the team module, the ultimate, the aim — reads the
+	 * player axes of `AIInput`, so when the thirst picks a target different
+	 * from the nearest foe, the honest way to aim the whole brain at it is to
+	 * make it "the player" in the perception rather than to special-case every
+	 * module. The pick's facts are the ones in `FoeInfo`; the fields the
+	 * perception knows only about the primary foe turn to safe unknowns — no
+	 * facing (never "faces me", so no evade roll), no sword reads (`"none"`),
+	 * no velocity (no lead, no burst — a walk-in out of a standoff is correct
+	 * anyway). The line of sight to the pick is real geometry, recomputed for
+	 * the actual segment — "we can see the enemy over there" is the whole
+	 * reason the pick is on the menu.
+	 */
+	private perceptionFor(input: AIInput, pick: FoeInfo): AIInput {
+		if (pick.x === input.playerX && pick.y === input.playerY) return input;
+		return {
+			...input,
+			playerX: pick.x,
+			playerY: pick.y,
+			distanceToPlayer: pick.distance,
+			playerFacingDirection: 0,
+			enemyHP: pick.hp,
+			enemyAction: "none",
+			enemyPhase: "none",
+			enemyBlocking: false,
+			enemyStunned: false,
+			enemyPlunging: false,
+			enemyStuck: false,
+			enemyGrounded: false,
+			enemyVX: 0,
+			enemyVY: 0,
+			enemyHero: "lia",
+			enemyConcealed: false,
+			hasLineOfSight: hasLineOfSight(
+				input.selfX,
+				input.selfY,
+				pick.x,
+				pick.y,
+				24,
+				this.world,
+			),
+		};
+	}
+
+	/**
 	 * The burst that closes a gap: dash (or tumble — the stance decides) toward
 	 * the foe while it is still catchable.
 	 *
@@ -840,9 +987,20 @@ export class EnemyBrain {
 		input: AIInput,
 		isLowHP: boolean,
 		isEnemyLow: boolean,
+		pushing: boolean | null,
+		hunting: boolean,
 	): AIState {
 		if (this.isStuck()) {
 			return AIState.CHASE;
+		}
+		// The hunt eclipses everything except the wall in front of your face:
+		// no zone, no flee, no standoff — the pick is being run down. The
+		// `distanceToPlayer` here is the *pick's*, so "in strike range" is
+		// about the kill, not whatever fights are happening elsewhere.
+		if (hunting) {
+			return input.distanceToPlayer < EXECUTE_RANGE_PX
+				? AIState.ATTACK
+				: AIState.CHASE;
 		}
 		// Sword range is somewhere to *be*, not somewhere to flee. Backing off on
 		// contact was correct when the only weapon was a gun; with a sword it
@@ -915,7 +1073,9 @@ export class EnemyBrain {
 			}
 			// Break away sometimes rather than brawling until someone dies. Cautious
 			// fighters zone more, which is what makes two bots play differently
-			// instead of mirroring each other into the centre of the map.
+			// instead of mirroring each other into the centre of the map. A side
+			// that decided to press falls out of the dance first: the break-away
+			// roll is scaled by `PUSH_ZONE_FACTOR` so the press keeps pressing.
 			//
 			// A dry gun never zones: the whole point of a zoning phase is the
 			// ranged game, and a bot pressing a trigger that answers nothing is
@@ -924,10 +1084,11 @@ export class EnemyBrain {
 			const wantsSpace =
 				WANTS_SPACE_BASE -
 				WANTS_SPACE_AGGRO_WEIGHT * this.config.aggressiveness;
+			const zoneScale = pushing ? PUSH_ZONE_FACTOR : 1;
 			if (
 				this.gunLive(input) &&
 				this.zoneCooldown <= 0 &&
-				Math.random() < wantsSpace
+				Math.random() < wantsSpace * zoneScale
 			) {
 				return AIState.ZONE;
 			}
@@ -945,10 +1106,15 @@ export class EnemyBrain {
 				// out half the time, and the retreat that does happen is short
 				// (`RETREAT_TEAM_DURATION_MS`) — a side where every hurt
 				// fighter kites for the full 2.2s measured the round draining
-				// away with nobody on the line. Solo, the kite is the only
+				// away with nobody on the line. A *pushing* side fights it out
+				// most of the time: the side has the standing, and the peel
+				// would hand the press back for free. Solo, the kite is the only
 				// wisdom, and the long hold is what the chaser's gun finishes.
-				if (input.allies.length > 0 && Math.random() < EVADE_COINFLIP) {
-					return AIState.ATTACK;
+				if (input.allies.length > 0) {
+					const fightChance = pushing ? PUSH_FIGHT_CHANCE : EVADE_COINFLIP;
+					if (Math.random() < fightChance) {
+						return AIState.ATTACK;
+					}
 				}
 				return this.corneredTimer <= 0 ? AIState.RETREAT : AIState.CHASE;
 			}

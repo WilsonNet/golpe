@@ -183,6 +183,13 @@ export interface MeleeContext {
 	/** 0..10 personality knobs from `AIConfig`. */
 	skill: number;
 	aggressiveness: number;
+	/**
+	 * The gun is dry: no magazine, no reserve. A support with a live gun holds
+	 * the rifle even in sword range; with none, the same support has to be a
+	 * blade — the "fight comes back to the sword" rule, applied to the role
+	 * that ownership normally exempts.
+	 */
+	dry: boolean;
 }
 
 /**
@@ -245,8 +252,11 @@ export class MeleeBrain {
 		if (ctx.role === "support") {
 			// A jeffs support is a *smoke* support: its shotgun is a
 			// point-blank weapon, so it keeps the sword for the last stand
-			// instead of kiting with a gun that cannot reach.
-			this.drawn = input.selfHero === "jeffs";
+			// instead of kiting with a gun that cannot reach. A dry gun —
+			// either hero's — is the "fight comes back to the sword" rule,
+			// applied to a role that ownership normally exempts: kiting with
+			// a rifle that answers nothing is how a support becomes passive.
+			this.drawn = input.selfHero === "jeffs" || ctx.dry;
 		} else if (ctx.role === "vanguard") {
 			this.drawn = true;
 		} else if (input.selfHero === "jeffs") {

@@ -37,6 +37,8 @@ function input(over: Partial<AIInput> = {}): AIInput {
 		enemyVX: 0,
 		enemyVY: 0,
 		selfTeam: null,
+		enemyConcealed: false,
+		roundNumber: 1,
 		allies: [],
 		foes: [],
 		fields: [],
@@ -54,8 +56,8 @@ describe("BlossomBrain", () => {
 		// Two foes inside the ring: the storm's reason to exist.
 		const i = input({
 			foes: [
-				{ id: "a", distance: 150, hp: 100, x: 500, y: 300 },
-				{ id: "b", distance: 200, hp: 100, x: 520, y: 320 },
+				{ id: "a", distance: 150, hp: 100, x: 500, y: 300, concealed: false },
+				{ id: "b", distance: 200, hp: 100, x: 520, y: 320, concealed: false },
 			],
 		});
 		brain.decide(i, 16.6, null);
@@ -81,7 +83,9 @@ describe("BlossomBrain", () => {
 		const brain = new BlossomBrain();
 		brain.decide(
 			input({
-				foes: [{ id: "a", distance: 400, hp: 100, x: 800, y: 300 }],
+				foes: [
+					{ id: "a", distance: 400, hp: 100, x: 800, y: 300, concealed: false },
+				],
 			}),
 			16.6,
 			null,
@@ -93,7 +97,9 @@ describe("BlossomBrain", () => {
 	it("the patience rule eventually spends a full meter on a near foe", () => {
 		const brain = new BlossomBrain();
 		const i = input({
-			foes: [{ id: "a", distance: 200, hp: 100, x: 500, y: 300 }],
+			foes: [
+				{ id: "a", distance: 200, hp: 100, x: 500, y: 300, concealed: false },
+			],
 		});
 		// Simulate 11 seconds of armed ticks.
 		for (let t = 0; t < 700; t++) {

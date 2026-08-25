@@ -2675,6 +2675,7 @@ export class Match {
 		let selfTeam: TeamId | null = null;
 		let selfUltCharge = 0;
 		let selfItemCharges = 0;
+		let enemyConcealed = false;
 		const fields: { x: number; y: number; hostile: boolean }[] = [];
 		const traps: { x: number; y: number }[] = [];
 		let selfId = "local";
@@ -2695,12 +2696,27 @@ export class Match {
 				const team = session.teamOf(id);
 				if (hostile(selfTeam, team)) {
 					if (session.aliveOf(id)) {
+						// Same concealment rule the renderer's fade uses, answered for
+						// *this* bot's view: a fighter hidden in its own side's smoke
+						// is invisible, and invisible enemies are not shoot at.
+						const concealed = session.smokeClouds.some((c) =>
+							smokeHidesFrom(
+								c,
+								id,
+								team,
+								session.manager.myId,
+								selfTeam,
+								fighter.state.x,
+								fighter.state.y,
+							),
+						);
 						foes.push({
 							id,
 							x: fighter.state.x,
 							y: fighter.state.y,
 							hp: session.hpOf(id),
 							distance: d,
+							concealed,
 						});
 					}
 				} else {
@@ -2715,6 +2731,12 @@ export class Match {
 					});
 				}
 			}
+			// The row for the fighter the brain was handed as "the enemy" — the
+			// same `state` object the session's `nearestFoe` returned, so identity
+			// is exact even when two remotes are equidistant.
+			enemyConcealed =
+				foes.find((f) => session.remotes.get(f.id)?.state === foe)?.concealed ??
+				false;
 			const field = session.singularity;
 			if (field) {
 				fields.push({
@@ -2735,6 +2757,7 @@ export class Match {
 				y: foe.y,
 				hp: enemyHP,
 				distance: Math.hypot(dx, dy),
+				concealed: false,
 			});
 		}
 
@@ -2748,14 +2771,9 @@ export class Match {
 			touchingDown: self.grounded,
 			touchingLeft: self.wallTouch === "left",
 			touchingRight: self.wallTouch === "right",
-			hasLineOfSight: hasLineOfSight(
-				self.x,
-				self.y,
-				foe.x,
-				foe.y,
-				24,
-				this.arena,
-			),
+			hasLineOfSight:
+				!enemyConcealed &&
+				hasLineOfSight(self.x, self.y, foe.x, foe.y, 24, this.arena),
 			selfHP,
 			enemyHP,
 			enemyAction: foe.meleeAction,
@@ -2773,12 +2791,14 @@ export class Match {
 			selfId,
 			selfHero: this.hero,
 			enemyHero: foeHero,
+			enemyConcealed,
 			enemyGrounded,
 			selfAirJumps: self.airJumps,
 			selfUltCharge,
 			enemyVX: foe.vx,
 			enemyVY: foe.vy,
 			selfTeam,
+			roundNumber: session?.matchStatus?.teams?.round ?? 1,
 			allies,
 			foes,
 			fields,

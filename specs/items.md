@@ -158,6 +158,12 @@ full kit; the rules here are the wire and the general item rules.
   blade — a glimpse of the attack, not a target to re-acquire). The local
   fighter still sees their own ghost even while hidden, so the fade is the cue
   that they are invisible to the enemy right now.
+- **The concealment is asked per viewer, and the AI asks it too.** Both
+  perceptions (server and client) run `smokeHidesFrom` against every living
+  enemy: a concealed foe is not shot at (the line of sight is gated), not
+  clustered for an ultimate, not a target of the kill thirst — the fog is
+  real to a bot exactly as it is to a human, and the human's *own* ghost is
+  the cue that the bots have just lost them.
 - **A dead Jeffs' clouds leave the floor with him**, exactly like traps:
   removed at respawn and at a round reset.
 - The cloud affects vision only. No damage, no collision, no bullet block.

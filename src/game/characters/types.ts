@@ -42,6 +42,16 @@ export interface FoeInfo {
 	y: number;
 	hp: number;
 	distance: number;
+	/**
+	 * This foe is standing in its own side's smoke and is therefore
+	 * **invisible to this viewer** (`smokeHidesFrom`).
+	 *
+	 * A brain must not shoot, throw at, ultimate or hunt a fighter it cannot
+	 * see — the smoke's concealment hides the fighter from a bot exactly as it
+	 * fades the sprite from a human. The concealment is computed per viewer in
+	 * the perception build, so every bot's `foes` rows answer *its own* vision.
+	 */
+	concealed: boolean;
 }
 
 /**
@@ -107,6 +117,17 @@ export interface AIInput {
 	selfHero: HeroId;
 	/** The enemy's hero, so a sword brain can read a dagger's options. */
 	enemyHero: HeroId;
+	/**
+	 * The foe the brain is reasoning about is standing in its own side's smoke
+	 * — invisible to this viewer.
+	 *
+	 * The field exists because `hasLineOfSight` is geometry, and geometry
+	 * cannot say "I know exactly where the enemy is, I just cannot see them".
+	 * The gates that lean on it decide the *weapons*; modules that need to
+	 * know whether the enemy is a real, visible target (the ultimate's cluster
+	 * scan, the kill thirst) read this.
+	 */
+	enemyConcealed: boolean;
 	/** Whether the enemy has the floor under it — the read for jumping a thrust. */
 	enemyGrounded: boolean;
 	/** Air jumps left. `AIR_JUMPS` means a double jump is still available. */
@@ -116,8 +137,21 @@ export interface AIInput {
 	/** The enemy's velocity, for leading a shot to where it will be. */
 	enemyVX: number;
 	enemyVY: number;
-	/** Own side, or `null` in a free-for-all. */
+	/**
+	 * Own side, or `null` in a free-for-all.
+	 */
 	selfTeam: TeamId | null;
+	/**
+	 * The team deathmatch round, 1-based. A free-for-all has no rounds, so
+	 * this is the room's best guess and no team logic reads it there.
+	 *
+	 * The round number is what makes a *coin flip* possible without any shared
+	 * state: both members of a side see the same number, the sides see
+	 * different teams, and `(round + team) % 2` hands them opposite halves of
+	 * every round — a fair coin across a match, with no random that two
+	 * independent brains could fail to match.
+	 */
+	roundNumber: number;
 	/** Teammates. Empty in a free-for-all. */
 	allies: AllyInfo[];
 	/** Every living enemy. `foes.length` is the number the brain is up against. */

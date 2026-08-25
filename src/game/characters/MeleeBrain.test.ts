@@ -39,6 +39,8 @@ function perception(overrides: Partial<AIInput> = {}): AIInput {
 		enemyVX: 0,
 		enemyVY: 0,
 		selfTeam: null,
+		enemyConcealed: false,
+		roundNumber: 1,
 		allies: [],
 		foes: [],
 		fields: [],
@@ -69,7 +71,12 @@ function decide(input: AIInput, skill: number, random: number): AIOutput {
 	};
 	const spy = vi.spyOn(Math, "random").mockReturnValue(random);
 	try {
-		brain.decide(input, output, DT, { role: null, skill, aggressiveness: 0.5 });
+		brain.decide(input, output, DT, {
+			role: null,
+			skill,
+			aggressiveness: 0.5,
+			dry: false,
+		});
 	} finally {
 		spy.mockRestore();
 	}

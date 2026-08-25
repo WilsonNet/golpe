@@ -79,6 +79,10 @@ interface Cluster {
 function bestCluster(input: AIInput): Cluster | null {
 	let best: Cluster | null = null;
 	for (const foe of input.foes) {
+		// A foe in its own side's smoke cannot be counted as where the throw
+		// is going: the cluster is a *visible* crowd, exactly like the crowd a
+		// human aims the hole at.
+		if (foe.concealed) continue;
 		let count = 0;
 		let cx = 0;
 		let cy = 0;
@@ -218,6 +222,13 @@ export class UltimateBrain {
 			this.lastDecline = "no-foes";
 			return;
 		}
+		// The enemy is inside its own side's smoke: no target to see, no angle
+		// to solve. A hole thrown at a fogged position is a x-ray throw — the
+		// solved lob lands exactly where a human could not have aimed.
+		if (input.enemyConcealed) {
+			this.lastDecline = "concealed";
+			return;
+		}
 		// The hold is the vulnerable window: a stun mid-hold aborts the cast,
 		// and an enemy in swing range will land one inside 220ms. Except for the
 		// point-blank answer below, the hole is thrown from a beat of safety.
@@ -246,7 +257,8 @@ export class UltimateBrain {
 		const cluster = bestCluster(input);
 		const outnumbered = input.foes.length > input.allies.length + 1;
 		const finisher = input.foes.some(
-			(f) => f.hp <= FINISHER_HP && f.distance < COMMIT_RANGE_PX,
+			(f) =>
+				!f.concealed && f.hp <= FINISHER_HP && f.distance < COMMIT_RANGE_PX,
 		);
 
 		// The crowd: two or more enemies standing together are the hole's reason
@@ -267,13 +279,15 @@ export class UltimateBrain {
 		}
 		if (finisher) {
 			const foe = input.foes.find(
-				(f) => f.hp <= FINISHER_HP && f.distance < COMMIT_RANGE_PX,
+				(f) =>
+					!f.concealed && f.hp <= FINISHER_HP && f.distance < COMMIT_RANGE_PX,
 			);
 			if (foe) return { x: foe.x, y: foe.y };
 		}
 		// The enemy is at the team's line: an ally is being engaged within a
 		// throw of us, so the hole lands where the fight already is.
 		const atTheLine = input.foes.find((f) => {
+			if (f.concealed) return false;
 			if (f.distance >= COMMIT_RANGE_PX) return false;
 			return input.allies.some(
 				(a) => Math.hypot(a.x - f.x, a.y - f.y) < ALLY_LINE_RANGE_PX,
@@ -283,7 +297,9 @@ export class UltimateBrain {
 		// The patience rule: the meter has been full too long — spend it on the
 		// nearest enemy it can still reach.
 		if (this.armedTimer > ARMED_PATIENCE_MS) {
-			const foe = input.foes.find((f) => f.distance < PATIENCE_RANGE_PX);
+			const foe = input.foes.find(
+				(f) => !f.concealed && f.distance < PATIENCE_RANGE_PX,
+			);
 			if (foe) return { x: foe.x, y: foe.y };
 		}
 		return null;

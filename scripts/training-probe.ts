@@ -23,11 +23,11 @@ import type { Page } from "playwright";
 import { chromium } from "playwright";
 import type { MeleeEventMsg } from "../src/game/online/types";
 import type { MeleeMove, MeleeOutcome } from "../src/game/simulation/Physics";
-import { DRAGON_DAMAGE } from "../src/tweakables/ultimate";
 import type {
 	TrainingReport,
 	TrainingScenario,
 } from "../src/game/training/report";
+import { DRAGON_DAMAGE } from "../src/tweakables/ultimate";
 
 const BASE_URL = process.env.GOLPE_URL ?? "http://localhost:8084";
 

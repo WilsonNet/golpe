@@ -179,6 +179,38 @@ the roles exist to prevent: a vanguard that chased a kiting enemy crossed three
 screens without a single swing, and a support that never stopped retreating
 dragged the whole side across the arena.
 
+**But a round stalls when both sides let the other make the move.** Two
+additional rules make somebody always the one pressing:
+
+- **The side with more combined HP is the aggressor.** Every decision, the
+  brain sums its side's standing (`selfHP` + living allies) against the
+  enemies' and the side ahead pushes: its supports advance and hold the band
+  floor instead of peeling it, its hurt fighters fight the exchange out instead
+  of kiting it, and its break-away zoning roll is scaled down
+  (`PUSH_ZONE_FACTOR`) — a side that decided to press does not withdraw.
+  Within `HP_TIE_WINDOW` the totals are a toss-up and **the round's coin
+  decides**: `(round + team) % 2`, the same arithmetic both members of one
+  side see, opposite halves to the enemy, alternating rounds — a fair coin
+  across a match with no shared random. The boundary is the hysteresis: a side
+  only stops pressing on a decisive drop, so the press does not flap with
+  every bullet that lands.
+- **A dry gun is a sword fight waiting to happen.** The support's kite
+  discipline belongs to the gun; with no magazine and no reserve the support
+  draws the blade and walks in (`the fight comes back to the sword`, the same
+  rule as everywhere) instead of retreating with a trigger that answers
+  nothing. Aggression never leaves with the ammunition.
+
+**And bots hunt picks.** The thirst: a living foe at `THIRST_HP` or below,
+no other enemy within `THIRST_ISOLATED_PX` (its side's line is over there — the
+flank, not the head-on), not concealed in smoke, within one screen's run —
+when one exists and the current exchange is a standoff, the whole brain
+re-points at it as "the enemy": the state machine, the sword game, the
+ultimate and the aim all walk at the kill, no zone, no flee, no team override
+along the way. Enemies that are **not visible** are nothing: `smokeHidesFrom`
+is answered per viewer in the perception, so a fighter hiding in its own
+side's smoke is not shot at, not clustered for an ultimate, not hunted —
+exactly as the sprite fades for a human, the target disappears for a bot.
+
 ## The arena
 
 Team deathmatch is played on **at least three screens** (2400px). `?screen=N`

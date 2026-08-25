@@ -9,6 +9,10 @@
  */
 
 import {
+	DRAGON_MIN_RIDE_MS,
+	DRAGON_RIDE_MS,
+} from "../../tweakables/ultimate.js";
+import {
 	DEFAULT_WORLD,
 	PLAYER_HEIGHT,
 	PLAYER_WIDTH,
@@ -24,7 +28,6 @@ import {
 } from "./Collision.js";
 import { type HeroKit, LIA_KIT } from "./Heroes.js";
 import { ROOT_MS, type Trap, trapCatches } from "./Items.js";
-import { DRAGON_MIN_RIDE_MS, DRAGON_RIDE_MS } from "../../tweakables/ultimate.js";
 import {
 	bombBlastFor,
 	bombFallHeight,

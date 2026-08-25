@@ -136,6 +136,10 @@ interface DiagnosticReport {
 		swordFrames: number;
 		gunFrames: number;
 		allyDistancePx: number;
+		pushing?: boolean | null;
+		sideHp?: number;
+		foeSideHp?: number;
+		hunting?: boolean;
 		ultimate?: { aimStarts?: number };
 	} | null;
 }
@@ -296,6 +300,19 @@ function assess(
 	const movement = diagnostic?.movementSummary;
 	const ult = diagnostic?.ultimateSummary;
 	if (team?.role) {
+		// The press and the hunt are the round's pulse: which side had the HP
+		// standing at the sample and whether a kill was being chased. Reported
+		// rather than asserted — one sample cannot prove a round-wide pattern,
+		// and the *round pace* (rounds played vs live time) is the stall metric.
+		if (typeof team.pushing === "boolean") {
+			const hpGap = (team.sideHp ?? 0) - (team.foeSideHp ?? 0);
+			notes.push(
+				team.pushing
+					? `side is pressing (HP ${team.sideHp} vs ${team.foeSideHp}, margin ${hpGap})`
+					: `side is holding (HP ${team.sideHp} vs ${team.foeSideHp}, margin ${hpGap})`,
+			);
+		}
+		if (team.hunting) notes.push("bot was hunting an isolated low-HP kill");
 		if (team.role === "support") {
 			// A jeffs support is a *smoke* support: its shotgun is a
 			// point-blank weapon, so it keeps the sword for the last stand and

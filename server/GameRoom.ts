@@ -51,6 +51,7 @@ import {
 	type ScoreEntry,
 	TIME_LIMIT_MS,
 } from "../src/game/simulation/Deathmatch.js";
+import { smokeHidesFrom } from "../src/game/simulation/Items.js";
 import {
 	aliveCounts,
 	balanceTeam,
@@ -1476,12 +1477,29 @@ export class GameRoom {
 			const d = Math.hypot(p.state.x - bot.state.x, p.state.y - bot.state.y);
 			if (hostile(bot.team, p.team)) {
 				if (p.alive) {
+					// A fighter standing in its own side's smoke is invisible.
+					// The smoke's concealment is a *per view* fact — this bot's
+					// view — so it follows the same predicate the renderer's fade
+					// uses, and a bot that cannot see a fighter does not aim at
+					// its true position.
+					const concealed = this.smokeClouds.some((c) =>
+						smokeHidesFrom(
+							c,
+							p.id,
+							p.team,
+							bot.id,
+							bot.team,
+							p.state.x,
+							p.state.y,
+						),
+					);
 					foes.push({
 						id: p.id,
 						x: p.state.x,
 						y: p.state.y,
 						hp: p.hp,
 						distance: d,
+						concealed,
 					});
 				}
 			} else {
@@ -1496,6 +1514,9 @@ export class GameRoom {
 				});
 			}
 		}
+
+		const primaryConcealed =
+			foes.find((f) => f.id === foe.id)?.concealed ?? false;
 
 		return {
 			playerX: foe.state.x,
@@ -1512,14 +1533,16 @@ export class GameRoom {
 			touchingDown: bot.state.grounded,
 			touchingLeft: bot.state.wallTouch === "left",
 			touchingRight: bot.state.wallTouch === "right",
-			hasLineOfSight: hasLineOfSight(
-				bot.state.x,
-				bot.state.y,
-				foe.state.x,
-				foe.state.y,
-				24,
-				this.world,
-			),
+			hasLineOfSight:
+				!primaryConcealed &&
+				hasLineOfSight(
+					bot.state.x,
+					bot.state.y,
+					foe.state.x,
+					foe.state.y,
+					24,
+					this.world,
+				),
 			selfHP: bot.hp,
 			enemyHP: foe.hp,
 			enemyAction: foe.state.meleeAction,
@@ -1537,12 +1560,14 @@ export class GameRoom {
 			selfId: bot.id,
 			selfHero: bot.hero,
 			enemyHero: foe.hero,
+			enemyConcealed: primaryConcealed,
 			enemyGrounded: foe.state.grounded,
 			selfAirJumps: bot.state.airJumps,
 			selfUltCharge: bot.ult,
 			enemyVX: foe.state.vx,
 			enemyVY: foe.state.vy,
 			selfTeam: bot.team,
+			roundNumber: this.roundNumber,
 			allies,
 			foes,
 			selfItemCharges: bot.itemCharges,

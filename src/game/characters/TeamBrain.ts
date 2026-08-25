@@ -23,6 +23,7 @@
 
 import type { World } from "../simulation/Arena.js";
 import type { HeroId } from "../simulation/Heroes.js";
+import { STRIKE_RANGE_PX } from "./MeleeBrain.js";
 import type { AIInput, AIOutput, MeleeModuleView, TeamRole } from "./types.js";
 
 /** A hostile inside this much of an ally means the ally is being threatened. */
@@ -36,6 +37,14 @@ const COVER_JUMP_CHANCE = 0.12;
 const THREAT_RANGE_PX = 300;
 /** A support stops backing off once its ally is this far ahead. */
 const ALLY_SPACING_PX = 400;
+/**
+ * One side's combined HP is within this much of the other's, the difference
+ * means nothing — a plane is not the side ahead — and the coin decides who
+ * presses. Without a window, a one-point difference would flip the whole side's
+ * aggression on the tick it happened and back off on the next: flapping sides
+ * are a side that stands still.
+ */
+const HP_TIE_WINDOW = 25;
 /**
  * The shotgun's blast range — the one distance a jeffs support's gun can
  * still mean something. Beyond it the smoke support holds its fire: the
@@ -87,7 +96,6 @@ export interface TeamContext {
 	/** Closest ally, for the diagnostic. 0 when there is no ally. */
 	allyDistancePx: number;
 }
-
 /**
  * One fighter's team decisions. Owned by `EnemyBrain`, which applies the
  * steering and passes `role` on to the melee and ultimate modules.
@@ -102,6 +110,18 @@ export class TeamBrain {
 	/** The vanguard's current line anchor, refreshed on a timer. */
 	private lineX: number | null = null;
 	private lineTimer = 0;
+	/**
+	 * Is this fighter's side the aggressor this round? `null` in a free-for-all.
+	 *
+	 * Decided by combined HP (the side ahead presses), and when the totals are
+	 * within `HP_TIE_WINDOW` the round's coin — `(round + side) % 2` — picks
+	 * one side, and keeps it picked for the whole round. See `pushDecision`.
+	 */
+	private pushing: boolean | null = null;
+	/** Combined HP of this fighter's side, for the diagnostic. */
+	private sideHp = 0;
+	/** Combined HP of the enemy side, for the diagnostic. */
+	private foeSideHp = 0;
 
 	constructor(private readonly world: World) {}
 
@@ -113,6 +133,9 @@ export class TeamBrain {
 		this.gunFrames = 0;
 		this.lineX = null;
 		this.lineTimer = 0;
+		this.pushing = null;
+		this.sideHp = 0;
+		this.foeSideHp = 0;
 	}
 
 	/** The role this fighter settled into, or null in a free-for-all. */
@@ -127,7 +150,62 @@ export class TeamBrain {
 			swordFrames: this.swordFrames,
 			gunFrames: this.gunFrames,
 			allyDistancePx: Math.round(this.allyDistancePx),
+			pushing: this.pushing,
+			sideHp: Math.round(this.sideHp),
+			foeSideHp: Math.round(this.foeSideHp),
 		};
+	}
+
+	/**
+	 * Is this fighter's side the aggressor, by combined HP?
+	 *
+	 * The side with more health standing takes the fight to the other side, so
+	 * a standoff is broken by somebody: an argument for having walked into the
+	 * middle in the first place. The side behind holds, kites and lets the
+	 * press overextend — the shape of a round, not two lines staring.
+	 *
+	 * **The coin.** The far harder half of the question: both sides read the
+	 * same HP sums, and when they are within `HP_TIE_WINDOW` *neither* side has
+	 * the standing. The flip is `(round + side) % 2` — the same round number
+	 * both members of one side see, opposite parities for opposite sides, and a
+	 * different answer every round, so across a match it comes out 50/50
+	 * without any shared random that two independent brains could fail to
+	 * agree on.
+	 *
+	 * Decided per decision — the HP sums are live — but the window is the
+	 * hysteresis: a side only stops pressing on a *decisive* drop, and ties
+	 * stay on the round's coin instead of flapping.
+	 */
+	pushDecision(input: AIInput): boolean | null {
+		const p = this.evaluatePush(input);
+		this.pushing = p.pushing;
+		this.sideHp = p.sideHp;
+		this.foeSideHp = p.foeSideHp;
+		return this.pushing;
+	}
+
+	private evaluatePush(input: AIInput): {
+		pushing: boolean | null;
+		sideHp: number;
+		foeSideHp: number;
+	} {
+		if (input.selfTeam === null) {
+			return { pushing: null, sideHp: 0, foeSideHp: 0 };
+		}
+		let sideHp = input.selfHP;
+		for (const ally of input.allies) {
+			if (ally.alive) sideHp += ally.hp;
+		}
+		let foeSideHp = 0;
+		for (const foe of input.foes) {
+			foeSideHp += foe.hp;
+		}
+		const diff = sideHp - foeSideHp;
+		let pushing: boolean;
+		if (diff > HP_TIE_WINDOW) pushing = true;
+		else if (diff < -HP_TIE_WINDOW) pushing = false;
+		else pushing = (input.roundNumber + input.selfTeam) % 2 === 0;
+		return { pushing, sideHp, foeSideHp };
 	}
 
 	/**
@@ -149,6 +227,7 @@ export class TeamBrain {
 		output: AIOutput,
 		melee: MeleeModuleView,
 		role: TeamRole | null,
+		hunting: boolean,
 		delta: number,
 	): TeamContext {
 		this.role = role;
@@ -160,6 +239,16 @@ export class TeamBrain {
 		}
 
 		output.swordStance ? this.swordFrames++ : this.gunFrames++;
+
+		// The thirst hunt is the coordinator's call, and the team module stands
+		// aside from it: the line, the kite and the cover are the side's
+		// structure, and none of them should hold a fighter back from an
+		// isolated low-HP enemy. Spacing still applies — stepping on the
+		// teammate is wrong even mid-hunt.
+		if (hunting) {
+			this.applySpacing(input, output);
+			return { role: this.role, allyDistancePx: this.allyDistancePx };
+		}
 
 		if (this.role === "support") {
 			this.steerSupport(input, output);
@@ -207,12 +296,19 @@ export class TeamBrain {
 
 	/**
 	 * The support: keep the gun at range, kite what closes — but only as far as
-	 * the side's own end screen, where the retreat becomes a last stand.
+	 * the side's own end screen, where the retreat becomes a last stand. When
+	 * the side has the standing (`pushing`) the support advances behind the
+	 * vanguard and holds when closed rather than peeling, and when the gun is
+	 * dry the whole kite discipline is over: the ranged weapon is gone, so the
+	 * support walks in and blades — passively kiting a gun that answers nothing
+	 * is how a round stalls out with nobody scoring it.
 	 */
 	private steerSupport(input: AIInput, output: AIOutput) {
 		const d = input.distanceToPlayer;
 		const threat = nearest(input.foes);
 		const toFoe = threat ? threat.x - input.selfX : input.playerX - input.selfX;
+		const dry = input.selfAmmo <= 0 && input.selfReserveRounds <= 0;
+		const pushing = this.pushing === true;
 
 		if (d < SUPPORT_FLOOR_PX) {
 			const away = input.selfX - input.playerX;
@@ -226,6 +322,24 @@ export class TeamBrain {
 				if (Math.random() < STRAFE_FLIP_CHANCE) this.strafeDir *= -1;
 				output.moveLeft = this.strafeDir < 0;
 				output.moveRight = this.strafeDir > 0;
+			} else if (dry) {
+				// The gun is gone: closing the last of the distance is a sword
+				// walk, not a retreat — the melee module has already drawn, and
+				// the walk stops at strike range, where the blade takes over.
+				if (d > STRIKE_RANGE_PX - 2) {
+					output.moveLeft = toFoe < 0;
+					output.moveRight = toFoe >= 0;
+				} else {
+					output.moveLeft = false;
+					output.moveRight = false;
+				}
+			} else if (pushing) {
+				// The side has the standing: the support holds the band floor
+				// and strafes rather than peeling it — the side's press is what
+				// the round wants, and the vanguard's line covers the hold.
+				if (Math.random() < STRAFE_FLIP_CHANCE) this.strafeDir *= -1;
+				output.moveLeft = this.strafeDir < 0;
+				output.moveRight = this.strafeDir > 0;
 			} else {
 				// Kite: away, and burst when the gap refuses to open.
 				output.moveLeft = away < 0;
@@ -235,11 +349,15 @@ export class TeamBrain {
 				if (input.touchingDown && Math.random() < COVER_JUMP_CHANCE)
 					output.jump = true;
 			}
-		} else if (d > SUPPORT_CEIL_PX) {
+		} else if (d > SUPPORT_CEIL_PX || pushing || dry) {
 			// Advance onto the enemy: the band is what stops the walk, and the
 			// vanguard's line is what covers it. Regrouping instead measured the
 			// whole side standing at home, nearest enemy a thousand pixels away,
 			// each fighter told "your ally is closer than the enemy — go there".
+			// A pushing side or a dry gun advances straight through the band: the
+			// side that decided to press does not wait to be told, and a blade
+			// does not hold a kiting range — a dry support walks to strike range
+			// the same way the floor branch does.
 			if (d > REGROUP_DIST_PX && this.allySeparated(input)) {
 				const ally = this.nearestAlly(input);
 				if (ally) {
@@ -247,6 +365,9 @@ export class TeamBrain {
 					output.moveLeft = toward < 0;
 					output.moveRight = toward >= 0;
 				}
+			} else if (dry && d <= STRIKE_RANGE_PX - 2) {
+				output.moveLeft = false;
+				output.moveRight = false;
 			} else {
 				output.moveLeft = toFoe < 0;
 				output.moveRight = toFoe >= 0;
@@ -261,12 +382,15 @@ export class TeamBrain {
 		// The gun fires whenever the band is held and the lane is clear —
 		// except the shotgun, which is a point-blank weapon: a jeffs support
 		// holds its fire at band range and lets the smoke and the sword do
-		// the work.
-		const rangedFire =
-			input.selfHero === "jeffs"
-				? input.distanceToPlayer <= SHOTGUN_BLAST_RANGE_PX
-				: true;
-		output.attack = rangedFire && input.hasLineOfSight && !input.selfStunned;
+		// the work. A dry support lets whatever the melee module pressed ride
+		// — the weapon in its hands is the sword now.
+		if (!dry) {
+			const rangedFire =
+				input.selfHero === "jeffs"
+					? input.distanceToPlayer <= SHOTGUN_BLAST_RANGE_PX
+					: true;
+			output.attack = rangedFire && input.hasLineOfSight && !input.selfStunned;
+		}
 
 		// Spacing: a second support standing on this one is two guns at the same
 		// spot, which is one gun with twice the target area.

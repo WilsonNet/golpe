@@ -563,7 +563,16 @@ default at every range and the shotgun is a point-blank finisher (pulled on a
 reeling foe, holstered after one blast), the blossom waits out a readied
 knockdown and casts into its own smoke, and the smoke has three plays — the
 blossom combo, the team save, the panic button. Measured complementary roles,
-not mirror fighters. A future weapon is a new module, never
+not mirror fighters. **A round never stalls because nobody made the press**: the
+team module sums each side's combined HP every decision (`pushDecision`) and the
+side ahead pushes — supports advance, hurt fighters trade, zoning rolls shrink —
+while a toss-up hands the press to the round's coin `(roundNumber + team) % 2`
+(one side per round, alternating — no shared random). **And the thirst hunts
+picks**: a living foe at `THIRST_HP` with no other enemy within
+`THIRST_ISOLATED_PX` and not smoke-concealed becomes "the enemy" for the whole
+decision (perception swap in `EnemyBrain.perceptionFor`), and smoke really does
+hide: both perceives answer `smokeHidesFrom` per viewer, so a concealed foe is
+not shot, clustered, ulted or hunted. A future weapon is a new module, never
 a new branch. The brain decides inside the same gaps the server's tick allows:
 a client brain that kept deciding through an ultimate's cinematic freeze held
 and released while no input could leave the client, so it is gated on the freeze

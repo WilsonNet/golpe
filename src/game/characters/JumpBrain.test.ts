@@ -51,6 +51,8 @@ function perception(overrides: Partial<AIInput> = {}): AIInput {
 		enemyVX: 0,
 		enemyVY: 0,
 		selfTeam: null,
+		enemyConcealed: false,
+		roundNumber: 1,
 		allies: [],
 		foes: [],
 		fields: [],

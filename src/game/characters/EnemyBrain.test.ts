@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { AIConfig } from "./AIConfig.js";
 import { EnemyBrain } from "./EnemyBrain.js";
-import type { AIInput, AIOutput } from "./types.js";
+import type { AIInput, AIOutput, FoeInfo } from "./types.js";
 
 const DT = 1000 / 60;
 
@@ -48,6 +48,8 @@ function perception(overrides: Partial<AIInput> = {}): AIInput {
 		enemyVX: 0,
 		enemyVY: 0,
 		selfTeam: null,
+		enemyConcealed: false,
+		roundNumber: 1,
 		allies: [],
 		foes: [],
 		fields: [],
@@ -392,6 +394,232 @@ describe("EnemyBrain", () => {
 		try {
 			const out = brain.decide(input, 0, DT);
 			expect(out.swordStance).toBe(true);
+		} finally {
+			spy.mockRestore();
+		}
+	});
+
+	// ---- the thirst: isolated low-HP picks ----
+
+	/**
+	 * A standoff in a team room: the bot at 400px from its primary, which is
+	 * on the LEFT, and a lone low-HP foe on the right — alone of its side.
+	 * Ordinary reasoning would walk left after the primary; hunting walks
+	 * right after the pick, so the movement axis is the discriminator.
+	 */
+	function standoffWithPick(
+		pick: Partial<Omit<FoeInfo, "concealed">>,
+	): AIInput {
+		return perception({
+			selfTeam: 0,
+			roundNumber: 1,
+			// Anands ally: the sort ranks this Lia fighter first, so the
+			// bot is the vanguard and the team module adds no band strafes.
+			allies: [
+				{
+					id: "ally",
+					x: 300,
+					y: 300,
+					hp: 100,
+					alive: true,
+					distance: 600,
+					hero: "anands",
+				},
+			],
+			distanceToPlayer: 400,
+			playerX: 500,
+			playerY: 300,
+			selfX: 900,
+			selfY: 300,
+			enemyHP: 100,
+			foes: [
+				{
+					id: "primary",
+					x: 500,
+					y: 300,
+					hp: 100,
+					distance: 400,
+					concealed: false,
+				},
+				{
+					id: "pick",
+					x: 1500,
+					y: 300,
+					hp: 20,
+					distance: 600,
+					concealed: false,
+					...pick,
+				},
+			],
+		});
+	}
+
+	it("hunts an isolated low-HP foe from a standoff — the thirst overrides the fight", () => {
+		// The pick is 600px out, RIGHT; the primary is LEFT at 400. A hunt
+		// walks right after the pick; a non-hunt stays on the primary.
+		const brain = new EnemyBrain(CONFIG);
+		const spy = vi.spyOn(Math, "random").mockReturnValue(0.5);
+		try {
+			const out = brain.decide(standoffWithPick({}), 0, DT);
+			expect(brain.getInsight().hunting).toBe(true);
+			expect(out.moveRight).toBe(true);
+			expect(out.moveLeft).toBe(false);
+		} finally {
+			spy.mockRestore();
+		}
+	});
+
+	it("does not hunt a foe it cannot see — smoke concealment blocks the thirst", () => {
+		// The pick on the RIGHT is concealed; the primary on the LEFT is the
+		// only visible foe, so the brain stays on it (a left walk).
+		const input = perception({
+			selfTeam: 0,
+			roundNumber: 1,
+			allies: [
+				{
+					id: "ally",
+					x: 300,
+					y: 300,
+					hp: 100,
+					alive: true,
+					distance: 600,
+					hero: "anands",
+				},
+			],
+			distanceToPlayer: 400,
+			playerX: 500,
+			playerY: 300,
+			selfX: 900,
+			selfY: 300,
+			enemyHP: 100,
+			foes: [
+				{
+					id: "primary",
+					x: 500,
+					y: 300,
+					hp: 100,
+					distance: 400,
+					concealed: false,
+				},
+				{ id: "pick", x: 1500, y: 300, hp: 20, distance: 600, concealed: true },
+			],
+		});
+		const brain = new EnemyBrain(CONFIG);
+		const spy = vi.spyOn(Math, "random").mockReturnValue(0.5);
+		try {
+			const out = brain.decide(input, 0, DT);
+			expect(brain.getInsight().hunting).toBe(false);
+			expect(out.moveLeft).toBe(true);
+		} finally {
+			spy.mockRestore();
+		}
+	});
+
+	it("does not hunt a low-HP foe that has a friend beside it", () => {
+		const input = perception({
+			selfTeam: 0,
+			roundNumber: 1,
+			allies: [
+				{
+					id: "ally",
+					x: 300,
+					y: 300,
+					hp: 100,
+					alive: true,
+					distance: 600,
+					hero: "anands",
+				},
+			],
+			distanceToPlayer: 400,
+			playerX: 500,
+			playerY: 300,
+			selfX: 900,
+			selfY: 300,
+			enemyHP: 100,
+			foes: [
+				{
+					id: "primary",
+					x: 500,
+					y: 300,
+					hp: 100,
+					distance: 400,
+					concealed: false,
+				},
+				{
+					id: "pick",
+					x: 1500,
+					y: 300,
+					hp: 20,
+					distance: 600,
+					concealed: false,
+				},
+				{
+					id: "pickFriend",
+					x: 1350,
+					y: 300,
+					hp: 100,
+					distance: 450,
+					concealed: false,
+				},
+			],
+		});
+		const brain = new EnemyBrain(CONFIG);
+		const spy = vi.spyOn(Math, "random").mockReturnValue(0.5);
+		try {
+			const out = brain.decide(input, 0, DT);
+			expect(brain.getInsight().hunting).toBe(false);
+			expect(out.moveLeft).toBe(true);
+		} finally {
+			spy.mockRestore();
+		}
+	});
+
+	it("does not abandon a fight at point-blank for a pick a screen away", () => {
+		const input = perception({
+			selfTeam: 0,
+			roundNumber: 1,
+			allies: [
+				{
+					id: "ally",
+					x: 300,
+					y: 300,
+					hp: 100,
+					alive: true,
+					distance: 600,
+					hero: "anands",
+				},
+			],
+			distanceToPlayer: 100,
+			playerX: 800,
+			playerY: 300,
+			selfX: 900,
+			selfY: 300,
+			enemyHP: 100,
+			foes: [
+				{
+					id: "primary",
+					x: 800,
+					y: 300,
+					hp: 100,
+					distance: 100,
+					concealed: false,
+				},
+				{
+					id: "pick",
+					x: 1800,
+					y: 300,
+					hp: 20,
+					distance: 900,
+					concealed: false,
+				},
+			],
+		});
+		const brain = new EnemyBrain(CONFIG);
+		const spy = vi.spyOn(Math, "random").mockReturnValue(0.5);
+		try {
+			const out = brain.decide(input, 0, DT);
+			expect(brain.getInsight().hunting).toBe(false);
+			expect(out.moveLeft).toBe(true);
 		} finally {
 			spy.mockRestore();
 		}
