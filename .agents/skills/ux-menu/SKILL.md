@@ -27,8 +27,11 @@ order of value:
    create"), and the address bar itself.
 3. **Conceptual model** — the user's mental model must match the system's. This
    game's model is *links are invitations*: you don't search for a match, you
-   share a room. The menu must never imply matchmaking, lobbies, or queues that
-   the server does not have.
+   share a room. Quick match is the one discovery path and it is still a link
+   join — it asks the server which room is open (`GET /rooms`), picks the
+   busiest, and commits `?room=<id>`, exactly as if the link had been shared;
+   with none open it creates a `?bots=1` duel that is itself open. There is
+   still no lobby and no queue, so the menu must never imply one.
 4. **Constraints** — make it impossible to do it wrong. The host form floors a
    team arena at 3 screens, clamps ranges, and validates a join id before a
    connection is attempted.
@@ -118,7 +121,7 @@ string. Rules that follow:
 ## The nesting rules (how to arrange any pre-match flow)
 
 1. **The primary action is one click from the bare URL.** Everything else is a
-   detour. (Quick match = `?bots=1`.)
+   detour. (Quick match = join the open room, or `?bots=1` when none.)
 2. **Hosting and joining are siblings.** They answer different questions and
    neither is a step toward the other. Never nest Join inside Host or vice
    versa.

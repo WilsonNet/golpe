@@ -720,6 +720,17 @@ export class GameRoom {
 	readonly botHero: HeroId | null;
 
 	/**
+	 * A probe room: created by a client whose own fighter is brain-driven
+	 * (`?ai=true`), so its match exists for measurement, not for people.
+	 *
+	 * Quick match must never land a stranger in one — a diagnostic running its
+	 * sixteenth-fighter test does not need a human joining mid-run. Set once at
+	 * creation, from the creator's own `ai` flag; a human joining later does not
+	 * clear it, because a probe room is a probe room for its whole life.
+	 */
+	readonly probe: boolean;
+
+	/**
 	 * The arena this room plays in: bounds, platforms and spawn points for its
 	 * screen count.
 	 *
@@ -746,10 +757,12 @@ export class GameRoom {
 			mode?: MatchMode;
 			freezeTimeMs?: number;
 			botHero?: unknown;
+			probe?: boolean;
 		} = {},
 	) {
 		this.id = id;
 		this.mode = rules.mode ?? "ffa";
+		this.probe = Boolean(rules.probe);
 		this.freezeTimeMs =
 			this.mode === "tdm"
 				? Math.max(0, rules.freezeTimeMs ?? ROUND_FREEZE_MS)
@@ -816,6 +829,30 @@ export class GameRoom {
 
 	get isFull(): boolean {
 		return this.channelIds.length >= MAX_PLAYERS;
+	}
+
+	/**
+	 * A room quick match may send a stranger to.
+	 *
+	 * The whole predicate in one place, so the discovery endpoint and any future
+	 * caller cannot disagree about what "open" means:
+	 *
+	 * - a human is in it (a room of pure bots is reaped anyway, and joining
+	 *   nothing is worse than joining nothing), and
+	 * - there is a free seat, and
+	 * - it is not a probe room (`?ai=true` — a diagnostic is running, and a
+	 *   stranger mid-run is the last thing it wants), and
+	 * - it is not somebody's practice session, and
+	 * - it is not sitting out the post-match ceremony waiting to restart.
+	 */
+	get isOpen(): boolean {
+		return (
+			this.humanCount > 0 &&
+			!this.isFull &&
+			!this.probe &&
+			!this.isTrainingRoom &&
+			this.phase === "live"
+		);
 	}
 
 	private isAdmin(id: string): boolean {

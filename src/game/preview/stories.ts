@@ -3,17 +3,18 @@
  *
  * This is the move list's Storybook. A **story** is not a video and not a
  * pre-rendered clip: it is a timeline of *intents* — the same `PlayerIntent`
- * a keyboard produces — plus at most two scripted-server cues. The stage feeds
- * the intents through the real `tickPlayer` and renders with the real
- * animation systems, so what a story shows is what the move does, for whatever
- * hero and sheet are current. A new hero needs no new art here and a retune
- * needs no re-render: the preview cannot drift from the game because it *is*
- * the game, one fighter wide.
+ * a keyboard produces — plus scripted-server cues, plus at most a lane or two
+ * of **target dummies** for the move to happen to. The stage feeds the intents
+ * through the real `tickPlayer` and renders with the real animation systems,
+ * so what a story shows is what the move does, for whatever hero and sheet are
+ * current. A new hero needs no new art here and a retune needs no re-render:
+ * the preview cannot drift from the game because it *is* the game, one duel
+ * wide.
  *
  * Stories are data on purpose — serializable, probe-able, and writable without
  * knowing anything about Pixi. Anything that needs a renderer lives in
- * `FighterStage`, which interprets the two cues (`throw-item`, `cast-ult`)
- * by running the same simulation functions the server runs.
+ * `FighterStage`, which interprets the cues (`throw-item`, `cast-ult`) by
+ * running the same simulation functions the server runs.
  */
 
 import { MASSIVE_CHARGE_MS } from "../../tweakables/melee";
@@ -46,7 +47,8 @@ export interface Story {
 	/**
 	 * ms before the loop wraps and the fighter resets to its spawn. Long
 	 * enough for the move *and* the recovery after it — a story that cuts
-	 * off mid-recovery hides the commitment the card is warning about.
+	 * off mid-recovery hides the commitment the card is warning about, but
+	 * no longer: a tail past the action is dead air the player sits through.
 	 */
 	loopMs: number;
 	steps: readonly StoryStep[];
@@ -57,10 +59,22 @@ export interface Story {
 	 */
 	spawnX?: number;
 	/**
+	 * The x lanes of the preview's target dummies, on the ground floor. The
+	 * dummies are what make a preview a demonstration instead of a mime:
+	 * melee connects, bullets land, the hole holds, and every reaction is
+	 * the real one. Absent: no dummies — the movement stories need none.
+	 */
+	targets?: readonly number[];
+	/**
+	 * The aim angle a gun story fires along, radians above the horizon. The
+	 * stage aims every shot here the way a match aims along the cursor.
+	 * Absent: level with the target dummies.
+	 */
+	aim?: number;
+	/**
 	 * The angle a `cast-ult` cue launches along, radians from the facing
-	 * direction. The arena is dense; the sweep that reads best is a measured
-	 * climb, not the flat line a first guess reaches for. Absent: the
-	 * stage's own defaults (a lob for the hole, a shallow climb for the ride).
+	 * direction. Absent: the stage solves the lob onto the first target (the
+	 * dragon: a shallow climb that clears the ground-level pillars).
 	 */
 	castAngle?: number;
 }
@@ -124,83 +138,123 @@ const STORIES: Record<string, Story> = {
 	},
 
 	// ---- melee (ids are the shared MOVES table's) ----
-	slash: { loopMs: 1800, steps: [press(400, { attack: true })] },
+	// Every melee story stands a target dummy just inside the move's reach, so
+	// the swing lands and the card's damage, stun and knockback are all shown,
+	// not claimed. A slash that connects also disables the dummy — the hit
+	// state the list says the move inflicts.
+	slash: {
+		loopMs: 1800,
+		targets: [156],
+		steps: [press(400, { attack: true })],
+	},
 	slash2: {
 		loopMs: 2400,
+		targets: [156],
 		steps: [press(400, { attack: true }), press(900, { attack: true })],
 	},
 	slash3: {
 		loopMs: 3200,
+		targets: [156],
 		steps: [
 			press(400, { attack: true }),
 			press(900, { attack: true }),
 			press(1400, { attack: true }),
 		],
 	},
-	uppercut: { loopMs: 2200, steps: [press(400, { uppercut: true })] },
+	uppercut: {
+		loopMs: 2400,
+		targets: [150],
+		steps: [press(400, { uppercut: true })],
+	},
 	// Hold the charge, release on the ground: the slam. The hold is the real
-	// charge time — a retune re-times the preview with the move.
+	// charge time — a retune re-times the preview with the move. The dummy
+	// stands on the slam point, so the blast that follows is shown on it.
 	massive: {
-		loopMs: 4000,
+		loopMs: 3600,
+		targets: [170],
 		steps: [press(300, { attack: true }, MASSIVE_HOLD_MS)],
 	},
-	stab: { loopMs: 1500, steps: [press(400, { attack: true })] },
-	// Shift is the dagger's thrust: a committed lunge, so hold the tell.
-	thrust: { loopMs: 2600, steps: [press(400, { block: true }, 500)] },
-	shoryuken: { loopMs: 2200, steps: [press(400, { uppercut: true })] },
+	stab: { loopMs: 1600, targets: [150], steps: [press(400, { attack: true })] },
+	// Shift is the dagger's thrust: a committed lunge, so hold the tell. The
+	// dummy stands in the lunge's path — the sweep knocks it down.
+	thrust: {
+		loopMs: 2800,
+		targets: [240],
+		steps: [press(400, { block: true }, 500)],
+	},
+	shoryuken: {
+		loopMs: 2400,
+		targets: [150],
+		steps: [press(400, { uppercut: true })],
+	},
 
-	// ---- ranged: the gun stays out for the rest of the story ----
+	// ---- ranged: the gun stays out, and every round flies at the target ----
 	rifle: {
-		loopMs: 3000,
+		loopMs: 2600,
+		targets: [210],
+		aim: 0,
 		steps: [
-			press(300, { swordStance: false }, 2700),
+			press(300, { swordStance: false }, 2300),
 			press(700, { attack: true }),
 			press(1200, { attack: true }),
 			press(1700, { attack: true }),
 		],
 	},
 	machinegun: {
-		loopMs: 3000,
+		loopMs: 2600,
+		targets: [210],
+		aim: 0,
 		steps: [
-			press(300, { swordStance: false }, 2700),
+			press(300, { swordStance: false }, 2300),
 			press(700, { attack: true }, 500),
 		],
 	},
 	shotgun: {
 		loopMs: 3200,
+		targets: [190],
+		aim: 0,
 		steps: [
 			press(300, { swordStance: false }, 2900),
 			press(800, { attack: true }),
 		],
 	},
 
-	// ---- items: the press and the scripted throw ----
+	// ---- items: the press, the scripted throw, and what it does on landing ----
 	grenade: {
-		loopMs: 4200,
+		loopMs: 3400,
+		targets: [240],
 		steps: [{ at: 300, input: { item: true }, cue: "throw-item" }],
 	},
 	trap: {
-		loopMs: 4200,
+		loopMs: 4600,
+		targets: [260],
 		steps: [{ at: 300, input: { item: true }, cue: "throw-item" }],
 	},
 	smoke: {
-		loopMs: 5200,
+		loopMs: 4600,
+		targets: [240],
 		steps: [{ at: 300, input: { item: true }, cue: "throw-item" }],
 	},
 
 	// ---- ultimates: hold the aim, release, and the scripted cast ----
+	// The cast is solved onto the target: the grenade hits the dummy directly
+	// and the hole opens on them, so the hold, the ticks and the release are
+	// all shown on somebody instead of out past the arena's rim.
 	"black-hole": {
-		loopMs: 10000,
+		loopMs: 7000,
+		targets: [240],
 		steps: [press(400, { ultimate: true }, 800), { at: 1200, cue: "cast-ult" }],
 	},
 	"dragon-thrust": {
-		loopMs: 4800,
+		loopMs: 4400,
 		spawnX: 320,
-		castAngle: -0.65,
+		castAngle: -0.35,
+		targets: [560],
 		steps: [press(400, { ultimate: true }, 600), { at: 1000, cue: "cast-ult" }],
 	},
 	"death-blossom": {
-		loopMs: 6000,
+		loopMs: 4200,
+		targets: [210],
 		steps: [press(400, { ultimate: true }, 600), { at: 1000, cue: "cast-ult" }],
 	},
 };

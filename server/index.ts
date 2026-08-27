@@ -80,6 +80,14 @@ interface JoinMsg {
 	solo?: boolean;
 	training?: boolean;
 	name?: string;
+	/**
+	 * This client's own fighter is brain-driven (`?ai=true`).
+	 *
+	 * A probe's or spectator's tool, never a person. When it is the *creator*
+	 * of a room, the room is marked as a probe room and quick match leaves it
+	 * alone — see `GameRoom.probe`.
+	 */
+	ai?: boolean;
 	/** Bots to play against. **Absent means none** — see `botFill`. */
 	bots?: number;
 	/** Fighters to keep the room topped up to with bots. Absent means none. */
@@ -224,6 +232,8 @@ function createRoom(
 		startUltCharge?: number;
 		mode?: MatchMode;
 		freezeTimeMs?: number;
+		botHero?: unknown;
+		probe?: boolean;
 	},
 ): GameRoom {
 	const room = new GameRoom(id, rules);
@@ -346,6 +356,9 @@ io.onConnection((channel) => {
 				// The creator can pin every bot's hero (`?botHero=`); a probe
 				// measuring the dagger at sixteen fighters is the only caller.
 				...(msg.botHero === undefined ? {} : { botHero: msg.botHero }),
+				// A room created by a brain-driven client is a probe room: quick
+				// match must not land a stranger in the middle of a diagnostic.
+				probe: Boolean(msg.ai),
 			});
 		}
 
@@ -415,6 +428,35 @@ httpServer.on("request", (req, res) => {
 			"Access-Control-Allow-Origin": "*",
 		});
 		res.end(JSON.stringify({ ok: true, rooms: rooms.size }));
+		return;
+	}
+
+	// The rooms quick match may send a stranger to.
+	//
+	// The menu is a URL generator, so this answers "which open room's id goes
+	// in the URL" rather than doing any matchmaking itself: the server names the
+	// rooms, the client picks one and joins it by link, exactly as if it had
+	// been handed the link. `GameRoom.isOpen` is the whole rule — a human in the
+	// room, a free seat, no probe, no practice session, no post-match ceremony —
+	// so discovery and the game cannot disagree about what is joinable. Sorted
+	// by how busy the room is, because a playtest wants the brawl, not the empty
+	// arena. Same CORS as `/health`: the page is served from a different origin.
+	if (req.method === "GET" && (req.url === "/rooms" || req.url === "/rooms/")) {
+		const open = [...rooms.values()]
+			.filter((room) => room.isOpen)
+			.map((room) => ({
+				id: room.id,
+				mode: room.mode,
+				playerCount: room.playerCount,
+				humanCount: room.humanCount,
+				screens: room.world.screens,
+			}))
+			.sort((a, b) => b.playerCount - a.playerCount);
+		res.writeHead(HTTP_OK, {
+			"Content-Type": "application/json",
+			"Access-Control-Allow-Origin": "*",
+		});
+		res.end(JSON.stringify({ ok: true, rooms: open }));
 		return;
 	}
 

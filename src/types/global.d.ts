@@ -361,11 +361,15 @@ declare global {
 		 */
 		__training?: TrainingApi;
 		/**
-		 * The move-list preview's fighter, while a preview stage is mounted:
-		 * the story clock, the fighter's position and its live melee state.
-		 * What a preview must prove is that the scripted intent reached the
-		 * simulation — a story whose attack never fired would otherwise
-		 * preview as a fighter standing still.
+		 * The move-list preview's fighter and its targets, while a preview
+		 * stage is mounted: the story clock, the fighter's position and live
+		 * melee state, and — now the stage has target dummies — the score the
+		 * scripted server has settled: bullets fired and landed, melee hits,
+		 * damage dealt, and where every dummy stands (stunned, downed, rooted,
+		 * hole-held). What a preview must prove is that the scripted intent
+		 * reached the simulation *and did something to somebody* — a story
+		 * whose attack never fired, or one whose hits never connected, would
+		 * otherwise preview as two fighters miming at each other.
 		 */
 		__previewState?: () => {
 			t: number;
@@ -379,6 +383,28 @@ declare global {
 			stance?: string;
 			vx?: number;
 			grounded?: boolean;
+			ammo?: number;
+			bulletsFired?: number;
+			bulletHits?: number;
+			meleeHits?: number;
+			damageDealt?: number;
+			trapsSprung?: number;
+			singularity?: {
+				x: number;
+				y: number;
+				remainingMs: number;
+			} | null;
+			targets?: {
+				id: string;
+				x: number;
+				y: number;
+				hp: number;
+				maxHp: number;
+				stun: boolean;
+				down: boolean;
+				root: boolean;
+				held: boolean;
+			}[];
 		};
 		/** Study a preview frame by frame: 1 is real time, 0.25 is a quarter. */
 		__previewSpeed?: (speed: number) => void;

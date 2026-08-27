@@ -857,6 +857,12 @@ the ways a *side* breaks things a free-for-all could not.
 - **Size and rules are fixed when the room is created.** Reading them from every
   arriving client let the last person through the door resize a match already in
   progress.
+- **Quick match is discovery, not a queue — and probe rooms stay out of it.**
+  `GET /rooms` lists what a stranger may join (`GameRoom.isOpen`), the menu joins
+  by `?room=`, and a room created by an `?ai=true` client is marked `probe` and
+  excluded for its whole life. The trap: a diagnostic mid-run and a human
+  dropping in on it would corrupt the very measurement the probe exists to take,
+  and no client would ever notice.
 
 ## The training room
 

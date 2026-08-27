@@ -39,9 +39,11 @@ simulation is deterministic.
 | `/?offline=true` | None. Escape hatch, bypasses all of this. Unsupported. |
 | `/?training=true` | A scriptable practice dummy — see [training-room.md](training-room.md) |
 
-The client sends `join {room, solo, training, name, bots, fill, scoreLimit,
+The client sends `join {room, solo, training, ai, name, bots, fill, scoreLimit,
 timeLimitMs}` on connect; the server holds placement until it knows which kind of
-match is wanted (1.5s grace, then it places anyway). See
+match is wanted (1.5s grace, then it places anyway). `ai` is the probe's flag:
+a room whose **creator** is brain-driven (`?ai=true`) is marked as a probe room,
+and quick match never sends a stranger into it. See
 [deathmatch.md](deathmatch.md) for room sizing and the name gate.
 
 ## Rooms are addressed, not matchmade
@@ -70,7 +72,21 @@ opened the game landed in the same match whether they meant to or not.
   rebalance to the stored `fillTarget`. Otherwise the last person through the door
   could resize or shorten a match everybody else was already playing.
 - **A room lives as long as it has a human in it**, then it and its id are
-  released. The same link afterwards creates a fresh room.
+  released. The same link afterwards creates a fresh room. A room of nothing but
+  bots is reaped with the human who asked for them — the id is never held by
+  bots alone.
+- **Quick match is the one exception to "identified, not searched for", and it
+  is still a link join.** `GET /rooms` lists the rooms a stranger may be sent to
+  (`GameRoom.isOpen`: a human in the room, a free seat, and not a probe room, a
+  training room, or one sitting out the post-match ceremony, sorted busiest
+  first). The menu asks, picks one, and commits `?room=<id>` — the game boots
+  exactly as if the link had been shared, so there is still no queue to sit in.
+  With none open, quick match creates a `?bots=1` duel, which is itself an open
+  room for the next player.
+- **A probe room stays out of reach of quick match for its whole life.** The
+  `ai` flag of the client that *created* the room marks it; a human joining a
+  probe room later does not clear it, because a diagnostic mid-run does not want
+  a stranger added to the measurement.
 - **A training room always gets its own fresh id** and ignores the one it was
   given. It is single-human by construction.
 - **A room already holding sixteen humans answers `room-full`** rather than

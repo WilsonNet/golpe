@@ -13,6 +13,9 @@ import { chromium } from "playwright";
 
 const BASE = process.env.GOLPE_URL ?? "http://localhost:8084";
 
+/** The game server's room list — the same address the menu's status line checks. */
+const ROOMS_URL = `http://${new URL(BASE).hostname}:9208/rooms`;
+
 /** A launch key the menu must never add on its own. */
 function launchKeys(url: string): string[] {
 	const params = new URLSearchParams(new URL(url).search);
@@ -63,8 +66,72 @@ const browser = await chromium.launch();
 	await ctx.close();
 }
 
-// --- 2. quick match: one click to a fight, name remembered ------
+// --- 2. quick match: an open room is joined, otherwise a duel is made ----
 {
+	// A room for quick match to find: a human client (no `?ai=true`) named
+	// through the same localStorage the menu writes, so the in-game prompt never
+	// blocks the seat. Kept open until the discovery below has used it.
+	const hostCtx = await browser.newContext();
+	const hostPage = await hostCtx.newPage();
+	await hostPage.addInitScript(() => {
+		localStorage.setItem("golpe.playerName", "ProbeHost");
+	});
+	const openRoom = `qm-open-${Date.now().toString(36)}`;
+	await hostPage.goto(`${BASE}/?room=${openRoom}&mute=1`);
+	await hostPage.waitForFunction(
+		() => typeof window.__gameState === "function",
+		{
+			timeout: 20000,
+		},
+	);
+
+	// Wait until the game server actually lists the room — the seat happens a
+	// beat after the client boots, and quick match must not race it.
+	let discoverable = false;
+	const deadline = Date.now() + 10000;
+	while (Date.now() < deadline) {
+		try {
+			const res = await fetch(ROOMS_URL);
+			const data = (await res.json()) as {
+				rooms?: { id?: string }[] | null;
+			};
+			if (data.rooms?.some((r) => r.id === openRoom)) {
+				discoverable = true;
+				break;
+			}
+		} catch {
+			/* server not up yet — keep polling */
+		}
+		await new Promise((r) => setTimeout(r, 250));
+	}
+	check("open room is discoverable via /rooms", discoverable);
+
+	const ctx = await browser.newContext();
+	const page = await ctx.newPage();
+	await page.goto(`${BASE}/?mute=1`);
+	await page.waitForSelector(".gd-menu-page", { timeout: 10000 });
+	await page.click(".gd-play-item-primary");
+	await page.waitForFunction(() => typeof window.__gameState === "function", {
+		timeout: 20000,
+	});
+	const joinedRoom = new URL(page.url()).searchParams.get("room");
+	check(
+		"quick match joins the open room",
+		joinedRoom === openRoom,
+		`room=${joinedRoom}`,
+	);
+
+	// Closing the host's context empties the room, and an empty room is reaped.
+	await ctx.close();
+	await hostCtx.close();
+}
+
+// --- 3. quick match with no room open creates a duel ------------
+{
+	// The fallback: when `/rooms` has nothing to offer, quick match must still
+	// boot — by creating a `?bots=1` duel. On a shared dev server a step-2 room
+	// (or another probe's) may still be open, so the assertion accepts either a
+	// fresh duel or a join; both are valid answers and both boot the game.
 	const ctx = await browser.newContext();
 	const page = await ctx.newPage();
 	await page.goto(`${BASE}/?mute=1`);
@@ -78,7 +145,14 @@ const browser = await chromium.launch();
 		timeout: 20000,
 	});
 	check("quick match boots the game", true);
-	check("quick match commits bots=1", launchKeys(page.url()).includes("bots"));
+	const q = new URLSearchParams(new URL(page.url()).search);
+	const joinedOpen = q.get("room") !== null;
+	const createdDuel = q.get("bots") === "1";
+	check(
+		"quick match joins or creates a duel",
+		joinedOpen || createdDuel,
+		`room=${q.get("room")} bots=${q.get("bots")}`,
+	);
 	const myName = await page.evaluate(() => window.__matchState?.()?.myName);
 	check("menu name is the match name", myName === "ProbeA", `myName=${myName}`);
 	// A player named by the menu never sees the name prompt's share box, so the
@@ -91,7 +165,62 @@ const browser = await chromium.launch();
 	await ctx.close();
 }
 
-// --- 3. practice is one click, and boots training --------------
+// --- 4. a probe room (created by ?ai=true) is never offered to quick match ---
+{
+	const probeCtx = await browser.newContext();
+	const probePage = await probeCtx.newPage();
+	const probeRoom = `qm-probe-${Date.now().toString(36)}`;
+	// `?ai=true` names itself and never blocks, exactly like every probe.
+	await probePage.goto(`${BASE}/?ai=true&room=${probeRoom}&mute=1`);
+	await probePage.waitForFunction(
+		() => typeof window.__gameState === "function",
+		{
+			timeout: 20000,
+		},
+	);
+
+	// The room is created the moment the probe is seated; it must stay out of
+	// `/rooms` for as long as it lives. A few polls prove it is not merely not
+	// *yet* registered.
+	let offered = false;
+	const deadline = Date.now() + 4000;
+	while (Date.now() < deadline) {
+		try {
+			const res = await fetch(ROOMS_URL);
+			const data = (await res.json()) as {
+				rooms?: { id?: string }[] | null;
+			};
+			if (data.rooms?.some((r) => r.id === probeRoom)) {
+				offered = true;
+				break;
+			}
+		} catch {
+			/* server not up yet — keep polling */
+		}
+		await new Promise((r) => setTimeout(r, 250));
+	}
+	check("ai room is never offered by /rooms", !offered);
+
+	const ctx = await browser.newContext();
+	const page = await ctx.newPage();
+	await page.goto(`${BASE}/?mute=1`);
+	await page.waitForSelector(".gd-menu-page", { timeout: 10000 });
+	await page.click(".gd-play-item-primary");
+	await page.waitForFunction(() => typeof window.__gameState === "function", {
+		timeout: 20000,
+	});
+	const joined = new URL(page.url()).searchParams.get("room");
+	check(
+		"quick match does not join the ai room",
+		joined !== probeRoom,
+		`room=${joined}`,
+	);
+
+	await ctx.close();
+	await probeCtx.close();
+}
+
+// --- 5. practice is one click, and boots training --------------
 {
 	const ctx = await browser.newContext();
 	const page = await ctx.newPage();
@@ -116,7 +245,7 @@ const browser = await chromium.launch();
 	await ctx.close();
 }
 
-// --- 4. join: a bare room id, typed by hand ---------------------
+// --- 6. join: a bare room id, typed by hand ---------------------
 {
 	const ctx = await browser.newContext();
 	const page = await ctx.newPage();
@@ -140,7 +269,7 @@ const browser = await chromium.launch();
 	await ctx.close();
 }
 
-// --- 5. a launch key in the URL never shows the menu ------------
+// --- 7. a launch key in the URL never shows the menu ------------
 {
 	const ctx = await browser.newContext();
 	const page = await ctx.newPage();
@@ -155,7 +284,7 @@ const browser = await chromium.launch();
 	await ctx.close();
 }
 
-// --- 6. the host form: mode and constraints land in the URL -----
+// --- 8. the host form: mode and constraints land in the URL -----
 {
 	const ctx = await browser.newContext();
 	const page = await ctx.newPage();
@@ -197,7 +326,7 @@ const browser = await chromium.launch();
 	await ctx.close();
 }
 
-// --- 7. learn: how to play is grouped, move list opens for the pick ---------
+// --- 9. learn: how to play is grouped, move list opens for the pick ---------
 {
 	const ctx = await browser.newContext();
 	const page = await ctx.newPage();

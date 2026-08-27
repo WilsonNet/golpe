@@ -64,6 +64,13 @@ export interface JoinOptions {
 	solo?: boolean;
 	/** The second slot is a scriptable dummy rather than a bot. */
 	training?: boolean;
+	/**
+	 * This client's fighter is brain-driven (`?ai=true`) — a probe, not a person.
+	 *
+	 * The server uses it to mark a room this client creates as a probe room, so
+	 * quick match never sends a stranger into the middle of a diagnostic.
+	 */
+	ai?: boolean;
 	/** What the scoreboard should call this player. */
 	name?: string;
 	/** Bots to seat. `0` is a legitimate empty room. */
@@ -179,6 +186,7 @@ export class OnlineManager {
 				{
 					solo: Boolean(join.solo),
 					training: Boolean(join.training),
+					...(join.ai ? { ai: true } : {}),
 					...(join.room === undefined ? {} : { room: join.room }),
 					...(join.name === undefined ? {} : { name: join.name }),
 					...(join.bots === undefined ? {} : { bots: join.bots }),

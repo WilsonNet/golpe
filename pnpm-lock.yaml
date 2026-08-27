@@ -63,9 +63,6 @@ importers:
       concurrently:
         specifier: ^10.0.4
         version: 10.0.4
-      fast-check:
-        specifier: ^4.9.0
-        version: 4.9.0
       knip:
         specifier: ^6.32.0
         version: 6.32.0

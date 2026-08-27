@@ -118,6 +118,29 @@ export function MainMenu({
 	// Who this player defaults to. The hero select writes it to localStorage
 	// *and* into every launch request, so a commit and a preference agree.
 	const [hero, setHero] = useState<HeroId>(() => readStoredHero());
+	// True while quick match is asking the server which room is open. The one
+	// place the menu is asynchronous: the primary action has to learn the room
+	// id before it can write it into the URL.
+	const [quickBusy, setQuickBusy] = useState(false);
+
+	const quickMatch = async () => {
+		if (quickBusy) return;
+		setQuickBusy(true);
+		try {
+			const room = await findOpenRoom();
+			// An open room is joined by link, exactly as if it had been shared —
+			// the URL carries `room=` and the game boots because the URL now
+			// names one. With none open, the menu creates a fresh duel against a
+			// single bot, which is itself an open room for the next player.
+			onLaunch(
+				room !== null
+					? { ...NOTHING, room, hero }
+					: { ...NOTHING, bots: 1, hero },
+			);
+		} finally {
+			setQuickBusy(false);
+		}
+	};
 
 	// Esc steps back through the menu; on the home view it does nothing. There
 	// is no game under this screen, so there is nothing else for it to mean.
@@ -147,12 +170,13 @@ export function MainMenu({
 							<button
 								className="gd-play-item gd-play-item-primary"
 								type="button"
-								onClick={() => onLaunch({ ...NOTHING, bots: 1, hero })}
+								onClick={quickMatch}
 							>
 								<strong>Quick match</strong>
 								<span>
-									Duel a server bot right now — your room link is ready to
-									share.
+									{quickBusy
+										? "Finding an open room…"
+										: "Join an open room, or start a duel against a bot — your room link is ready to share."}
 								</span>
 							</button>
 							<div className="gd-two">
@@ -821,4 +845,32 @@ function roomIdFromInput(raw: string): string | null {
 function formatMinutes(sec: number): string {
 	const m = Math.round(sec / 60);
 	return `${m} ${m === 1 ? "minute" : "minutes"}`;
+}
+
+/**
+ * The id of a room quick match should join, or null when there is none open.
+ *
+ * Asked of the game server on :9208 — the same address the status line checks,
+ * so the answer and the health read agree about what is running. "Open" is the
+ * server's own `GameRoom.isOpen`: a room with a human in it and a free seat
+ * that is not a probe, not a practice session and not mid-ceremony. The list
+ * is sorted busiest-first, because joining a fight already going beats joining
+ * an empty arena. A failure to ask (server down, or a fetch that hangs) falls
+ * back to null and the menu creates a fresh room, which is the safe answer:
+ * a bot duel needs the same server anyway, and the status line says so.
+ */
+async function findOpenRoom(): Promise<string | null> {
+	try {
+		const ctrl = new AbortController();
+		const timer = window.setTimeout(() => ctrl.abort(), 2500);
+		const res = await fetch(`http://${window.location.hostname}:9208/rooms`, {
+			signal: ctrl.signal,
+		});
+		window.clearTimeout(timer);
+		if (!res.ok) return null;
+		const data = (await res.json()) as { rooms?: { id?: string }[] | null };
+		return data.rooms?.find((r) => typeof r?.id === "string")?.id ?? null;
+	} catch {
+		return null;
+	}
 }

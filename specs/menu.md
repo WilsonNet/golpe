@@ -59,7 +59,7 @@ a phone so every button is a thumb-sized target.
 
 | Entry | What it commits | Notes |
 |---|---|---|
-| Quick match (primary) | `?bots=1` | A duel vs a server bot: action in one click. The room link is the bot's seat — friends replace it. |
+| Quick match (primary) | joins an open room, or `?bots=1` when none | Asks the game server which room is open (`GET /rooms`), joins the busiest one by link, or creates a duel against a single server bot when no room is open — and that duel is itself an open room for the next player. A playtest funnels into one brawl without anyone pasting links. An open room is one with a human in it and a free seat, that is not a probe, a practice session or mid-ceremony. The room link is the bot's seat — friends replace it. |
 | Your fighter (on home) | `golpe.hero`, and `?hero=` on every launch below | Two portrait chips: Lia and Anands, each the fighter's own sheet frame. Picking writes the preference immediately; a commit below carries it. |
 | Host a match | `?mode=…&screen=N&bots=N&scoreLimit=N&timeLimit=N` (+ `fill`, `freezeTime`, `ultCharge`) | Every room-creator choice, defaults pre-filled to the server's own defaults. |
 | Join a match | `?room=<id>` | One field accepts the bare id *or* the whole link. |
@@ -71,6 +71,35 @@ a phone so every button is a thumb-sized target.
 The hero is **per-client**: the picker's choice rides every commit as
 `?hero=`, and a shared room link deliberately does not carry one, so a joiner
 plays whoever their own menu last picked. See [heroes.md](heroes.md).
+
+### Quick match is discovery, not a queue
+
+The one place the menu is asynchronous: Quick match asks the game server
+(`GET /rooms` on :9208, the same address the status line checks) which rooms a
+stranger may be sent to, picks the busiest, and commits `?room=<id>`. Joining
+is still joining by link — the game boots because the URL names a room, exactly
+as if the link had been pasted into Join. That is the whole concession to
+matchmaking: there is still no lobby and no queue, just one button that can
+answer "which room is already going".
+
+"Open" is the server's own predicate, not a guess the menu makes. A room
+qualifies when a human is in it, a seat is free, and it is not a **probe room**
+(created by an `?ai=true` client — a diagnostic is running, and a stranger
+mid-run is the last thing it wants), not a **training room** (somebody's
+practice session) and not sitting out the post-match ceremony. An empty room
+was reaped the moment its last human left, so it never appears. When no room is
+open, Quick match creates a `?bots=1` duel — which is itself an open room, so
+the next player who clicks Quick match lands in it. A playtest funnels into one
+brawl without anyone pasting links.
+
+### Bots are named so they can be removed
+
+A server-hosted bot's name begins with the **`BOT · `** marker — readable on the
+in-world nameplate, not just on the scoreboard, where the roster already tags
+it. The reason is the Esc menu's room panel: anybody can see who is a bot, and
+the creator can remove one (`− Bot`) when a human replaces it. A client-side
+AI fighter (`?ai=true`) carries its own marker, `AI-<number>`, so a probe's
+fighter is identifiable the same way.
 
 Hosting and joining are siblings, not parent and child of one "Play": they
 answer different questions, and neither is a step toward the other. The primary
@@ -157,44 +186,87 @@ parts:
   (UNBLOCKABLE · KNOCKDOWN · CANCELLABLE …), its command as live keycaps, a
   prose explanation, and a stat card.
 - **A preview stage** below that fills the remaining space: a *live* fighter
-  playing the move on the hero's own sheet, with a frame-data timeline
-  (startup/active/recovery) whose cursor and phase chip track the move's
-  *real* timings.
+  playing the move **against target dummies that take the hit** — real
+  fighters with nameplates, health bars, and every reaction the game owns —
+  with a frame-data timeline (startup/active/recovery) whose cursor and phase
+  chip track the move's *real* timings.
 - A **position indicator** ("2 / 5") for the move within its category.
-
-### The preview is the game, one fighter wide
+### The preview is the game, one duel wide
 
 The preview is not a video and not a CSS puppet show (the first version was
 both — a static sheet frame lunging on keyframes while a gold smear stood in
 for the swing, and it could never show a slash because the slash *is* the
 arc `MeleeFx` draws). It is a **`FighterStage`** (`src/game/preview/`): a
-one-fighter match that feeds a scripted story through the real `tickPlayer`
-at the fixed 60Hz step and renders with the real animation and melee-effect
-systems. A retune re-times every preview for free; a new hero's previews
-exist the moment its sheet and clip table do; there is nothing to re-render.
+hero and its **target dummies** on the classic one-screen arena, fed through
+the real `tickPlayer` at the fixed 60Hz step and rendered with the real
+animation and melee-effect systems. A retune re-times every preview for free;
+a new hero's previews exist the moment its sheet and clip table do; there is
+nothing to re-render.
+
+**The target dummies are what make a preview a demonstration.** Every combat
+story stands one or two real fighters at lanes the story names
+(`stories.ts`'s `targets`), facing the hero, named TARGET, with the
+nameplate-and-health-bar module a match feeds (`Nameplates`). They are
+ticked through the same `tickPlayer` — neutral intent, real physics — so
+every reaction is the game's own: the stagger, the knockdown, the launch,
+the root, the hole's orbit. And the stage stands in for the **server** for
+every decision a lone fighter cannot make alone, by running the same
+simulation functions the server runs and nothing else:
+
+- **Melee** — the ordinary `resolveMelee` → `applyMeleeResult` pass, then
+  the thrust's multi-target sweep with the server's per-cast latch
+  (`resolveThrusts`), in the server's order — the reach box latches the
+  swing, so a body it caught is never also swept.
+- **Bullets** — the shared `BulletSystem` on the trigger edge, through the
+  same `fireFan` the server spawns (cooldown, magazine, the shotgun's
+  deterministic fan, distance falloff at the hit), aimed along the story's
+  `aim`. The hero carries a real magazine — filled exactly as the server's
+  `refillMagazine` fills it — so the gun-fire clip plays off the same
+  ammo-drop evidence the wire provides.
+- **The massive's blasts** — read off the same `tickPlayer` transitions the
+  server's `noteBlasts` reads, applied to every dummy in the radius with the
+  server's exact writes (shove, knockup, the carried-victim pin).
+- **Items and ultimates** — `launchHeGrenade`/`launchGrenade`/`dragonVelocity`
+  launches (the HE, the trap canister and the hole's grenade are *solved
+  onto the first target*, a low-arc lob from the projectile equation, so the
+  landing happens on somebody instead of past the arena's rim), the trap's
+  single-use spring with its burst and ROOTED caption, the hole's
+  per-interval ticks, the dragon's swept line with its per-cast latch, the
+  blossom's per-interval sweeps — and `fieldFor` for every fighter, so the
+  caster walks through their own hole exactly as they do in a match.
+- **The readout** — every point of damage pops as a floating number
+  (`preview/HitNumbers.ts`), so a card's stat row is shown, not claimed.
+
+The camera frames **the whole scene**: hero, dummies and every live world
+object (the grenade in flight, the hole, the storm) sit inside one interest
+box, so a cast the old camera chased clear offstage now plays in frame.
 
 The pieces:
 
 - **`preview/stories.ts`** — the story registry: declarative timelines of
-  `PlayerIntent` presses (the same intents a keyboard produces) plus at most
+  `PlayerIntent` presses, the target lanes, a gun story's aim angle and the
   two scripted-server cues. The entry id *is* the story id — `MovePreview`
   looks up `entry.preview ?? entry.id`, so an entry and its story share one
   name and cannot drift; the field is an override only, used by the melee
-  entries to project the shared `MOVES` id. Frame-data-derived holds read the
-  tuning constant (the massive holds `MASSIVE_CHARGE_MS + 50`, not a literal).
-- **`preview/FighterStage.ts`** — the stage. It stands in for the **server**
-  for the two decisions a lone fighter cannot make alone (an item throw, an
-  ultimate cast) by running the same simulation functions the server runs and
-  feeding the results to the same presentation modules a match feeds
-  (`ItemFx`, `BlackHoleFx`, `DragonFx`, `BlossomFx`). Gun ammo is mirrored on
-  firing edges exactly like the `?offline=true` hatch, so the gun-fire clip
-  plays off the same evidence the wire provides. `window.__previewState` and
-  `window.__previewSpeed` are its probe surface, in the spirit of the match's
-  own `window.__*` handles.
+  entries to project the shared `MOVES` id. Frame-data-derived holds read
+  the tuning constant (the massive holds `MASSIVE_CHARGE_MS + 50`, not a
+  literal), and the loops are cut to the action — no dead tails.
+- **`preview/FighterStage.ts`** — the stage: the cast (hero + dummies), the
+  server halves above, the interest camera, and the presentation modules a
+  match feeds (`ItemFx`, `BlackHoleFx`, `DragonFx`, `BlossomFx`,
+  `Nameplates`, `BulletSystem`, `MeleeFx`). `window.__previewState` and
+  `window.__previewSpeed` are its probe surface — the counters (bullets
+  fired and landed, melee hits, damage, traps sprung) and every dummy's
+  state (stunned, downed, rooted, held) — and **`scripts/movelist-probe.ts`
+  is the measurement**: every entry whose card claims a hit must land one on
+  a dummy, online-shaped through the same functions a match's server runs.
 - **`ui/MovePreview.tsx`** — the React shell: one stage for the panel's
   lifetime (walking the list calls `setStory`, it does not tear the renderer
   down per move), and a timeline whose cursor is written straight to the DOM
-  from the stage's frame callback — never through state.
+  from the stage's frame callback — never through state. The probe globals
+  are published only by the stage that survives React StrictMode's
+  double-mount, and torn down by identity, so they always answer for the
+  renderer that is actually running.
 
 Two rules the stage lives by:
 
@@ -248,5 +320,6 @@ the URL. The action is the one destructive choice in the UI, so it asks
 
 The offline escape hatch (`?offline=true`) stays a typed URL: it bypasses the
 netcode and is for working without a server, not for playing. The `?ai=true`
-flag stays a probe's and spectator's tool. Neither is a way a human who can
-reach the menu should start a match.
+flag stays a probe's and spectator's tool — and a room it creates is a probe
+room, which quick match deliberately never sends a human into. Neither is a way
+a human who can reach the menu should start a match.

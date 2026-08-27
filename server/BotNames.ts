@@ -35,6 +35,23 @@ function gamertag(raw: string): string {
  */
 const MAX_NAME = 16;
 
+/**
+ * Every bot name begins with this marker, so a fighter driven by the server is
+ * readable at a glance — on the in-world nameplate, not just on the scoreboard,
+ * where the roster already tags it. A player who joins a room with a bot in it
+ * must be able to tell who to remove.
+ */
+export const BOT_NAME_PREFIX = "BOT · ";
+
+/**
+ * Longest gamertag a bot may carry *behind the prefix*.
+ *
+ * `MAX_NAME` caps the whole name; the prefix eats six characters of it, so the
+ * drawn tag gets the rest. Same wrap-protection argument, applied to the part
+ * that varies.
+ */
+const MAX_TAG_LEN = MAX_NAME - BOT_NAME_PREFIX.length;
+
 /** How many attempts to draw a name before falling back to a numeric suffix. */
 const MAX_ATTEMPTS = 40;
 /** Characters a fallback suffix (`2`..`99`) may eat before the cap. */
@@ -45,16 +62,17 @@ const UNIQUE_SUFFIX_SLACK = 2;
 const MAX_UNIQUE_SUFFIX = 99;
 
 /**
- * A gamertag-shaped name not already in `taken`.
+ * A gamertag-shaped name not already in `taken`, with the bot marker up front.
  *
  * Uniqueness is enforced rather than hoped for: two `SilentWolf`s on a
- * scoreboard is indistinguishable from a scoring bug. After a bounded number of
- * tries it falls back to a numeric suffix, because a slightly ugly name beats an
+ * scoreboard is indistinguishable from a scoring bug — and a human and a bot
+ * sharing a name would make the marker a lie. After a bounded number of tries
+ * it falls back to a numeric suffix, because a slightly ugly name beats an
  * unbounded loop on the server's boot path.
  */
 export function botName(taken: ReadonlySet<string>): string {
 	for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-		const name = gamertag(
+		const tag = gamertag(
 			uniqueNamesGenerator({
 				dictionaries:
 					attempt % 2 === 0 ? [adjectives, animals] : [colors, animals],
@@ -63,8 +81,10 @@ export function botName(taken: ReadonlySet<string>): string {
 				style: "lowerCase",
 			}),
 		);
-		if (name.length > MAX_NAME || taken.has(name)) continue;
-		return name;
+		if (tag.length > MAX_TAG_LEN) continue;
+		const full = BOT_NAME_PREFIX + tag;
+		if (taken.has(full)) continue;
+		return full;
 	}
 
 	// Give up drawing and build one. Truncated so the numeric suffix still fits
@@ -76,10 +96,10 @@ export function botName(taken: ReadonlySet<string>): string {
 			length: 1,
 			style: "lowerCase",
 		}),
-	).slice(0, MAX_NAME - FALLBACK_SUFFIX_SLACK);
+	).slice(0, MAX_TAG_LEN - FALLBACK_SUFFIX_SLACK);
 	let n = 2;
-	while (taken.has(`${base}${n}`)) n++;
-	return `${base}${n}`;
+	while (taken.has(`${BOT_NAME_PREFIX}${base}${n}`)) n++;
+	return `${BOT_NAME_PREFIX}${base}${n}`;
 }
 
 /**

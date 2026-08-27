@@ -1149,6 +1149,7 @@ export class Match {
 		this.online.connect({
 			solo: this.soloMatch,
 			training: this.trainingMode,
+			ai: this.aiMode,
 			name,
 			room: this.roomId,
 			...(this.botCount === undefined ? {} : { bots: this.botCount }),

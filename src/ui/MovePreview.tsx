@@ -69,10 +69,18 @@ export function MovePreview({
 
 	// One stage for the panel's lifetime; walking the list swaps the story on
 	// it (`setStory`) instead of tearing the renderer down per move.
+	//
+	// The probe globals are installed only on the stage that survives — React
+	// StrictMode boots two stages per open and destroys the first *after* the
+	// second has resolved, so a boot-time install can be claimed by a stage
+	// that is about to be torn down. Identity-checked teardown keeps a live
+	// sibling's handles intact.
 	useEffect(() => {
 		const host = hostRef.current;
 		if (!host) return;
 		let stage: FighterStage | null = null;
+		let stateHandle: NonNullable<Window["__previewState"]> | null = null;
+		let speedHandle: Window["__previewSpeed"] | null = null;
 		let cancelled = false;
 		FighterStage.create(host, {
 			hero: propsRef.current.hero,
@@ -110,6 +118,13 @@ export function MovePreview({
 			}
 			stage = s;
 			stageRef.current = s;
+			// The probes' window into the preview, like `window.__physicsDiagnostic`
+			// is the match's. Only the kept stage publishes, so the globals always
+			// answer for the renderer that is actually running.
+			stateHandle = s.probeState;
+			speedHandle = (speed: number) => s.setSpeed(speed);
+			window.__previewState = stateHandle;
+			window.__previewSpeed = speedHandle;
 			// Props may have changed while the renderer was booting.
 			s.setStory({
 				hero: propsRef.current.hero,
@@ -118,6 +133,14 @@ export function MovePreview({
 		});
 		return () => {
 			cancelled = true;
+			// Only strip the globals if they are still ours — a later mount owns
+			// them otherwise.
+			if (window.__previewState === stateHandle) {
+				delete window.__previewState;
+			}
+			if (window.__previewSpeed === speedHandle) {
+				delete window.__previewSpeed;
+			}
 			stage?.destroy();
 			stageRef.current = null;
 		};

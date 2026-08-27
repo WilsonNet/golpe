@@ -13,9 +13,20 @@
 
 import { fc, test } from "@fast-check/vitest";
 import { describe, expect, it } from "vitest";
-import { botName, sanitiseName, uniqueName } from "./BotNames.js";
+import {
+	BOT_NAME_PREFIX,
+	botName,
+	sanitiseName,
+	uniqueName,
+} from "./BotNames.js";
 
 const MAX = 16;
+
+/** The gamertag part of a bot's full name. */
+const stripPrefix = (name: string) => name.slice(BOT_NAME_PREFIX.length);
+
+/** A name the way a scoreboard row ends up holding it: `BOT · SilentWolf`. */
+const tagShape = /^BOT · [A-Z][A-Za-z0-9]*$/;
 
 /** Every printable code point below the DELETE control, as a generator. */
 const printableChar = fc.constantFrom(
@@ -63,7 +74,7 @@ describe("botName", () => {
 		const name = botName(taken);
 		expect(taken.has(name)).toBe(false);
 		expect(name.length).toBeLessThanOrEqual(MAX);
-		expect(name).toMatch(/^[A-Za-z]+[A-Za-z0-9]*$/);
+		expect(name).toMatch(tagShape);
 	});
 
 	it("fills a full room of sixteen without a collision", () => {
@@ -79,7 +90,8 @@ describe("botName", () => {
 	/**
 	 * The dictionaries happily produce `ConstitutionalMockingbird`, which wraps
 	 * mid-word in a 28px podium heading — and is longer than any name a human is
-	 * allowed to type.
+	 * allowed to type. The marker eats six characters, so the drawn tag has to
+	 * stay inside the ten that are left.
 	 */
 	it("stays within the cap humans get", () => {
 		const taken = new Set<string>();
@@ -90,9 +102,14 @@ describe("botName", () => {
 		}
 	});
 
-	it("reads like a chosen name, not a slug", () => {
+	it("carries the bot marker, so a player can tell who to remove", () => {
 		const name = botName(new Set());
-		expect(name).toMatch(/^[A-Z][A-Za-z]*$/);
+		expect(name.startsWith(BOT_NAME_PREFIX)).toBe(true);
+	});
+
+	it("reads like a chosen name behind the marker, not a slug", () => {
+		const name = botName(new Set());
+		expect(stripPrefix(name)).toMatch(/^[A-Z][A-Za-z]*$/);
 	});
 });
 

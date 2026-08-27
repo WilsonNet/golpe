@@ -276,6 +276,7 @@ tsx scripts/pad-probe.ts                             # controller aim, gamepad a
 tsx scripts/training-probe.ts                        # one interaction, against a scripted dummy
 tsx scripts/training-probe.ts --hero=anands          # ...as the dagger (its rows are dagger-only)
 tsx scripts/menu-probe.ts                            # the root menu: every click a URL, boots a match
+tsx scripts/movelist-probe.ts                        # the move list: every preview lands its move on the target dummies
 tsx scripts/dash-probe.ts                            # double-tap dash delivery, at a forced frame rate
 tsx scripts/screens-probe.ts                         # ?screen=N room: spawn spread + follow camera
 tsx scripts/ultimate-probe.ts                        # the black hole: hold to aim, release to cast, freeze, capture
@@ -583,7 +584,15 @@ exactly like the fixed steps.
 `?room=` makes a new one, and the client writes the id into the address bar so the
 URL is the invitation. **Two tabs at the same URL are in two different rooms unless
 that URL names one** — every multi-client script passes an explicit `room`, with a
-fresh id per run so consecutive runs cannot collide.
+fresh id per run so consecutive runs cannot collide. **Quick match is the one
+discovery path, and it is still a link join**: `GET /rooms` lists the open rooms
+(`GameRoom.isOpen` — a human in the room, a free seat, and not a probe room, a
+training room, or one mid-ceremony), the menu joins the busiest by `?room=`, and
+falls back to a `?bots=1` duel that is itself open for the next player. **A room
+whose creator is `?ai=true` is a probe room, excluded from quick match for its
+whole life** — a diagnostic mid-run does not want a stranger in the measurement.
+**A bot's name begins with `BOT · `** so who to remove is readable on the
+nameplate, not just the scoreboard; a room with no humans in it is reaped.
 
 **`?training=true`** opens the training room: a scriptable practice dummy, a DOM
 menu over the canvas, and `window.__training` for agents. No key toggles the
