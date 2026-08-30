@@ -895,6 +895,7 @@ export class GameRoom {
 			p.state.plungeCarryTimer = 0;
 			p.state.dragonTimer = 0;
 			p.state.rootTimer = 0;
+			p.state.knockdownPendingTimer = 0;
 		}
 		console.log(`[TEAM] ${p.name} switches ${old} -> ${team}`);
 		this.broadcastRoster();

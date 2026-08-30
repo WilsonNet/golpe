@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+	ANTIAIR_KNOCKDOWN_MS,
+	applyHitToDefender,
 	applyMeleeResult,
 	BACKSTAB_BONUS_STUN_MS,
 	BACKSTAB_MIN_SEPARATION_PX,
@@ -1002,6 +1004,133 @@ describe("hit consequences", () => {
 			connects(resolveMelee(attacker, defender)),
 		);
 		expect(defender.meleeAction).toBe("none");
+	});
+});
+
+/**
+ * A launch sends its victim up and a knockdown spikes them down, so on the tick
+ * they are both applied they contradict each other — and the uppercut does both.
+ * It therefore spends its launch on the hit and *arms* the knockdown, which
+ * `tickPlayer` pays the moment the feet come back to the floor.
+ *
+ * The debt is simulation state on the wire rather than a renderer's guess,
+ * because the tick a fighter goes down is a fact both sides have to agree on: a
+ * knockdown applied on top of predicted state would be erased by the next
+ * reconciliation, exactly like a dash or the black hole's pull.
+ */
+describe("the knockdown a launch owes the floor", () => {
+	/**
+	 * A fighter hit by an uppercut in open air: high enough that the rise never
+	 * touches a ceiling, and with `LOW_LEFT` waiting 350px below to land on.
+	 */
+	function launched(): PlayerPosition {
+		const { attacker, defender } = duel({ move: "uppercut" });
+		attacker.y = 200;
+		defender.y = 200;
+		defender.grounded = true;
+		applyMeleeResult(
+			attacker,
+			defender,
+			connects(resolveMelee(attacker, defender)),
+		);
+		return defender;
+	}
+
+	it("arms the knockdown on the hit without spending it", () => {
+		const s = launched();
+		expect(s.knockdownTimer).toBe(0);
+		expect(s.knockdownPendingTimer).toBe(ANTIAIR_KNOCKDOWN_MS);
+		// The launch survives: the arc is what the move was, and the slam would
+		// have eaten it.
+		expect(s.vy).toBe(MOVES.uppercut.launchVy);
+		expect(s.grounded).toBe(false);
+	});
+
+	/**
+	 * The debt is collected at the *top* of the tick after the feet come back —
+	 * exactly where a stun that arrived between ticks is handled — so the stun
+	 * gate is the one thing that decides what a knockdown takes away.
+	 *
+	 * Paying it at the end of the landing tick instead left the victim lying on
+	 * the floor still holding the guard they had out on the way down, and the
+	 * `illegalActions` diagnostic flagged it on the first online run: a knockdown
+	 * is a stun, and a stun does not leave a guard up.
+	 */
+	it("pays it on the tick after the feet reach the floor, guard and all", () => {
+		// A dummy that never stops blocking: the victim re-raises its guard the
+		// moment the launch's hitstun expires, and is still holding it on landing.
+		let s = launched();
+		let ticksAirborne = 0;
+		while (ticksAirborne < 300) {
+			s = tickPlayer(s, intent({ block: true }), DT);
+			if (s.grounded) break;
+			ticksAirborne++;
+			// Nothing is drawn lying down while the arc is still running.
+			expect(s.knockdownTimer).toBe(0);
+		}
+		expect(s.grounded).toBe(true);
+		expect(ticksAirborne).toBeGreaterThan(10);
+		expect(s.knockdownTimer).toBe(0);
+		expect(s.blocking).toBe(true);
+
+		s = tickPlayer(s, intent({ block: true }), DT);
+		// One tick of the clock is already spent on it, like every other stun.
+		expect(s.knockdownTimer).toBeCloseTo(ANTIAIR_KNOCKDOWN_MS - DT_MS, 6);
+		expect(s.knockdownPendingTimer).toBe(0);
+		// A knockdown is a stun as well, or a downed fighter could act — and the
+		// guard that was up on the landing is gone with the stun.
+		expect(s.stunTimer).toBeGreaterThanOrEqual(s.knockdownTimer);
+		expect(s.blocking).toBe(false);
+	});
+
+	it("is not owed twice when a longer knockdown lands first", () => {
+		// A launched victim is an airborne target, and the dagger's thrust is the
+		// move that catches one: its knockdown lands immediately, so it pays the
+		// uppercut's debt on the spot — and the landing must not *shorten* the
+		// sentence the lunge already handed them by re-arming a smaller one.
+		let s = launched();
+		const ms = applyHitToDefender(s, {
+			move: "thrust",
+			outcome: "hit",
+			damage: MOVES.thrust.damage,
+			x: s.x,
+			y: s.y,
+			dir: 1,
+		});
+		expect(ms).toBe(MOVES.thrust.damage);
+		expect(s.knockdownTimer).toBe(MOVES.thrust.knockdownMs);
+		expect(s.knockdownPendingTimer).toBe(0);
+		for (let i = 0; i < 120 && !s.grounded; i++)
+			s = tickPlayer(s, intent(), DT);
+		expect(s.grounded).toBe(true);
+		// Still down for the thrust, and no fresh knockdown was paid at the floor.
+		expect(s.knockdownTimer).toBeGreaterThan(ANTIAIR_KNOCKDOWN_MS / 2);
+	});
+
+	it("is the only move that defers it, and both anti-airs go down the same length of time", () => {
+		expect(MOVES.uppercut.knockdown).toBe(true);
+		expect(MOVES.uppercut.knockdownOnLanding).toBe(true);
+		expect(MOVES.uppercut.knockdownMs).toBe(ANTIAIR_KNOCKDOWN_MS);
+		// The dagger's anti-air knocks down on the hit — it has no launch to
+		// contradict it — for the same short floor time.
+		expect(MOVES.shoryuken.knockdown).toBe(true);
+		expect(MOVES.shoryuken.knockdownOnLanding).toBeUndefined();
+		expect(MOVES.shoryuken.knockdownMs).toBe(ANTIAIR_KNOCKDOWN_MS);
+		expect(MOVES.shoryuken.hitstunMs).toBe(MOVES.shoryuken.knockdownMs);
+		// Both shorter than the committed lunge, which is what the lunge's 260ms
+		// tell and 480ms recovery buy.
+		expect(ANTIAIR_KNOCKDOWN_MS).toBeLessThan(MOVES.thrust.knockdownMs ?? 0);
+		for (const move of [
+			"slash",
+			"slash2",
+			"slash3",
+			"massive",
+			"stab",
+			"thrust",
+			"shoryuken",
+		] as const) {
+			expect(MOVES[move].knockdownOnLanding).toBeUndefined();
+		}
 	});
 });
 

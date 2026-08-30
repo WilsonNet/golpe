@@ -107,7 +107,7 @@ On hit:
 | Slash | 190ms | — | 130 px/s | — |
 | Slash 2 | 210ms | — | 150 px/s | — |
 | Slash 3 | 520ms | — | 300 px/s | **yes** |
-| Uppercut | 260ms | **−620 px/s** | 90 px/s | — |
+| Uppercut | 260ms | **−620 px/s** | 90 px/s | **yes, on the landing** |
 | Massive Strike | 650ms | — | 420 px/s | — |
 
 The Massive Strike's *blast* is not in this table, because it is not a swing:
@@ -246,15 +246,54 @@ invulnerability doing its real job of capping butterfly DPS.
 
 ### The knockdown
 
-The finisher puts its target **on the floor for 520ms** — stunned, drawn lying
-down, and spiked downward if it was caught in the air.
+Four moves put a target on the floor, and they are priced in the order of how
+much they commit to it: the chain's finisher (**520ms**), both anti-airs
+(**700ms**, `ANTIAIR_KNOCKDOWN_MS`), and the dagger's thrust (**1500ms**).
 
-**`KNOCKDOWN_MS` equals the finisher's active plus recovery frames.** The attacker
-is free `active + recovery` after the hitbox opened; the victim gets up
+The finisher's 520ms is **equal to its own active plus recovery frames**. The
+attacker is free `active + recovery` after the hitbox opened; the victim gets up
 `KNOCKDOWN_MS` after being hit by it. They are the same number, so **a landed
 combo ends in neutral** — position and damage, never a free follow-up. That is
 what pays for the finisher being uninterruptible, and it is asserted in
 `Melee.test.ts` rather than left as a comment.
+
+**A knockdown is always a stun as well** — a fighter flat on the floor who could
+still walk is the bug the `illegalActions` diagnostic watches for — and it is the
+one thing that ends a Death Blossom. Both rules live in `applyKnockdown`, the
+single place the state is written.
+
+#### The knockdown a launch owes the floor
+
+The sword's uppercut both **launches** (−620 px/s) and **knocks down**, and on the
+tick of the hit those two contradict each other: a knockdown spikes its victim
+downward and a launch sends them up. So the uppercut spends the launch and *arms*
+the floor time, in `knockdownPendingTimer` — the debt is simulation state on the
+wire, not a renderer's guess, because the tick a fighter goes down is a fact both
+sides must agree on and a knockdown applied on top of predicted state would be
+erased by the next reconciliation.
+
+`tickPlayer` collects the debt on the tick the feet are next found on the floor,
+**wherever in the arena that turns out to be** — and it collects it *before* the
+melee tick runs, exactly where a stun that arrived between ticks is handled, so
+the stun gate is the one thing that decides what a knockdown takes away. Paying
+it at the end of the landing tick instead left the victim lying on the floor
+still holding the guard they had out on the way down, which is the state the
+`illegalActions` diagnostic exists to catch (and which it caught, online, on the
+first run).
+
+The consequences:
+
+- The victim's arc is unchanged. They rise, and the 260ms hitstun expires
+  mid-flight, so an uppercut still opens the juggle it always opened, and a foe
+  with their air dash or second jump still in hand can spend it on the way down.
+- Escaping the stun is **not** escaping the move. Whoever falls, falls on their
+  back: the knockdown is delivered on the landing rather than never.
+- A knockdown that lands *first* (a thrust catching the launched fighter) clears
+  the debt, so the landing cannot shorten a longer sentence by re-arming a
+  shorter one.
+
+The dagger's shoryuken knocks down **on the hit** — it has no launch to contradict
+it, so its victim is spiked straight into the floor.
 
 ### What it looks like
 
@@ -555,13 +594,17 @@ hit's own stun and knockback playing out on top. Bullets do not break it.
 
 ## The uppercut
 
-A short, fast, **unblockable** thrust that launches the target into the air.
+A short, fast, **unblockable** thrust that launches the target into the air — and
+then puts them on the floor.
 
 - It out-ranges nothing — **34px, the shortest reach of the three** — so it must
   be walked into.
 - It cannot be cancelled and recovers for 340ms.
 - A launched fighter is airborne *and* stunned for 260ms, which is a combo
   opening rather than a kill on its own.
+- Its **knockdown is paid on the landing** (`700ms`, the same short floor time as
+  the dagger's shoryuken), because a launch and a slam cannot happen on the same
+  tick. See *The knockdown a launch owes the floor*.
 
 Its whole job is to answer a block. It loses to spacing, and it loses badly to
 being whiffed.
@@ -644,6 +687,10 @@ fire illegally**:
 | `meleeDesyncFrames` | **0** — predicted move matches the authoritative one |
 | `slashes`, `massives`, `plunges`, `uppercuts`, `blocks`, `parries`, `backstabs`, `stuns`, `butterflyChains`, `blasts`, `bombs` | **> 0** across a few runs |
 | `comboLinks`, `combosFinished`, `knockdowns` | **> 0** across a few runs |
+| `knockdownsArmed` / `knockdownsPaidOnLanding` | **both > 0, and equal** — a launched
+  victim's debt was armed by the hit and collected by the floor. `knockdowns` alone
+  cannot tell the arc-and-a-landing from a spike on the hit, and only one of those is
+  the uppercut |
 | `plungeCatches` | **> 0** when the runs include dives — a dive that never catches is a fancy fall |
 
 The second row matters as much as the first. Every must-be-zero metric is

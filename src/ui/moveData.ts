@@ -148,7 +148,12 @@ function meleeStats(move: MeleeMove): MoveStat[] {
 	if (d.hitstunMs > 0)
 		rows.push({ label: "HITSTUN", value: `${d.hitstunMs}ms` });
 	if (d.knockdown)
-		rows.push({ label: "KNOCKDOWN", value: `${d.knockdownMs ?? "—"}ms` });
+		rows.push({
+			label: "KNOCKDOWN",
+			value: d.knockdownOnLanding
+				? `${d.knockdownMs ?? "—"}ms ON LANDING`
+				: `${d.knockdownMs ?? "—"}ms`,
+		});
 	return rows;
 }
 
@@ -212,14 +217,14 @@ const MELEE_PROSE: Partial<Record<MeleeMove, string>> = {
 	slash3:
 		"The finisher — a straight overhead that knocks the target down for 520ms. It cannot be cancelled: this is the commitment that ends the chain, and what it commits to is neutral, not a punish. The whole chain is 7 + 7 + 11 = 25, a shade more than a Massive, for three hits that each have to connect on the ground.",
 	uppercut:
-		"The answer to a turtle. An unblockable upward thrust that launches its target into the air — but only 34px of reach, so it has to be walked into, and 340ms of recovery you cannot cancel. A whiffed uppercut loses you the exchange.",
+		"The answer to a turtle. An unblockable upward thrust that launches its target into the air — but only 34px of reach, so it has to be walked into, and 340ms of recovery you cannot cancel. The foe goes up on the launch and comes **down on the floor**: the knockdown is paid when their feet return, so recovering mid-arc does not escape it. A whiffed uppercut loses you the exchange.",
 	massive:
 		"The payoff for a 1.6s charge or a guard break. Held, it slams the sword into the floor 56px ahead; the swing itself is blockable, and the blast that follows is front *and* back of the slam point, stunning through a guard. Released in the air it becomes the plunge bomb instead.",
 	stab: "The dagger's bread and butter — fast, weak, and cancellable into the thrust. Where the slash is 330ms the stab is 190; where the slash deals 7 the stab deals 5. A dagger in range interrupts the gap between a sword wielder's swings, and trading with the sword still loses.",
 	thrust:
 		"The dagger's whole identity and its Shift move: a committed lunge that knocks down everyone in its path for 1.5s. It is the answer to having no guard — the 260ms wind-up is the tell, and a jump clears the flat line entirely. The dash is unblockable once committed.",
 	shoryuken:
-		"The dagger's anti-air, on the uppercut button. A rising stab with a wide reach that knocks down. It only fires while the second jump is still in hand, so it can never be a third jump — and unlike the sword's uppercut it is blockable, so a read guard stops it.",
+		"The dagger's anti-air, on the uppercut button. A rising stab with a wide reach that spikes its target into the floor for 700ms — the same short knockdown as the sword's uppercut, paid on the hit instead of on the landing. It only fires while the second jump is still in hand, so it can never be a third jump — and unlike the sword's uppercut it is blockable, so a read guard stops it.",
 };
 
 function meleeEntry(move: MeleeMove): MoveEntry {

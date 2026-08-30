@@ -9,7 +9,7 @@
 import { describe, expect, it } from "vitest";
 import { pelletDamageAt } from "../../tweakables/ranged.js";
 import { buildWorld } from "./Arena.js";
-import type { MeleeBody } from "./Melee.js";
+import { ANTIAIR_KNOCKDOWN_MS, type MeleeBody } from "./Melee.js";
 import {
 	applyHitToDefender,
 	applyMeleeResult,
@@ -350,9 +350,9 @@ describe("the thrust", () => {
 });
 
 describe("the shoryuken", () => {
-	it("is the dagger's F move and gives a weaker knockdown", () => {
+	it("is the dagger's F move and gives the short anti-air knockdown", () => {
 		const def = MOVES.shoryuken;
-		expect(def.knockdownMs).toBe(900);
+		expect(def.knockdownMs).toBe(ANTIAIR_KNOCKDOWN_MS);
 		expect(def.knockdownMs).toBeLessThan(MOVES.thrust.knockdownMs ?? 0);
 	});
 

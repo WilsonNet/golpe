@@ -387,7 +387,7 @@ const BATTERY: BatteryRow[] = [
 		},
 	},
 	{
-		name: "uppercut beats a block and launches",
+		name: "uppercut beats a block, launches, and drops them on the floor",
 		/**
 		 * A launch is an *event*, so it is measured by watching, not by asking once
 		 * afterwards.
@@ -396,13 +396,19 @@ const BATTERY: BatteryRow[] = [
 		 * is the wrong instrument twice over. `training-state` is sent on change and
 		 * its change signature deliberately excludes position — so the velocity in it
 		 * is from whenever the config, script status or stats last moved, not from
-		 * now. And a -620 launch is spent in ~340ms, so even a live single sample is a
+		 * now. And a -620 launch is spent in ~340ms, so even a single live sample is a
 		 * coin flip on where in the arc it lands.
 		 *
 		 * The snapshot is the live source: `enemyPhys` is the dummy's authoritative
 		 * state, predicted every tick and corrected every snapshot. Polling it for
 		 * the minimum answers the question actually being asked — did this fighter
 		 * ever leave the ground?
+		 *
+		 * The same poll also answers the second half: the uppercut's knockdown is
+		 * *owed* by the launch and paid by the floor, so the rising edge of
+		 * `knockdownTimer` must arrive on a tick that is already grounded. A
+		 * knockdown that appeared mid-arc is the old slam behaviour back again (the
+		 * launch eaten); one that never appeared is a pending timer nobody collects.
 		 */
 		async run(page) {
 			const running = page.evaluate(
@@ -411,30 +417,79 @@ const BATTERY: BatteryRow[] = [
 					name: "uppercut beats a block",
 					config: { behaviour: "blockAll", facing: "foe" },
 					steps: [UPPERCUT],
-					settleMs: 900,
+					settleMs: 1600,
 				} as TrainingScenario,
 			);
 
 			let minVy = Number.POSITIVE_INFINITY;
-			for (let i = 0; i < 45; i++) {
-				const vy = await page.evaluate(
-					() => window.__gameState?.().enemyPhys?.vy ?? 0,
-				);
-				minVy = Math.min(minVy, vy);
+			let downedWhileAirborne = false;
+			let downedAt: { vy: number; grounded: boolean } | null = null;
+			for (let i = 0; i < 80; i++) {
+				const phys = await page.evaluate(() => {
+					const p = window.__gameState?.().enemyPhys;
+					return p
+						? {
+								vy: p.vy,
+								knockdownTimer: p.knockdownTimer,
+								grounded: p.grounded,
+							}
+						: null;
+				});
+				if (phys) {
+					minVy = Math.min(minVy, phys.vy);
+					if (phys.knockdownTimer > 0 && !downedAt) {
+						downedAt = { vy: phys.vy, grounded: phys.grounded };
+					}
+					if (phys.knockdownTimer > 0 && !phys.grounded) {
+						downedWhileAirborne = true;
+					}
+				}
 				await page.waitForTimeout(20);
 			}
 
-			return { report: await running, extra: minVy };
+			return {
+				report: await running,
+				extra: { minVy, downedWhileAirborne, downedAt },
+			};
 		},
-		verify(report, minVy) {
+		verify(report, extra) {
+			const { minVy, downedWhileAirborne, downedAt } = extra as {
+				minVy: number;
+				downedWhileAirborne: boolean;
+				downedAt: { vy: number; grounded: boolean } | null;
+			};
 			const c = checks(report);
 			c.swung("uppercut");
 			c.outcome("hit", "uppercut");
 			c.damage(DAMAGE.uppercut);
+			c.atLeast("knockdowns", report.melee?.knockdowns ?? 0, 1);
+			// The pair, not either half: the hit must *arm* the debt and the floor
+			// must *collect* it. A build that spikes the victim on the hit keeps
+			// `knockdowns` healthy and eats the launch; one that arms and never
+			// pays keeps the arc and never drops anybody.
+			c.eq(
+				"knockdowns armed by the launch",
+				report.melee?.knockdownsArmed ?? 0,
+				1,
+			);
+			c.eq(
+				"knockdowns paid on the landing",
+				report.melee?.knockdownsPaidOnLanding ?? 0,
+				1,
+			);
 			if (!(minVy < 0)) {
 				c.fails.push(
 					`dummy never rose (lowest vy ${minVy}), expected a launch`,
 				);
+			}
+			if (!downedAt) c.fails.push("dummy was never knocked down");
+			else if (!downedAt.grounded) {
+				c.fails.push(
+					`knockdown landed mid-air (vy ${downedAt.vy}), expected the floor`,
+				);
+			}
+			if (downedWhileAirborne) {
+				c.fails.push("dummy was drawn knocked down while still airborne");
 			}
 			return c.fails;
 		},

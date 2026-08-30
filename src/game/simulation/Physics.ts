@@ -29,6 +29,7 @@ import {
 import { type HeroKit, LIA_KIT } from "./Heroes.js";
 import { ROOT_MS, type Trap, trapCatches } from "./Items.js";
 import {
+	applyKnockdown,
 	bombBlastFor,
 	bombFallHeight,
 	copyMeleeState,
@@ -654,6 +655,29 @@ export function tickPlayer(
 	if (grip === "held") {
 		s.dragonTimer = 0;
 		s.stunTimer = Math.max(s.stunTimer, SINGULARITY_HOLD_STUN_MS);
+	}
+
+	// ---- the knockdown the air was owed ----
+	//
+	// A move that both launches and knocks down (the uppercut) cannot spend both
+	// on the same tick — the launch sends its victim up and a knockdown spikes
+	// them down — so the hit arms `knockdownPendingTimer` and the floor collects
+	// it. `grounded` here is last tick's contact, so the debt is paid on the tick
+	// *after* the feet come back down.
+	//
+	// Collected before `tickMelee`, exactly like a hit that arrived between
+	// ticks: a knockdown **is** a stun, and the stun gate is the one place that
+	// knows everything a stun takes away — the guard, the charge, the move in
+	// progress, the buttons. Paying it at the end of the tick instead left the
+	// victim knocked down and still holding a block, which is the state the
+	// `illegalActions` diagnostic exists to catch (it caught it immediately).
+	//
+	// Both sides run this against the same replayed state, so a client predicts
+	// its own landing on the tick the server judges it. The debt rides the wire
+	// because a knockdown applied on top of predicted state would be erased by
+	// the next reconciliation, exactly like a dash or the black hole's pull.
+	if (s.grounded && s.knockdownPendingTimer > 0) {
+		applyKnockdown(s, s.knockdownPendingTimer);
 	}
 
 	tickMelee(s, input, dt, kit.melee);

@@ -413,6 +413,7 @@ Emitted as `__DIAGNOSTIC_RESULT__{...}__END__` on one console line.
 | `meleeSummary` counters | `slashes`, `massives`, `plunges`, `uppercuts`, `blocks`, `parries`, `backstabs`, `butterflyChains`, `blasts`, `bombs` — **must be > 0**, or the run proves nothing |
 | `meleeSummary.parries` | the guard-break counter. Every guard that stops a sword attack is a `parried` outcome now — there is no rewardless "blocked" tier — so `parries: 0` beside a healthy `blocks` says guards are going up but swings are not reaching them |
 | `meleeSummary.outcomeByMove` | outcomes per move; a flat `parried: 0` cannot distinguish "guards failing" from "everything that landed was unblockable" |
+| `meleeSummary.knockdownsArmed` / `knockdownsPaidOnLanding` | the uppercut's launch as a **pair**: the hit armed a knockdown debt, and the floor collected it. Both must be > 0 and equal — `knockdowns` alone reads the same for a build that spikes the victim out of the air on the hit and kills the launch, which is the bug this mechanic exists to avoid |
 | `meleeSummary.violations[]` | which fighter broke which frame-data contract, and by how much |
 | `arenaSummary.xSpanPct` / `ySpanPct` | how much of the arena the fight touched. A duel confined to a narrow band tests almost nothing |
 | `arenaSummary.surfacesUsed` | distinct platforms stood on, out of `surfacesAvailable`. 1 of 9 means the ledges are untested |

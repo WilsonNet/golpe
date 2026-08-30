@@ -13,6 +13,7 @@
  */
 
 import {
+	ANTIAIR_KNOCKDOWN_MS,
 	BACKSTAB_BONUS_STUN_MS,
 	BLOCK_PUSHBACK,
 	BLOCK_STARTUP_MS,
@@ -66,6 +67,7 @@ import {
 import { MS_PER_SECOND } from "./units.js";
 
 export {
+	ANTIAIR_KNOCKDOWN_MS,
 	BACKSTAB_BONUS_STUN_MS,
 	BLOCK_STARTUP_MS,
 	CHARGE_LOCK_MS,
@@ -240,6 +242,20 @@ export interface MeleeState {
 	 * "on the floor", and so the two states can be told apart in a diagnostic.
 	 */
 	knockdownTimer: number;
+	/**
+	 * ms of knockdown **owed**, to be paid the next time these feet touch the
+	 * floor. Zero when nothing is pending.
+	 *
+	 * Only a move that both launches and knocks down can arm it — the two rules
+	 * contradict each other on the tick they are applied, because a knockdown
+	 * spikes its victim downward (`KNOCKDOWN_SLAM_VY`) and a launch sends them up.
+	 * So the uppercut's launch runs unchanged, and the floor collects the debt in
+	 * `tickPlayer`. It is simulation state rather than a renderer's guess because
+	 * both sides must agree on the tick the fighter goes down: it rides the wire
+	 * like `knockdownTimer` does, and a launch the client could not predict would
+	 * be reconciled away mid-arc.
+	 */
+	knockdownPendingTimer: number;
 	/** ms of melee damage immunity remaining. */
 	iframeTimer: number;
 	attackHeld: boolean;
@@ -342,6 +358,7 @@ export function createMeleeState(facing: number): MeleeState {
 		comboTimer: 0,
 		stunTimer: 0,
 		knockdownTimer: 0,
+		knockdownPendingTimer: 0,
 		iframeTimer: 0,
 		attackHeld: false,
 		blockHeld: false,
@@ -371,6 +388,7 @@ export function copyMeleeState<T extends MeleeState>(
 	target.comboTimer = source.comboTimer;
 	target.stunTimer = source.stunTimer;
 	target.knockdownTimer = source.knockdownTimer;
+	target.knockdownPendingTimer = source.knockdownPendingTimer;
 	target.iframeTimer = source.iframeTimer;
 	target.attackHeld = source.attackHeld;
 	target.blockHeld = source.blockHeld;
@@ -1150,6 +1168,32 @@ export function applyMeleeResult(
 }
 
 /**
+ * Put a fighter **on the floor**: the knockdown, and the stun it is made of.
+ *
+ * Two callers, because two kinds of move owe a knockdown at different instants:
+ * `applyHitToDefender` on the tick a knockdown lands, and `tickPlayer` on the
+ * tick a *launched* fighter's feet come back to the floor — `knockdownPendingTimer`
+ * is that debt. Both go through here so the two rules that make a knockdown a
+ * knockdown can never be applied apart: a knockdown **is** a stun as well (a
+ * fighter lying on the floor who can act is exactly what the `illegalActions`
+ * diagnostic catches), and it is the one thing that ends a Death Blossom.
+ */
+export function applyKnockdown(s: MeleeBody, ms: number): void {
+	s.knockdownTimer = ms;
+	s.stunTimer = Math.max(s.stunTimer, ms);
+	// Being on the floor pays any knockdown the air was owed, so a launch that
+	// ends in a knockdown cannot be knocked down twice for the same mistake.
+	s.knockdownPendingTimer = 0;
+	// The knockdown is the one interrupt of a Death Blossom: the chain's
+	// finisher, the thrust, the shoryuken and the plunge blast all end the
+	// storm on the same tick both sides simulate, which is what keeps the
+	// interrupt from needing a message of its own. Ordinary hitstun never
+	// reaches here, so a slash inside the storm only slows the caster, it
+	// does not stop them — the whole design of the ability, in one `if`.
+	if (s.blossomTimer !== undefined) s.blossomTimer = 0;
+}
+
+/**
  * Apply a resolved hit to the *defender*, with nothing latched on the attacker.
  *
  * The thrust's sweep is multi-target: it knocks down everyone in its path, so
@@ -1174,15 +1218,19 @@ export function applyHitToDefender(
 		defender.grounded = false;
 	}
 	if (def.knockdown) {
-		defender.knockdownTimer = def.knockdownMs ?? KNOCKDOWN_MS;
-		defender.vy = Math.max(defender.vy, KNOCKDOWN_SLAM_VY);
-		// The knockdown is the one interrupt of a Death Blossom: the chain's
-		// finisher, the thrust, the shoryuken and the plunge blast all end the
-		// storm on the same tick both sides simulate, which is what keeps the
-		// interrupt from needing a message of its own. Ordinary hitstun never
-		// reaches here, so a slash inside the storm only slows the caster, it
-		// does not stop them — the whole design of the ability, in one `if`.
-		if (defender.blossomTimer !== undefined) defender.blossomTimer = 0;
+		const ms = def.knockdownMs ?? KNOCKDOWN_MS;
+		if (def.knockdownOnLanding) {
+			// A launch and a slam are the same tick apart and opposite in
+			// direction, so the uppercut's victim keeps their arc and pays for
+			// it on the floor. `tickPlayer` collects; nothing here touches `vy`.
+			defender.knockdownPendingTimer = Math.max(
+				defender.knockdownPendingTimer,
+				ms,
+			);
+		} else {
+			applyKnockdown(defender, ms);
+			defender.vy = Math.max(defender.vy, KNOCKDOWN_SLAM_VY);
+		}
 	}
 	defender.meleeAction = "none";
 	defender.meleeTimer = 0;

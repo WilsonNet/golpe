@@ -107,6 +107,10 @@ interface MeleeSummaryView {
 	comboLinks: number;
 	combosFinished: number;
 	knockdowns: number;
+	/** Knockdowns armed by a launch (the uppercut's debt). */
+	knockdownsArmed: number;
+	/** …and the ones the floor then collected. */
+	knockdownsPaidOnLanding: number;
 	uppercuts: number;
 	massives: number;
 	/** Bomb dives begun — the airborne half of the massive. */

@@ -36,7 +36,7 @@ On hit:
 |---|---|---|---|
 | Stab | 140ms | 90 px/s | — |
 | Thrust | 1500ms | 240 px/s | **1500ms** |
-| Shoryuken | 900ms | 120 px/s | **900ms** |
+| Shoryuken | 700ms | 120 px/s | **700ms** |
 
 **Why these hold:**
 
@@ -75,11 +75,15 @@ On hit:
   jump**: it only fires while the second jump is still in hand
   (`airJumps > 0`), so a fighter who double-jumped has spent its vertical
   options. And it is **blockable** — unlike the sword's uppercut —
-  with a knockdown (900ms) that is weaker than the thrust's. The trade for a
-  knockdown that lands is that a read guard stops it. **The one thing the
-  anti-air loses to is the plunge bomb**: the dive is immune to melee, and
-  the shoryuken's own launch puts its user in the dive's column — a shoryuken
-  into a dive is a shoryuken into a ride down (see
+  with the game's **short knockdown: 700ms** (`ANTIAIR_KNOCKDOWN_MS`), the same
+  floor time the sword's uppercut pays on the landing, and well under the
+  thrust's second and a half. Two anti-airs, one number: they are the same
+  *answer* — a foe who chose the air — wearing different weapons, and one being
+  a harder knockdown than the other would be an accident of the kit table. The
+  trade for a knockdown that lands is that a read guard stops it. **The one
+  thing the anti-air loses to is the plunge bomb**: the dive is immune to melee,
+  and the shoryuken's own launch puts its user in the dive's column — a
+  shoryuken into a dive is a shoryuken into a ride down (see
   [melee.md](melee.md#the-catch--the-dive-carries-its-victims)). The dagger
   reads the dive as distance, not as a jump-in.
 - **The double-tap dash is the dagger's own**: a little faster than the

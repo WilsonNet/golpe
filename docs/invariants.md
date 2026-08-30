@@ -281,6 +281,25 @@ stops the butterfly being the only option.
   fighters come out of a landed combo on the same tick — that neutral is what pays
   for the finisher being uncancellable, and `Melee.test.ts` asserts the identity
   rather than trusting the two numbers to stay in step.
+- **A knockdown the victim is airborne for is a debt in the state, not a choice
+  made by the renderer.** The uppercut both launches (−620 px/s) and knocks down,
+  and on the tick of the hit those two point in opposite directions: a knockdown
+  forces `KNOCKDOWN_SLAM_VY` downward and a launch *is* the upward impulse, so
+  paying both at once ate the arc whole (`vy` measured 0, "dummy never rose").
+  The hit therefore arms `knockdownPendingTimer` and `tickPlayer` collects it on
+  the next tick whose feet are on the floor — as simulation state on the wire,
+  because a knockdown applied on top of predicted state is erased by the next
+  reconciliation exactly like a dash or the black hole's pull.
+  **Collected *before* `tickMelee`, not after the collision**: the first version
+  paid the debt at the end of the landing tick and left the victim lying on the
+  floor still holding the guard they had out on the way down, which is precisely
+  the "down but not stunned" contradiction `illegalActions` was written to catch —
+  and it caught it, 4 flags in the first online training run. Paying it at the top
+  makes the arrival indistinguishable from any other stun that landed between
+  ticks, so the stun gate remains the one place that knows what a stun takes away.
+  Measured as a pair, `knockdownsArmed` / `knockdownsPaidOnLanding`: a run's
+  `knockdowns` total reads identically whether the victim was spiked out of the
+  air or put down on the landing, and only one of those is the move as specified.
 - **A landed hit must be visible on the fighter that took it.** Hitstun with no
   sprite for it read as nothing happening for a whole LAN playtest. The disabled
   and knocked-down poses are generated from the character strip at boot, so they

@@ -307,6 +307,8 @@ interface MeleeTrack {
 	sinceCancelMs: number;
 	chainLength: number;
 	wasKnockedDown: boolean;
+	/** Knockdown debt (`knockdownPendingTimer`) at the previous sample. */
+	wasOwingKnockdown: boolean;
 	/**
 	 * Ground contact at the previous sample, for judging whether a chain link
 	 * was *thrown* in the air rather than merely carried into it — see the
@@ -333,6 +335,7 @@ function newMeleeTrack(): MeleeTrack {
 		sinceCancelMs: Number.POSITIVE_INFINITY,
 		chainLength: 0,
 		wasKnockedDown: false,
+		wasOwingKnockdown: false,
 		wasGrounded: true,
 		lastDragonFrame: -100,
 	};
@@ -428,6 +431,22 @@ export class PhysicsDiagnostics {
 	/** Chains that reached the finisher. */
 	private combosFinished = 0;
 	private knockdowns = 0;
+	/**
+	 * Knockdowns armed by a move that also launches — the uppercut's debt —
+	 * counted on the rising edge of `knockdownPendingTimer`.
+	 */
+	private knockdownsArmed = 0;
+	/**
+	 * Of those, the ones the floor actually collected: a knockdown whose rising
+	 * edge found the victim still owing one.
+	 *
+	 * `knockdowns` alone cannot tell these two builds apart, and they are not the
+	 * same build: one where a launched fighter is spiked out of the air on the
+	 * hit, one where the launch runs its whole arc and the victim goes down on the
+	 * landing. The arc is the move — a knockdown that ate it is the old uppercut
+	 * with a new number beside it — so the pair is the measurement, not either.
+	 */
+	private knockdownsPaidOnLanding = 0;
 	private longestChain = 0;
 	private stunsTaken = 0;
 	private massivesArmed = 0;
@@ -575,6 +594,8 @@ export class PhysicsDiagnostics {
 		this.comboLinks = 0;
 		this.combosFinished = 0;
 		this.knockdowns = 0;
+		this.knockdownsArmed = 0;
+		this.knockdownsPaidOnLanding = 0;
 		this.longestChain = 0;
 		this.stunsTaken = 0;
 		this.massivesArmed = 0;
@@ -1179,7 +1200,13 @@ export class PhysicsDiagnostics {
 		// On the floor. Counted on the rising edge, like a stun — a knockdown lasts
 		// half a second, and per-frame counting would report one as thirty.
 		const downed = s.knockdownTimer > 0;
-		if (downed && !t.wasKnockedDown) this.knockdowns++;
+		const owing = s.knockdownPendingTimer > 0;
+		if (owing && !t.wasOwingKnockdown) this.knockdownsArmed++;
+		if (downed && !t.wasKnockedDown) {
+			this.knockdowns++;
+			if (t.wasOwingKnockdown) this.knockdownsPaidOnLanding++;
+		}
+		t.wasOwingKnockdown = owing;
 		// A knockdown is a stun that also puts you down. If the two ever come apart,
 		// a fighter is lying on the floor and allowed to act.
 		if (downed && !stunned) this.illegalActions++;
@@ -1226,6 +1253,9 @@ export class PhysicsDiagnostics {
 			comboLinks: this.comboLinks,
 			combosFinished: this.combosFinished,
 			knockdowns: this.knockdowns,
+			/** The uppercut's launch: armed, and paid on the floor. Both > 0. */
+			knockdownsArmed: this.knockdownsArmed,
+			knockdownsPaidOnLanding: this.knockdownsPaidOnLanding,
 			uppercuts: this.moveCounts.uppercut,
 			massives: this.moveCounts.massive,
 			blocks: this.blocksRaised,

@@ -217,6 +217,15 @@ One line each; the war story behind every one is in
   blocks the second hit. The chain also pierces melee iframes, and only the chain.
 - **A landed hit must be visible on the fighter that took it.** A disabled state
   with no sprite for it read as nothing happening for an entire playtest.
+- **A knockdown the victim is airborne for is a debt, not an effect.** The
+  uppercut launches *and* knocks down, and those two contradict each other on the
+  hit's tick, so the hit arms `knockdownPendingTimer` and `tickPlayer` collects it
+  the next tick the feet are on the floor — before `tickMelee`, where the stun gate
+  takes the guard away with everything else. Paid at the end of the landing tick it
+  left a fighter lying on the floor holding a block, and `illegalActions` said so
+  on the first online run. Measured as a pair (`knockdownsArmed` /
+  `knockdownsPaidOnLanding`), because `knockdowns` alone cannot tell the arc from
+  a spike out of the air.
 - **Changing gravity or jump velocity changes level reachability** — and retunes
   combat, because the uppercut's launch is derived from the jump.
 - **Anything that moves a fighter travels in the intent.** A dash applied
@@ -438,7 +447,11 @@ carries them down to be pinned by the landing blast, and it **cannot be
 anti-aired** — a diving fighter is immune to melee, so the shoryuken and the
 uppercut lose to it (only the black hole and the dragon thrust can stop a
 dive). The swing itself is blockable: a front massive into a read guard is a gift, and
-the uppercut is the third answer to a turtle. Sword damage pays double ultimate
+the uppercut is the third answer to a turtle. **The uppercut also knocks down**,
+and it is the knockdown the victim is *airborne* for: it launches at −620 px/s and
+arms a 700ms floor time that `tickPlayer` collects on the landing (the same short
+knockdown the dagger's shoryuken pays on its hit — `ANTIAIR_KNOCKDOWN_MS`; the
+thrust keeps its 1500ms for its 260ms tell). Sword damage pays double ultimate
 charge.
 
 **An airborne dash is a flat line** — no gravity, same Y throughout — and the

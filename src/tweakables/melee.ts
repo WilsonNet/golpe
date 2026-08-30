@@ -67,7 +67,8 @@ export interface MoveDef {
 	/** Horizontal impulse on hit, away from the attacker. */
 	knockbackVx: number;
 	/**
-	 * Does it put the target on the floor? Only the chain's finisher.
+	 * Does it put the target on the floor? The chain's finisher, the dagger's
+	 * thrust, and both anti-airs.
 	 *
 	 * A knockdown is a stun that also spikes an airborne target down and reads as
 	 * a distinct state on screen — the reason the finisher is worth chaining into
@@ -76,6 +77,16 @@ export interface MoveDef {
 	knockdown: boolean;
 	/** How long the knockdown holds, when `knockdown` is set. Defaults to `KNOCKDOWN_MS`. */
 	knockdownMs?: number;
+	/**
+	 * Does the knockdown wait for the floor instead of landing on the hit?
+	 *
+	 * Only a move that *also* launches can want this, because the two rules
+	 * contradict each other: a knockdown drags its victim down (`KNOCKDOWN_SLAM_VY`)
+	 * and a launch sends them up. Deferred, the launched fighter rises exactly as
+	 * they always did and goes down on the tick their feet come back to the floor —
+	 * `knockdownPendingTimer` in the simulation is the debt. See *The uppercut*.
+	 */
+	knockdownOnLanding?: boolean;
 	/**
 	 * Horizontal speed the *attacker* travels during the active frames, along
 	 * their facing — the dagger thrust's dash. The one place a move moves its
@@ -130,6 +141,19 @@ export interface MeleeWeaponDef {
 	burst: { speed: number; durationMs: number; lockoutMs: number };
 }
 export const COMBO_CHAIN = ["slash", "slash2", "slash3"] as const;
+
+/**
+ * How long either anti-air keeps its victim on the floor: 700ms.
+ *
+ * **Deliberately the shorter knockdown in the game.** A launch already spends
+ * half a second of somebody's life on their way back down, and a lunge that
+ * travels is the commitment that earns the floor time — so both anti-airs go
+ * down for less than the thrust's 1500ms, and the same amount as each other:
+ * the sword's uppercut and the dagger's shoryuken are the same *answer* (a foe
+ * who chose the air) wearing different weapons, and one being a harder knockdown
+ * than the other would just be an accident of the kit table.
+ */
+export const ANTIAIR_KNOCKDOWN_MS = 700;
 
 export const MOVES: Record<MeleeMove, MoveDef> = {
 	/**
@@ -227,6 +251,10 @@ export const MOVES: Record<MeleeMove, MoveDef> = {
 	 * The answer to a turtle. Unblockable and launching, but the shortest reach of
 	 * the three, so it has to be walked into — and 340ms of uncancellable recovery
 	 * means walking into it wrong loses the exchange.
+	 *
+	 * It also **knocks down**, on the landing rather than on the hit: the foe goes
+	 * up on the launch and stays up for the arc exactly as they always did, and the
+	 * floor is what puts them on their back. See `knockdownOnLanding`.
 	 */
 	uppercut: {
 		startupMs: 110,
@@ -239,6 +267,12 @@ export const MOVES: Record<MeleeMove, MoveDef> = {
 		blockable: false,
 		cancellable: false,
 		piercesIframes: false,
+		/**
+		 * Covers the rise, not the fall. A launched fighter who recovers mid-arc
+		 * still has their air dash and second jump to spend on the way down — the
+		 * knockdown waits for their feet, so escaping the stun is not escaping
+		 * the move.
+		 */
 		hitstunMs: 260,
 		/**
 		 * Deliberately weaker than JUMP_VELOCITY (-700): a launched fighter rises
@@ -247,7 +281,9 @@ export const MOVES: Record<MeleeMove, MoveDef> = {
 		 */
 		launchVy: -620,
 		knockbackVx: 90,
-		knockdown: false,
+		knockdown: true,
+		knockdownMs: ANTIAIR_KNOCKDOWN_MS,
+		knockdownOnLanding: true,
 	},
 	/**
 	 * The payoff for a 2.5s charge or a guard break. The swing comes down on the
@@ -397,12 +433,16 @@ export const MOVES: Record<MeleeMove, MoveDef> = {
 		blockable: true,
 		cancellable: false,
 		piercesIframes: false,
-		/** A weaker knockdown than the thrust's: 900ms, not 1500ms. */
-		hitstunMs: 900,
+		/**
+		 * The same short knockdown as the sword's uppercut (`ANTIAIR_KNOCKDOWN_MS`),
+		 * and paid on the hit rather than on a landing, because the dagger's
+		 * anti-air does not launch anybody — it spikes them straight down.
+		 */
+		hitstunMs: ANTIAIR_KNOCKDOWN_MS,
 		launchVy: 0,
 		knockbackVx: 120,
 		knockdown: true,
-		knockdownMs: 900,
+		knockdownMs: ANTIAIR_KNOCKDOWN_MS,
 		/** The rise: a clean anti-air hop, not a jump (see `selfVy`). */
 		selfVy: -420,
 	},

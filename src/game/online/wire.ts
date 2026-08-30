@@ -172,6 +172,10 @@ const NUMBER_FIELDS = [
 	"ammo",
 	"reserveRounds",
 	"reloadTimer",
+	// The knockdown a launch owes the floor (the uppercut), appended for the
+	// same reason as every field before it: both sides must pay it on the same
+	// tick, so the debt has to survive the trip.
+	"knockdownPendingTimer",
 ] as const;
 
 const ENUM_FIELDS = ["wallTouch", "stance", "meleeAction"] as const;

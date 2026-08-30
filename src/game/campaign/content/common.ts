@@ -144,7 +144,7 @@ export function swordChapter(hero: HeroId): Chapter {
 				id: `${hero}-uppercut`,
 				title: "Answering a turtle",
 				brief:
-					"This dummy holds its guard. A slash will not get through it — the uppercut will: unblockable, and it launches. It reaches barely past your own body and its recovery cannot be cancelled, so a whiff is the exchange.",
+					"This dummy holds its guard. A slash will not get through it — the uppercut will: unblockable, and it launches. It reaches barely past your own body and its recovery cannot be cancelled, so a whiff is the exchange. And the foe comes back down **on their back**: the launch is the hit, the floor is the knockdown.",
 				stage: { ...SAFE, behaviour: "blockAll" },
 				objectives: [o.land("uppercut", "an uppercut", 2)],
 				outro: "Unblockable, short, and slow to recover. Read, then throw.",
