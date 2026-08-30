@@ -172,6 +172,45 @@ export const MENU_CSS = `
 	box-shadow: 0 8px 26px rgba(255, 209, 102, 0.32);
 }
 
+/* The tutorial is the page's first item, and it is deliberately *not* gold.
+   Quick match stays the one filled button — the primary action of a game is
+   playing it — so the course wears the aim beam's cyan instead: unmissable at
+   the top of the page, clearly a different kind of door, and never competing
+   with the button beneath it for "the one thing to press". */
+.gd-play-item-tutorial {
+	border-color: rgba(14, 195, 201, 0.65);
+	background: linear-gradient(180deg, rgba(14, 195, 201, 0.16), rgba(0, 0, 0, 0.9));
+	padding: 16px 18px;
+	box-shadow: 0 4px 20px rgba(14, 195, 201, 0.14);
+}
+.gd-play-item-tutorial strong {
+	color: #7ff0f4;
+	font-size: 16px;
+}
+.gd-play-item-tutorial span {
+	opacity: 0.75;
+}
+.gd-play-item-tutorial:hover {
+	border-color: #7ff0f4;
+	transform: translateY(-1px);
+	box-shadow: 0 8px 26px rgba(14, 195, 201, 0.26);
+}
+/* "4/16" beside the title: progress is remembered, and saying so is what makes
+   a half-finished course feel resumable rather than restarted. */
+.gd-badge {
+	display: inline-block;
+	margin-left: 8px;
+	padding: 1px 7px;
+	border-radius: 999px;
+	background: rgba(127, 240, 244, 0.16);
+	border: 1px solid rgba(127, 240, 244, 0.4);
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+	letter-spacing: 0.04em;
+	color: #7ff0f4;
+	vertical-align: middle;
+}
+
 /* Host and Join answer different questions and neither is a step toward the
    other, so they sit side by side as siblings rather than one above the
    other. The row collapses to a column on a phone. */

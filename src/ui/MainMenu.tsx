@@ -8,10 +8,16 @@
  * configure something the game will not honour. What the address bar says after
  * a commit is exactly the link that would boot that match if it were shared.
  *
- * The home screen is three sections in strict hierarchy, because seven buttons
+ * The home screen is four sections in strict hierarchy, because seven buttons
  * of equal weight made every choice look like every other choice:
  *
- * - **Play** — starting a fight is the primary job, so it is first: the gold
+ * - **Start here** — the Tutorial, first on the page. The good moves in this
+ *   game are invisible to somebody who has only ever pressed attack, so the
+ *   answer to the stranger's real question goes above everything else. It is
+ *   deliberately not the gold button: Quick match keeps that, because the
+ *   primary *action* of a game is playing it, and the course wears the aim
+ *   beam's cyan so it reads as a different door rather than a competing one.
+ * - **Play** — starting a fight is the primary job, so it is next: the gold
  *   Quick match, then Host/Join as siblings, then Practice.
  * - **Your fighter** — who you bring. The hero picker lives here, on the home
  *   screen, beside the name field: a hero shooter should show its heroes, and
@@ -40,6 +46,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { lessonsOf, progressOf, tutorialFor } from "../game/campaign";
 import { readStoredHero, storeHero } from "../game/heroPref";
 import { type Action, bindings, codeLabel } from "../game/input/Bindings";
 import type { LaunchParams } from "../game/online/launch";
@@ -95,6 +102,7 @@ const NOTHING: LaunchParams = {
 	online: false,
 	offline: false,
 	training: false,
+	tutorial: false,
 	hero: null,
 	botHero: null,
 	bots: undefined,
@@ -122,6 +130,20 @@ export function MainMenu({
 	// place the menu is asynchronous: the primary action has to learn the room
 	// id before it can write it into the URL.
 	const [quickBusy, setQuickBusy] = useState(false);
+	// How much of this hero's course is done. Snapshotted into state rather than
+	// read off `localStorage` during the render, exactly like the bindings: a
+	// compiled component memoises the values a render *reads*, and a store it
+	// cannot see would freeze at whatever the first render happened to find.
+	// Re-read when the hero changes, because the courses are per-hero — and the
+	// menu remounts on the way back from a match, which is when the count moves.
+	const [tutorialProgress, setTutorialProgress] = useState(() =>
+		progressOf(lessonsOf(tutorialFor(hero)).map((l) => l.id)),
+	);
+	useEffect(() => {
+		setTutorialProgress(
+			progressOf(lessonsOf(tutorialFor(hero)).map((l) => l.id)),
+		);
+	}, [hero]);
 
 	const quickMatch = async () => {
 		if (quickBusy) return;
@@ -165,6 +187,33 @@ export function MainMenu({
 
 				{view === "home" ? (
 					<>
+						{/* First on the page, above Play, because it is the answer to the
+						    only question a stranger actually has. Everything else on
+						    this screen assumes you already know what a butterfly is. */}
+						<div className="gd-section">
+							<div className="gd-section-head">Start here</div>
+							<button
+								className="gd-play-item gd-play-item-tutorial"
+								type="button"
+								onClick={() => onLaunch({ ...NOTHING, tutorial: true, hero })}
+							>
+								<strong>
+									Tutorial — learn {HEROES[hero].name}
+									{tutorialProgress.done > 0 ? (
+										<span className="gd-badge">
+											{tutorialProgress.done}/{tutorialProgress.total}
+										</span>
+									) : null}
+								</strong>
+								<span>
+									Play every move against a live opponent, one lesson at a time.
+									{tutorialProgress.done > 0
+										? " Your progress is remembered."
+										: ""}
+								</span>
+							</button>
+						</div>
+
 						<div className="gd-section">
 							<div className="gd-section-head">Play</div>
 							<button

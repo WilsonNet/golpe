@@ -12,6 +12,7 @@
  * caught.
  */
 
+import type { TutorialApi } from "../game/campaign";
 import type { AIState } from "../game/characters/EnemyBrain";
 import type { AimReport } from "../game/input/Aim";
 import type { AimScheme, DeckSetting } from "../game/input/Scheme";
@@ -360,6 +361,16 @@ declare global {
 		 * rather than something inferred from watching two brains fight.
 		 */
 		__training?: TrainingApi;
+		/**
+		 * The tutorial's controller: where the course is, and the four things
+		 * the overlay's buttons do — continue, skip, retry, jump to a lesson.
+		 *
+		 * Present only under `?tutorial=true`. Like `__training` it is a
+		 * deliverable rather than a debug hook: `scripts/tutorial-probe.ts`
+		 * walks the whole course through it, which is the only way to prove
+		 * that every lesson in every hero's tutorial can actually be staged.
+		 */
+		__tutorial?: TutorialApi;
 		/**
 		 * The move-list preview's fighter and its targets, while a preview
 		 * stage is mounted: the story clock, the fighter's position and live

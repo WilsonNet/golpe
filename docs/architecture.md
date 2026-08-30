@@ -67,6 +67,15 @@ src/game/
     scripts.ts      behaviour -> beat list; pure, and unit tested
     TrainingRoom.ts window.__training, and a *view* over PhysicsDiagnostics
     report.ts       the agent-facing API and report shapes (client only)
+  campaign/       the guided course, and the layer a campaign would be built on
+    types.ts        Objective / Lesson / Chapter / CampaignModule — content is data
+    objectives.ts   the verbs a lesson is written in; every `count` is pure
+    signals.ts      LessonTracker: counters read off state transitions and server
+                    outcomes, never off button presses
+    progress.ts     which lesson ids this browser has finished (localStorage)
+    content/        the courses. common.ts is what Lia and Jeffs share
+    TutorialDirector.ts  stage → count → report. Owns no gameplay: it drives the
+                    training room's dummy and asks the objectives their question
   EventBus.ts     game → React events (bullet-fired, enemy-hp-changed)
 
 src/ui/           React overlays drawn over the canvas

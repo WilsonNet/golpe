@@ -20,6 +20,7 @@ const SPRITE_ANCHOR_CENTRE = 0.5;
 import { Container, Sprite } from "pixi.js";
 import { SMOKE_REVEAL_MS } from "../tweakables/items.js";
 import { pelletDamageAt } from "../tweakables/ranged.js";
+import { TutorialDirector, tutorialFor } from "./campaign";
 import { type AIConfig, randomBotConfig } from "./characters/AIConfig";
 import { EnemyBrain } from "./characters/EnemyBrain";
 import type { AIInput, AIOutput, AllyInfo, FoeInfo } from "./characters/types";
@@ -140,6 +141,13 @@ import {
 } from "./simulation/Teams";
 import { sound } from "./sound/facade";
 import { TrainingRoom } from "./training/TrainingRoom";
+
+/**
+ * The charge floor a tutorial room runs with, unless the URL says otherwise.
+ *
+ * Full, so the ultimate lesson can be attempted, failed and attempted again.
+ */
+const TUTORIAL_ULT_CHARGE = 100;
 
 /** Client physics runs at a fixed 60Hz to match the server, whatever the display does. */
 const PHYSICS_DT = 1 / 60;
@@ -284,6 +292,16 @@ export class Match {
 	 * training room is used to test other things through.
 	 */
 	private trainingMode = false;
+	/**
+	 * Tutorial: a training room with a director in front of it (`?tutorial=true`).
+	 *
+	 * Implies `trainingMode` — the course is *played* in the practice room, on
+	 * the server's scriptable dummy, so every lesson runs through the same
+	 * prediction and reconciliation a real match does. This flag only decides
+	 * who reconfigures the dummy: a player through the practice menu, or the
+	 * lesson script. See specs/tutorial.md.
+	 */
+	private tutorialMode = false;
 	/** Bots to seat in a solo room, and fighters to top a public room up to. */
 	private botCount: number | undefined;
 	private fillCount: number | undefined;
@@ -313,6 +331,7 @@ export class Match {
 	private freezeTime: number | undefined;
 	private online: OnlineSession | undefined;
 	private training: TrainingRoom | undefined;
+	private tutorial: TutorialDirector | undefined;
 	private dragonFx!: DragonFx;
 	private blossomFx!: BlossomFx;
 
@@ -479,7 +498,12 @@ export class Match {
 		// `?offline=true` is an escape hatch for working without a game server. It
 		// is not the supported path — it bypasses the netcode entirely.
 		this.onlineMode = !launch.offline;
-		this.trainingMode = launch.training;
+		// The tutorial is played in a training room, so it *is* one: the dummy,
+		// the single-human seating and the server-side scripting are exactly what
+		// a lesson needs, and a second kind of room would be a second thing to
+		// keep working.
+		this.tutorialMode = launch.tutorial;
+		this.trainingMode = launch.training || launch.tutorial;
 		// `bots=0` is meaningful — an empty room — so it cannot go through the
 		// positive-integer parser the other counts use.
 		this.botCount = launch.bots;
@@ -491,6 +515,12 @@ export class Match {
 		// like the shortened rules — see specs/ultimate.md. Zero is the real
 		// default and a legitimate thing to ask for explicitly.
 		this.ultCharge = launch.ultCharge;
+		// A course that teaches the ultimate cannot ask a new player to earn one
+		// first: the meter takes minutes, and the lesson is the *cast*. The
+		// practice room's charge floor already exists for exactly this, so the
+		// tutorial asks for it rather than inventing a second way to be armed.
+		if (this.tutorialMode && this.ultCharge === undefined)
+			this.ultCharge = TUTORIAL_ULT_CHARGE;
 		// Both spellings, like `training`, and both are only a request.
 		this.mode = launch.mode ?? "ffa";
 		// Zero is a legitimate request — "no countdown, start fighting" — so this
@@ -1178,6 +1208,16 @@ export class Match {
 			console.log("[TRAINING] window.__training installed");
 		}
 
+		if (this.tutorialMode && this.training) {
+			this.tutorial = new TutorialDirector({
+				training: this.training,
+				module: tutorialFor(this.hero),
+				hero: this.hero,
+				localBody: () => this.local.body,
+			});
+			console.log("[TUTORIAL] window.__tutorial installed");
+		}
+
 		if (this.aiMode) {
 			this.localBrain = new EnemyBrain(fightConfig(), this.arena, this.hero);
 			console.log("[AI-ONLINE] AI brain created for local player");
@@ -1533,6 +1573,7 @@ export class Match {
 		else this.updateCamera();
 
 		this.training?.update(dtMs);
+		this.tutorial?.update(dtMs);
 		this.record(dtMs);
 		this.emitHud();
 	}
@@ -3474,6 +3515,7 @@ export class Match {
 		this.denyFx.destroy();
 		this.rootedFx.destroy();
 		this.items.destroy();
+		this.tutorial?.destroy();
 		this.training?.destroy();
 		this.online?.disconnect();
 		// Leaving a match returns the title screen's music to the page even

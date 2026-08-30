@@ -34,6 +34,7 @@ it.
 | [menu.md](menu.md) | The root menu: when it shows, how choices become URLs, hosting and joining |
 | [audio.md](audio.md) | The soundtrack and sound FX: the loops, the bank, the mixer, and what plays when |
 | [training-room.md](training-room.md) | The scriptable practice dummy, its beat format, and the agent API |
+| [tutorial.md](tutorial.md) | The guided course: lessons, live opponents, honest counters, and the campaign layer it is built on |
 
 ## Rules
 

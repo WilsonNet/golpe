@@ -30,6 +30,7 @@ const NOTHING: LaunchParams = {
 	hero: null,
 	botHero: null,
 	training: false,
+	tutorial: false,
 	bots: undefined,
 	fill: undefined,
 	scoreLimit: undefined,
@@ -75,6 +76,7 @@ const validParams: fc.Arbitrary<LaunchParams> = fc.record({
 	online: fc.boolean(),
 	offline: fc.boolean(),
 	training: fc.boolean(),
+	tutorial: fc.boolean(),
 	hero: heroArb,
 	botHero: heroArb,
 	bots: optNum(fc.nat({ max: 16 })),
@@ -94,7 +96,7 @@ describe("parseLaunchParams", () => {
 
 	it("reads every field from a full link", () => {
 		const parsed = parseLaunchParams(
-			"?room=abc-123&ai=true&online=true&offline=true&training=true&hero=anands&botHero=lia&bots=3&fill=8&scoreLimit=9&timeLimit=120&ultCharge=50&mode=tdm&freezeTime=2&screen=4",
+			"?room=abc-123&ai=true&online=true&offline=true&training=true&tutorial=true&hero=anands&botHero=lia&bots=3&fill=8&scoreLimit=9&timeLimit=120&ultCharge=50&mode=tdm&freezeTime=2&screen=4",
 		);
 		expect(parsed).toEqual({
 			room: "abc-123",
@@ -102,6 +104,7 @@ describe("parseLaunchParams", () => {
 			online: true,
 			offline: true,
 			training: true,
+			tutorial: true,
 			hero: "anands",
 			botHero: "lia",
 			bots: 3,
@@ -117,6 +120,16 @@ describe("parseLaunchParams", () => {
 
 	it("accepts both spellings of the training room", () => {
 		expect(parseLaunchParams("?training-room=true").training).toBe(true);
+	});
+
+	it("reads the tutorial as its own request, not as the practice room", () => {
+		// The tutorial is *played* in a training room, but the URL keeps them
+		// apart: `Match` is what decides one implies the other, and a link that
+		// said `training=true` would boot the scriptable dummy's menu instead of
+		// the course.
+		const parsed = parseLaunchParams("?tutorial=true");
+		expect(parsed.tutorial).toBe(true);
+		expect(parsed.training).toBe(false);
 	});
 
 	it("accepts `team` as the team mode, like Match always did", () => {

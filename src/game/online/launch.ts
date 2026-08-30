@@ -31,6 +31,15 @@ export interface LaunchParams {
 	/** `?training=true` (or `?training-room=true`) — the practice room. */
 	training: boolean;
 	/**
+	 * `?tutorial=true` — the guided course, played *in* the practice room.
+	 *
+	 * A tutorial is a training room with a director in front of it: the same
+	 * server dummy, the same netcode, and a lesson script that reconfigures the
+	 * dummy between objectives. `Match` therefore treats it as `training` too —
+	 * this flag only says who is driving. See specs/tutorial.md.
+	 */
+	tutorial: boolean;
+	/**
 	 * `?hero=lia|anands|jeffs` — the hero this client's own fighter plays.
 	 *
 	 * Per-client, unlike the room properties: the menu's hero select writes it
@@ -84,6 +93,7 @@ const LAUNCH_KEYS = [
 	"offline",
 	"training",
 	"training-room",
+	"tutorial",
 	"hero",
 	"bots",
 	"fill",
@@ -142,6 +152,7 @@ export function parseLaunchParams(search: string): LaunchParams {
 		training:
 			params.get("training") === "true" ||
 			params.get("training-room") === "true",
+		tutorial: params.get("tutorial") === "true",
 		hero: (() => {
 			const raw = params.get("hero");
 			return isHeroId(raw) ? raw : null;
@@ -187,6 +198,7 @@ export function serializeLaunchParams(params: LaunchParams): string {
 	if (params.online) url.set("online", "true");
 	if (params.offline) url.set("offline", "true");
 	if (params.training) url.set("training", "true");
+	if (params.tutorial) url.set("tutorial", "true");
 	if (params.hero !== null) url.set("hero", params.hero);
 	if (params.botHero !== null) url.set("botHero", params.botHero);
 	if (params.bots !== undefined) url.set("bots", String(params.bots));

@@ -41,9 +41,18 @@ second combat path. Anything it can show you, a real match can do.
 |---|---|
 | `?training=true` | Training room. `?training-room=true` is an accepted alias. |
 | `?training=true&ai=true` | Your fighter is AI-driven too, against a scripted dummy. |
+| `?tutorial=true` | The guided course, played in this room. Implies training; the dummy is reconfigured by a lesson script instead of by the panel. See [tutorial.md](tutorial.md). |
 
 Training implies **online and solo**: `?offline=true&training=true` is not a
 mode, because the dummy lives on the server.
+
+**The tutorial is this room's second client.** It sets the same config, resets
+the same way, and watches the same server-judged outcomes — through
+`TrainingRoom.onCombat`, a view over what the room already records rather than a
+second subscription that could disagree with the first. That reuse is what makes
+every lesson's enemy a real opponent played through real netcode; see
+[tutorial.md](tutorial.md) for why a tutorial with its own simulation would have
+been the wrong build.
 
 ## Behaviours
 

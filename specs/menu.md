@@ -35,10 +35,21 @@ them ever sees the menu.
 
 ## The home screen
 
-The root is three sections in strict hierarchy — seven buttons of equal weight
+The root is four sections in strict hierarchy — seven buttons of equal weight
 made every choice look like every other choice:
 
-- **Play** — starting a fight is the primary job, so it is first: the gold
+- **Start here** — the **Tutorial**, and it is the first thing on the page,
+  above Play. This is a game whose good moves are invisible to somebody who has
+  only ever pressed attack, so the answer to the only question a stranger
+  actually has goes first; everything below it assumes you already know what a
+  butterfly is. It is deliberately **not** the gold button — Quick match keeps
+  that, because the primary action of a game is playing it — and wears the aim
+  beam's cyan instead, so it reads as a different kind of door rather than as a
+  competing one. The label names the picked hero, and a `4/16` badge appears
+  once any lesson is finished: progress is remembered, and saying so is what
+  turns a half-finished course into one worth coming back to. See
+  [tutorial.md](tutorial.md).
+- **Play** — starting a fight is the primary job, so it is next: the gold
   Quick match (the only filled button on the page), then Host/Join as siblings,
   then Practice.
 - **Your fighter** — the hero picker lives here, on the home screen, beside the
@@ -63,7 +74,8 @@ a phone so every button is a thumb-sized target.
 | Your fighter (on home) | `golpe.hero`, and `?hero=` on every launch below | Two portrait chips: Lia and Anands, each the fighter's own sheet frame. Picking writes the preference immediately; a commit below carries it. |
 | Host a match | `?mode=…&screen=N&bots=N&scoreLimit=N&timeLimit=N` (+ `fill`, `freezeTime`, `ultCharge`) | Every room-creator choice, defaults pre-filled to the server's own defaults. |
 | Join a match | `?room=<id>` | One field accepts the bare id *or* the whole link. |
-| Practice | `?training=true` | The training room, one click away. |
+| Tutorial (first on the page) | `?tutorial=true&hero=<id>` | The guided course for the picked hero — a live opponent, one lesson at a time, and objectives the simulation has to agree happened. It boots the *training room* with a director in front of it, so it is the practice room's dummy and the practice room's netcode. See [tutorial.md](tutorial.md). |
+| Practice | `?training=true` | The training room, one click away — the same room the tutorial runs in, handed to the player instead of to a lesson script. |
 | How to play | — | The controls reference, **grouped into three sections** (getting around / fighting / the match) and read from the *live* bindings — a hint that lies about the button is worse than no hint. One sentence per row; the advanced tactics point to the Move list, which is where their full cards live. |
 | Move list | — | The Guilty Gear-style command list, for the hero the picker has selected — the same module the Esc menu's *Moves* item opens. |
 | Options | — | The same controls dialog as the Esc menu, so rebinding is possible before the first match. |

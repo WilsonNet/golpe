@@ -916,6 +916,49 @@ ways it goes wrong quietly.
   the panel blurs on any canvas click. Without it, setting a walk bound to "500"
   also walked the fighter, and a menu that swallows WASD makes the mode useless.
 
+## The tutorial
+
+Full detail in [specs/tutorial.md](../specs/tutorial.md). It is the training
+room with a director in front of it, so every rule above still applies; these
+are the ones that are its own.
+
+- **Count transitions and server decisions, never button presses.** A tutorial
+  that counted its own buttons ticks "you dashed" for a dash the simulation
+  refused — on cooldown, rooted, mid-recovery — and congratulates the player for
+  something that never happened on screen. A jump is leaving the ground
+  *upward*; an air jump is the jump budget going down; a hit is a
+  `MeleeEventMsg` the server sent.
+- **A delta needs its zero taken deliberately.** `training-state` is sent *on
+  change*, so a lesson where nothing moves until the first big hit hands the
+  tracker that hit as its baseline: the dragon thrust's 30 damage landed, became
+  the opening figure, and "deal 20 damage" read 0/20 forever. The stats are
+  seeded from `TrainingRoom.state()` the moment a lesson arms.
+- **The same trap, once more, on item charges.** `item-charge` also fires on
+  change, so the first count a lesson ever saw was the one *after* the throw —
+  the first item use of every lesson was silently free. The charges are read off
+  `hud-state`, which reports them every snapshot, so the baseline exists before
+  anything is thrown.
+- **A lesson is a complete description of a room, not a delta on the last one.**
+  Its stage is merged onto the training *defaults* — the same rule
+  `TrainingRoom.run` follows, for the same reason: a scenario that inherited the
+  previous one's dummy hero and spawns measured a fight it never asked for.
+- **The objectives cannot open already satisfied.** An inverted predicate looks
+  identical to a working one until the lesson clears itself the frame it armed.
+  `Campaign.test.ts` asserts every objective reads below its target against an
+  empty counter set, and the director gives every lesson a settle window before
+  it may complete at all.
+- **The drill must be reachable, and only playing it proves that.** Everything
+  else about a broken lesson looks perfect: it stages, the enemy acts, the card
+  draws — and the player can never leave. `tutorial-probe.ts --play` finishes
+  every drill; it is what caught the two baseline bugs above, and a backstab
+  drill that had walked *inside* `BACKSTAB_MIN_SEPARATION_PX`.
+- **The player never dies in a drill.** `playerInvincible` and
+  `disableRoundReset` on every stage — a respawn resets the counters under
+  somebody who was halfway through. Only the graduation fight lets the dummy die.
+- **Lesson ids are stable and hero-prefixed.** Progress is a set of ids in
+  `localStorage`; reordering a chapter must not un-finish anything, and a
+  collision would mark the wrong lesson complete in another hero's course.
+
 ## The AI
 
 Behaviour detail lives in [specs/combat.md](../specs/combat.md); these are the

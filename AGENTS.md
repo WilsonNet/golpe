@@ -46,6 +46,7 @@ skill({ name: "feedback-loop" })    # the full workflow
 | How do heroes interact with each other? | [`specs/interactions.md`](specs/interactions.md) — attributes, statuses, predicates, and the one rule for matchup exceptions |
 | What are items, and how do charges work? | [`specs/items.md`](specs/items.md) |
 | What should the menu do? | [`specs/menu.md`](specs/menu.md) — when it shows, and how choices become URLs |
+| How does a new player learn the game? | [`specs/tutorial.md`](specs/tutorial.md) — the guided course, and the campaign layer it is built on |
 | What happens when a match ends? | [`specs/play-of-the-game.md`](specs/play-of-the-game.md) — the reel, the camera edit, then the podium |
 | What should the game sound like, and where does the music come from? | [`specs/audio.md`](specs/audio.md) · [`audio/README.md`](audio/README.md) — MIDI sources, the soundfont per track, the mixer |
 | What rule will I break if I'm careless? | [`docs/invariants.md`](docs/invariants.md) |
@@ -67,6 +68,7 @@ spec before implementing: [movement](specs/movement.md) ·
 [deathmatch](specs/deathmatch.md) · [team deathmatch](specs/team-deathmatch.md) ·
 [netcode](specs/netcode.md) ·
 [controls](specs/controls.md) · [training room](specs/training-room.md) ·
+[tutorial](specs/tutorial.md) ·
 [ultimate](specs/ultimate.md) ·
 [play of the game](specs/play-of-the-game.md).
 
@@ -275,6 +277,8 @@ tsx scripts/aim-probe.ts                             # cursor, facing and shot d
 tsx scripts/pad-probe.ts                             # controller aim, gamepad and the phone deck
 tsx scripts/training-probe.ts                        # one interaction, against a scripted dummy
 tsx scripts/training-probe.ts --hero=anands          # ...as the dagger (its rows are dagger-only)
+tsx scripts/tutorial-probe.ts                        # the guided course: every lesson stages its enemy, progress persists
+tsx scripts/tutorial-probe.ts --play                 # ...and every drill is played to the end
 tsx scripts/menu-probe.ts                            # the root menu: every click a URL, boots a match
 tsx scripts/movelist-probe.ts                        # the move list: every preview lands its move on the target dummies
 tsx scripts/dash-probe.ts                            # double-tap dash delivery, at a forced frame rate
@@ -598,6 +602,35 @@ nameplate, not just the scoreboard; a room with no humans in it is reaped.
 menu over the canvas, and `window.__training` for agents. No key toggles the
 panel — it is a URL mode, and its header collapses it. See
 [specs/training-room.md](specs/training-room.md).
+
+**`?tutorial=true` is the guided course, and it is the training room with a
+director in front of it.** The **first item on the root menu**, above Play — a
+game whose good moves are invisible to somebody who has only pressed attack
+answers that question first. Cuphead's model: a **live opponent** (the server's
+scriptable dummy, restaged per lesson — `slash` to teach the guard, `jump` to
+teach anti-air, `counterAttack` for the graduation fight), a short brief, and
+objectives that only complete when the simulation agrees the move happened.
+**A tutorial that simulated anything itself would teach a game nobody else is
+playing**, so it stages, counts and reports — and never decides an outcome.
+- **Every counter is a transition or a server decision, never a button press.**
+  A press-counting tutorial ticks "you dashed" for a dash the simulation refused
+  and congratulates a player for something that never happened on screen.
+- **A delta needs its zero taken deliberately.** `training-state` and
+  `item-charge` are both sent *on change*, so the first value a lesson saw was
+  the one *after* the thing it was counting: the dragon's 30 damage became the
+  baseline and "deal 20" read 0/20 forever, and the first item use of every
+  lesson was free. Both are seeded at arm time now — the stats from
+  `TrainingRoom.state()`, the charges from the HUD's per-snapshot count.
+- **The content layer is data, and it is the campaign's.** `src/game/campaign/`
+  — a `CampaignModule` of chapters of lessons, each lesson a stage
+  (`TrainingConfigPatch`) plus pure objectives over one counter record. A
+  campaign act is another module in the registry; nothing in the director, the
+  overlay or the menu changes to add one.
+- **Lesson ids are stable and hero-prefixed**, because progress is stored by id
+  in `localStorage` and never on the wire.
+- Measured by `scripts/tutorial-probe.ts`; `--play` finishes all forty-four
+  drills, which is the only way to catch an objective nobody can satisfy. See
+  [specs/tutorial.md](specs/tutorial.md).
 
 **You face the cursor**, except through a swing's startup and active frames and
 while stunned; the gun fires along the same angle. See

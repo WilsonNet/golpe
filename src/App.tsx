@@ -16,6 +16,7 @@ import { Scoreboard } from "./ui/Scoreboard";
 import { SpriteSlicer } from "./ui/SpriteSlicer";
 import { TouchControls } from "./ui/TouchControls";
 import { TrainingPanel } from "./ui/TrainingPanel";
+import { Tutorial } from "./ui/Tutorial";
 import { UltimateCinematic } from "./ui/UltimateCinematic";
 import { VictoryCard } from "./ui/VictoryCard";
 
@@ -33,6 +34,20 @@ function isTrainingMode(): boolean {
 	return (
 		params.get("training") === "true" || params.get("training-room") === "true"
 	);
+}
+
+/**
+ * `?tutorial=true` — the guided course.
+ *
+ * Read from the URL for the same reason the training flag is: the overlay
+ * mounts before Pixi has finished booting, and the address bar already carries
+ * the committed launch request. A tutorial is *also* a training room (see
+ * `Match`), but it gets the coach instead of the scriptable dummy's menu —
+ * a course that shipped with the dummy's behaviour dropdown on screen would be
+ * handing a new player the answer sheet and the levers at the same time.
+ */
+function isTutorialMode(): boolean {
+	return new URLSearchParams(window.location.search).get("tutorial") === "true";
 }
 
 /**
@@ -105,14 +120,19 @@ function App() {
 		);
 	}
 
-	const training = isTrainingMode();
+	const tutorial = isTutorialMode();
+	const training = isTrainingMode() || tutorial;
 
 	return (
 		<div id="app">
 			{/* The HUD lives inside the canvas's own box, so it scales with the
 			    arena instead of drifting off it. */}
 			<GameCanvas>
-				<FightHud training={training} />
+				<FightHud training={training && !tutorial} />
+				{/* Inside the canvas box, like the HUD, and for the same reason: a
+				    lesson card sized in container units has to share the arena's box
+				    or it drifts off the fight it is narrating. */}
+				{tutorial ? <Tutorial onExitToMenu={exitToMenu} /> : null}
 				{/* Inside the canvas box, like the HUD: the ceremony's letterbox frames
 				    the *arena*, not the browser window, and a 4:3 game in a wide window
 				    would otherwise get bars across the whole page. The victory card
@@ -126,7 +146,7 @@ function App() {
 			    canvas into a handheld, screen above and controls below. It draws
 			    nothing at all unless this player is aiming like a controller. */}
 			<TouchControls />
-			{training ? <TrainingPanel /> : null}
+			{training && !tutorial ? <TrainingPanel /> : null}
 			<Scoreboard />
 			{/* Over the scoreboard, under the podium and the menu: a cutscene beats
 			    a stat table, and nothing beats being able to leave. It is

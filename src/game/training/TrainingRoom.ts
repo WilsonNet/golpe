@@ -170,6 +170,22 @@ class ExchangeWatcher {
 	}
 }
 
+/**
+ * A server-judged outcome, forwarded to whoever is watching the room.
+ *
+ * The training room already records all four — they are what its report is
+ * made of. This is a *view* over that recording, for a client that needs the
+ * outcomes as they happen rather than as a summary at the end: the tutorial
+ * director, which has to tick "you guard-broke it" the moment it is true.
+ * Deliberately not a second subscription to the session, which would mean two
+ * counts of the same event that could disagree.
+ */
+export type TrainingCombatEvent =
+	| { kind: "melee"; event: MeleeEventMsg; byLocal: boolean }
+	| { kind: "deny" }
+	| { kind: "explosion" }
+	| { kind: "rooted" };
+
 export interface TrainingRoomDeps {
 	session: OnlineSession;
 	input: Input;
@@ -190,6 +206,9 @@ export class TrainingRoom {
 	private rooted = 0;
 	private readonly watcher = new ExchangeWatcher();
 	private readonly echoWaiters: ((state: TrainingStateMsg) => void)[] = [];
+	private readonly combatListeners = new Set<
+		(event: TrainingCombatEvent) => void
+	>();
 	private elapsedMs = 0;
 	private started = false;
 
@@ -218,6 +237,7 @@ export class TrainingRoom {
 	recordMeleeEvent(event: MeleeEventMsg, byLocal: boolean) {
 		this.events.push(event);
 		if (this.events.length > 256) this.events.shift();
+		this.emitCombat({ kind: "melee", event, byLocal });
 		if (!byLocal) return;
 		const damage =
 			event.outcome === "hit" || event.outcome === "backstab"
@@ -229,16 +249,35 @@ export class TrainingRoom {
 	/** An ultimate was denied. Counted, because it is a first-class outcome. */
 	recordDeny() {
 		this.denies++;
+		this.emitCombat({ kind: "deny" });
 	}
 
 	/** An HE blast went off. Counted, because it is a first-class outcome. */
 	recordExplosion() {
 		this.explosions++;
+		this.emitCombat({ kind: "explosion" });
 	}
 
 	/** A trap rooted somebody. Counted, because it is a first-class outcome. */
 	recordRooted() {
 		this.rooted++;
+		this.emitCombat({ kind: "rooted" });
+	}
+
+	/**
+	 * Watch the outcomes this room records. Returns the unsubscriber, like
+	 * `EventBus.on` — a caller that forgets to detach is a caller that keeps
+	 * counting after it is gone.
+	 */
+	onCombat(listener: (event: TrainingCombatEvent) => void): () => void {
+		this.combatListeners.add(listener);
+		return () => {
+			this.combatListeners.delete(listener);
+		};
+	}
+
+	private emitCombat(event: TrainingCombatEvent) {
+		for (const listener of [...this.combatListeners]) listener(event);
 	}
 
 	private onTrainingState(state: TrainingStateMsg) {
