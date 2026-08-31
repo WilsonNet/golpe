@@ -604,10 +604,16 @@ that URL names one** — every multi-client script passes an explicit `room`, wi
 fresh id per run so consecutive runs cannot collide. **Quick match is the one
 discovery path, and it is still a link join**: `GET /rooms` lists the open rooms
 (`GameRoom.isOpen` — a human in the room, a free seat, and not a probe room, a
-training room, or one mid-ceremony), the menu joins the busiest by `?room=`, and
+training room, private, or one mid-ceremony), the menu joins the busiest by `?room=`, and
 falls back to a `?bots=1` duel that is itself open for the next player. **A room
 whose creator is `?ai=true` is a probe room, excluded from quick match for its
 whole life** — a diagnostic mid-run does not want a stranger in the measurement.
+**A room can be private (`?private=true`) or passworded (`?password=`, which
+implies private): both are creator-only and stay out of quick match and any future
+listing, and a locked room answers `room-locked` with a prompt for the key rather
+than a seat.** The join screen's server browser lists the same `GET /rooms` (mode,
+player count, screens, region, HTTP ping) with filters for search/mode/region
+and sort by ping/players/mode — private and probe rooms never appear.
 **A bot's name begins with `BOT · `** so who to remove is readable on the
 nameplate, not just the scoreboard; a room with no humans in it is reaped.
 

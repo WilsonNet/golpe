@@ -39,6 +39,8 @@ const NOTHING: LaunchParams = {
 	mode: null,
 	freezeTime: undefined,
 	screens: undefined,
+	password: null,
+	isPrivate: false,
 };
 
 /** A room id — the kind of string the menu and shared links actually produce. */
@@ -54,6 +56,22 @@ const heroArb = fc.oneof(fc.constant(null), fc.constantFrom(...HERO_IDS));
 const modeArb = fc.oneof(
 	fc.constant(null),
 	fc.constantFrom("ffa" as const, "tdm" as const),
+);
+
+/**
+ * A password the round trip can carry: printable, no surrounding whitespace
+ * (the parser trims, deliberately), and within the server's cap. URL encoding
+ * survives any of these characters, so the trip tests the parser, not the
+ * encoder.
+ */
+const passwordArb = fc.oneof(
+	fc.constant(null),
+	fc
+		.array(
+			fc.integer({ min: 0x21, max: 0x7e }).map((c) => String.fromCharCode(c)),
+			{ minLength: 1, maxLength: 64 },
+		)
+		.map((cs) => cs.join("")),
 );
 
 /**
@@ -87,6 +105,8 @@ const validParams: fc.Arbitrary<LaunchParams> = fc.record({
 	mode: modeArb,
 	freezeTime: optNum(fc.nat({ max: 60 })),
 	screens: optNum(fc.integer({ min: 1, max: 8 })),
+	password: passwordArb,
+	isPrivate: fc.boolean(),
 });
 
 describe("parseLaunchParams", () => {
@@ -96,7 +116,7 @@ describe("parseLaunchParams", () => {
 
 	it("reads every field from a full link", () => {
 		const parsed = parseLaunchParams(
-			"?room=abc-123&ai=true&online=true&offline=true&training=true&tutorial=true&hero=anands&botHero=lia&bots=3&fill=8&scoreLimit=9&timeLimit=120&ultCharge=50&mode=tdm&freezeTime=2&screen=4",
+			"?room=abc-123&ai=true&online=true&offline=true&training=true&tutorial=true&hero=anands&botHero=lia&bots=3&fill=8&scoreLimit=9&timeLimit=120&ultCharge=50&mode=tdm&freezeTime=2&screen=4&password=hunter2&private=true",
 		);
 		expect(parsed).toEqual({
 			room: "abc-123",
@@ -115,6 +135,8 @@ describe("parseLaunchParams", () => {
 			mode: "tdm",
 			freezeTime: 2,
 			screens: 4,
+			password: "hunter2",
+			isPrivate: true,
 		});
 	});
 
@@ -156,6 +178,24 @@ describe("parseLaunchParams", () => {
 		expect(parseLaunchParams("?fill=0").fill).toBeUndefined();
 		expect(parseLaunchParams("?screen=0").screens).toBeUndefined();
 	});
+
+	it("reads a blank password as no password at all", () => {
+		expect(parseLaunchParams("?password=").password).toBeNull();
+		expect(parseLaunchParams("?password=%20%20").password).toBeNull();
+	});
+
+	it("trims and caps the password exactly as the server does", () => {
+		expect(parseLaunchParams("?password=%20%20abc%20%20").password).toBe("abc");
+		const long = "a".repeat(200);
+		expect(parseLaunchParams(`?password=${long}`).password).toBe(
+			"a".repeat(64),
+		);
+	});
+
+	it("treats a false private flag as absent", () => {
+		expect(parseLaunchParams("?private=false").isPrivate).toBe(false);
+		expect(parseLaunchParams("?private=true").isPrivate).toBe(true);
+	});
 });
 
 describe("isMenuShape", () => {
@@ -187,6 +227,8 @@ describe("isMenuShape", () => {
 			"mode",
 			"freezeTime",
 			"screen",
+			"password",
+			"private",
 		]) {
 			expect(isMenuShape(`?${key}=x`), key).toBe(false);
 		}

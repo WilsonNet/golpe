@@ -221,6 +221,13 @@ export interface OnlineCallbacks {
 	onSeated: (roomId: string, screens: number, mode: MatchMode) => void;
 	/** The room asked for is full of humans. */
 	onRoomFull: (roomId: string) => void;
+	/**
+	 * The room asked for is locked: it has a password, and this attempt
+	 * carried none that matched. The session will go no further on this
+	 * connection — the scene's answer is a prompt for the key and a fresh
+	 * attempt, not a wait.
+	 */
+	onRoomLocked: (roomId: string) => void;
 }
 
 /**
@@ -700,6 +707,7 @@ export class OnlineSession {
 				onSeated: (roomId, screens, mode) =>
 					this.callbacks.onSeated(roomId, screens, mode),
 				onRoomFull: (roomId) => this.callbacks.onRoomFull(roomId),
+				onRoomLocked: (roomId) => this.callbacks.onRoomLocked(roomId),
 			},
 			join,
 		);

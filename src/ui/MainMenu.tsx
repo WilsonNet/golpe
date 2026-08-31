@@ -51,6 +51,8 @@ import { readStoredHero, storeHero } from "../game/heroPref";
 import { type Action, bindings, codeLabel } from "../game/input/Bindings";
 import type { LaunchParams } from "../game/online/launch";
 import { ROOM_ID_RE } from "../game/online/room";
+import { MAX_PASSWORD_LENGTH } from "../game/online/types";
+import { setPendingPassword } from "../game/online/passwordStore";
 import { MAX_NAME, readStoredName, storeName } from "../game/playerName";
 import { HERO_IDS, HEROES, type HeroId } from "../game/simulation/Heroes";
 import type { MatchMode } from "../game/simulation/Teams";
@@ -58,6 +60,7 @@ import { ControlsDialog } from "./ControlsDialog";
 import { HUD_CSS } from "./hudStyles";
 import { MoveList } from "./MoveList";
 import { MENU_CSS } from "./menuStyles";
+import { ServerBrowser } from "./ServerBrowser";
 import { SoundMixer } from "./SoundMixer";
 
 /** The requested room's defaults, as the server would create them. */
@@ -82,6 +85,26 @@ interface HostSettings {
 	freezeTime: number;
 	/** Ultimate charge every fighter starts with, 0..100. 0 = off. */
 	ultCharge: number;
+	/** `?private=true` — an unlisted room, hidden from quick match. */
+	isPrivate: boolean;
+	/**
+	 * `?password=` — the room's password.
+	 *
+	 * A password implies a private room, exactly like the server does: a
+	 * locked room a stranger can discover from a listing is a lock that
+	 * advertises itself. The converse is not true — private without a
+	 * password is a valid room too, and then the link is the whole invitation.
+	 */
+	password: string;
+	/**
+	 * Whether to put `?password=` in the invite link.
+	 *
+	 * Off by default — the password travels via `sessionStorage` so it never
+	 * sits in history or a copied URL. A checked box opts into the old
+	 * shareable-link shape for when the host *wants* the link to carry the
+	 * key.
+	 */
+	sharePasswordInLink: boolean;
 }
 
 const DEFAULT_SETTINGS: HostSettings = {
@@ -93,6 +116,9 @@ const DEFAULT_SETTINGS: HostSettings = {
 	timeLimitSec: TIME_LIMIT_SEC,
 	freezeTime: FREEZE_TIME_SEC,
 	ultCharge: 0,
+	isPrivate: false,
+	password: "",
+	sharePasswordInLink: false,
 };
 
 /** The empty request — the base every menu choice adds one thing to. */
@@ -113,6 +139,8 @@ const NOTHING: LaunchParams = {
 	mode: null,
 	freezeTime: undefined,
 	screens: undefined,
+	password: null,
+	isPrivate: false,
 };
 
 export function MainMenu({
@@ -434,6 +462,13 @@ function HostForm({
 	const screens = Math.max(minScreens, Math.min(settings.screens, 8));
 
 	const commit = () => {
+		const password = settings.password.trim().slice(0, MAX_PASSWORD_LENGTH);
+		const isPrivate = settings.isPrivate || password.length > 0;
+		// By default the password never appears in the address bar — it is
+		// handed off via `sessionStorage` so history and a copied link do not
+		// leak it. The checkbox opts into the shareable `?password=` shape.
+		const shareInUrl = settings.sharePasswordInLink && password.length > 0;
+		if (password.length > 0 && !shareInUrl) setPendingPassword(password);
 		onLaunch({
 			...NOTHING,
 			hero,
@@ -445,13 +480,17 @@ function HostForm({
 			timeLimitSec: settings.timeLimitSec,
 			freezeTime: settings.mode === "tdm" ? settings.freezeTime : undefined,
 			ultCharge: settings.ultCharge > 0 ? settings.ultCharge : undefined,
+			password: shareInUrl ? password : null,
+			isPrivate,
 		});
 	};
 
+	const isPrivate = settings.isPrivate || settings.password.trim() !== "";
+
 	const summary =
 		settings.mode === "tdm"
-			? `Team deathmatch · ${screens} screens · first side to ${settings.scoreLimit} rounds · ${settings.timeLimitSec}s of play per round fight, ${settings.freezeTime}s freezetime${settings.bots > 0 ? ` · ${settings.bots} bots` : ""}`
-			: `Deathmatch · ${screens} ${screens === 1 ? "screen" : "screens"} · first to ${settings.scoreLimit} frags, or best score in ${formatMinutes(settings.timeLimitSec)}${settings.bots > 0 ? ` · ${settings.bots} bots` : ""}`;
+			? `Team deathmatch · ${screens} screens · first side to ${settings.scoreLimit} rounds · ${settings.timeLimitSec}s of play per round fight, ${settings.freezeTime}s freezetime${settings.bots > 0 ? ` · ${settings.bots} bots` : ""}${isPrivate ? " · private" : ""}${settings.password.trim() !== "" ? " · passworded" : ""}`
+			: `Deathmatch · ${screens} ${screens === 1 ? "screen" : "screens"} · first to ${settings.scoreLimit} frags, or best score in ${formatMinutes(settings.timeLimitSec)}${settings.bots > 0 ? ` · ${settings.bots} bots` : ""}${isPrivate ? " · private" : ""}${settings.password.trim() !== "" ? " · passworded" : ""}`;
 
 	return (
 		<>
@@ -549,6 +588,58 @@ function HostForm({
 				/>
 			</div>
 
+			<div className="gd-field">
+				<label className="gd-field-label" htmlFor="gd-private">
+					<input
+						id="gd-private"
+						type="checkbox"
+						checked={isPrivate}
+						disabled={settings.password.trim() !== ""}
+						onChange={(e) => set({ isPrivate: e.target.checked })}
+					/>{" "}
+					Private room — hidden from quick match
+				</label>
+				<p className="gd-field-note">
+					{settings.password.trim() !== ""
+						? "A password implies private, so this stays on while a password is set."
+						: "Unlisted: friends can join by link, but strangers will not be sent here."}
+				</p>
+			</div>
+			<div className="gd-field">
+				<span className="gd-field-label">Password (optional)</span>
+				<input
+					type="text"
+					value={settings.password}
+					maxLength={MAX_PASSWORD_LENGTH}
+					placeholder="leave empty for no password"
+					autoComplete="off"
+					spellCheck={false}
+					onChange={(e) => set({ password: e.target.value })}
+				/>
+				{settings.password.trim() !== "" ? (
+					<label className="gd-field-label" htmlFor="gd-share-pw">
+						<input
+							id="gd-share-pw"
+							type="checkbox"
+							checked={settings.sharePasswordInLink}
+							onChange={(e) => set({ sharePasswordInLink: e.target.checked })}
+						/>{" "}
+						Include password in invite link
+					</label>
+				) : null}
+				<p className="gd-field-note">
+					{settings.password.trim() !== "" ? (
+						settings.sharePasswordInLink ? (
+							<>The link will carry `?password=` — anyone with the link can join.</>
+						) : (
+							<>Not shown in the link by default — share the password separately.</>
+						)
+					) : (
+						<>A passworded room is always private.</>
+					)}
+				</p>
+			</div>
+
 			<div className="gd-advanced">
 				<button
 					className="gd-advanced-toggle"
@@ -635,11 +726,15 @@ function HostForm({
 }
 
 /**
- * The join form: one field for a room id or the whole link.
+ * The join form: one field for a room id or the whole link, plus the
+ * server browser — the same `GET /rooms` quick match uses, but for
+ * choosing rather than being chosen for.
  *
  * Rooms are addressed, so "joining" is naming the room — a shareable link or
  * its bare id are the same thing, and accepting both is what keeps a player
- * who was handed a URL from having to understand it.
+ * who was handed a URL from having to understand it. The browser is the
+ * discoverable complement: what rooms are open, how busy they are, what mode
+ * they play, and how far away they feel.
  */
 function JoinForm({
 	onLaunch,
@@ -671,7 +766,7 @@ function JoinForm({
 			<p className="gd-join-hint">
 				A host's link looks like{" "}
 				<span className="gd-join-example">…/?room=abc-123</span>. Paste it here,
-				or just type the room id.
+				or just type the room id. Or pick an open room below.
 			</p>
 			<form onSubmit={submit}>
 				<input
@@ -699,6 +794,8 @@ function JoinForm({
 				</div>
 				<div className="gd-error">{error}</div>
 			</form>
+
+			<ServerBrowser onJoin={onLaunch} hero={hero} />
 		</>
 	);
 }

@@ -187,6 +187,7 @@ import {
 	ultChargeMultiplier,
 	ultReady,
 } from "./physics.js";
+import { hashPassword, verifyPassword } from "./RoomPassword.js";
 import { TrainingDummy } from "./TrainingDummy.js";
 
 /** Per-fighter counters. Only the server sees a bullet connect, or a hit land through invincibility. */
@@ -731,6 +732,27 @@ export class GameRoom {
 	readonly probe: boolean;
 
 	/**
+	 * A private room: unlisted from quick match and any future server listing.
+	 *
+	 * Set once at creation (`?private=true`), and always set when the room has a
+	 * password — a passworded room is private, because a lock a stranger can
+	 * rattle from a listing is a lock that advertises itself. The converse is
+	 * not true: a private room may have no password at all, and then the link
+	 * stays the whole invitation, exactly as before, only undiscoverable. The
+	 * room is still joinable by anybody who holds the link.
+	 */
+	readonly unlisted: boolean;
+
+	/**
+	 * The room's password, salted and hashed — or `null` for an unlocked room.
+	 *
+	 * Server-only: it never travels in a snapshot, and a client learns nothing
+	 * from it but "seated" or `room-locked`. Set by the room's creator and fixed
+	 * for the room's whole life; see `checkPassword`.
+	 */
+	private readonly passwordHash: string | null;
+
+	/**
 	 * The arena this room plays in: bounds, platforms and spawn points for its
 	 * screen count.
 	 *
@@ -758,11 +780,19 @@ export class GameRoom {
 			freezeTimeMs?: number;
 			botHero?: unknown;
 			probe?: boolean;
+			password?: string | null;
+			unlisted?: boolean;
 		} = {},
 	) {
 		this.id = id;
 		this.mode = rules.mode ?? "ffa";
 		this.probe = Boolean(rules.probe);
+		this.passwordHash =
+			rules.password === undefined || rules.password === null
+				? null
+				: hashPassword(rules.password);
+		// A passworded room is unlisted whether its creator said so or not.
+		this.unlisted = Boolean(rules.unlisted) || this.passwordHash !== null;
 		this.freezeTimeMs =
 			this.mode === "tdm"
 				? Math.max(0, rules.freezeTimeMs ?? ROUND_FREEZE_MS)
@@ -843,6 +873,9 @@ export class GameRoom {
 	 * - it is not a probe room (`?ai=true` — a diagnostic is running, and a
 	 *   stranger mid-run is the last thing it wants), and
 	 * - it is not somebody's practice session, and
+	 * - it is not private (`?private=`, or passworded — an unlisted room is for
+	 *   the people who hold its link, and a listing has no password field to
+	 *   offer them anyway), and
 	 * - it is not sitting out the post-match ceremony waiting to restart.
 	 */
 	get isOpen(): boolean {
@@ -851,8 +884,25 @@ export class GameRoom {
 			!this.isFull &&
 			!this.probe &&
 			!this.isTrainingRoom &&
+			!this.unlisted &&
 			this.phase === "live"
 		);
+	}
+
+	/** Whether the room needs a password at the door. */
+	get hasPassword(): boolean {
+		return this.passwordHash !== null;
+	}
+
+	/**
+	 * Whether this join attempt may enter.
+	 *
+	 * An unlocked room admits everybody. A locked one admits exactly the text
+	 * its creator set — compared against the hash server-side, never on the
+	 * client and never over the wire in any other direction.
+	 */
+	checkPassword(raw: unknown): boolean {
+		return verifyPassword(raw, this.passwordHash);
 	}
 
 	private isAdmin(id: string): boolean {

@@ -72,7 +72,7 @@ a phone so every button is a thumb-sized target.
 |---|---|---|
 | Quick match (primary) | joins an open room, or `?bots=1` when none | Asks the game server which room is open (`GET /rooms`), joins the busiest one by link, or creates a duel against a single server bot when no room is open — and that duel is itself an open room for the next player. A playtest funnels into one brawl without anyone pasting links. An open room is one with a human in it and a free seat, that is not a probe, a practice session or mid-ceremony. The room link is the bot's seat — friends replace it. |
 | Your fighter (on home) | `golpe.hero`, and `?hero=` on every launch below | Two portrait chips: Lia and Anands, each the fighter's own sheet frame. Picking writes the preference immediately; a commit below carries it. |
-| Host a match | `?mode=…&screen=N&bots=N&scoreLimit=N&timeLimit=N` (+ `fill`, `freezeTime`, `ultCharge`) | Every room-creator choice, defaults pre-filled to the server's own defaults. |
+| Host a match | `?mode=…&screen=N&bots=N&scoreLimit=N&timeLimit=N` (+ `fill`, `freezeTime`, `ultCharge`, `private`, `password`) | Every room-creator choice, defaults pre-filled to the server's own defaults. |
 | Join a match | `?room=<id>` | One field accepts the bare id *or* the whole link. |
 | Tutorial (first on the page) | `?tutorial=true&hero=<id>` | The guided course for the picked hero — a live opponent, one lesson at a time, and objectives the simulation has to agree happened. It boots the *training room* with a director in front of it, so it is the practice room's dummy and the practice room's netcode. See [tutorial.md](tutorial.md). |
 | Practice | `?training=true` | The training room, one click away — the same room the tutorial runs in, handed to the player instead of to a lesson script. |
@@ -98,11 +98,13 @@ answer "which room is already going".
 qualifies when a human is in it, a seat is free, and it is not a **probe room**
 (created by an `?ai=true` client — a diagnostic is running, and a stranger
 mid-run is the last thing it wants), not a **training room** (somebody's
-practice session) and not sitting out the post-match ceremony. An empty room
-was reaped the moment its last human left, so it never appears. When no room is
-open, Quick match creates a `?bots=1` duel — which is itself an open room, so
-the next player who clicks Quick match lands in it. A playtest funnels into one
-brawl without anyone pasting links.
+practice session), not **private** (`?private=true`, or passworded — an
+unlisted room is for the people who hold its link, and a listing has no
+password field to offer them anyway) and not sitting out the post-match
+ceremony. An empty room was reaped the moment its last human left, so it never
+appears. When no room is open, Quick match creates a `?bots=1` duel — which is
+itself an open room, so the next player who clicks Quick match lands in it. A
+playtest funnels into one brawl without anyone pasting links.
 
 ### Bots are named so they can be removed
 
@@ -133,6 +135,8 @@ rules are pinned by the URL and cannot drift with a future default change.
 | Bots to fight | 0 | 0–15 |
 | Frags / rounds to win | 21 / 15 | 1–999 |
 | Match length | 5 minutes | 1–60 |
+| Private room | Off | Off / On — hidden from quick match and any listing. A password implies private. |
+| Password | (none) | Up to 64 characters. A passworded room is always private. Hidden from the URL by default; check "Include password in invite link" to make the link carry `?password=`. |
 | Advanced: keep room filled | 0 (off) | 0–16 |
 | Advanced: freezetime | 4s (team matches only) | 0–60 |
 | Advanced: ult charge floor | 0 | 0–100 |
@@ -145,7 +149,26 @@ team floor, in particular, is told *before* the commit, not discovered after.
 The field accepts a room id (`abc-123`) or a full link (anything with a `room=`
 parameter). Anything else is a plain-language error; the id is validated against
 the same `ROOM_ID_RE` the server validates against, so a malformed join is
-caught before a connection is ever attempted.
+caught before a connection is ever attempted. A locked room answers
+`room-locked` rather than a seat, and the client shows a password prompt that
+stores the key in `sessionStorage` and reloads without putting it in the URL —
+a manually typed `?password=` still works for old share links.
+
+### Server browser
+
+Below the manual field the join screen lists every open room — the same
+`GET /rooms` quick match uses, refreshed every five seconds. Each row shows
+the room id (shortened), region, mode (Deathmatch / Team DM), player count
+(`humans/players` with bot count), map size (screens) and HTTP ping (time to
+fetch the listing, a proxy for latency; WebRTC ping is not available via
+`fetch`). The list is the same `GameRoom.isOpen` predicate, so discovery and
+the game cannot disagree.
+
+Filters sit above the list: a search box (room id substring), a mode
+filter (All / Deathmatch / Team DM), a region filter (All / Local — ready
+for a future multi-host listing where each host is a region) and a sort
+control (Ping, Players, Mode, toggling asc/desc). Private, probe and full
+rooms never appear.
 
 ## The name
 

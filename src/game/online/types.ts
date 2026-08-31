@@ -39,6 +39,17 @@ export const GAME_SERVER_PORT = 9208;
 export const RELIABLE = { reliable: true } as const;
 
 /**
+ * The length of the longest room password.
+ *
+ * Shared by both sides of the wire on purpose: the server caps what it stores
+ * and the host form caps what it accepts, so a password a player can type is
+ * always a password the room can hold — nothing is silently truncated at one
+ * end of the conversation. Long enough for a phrase, short enough that a
+ * flood of join attempts cannot keep the server hashing kilobytes of text.
+ */
+export const MAX_PASSWORD_LENGTH = 64;
+
+/**
  * One tick of player intent. `seq` is what makes prediction work: the server
  * echoes back the last sequence it consumed so the client knows exactly which
  * of its predicted inputs are still unacknowledged and must be replayed.

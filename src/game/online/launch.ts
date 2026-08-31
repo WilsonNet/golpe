@@ -17,6 +17,7 @@
 import type { HeroId } from "../simulation/Heroes";
 import { isHeroId } from "../simulation/Heroes";
 import type { MatchMode } from "../simulation/Teams";
+import { MAX_PASSWORD_LENGTH } from "./types";
 
 /** A match the URL can ask for. `undefined` means "not asked". */
 export interface LaunchParams {
@@ -72,6 +73,23 @@ export interface LaunchParams {
 	freezeTime: number | undefined;
 	/** `?screen=N` — how many 800px screens wide the arena is, 1..8. */
 	screens: number | undefined;
+	/**
+	 * `?password=<text>` — the room's password.
+	 *
+	 * Two roles in one parameter, decided by whether the room exists yet: the
+	 * creator's is the door the room is created with (and makes it unlisted),
+	 * and everybody after carries the key to get in. `null` means no password
+	 * was asked for.
+	 */
+	password: string | null;
+	/**
+	 * `?private=true` — an unlisted room.
+	 *
+	 * Creator-only, like the other room properties: it stays out of quick match
+	 * and any future server listing, but the link remains the whole invitation.
+	 * A passworded room is unlisted whether this is set or not.
+	 */
+	isPrivate: boolean;
 }
 
 /**
@@ -103,6 +121,8 @@ const LAUNCH_KEYS = [
 	"mode",
 	"freezeTime",
 	"screen",
+	"password",
+	"private",
 ] as const;
 
 const LAUNCH_KEY_SET = new Set<string>(LAUNCH_KEYS);
@@ -169,7 +189,23 @@ export function parseLaunchParams(search: string): LaunchParams {
 		mode: parseMode(params.get("mode")),
 		freezeTime: countParam(params, "freezeTime"),
 		screens: numberParam(params, "screen"),
+		password: parsePassword(params.get("password")),
+		isPrivate: params.get("private") === "true",
 	};
+}
+
+/**
+ * The password a URL carries, or null when it carries none.
+ *
+ * Trimmed and capped exactly as the server caps what it stores, so a shared
+ * link can never ask for a password the room it meets cannot hold — the two
+ * ends of the wire read the same `MAX_PASSWORD_LENGTH`.
+ */
+function parsePassword(raw: string | null): string | null {
+	if (raw === null) return null;
+	const trimmed = raw.trim();
+	if (trimmed.length === 0) return null;
+	return trimmed.slice(0, MAX_PASSWORD_LENGTH);
 }
 
 /**
@@ -213,5 +249,7 @@ export function serializeLaunchParams(params: LaunchParams): string {
 	if (params.freezeTime !== undefined)
 		url.set("freezeTime", String(params.freezeTime));
 	if (params.screens !== undefined) url.set("screen", String(params.screens));
+	if (params.password !== null) url.set("password", params.password);
+	if (params.isPrivate) url.set("private", "true");
 	return url.toString();
 }

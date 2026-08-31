@@ -50,6 +50,12 @@ export interface OnlineHandlers {
 	onSeated: (roomId: string, screens: number, mode: MatchMode) => void;
 	/** The room asked for is full of humans. Nothing more will arrive. */
 	onRoomFull: (roomId: string) => void;
+	/**
+	 * The room asked for has a password, and this join carried none that
+	 * matched. Nothing more will arrive on this connection — the answer to a
+	 * locked room is a new attempt with the key, not a wait.
+	 */
+	onRoomLocked: (roomId: string) => void;
 }
 
 export interface JoinOptions {
@@ -122,6 +128,20 @@ export interface JoinOptions {
 	 * only caller.
 	 */
 	botHero?: HeroId;
+	/**
+	 * The room's password.
+	 *
+	 * For the client that creates the room it is the door — the server hashes
+	 * it and the room becomes locked and unlisted. For everybody after it is
+	 * the key, compared server-side; a wrong or missing one answers
+	 * `room-locked`.
+	 */
+	password?: string;
+	/**
+	 * Create the room unlisted (`?private=true`). Creator-only, like the other
+	 * room properties — ignored by a room that already exists.
+	 */
+	isPrivate?: boolean;
 }
 
 export class OnlineManager {
@@ -207,6 +227,8 @@ export class OnlineManager {
 						: { freezeTime: join.freezeTime }),
 					...(join.hero === undefined ? {} : { hero: join.hero }),
 					...(join.botHero === undefined ? {} : { botHero: join.botHero }),
+					...(join.password === undefined ? {} : { password: join.password }),
+					...(join.isPrivate === undefined ? {} : { private: join.isPrivate }),
 				},
 				RELIABLE,
 			);
@@ -235,6 +257,15 @@ export class OnlineManager {
 		channel.on("room-full", (data: unknown) => {
 			const msg = data as { roomId?: string } | null;
 			handlers.onRoomFull(msg?.roomId ?? "");
+		});
+
+		// The room has a password and this attempt carried none that matched.
+		// Reliable, like room-full: it is the only answer this connection will
+		// ever get, and a client that missed it would sit on "Connecting…" with
+		// nothing to show for it.
+		channel.on("room-locked", (data: unknown) => {
+			const msg = data as { roomId?: string } | null;
+			handlers.onRoomLocked(msg?.roomId ?? "");
 		});
 
 		channel.on("state", (data: unknown) => {

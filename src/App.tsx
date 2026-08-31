@@ -12,6 +12,7 @@ import { MatchOver } from "./ui/MatchOver";
 import { NamePrompt } from "./ui/NamePrompt";
 import { PauseMenu } from "./ui/PauseMenu";
 import { PlayOfTheGame } from "./ui/PlayOfTheGame";
+import { RoomPassword } from "./ui/RoomPassword";
 import { Scoreboard } from "./ui/Scoreboard";
 import { SpriteSlicer } from "./ui/SpriteSlicer";
 import { TouchControls } from "./ui/TouchControls";
@@ -155,6 +156,7 @@ function App() {
 			<UltimateCinematic />
 			<MatchOver />
 			<NamePrompt />
+			<RoomPassword />
 			{/* Last, so it draws over the podium: a player who wants to rebind
 			    something at the end of a match should not have to wait for the next
 			    one to start. */}

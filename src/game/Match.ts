@@ -53,6 +53,7 @@ import { Input } from "./input/Input";
 import { inputSettings } from "./input/Scheme";
 import { parseLaunchParams } from "./online/launch";
 import { OnlineSession } from "./online/OnlineSession";
+import { consumePendingPassword } from "./online/passwordStore";
 import { requestedRoomId, showRoomInUrl } from "./online/room";
 import type { KillCause, MatchOverMsg } from "./online/types";
 import { readStoredName, storeName } from "./playerName";
@@ -329,6 +330,20 @@ export class Match {
 	private mode: MatchMode = "ffa";
 	/** `?freezeTime=S`: how long a team round's countdown lasts. Creator-only. */
 	private freezeTime: number | undefined;
+	/**
+	 * `?password=`: this attempt's key to the room.
+	 *
+	 * For the client that creates the room it is the door the room is created
+	 * with; for everybody after it is what the server compares against the
+	 * room's hash. A wrong or missing one answers `room-locked`, and the scene
+	 * asks the player for the key — see the RoomPassword overlay.
+	 */
+	private roomPassword: string | null = null;
+	/**
+	 * `?private=true`: a room this client creates stays out of quick match and
+	 * any listing. Creator-only, like the other room properties.
+	 */
+	private privateRoom = false;
 	private online: OnlineSession | undefined;
 	private training: TrainingRoom | undefined;
 	private tutorial: TutorialDirector | undefined;
@@ -526,6 +541,22 @@ export class Match {
 		// Zero is a legitimate request — "no countdown, start fighting" — so this
 		// goes through the parser that accepts it.
 		this.freezeTime = launch.freezeTime;
+		// The room's door and its key: the creator's password becomes the room's
+		// lock, and everybody after carries theirs in the same parameter. By
+		// default the password never appears in the address bar — it is handed
+		// off via `sessionStorage` so a history entry or a copied link does not
+		// leak it. A manually typed `?password=` still works as a fallback for
+		// old share links.
+		{
+			const v = consumePendingPassword();
+			let stored: string | null = null;
+			if (v !== null) {
+				const t = v.trim();
+				stored = t ? t.slice(0, 64) : null;
+			}
+			this.roomPassword = launch.password ?? stored;
+		}
+		this.privateRoom = launch.isPrivate;
 		const timeLimitSec = launch.timeLimitSec;
 		this.timeLimitMs =
 			timeLimitSec === undefined ? undefined : timeLimitSec * MS_PER_SECOND;
@@ -1174,6 +1205,19 @@ export class Match {
 					EventBus.emit(HUD_EVENTS.status, "That room is full.");
 					console.log(`[ONLINE] room ${roomId} is full`);
 				},
+				onRoomLocked: (roomId) => {
+					// A locked room never seats this connection — the answer is a
+					// prompt, not a wait, so the status the connect left behind
+					// ("Connecting…") is cleared and the modal takes over.
+					// Whether the attempt carried a password decides the prompt's
+					// wording: "enter" vs "wrong".
+					EventBus.emit(
+						"room-locked",
+						{ roomId, hadPassword: this.roomPassword !== null } as never,
+					);
+					EventBus.emit(HUD_EVENTS.status, "That room is locked.");
+					console.log(`[ONLINE] room ${roomId} is locked`);
+				},
 			},
 		);
 		this.online.connect({
@@ -1195,6 +1239,8 @@ export class Match {
 			// The hero is a per-client choice: it rides the join like the name.
 			hero: this.hero,
 			...(this.botHero === null ? {} : { botHero: this.botHero }),
+			...(this.roomPassword === null ? {} : { password: this.roomPassword }),
+			...(this.privateRoom ? { isPrivate: true } : {}),
 		});
 
 		if (this.trainingMode) {

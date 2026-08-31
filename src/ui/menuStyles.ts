@@ -419,6 +419,81 @@ export const MENU_CSS = `
 	word-break: break-all;
 }
 
+/* ---- server browser ----
+   The listing is the same GET /rooms quick match uses, but presented
+   for choosing rather than for being chosen for. Filters sit above the
+   table; the table itself is a list of rows rather than a table so it
+   collapses naturally on a phone. */
+.gd-server-browser {
+	margin-top: 18px;
+	padding-top: 14px;
+	border-top: 1px dashed rgba(255, 255, 255, 0.16);
+}
+.gd-browser-filters {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	margin-bottom: 14px;
+}
+.gd-browser-filters .gd-input {
+	width: 100%;
+	box-sizing: border-box;
+}
+.gd-browser-sorts {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+	flex-wrap: wrap;
+}
+.gd-browser-list {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	max-height: 280px;
+	overflow-y: auto;
+	padding-right: 4px;
+}
+.gd-browser-row {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 12px;
+	padding: 10px 12px;
+	border: 1px solid rgba(255, 255, 255, 0.14);
+	border-radius: 8px;
+	background: rgba(0, 0, 0, 0.55);
+}
+.gd-browser-main {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	min-width: 0;
+}
+.gd-browser-id {
+	font-size: 12px;
+	letter-spacing: 0.06em;
+	color: #ffd166;
+	word-break: break-all;
+}
+.gd-browser-meta {
+	font-size: 11px;
+	opacity: 0.6;
+	line-height: 1.4;
+}
+.gd-browser-side {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex: 0 0 auto;
+}
+.gd-browser-ping {
+	font-size: 11px;
+	opacity: 0.65;
+	min-width: 48px;
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+
 /* ---- how to play ----
    Rows sit inside .gd-section groups, so their rhythm (10px inside a section,
    24px between groups) comes from the section gap — a row-level margin would

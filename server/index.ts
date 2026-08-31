@@ -10,6 +10,7 @@ import {
 import { ULT_MAX_CHARGE } from "../src/game/simulation/Ultimate.js";
 import { MS_PER_SECOND } from "../src/game/simulation/units.js";
 import { GameRoom } from "./GameRoom.js";
+import { cleanPassword } from "./RoomPassword.js";
 
 const io = geckos({ iceServers: [] });
 
@@ -157,6 +158,27 @@ interface JoinMsg {
 	 * Absent means random per bot.
 	 */
 	botHero?: unknown;
+	/**
+	 * The room's password.
+	 *
+	 * Two roles in one field, decided by whether the room exists yet. For the
+	 * *creator* it is a room property like the rest — the door the room is
+	 * created with, hashed before it is stored, and the room becomes unlisted
+	 * with it. For everybody after, it is the key: the text is compared against
+	 * the room's hash, and a wrong or missing one is turned away with
+	 * `room-locked` rather than seated.
+	 */
+	password?: unknown;
+	/**
+	 * An unlisted room (`?private=true`).
+	 *
+	 * Creator-only, like the rest of the room properties: a latecomer cannot
+	 * hide a match everybody else is already playing, and cannot unhide one
+	 * either. Private rooms stay out of quick match and any future listing; the
+	 * link remains the whole invitation. A passworded room is unlisted whether
+	 * this flag says so or not.
+	 */
+	private?: unknown;
 }
 
 function clamp(
@@ -234,12 +256,19 @@ function createRoom(
 		freezeTimeMs?: number;
 		botHero?: unknown;
 		probe?: boolean;
+		password?: string | null;
+		unlisted?: boolean;
 	},
 ): GameRoom {
 	const room = new GameRoom(id, rules);
 	rooms.set(id, room);
+	const privacy = room.hasPassword
+		? ", passworded"
+		: room.unlisted
+			? ", private"
+			: "";
 	console.log(
-		`[MATCH] Created room ${id} (${room.mode}, fill ${room.fillTarget}, ${room.world.screens} screens)`,
+		`[MATCH] Created room ${id} (${room.mode}, fill ${room.fillTarget}, ${room.world.screens} screens${privacy})`,
 	);
 	return room;
 }
@@ -313,6 +342,10 @@ io.onConnection((channel) => {
 		if (!room) {
 			// First one through the door sets the rules, the size and the mode.
 			const mode = matchMode(msg.mode);
+			// The door itself: a password to set it, and `?private=` to keep it
+			// out of the listings. Both are the creator's alone — for everybody
+			// after, the password field is the key, not a room property.
+			const password = cleanPassword(msg.password);
 			room = createRoom(id, {
 				mode,
 				...(msg.freezeTime === undefined
@@ -359,7 +392,22 @@ io.onConnection((channel) => {
 				// A room created by a brain-driven client is a probe room: quick
 				// match must not land a stranger in the middle of a diagnostic.
 				probe: Boolean(msg.ai),
+				password,
+				// A passworded room is unlisted either way; `GameRoom` enforces
+				// the implication, so this only carries the creator's own ask.
+				unlisted: msg.private === true,
 			});
+		} else if (!room.checkPassword(msg.password)) {
+			// A locked room answers with the lock, not with a seat — and not with
+			// the room's existence either: the message says "locked", never who is
+			// inside or how full it is.
+			console.log(
+				`[MATCH] Room ${room.id} is locked — ${channel.id} turned away`,
+			);
+			// Reliable: losing this leaves a client connected, receiving nothing,
+			// with no way to tell a locked room from a broken one.
+			channel.emit("room-locked", { roomId: room.id }, RELIABLE);
+			return;
 		}
 
 		if (room.addPlayer(channel, name, msg.hero)) {

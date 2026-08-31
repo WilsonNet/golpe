@@ -39,11 +39,11 @@ simulation is deterministic.
 | `/?offline=true` | None. Escape hatch, bypasses all of this. Unsupported. |
 | `/?training=true` | A scriptable practice dummy — see [training-room.md](training-room.md) |
 
-The client sends `join {room, solo, training, ai, name, bots, fill, scoreLimit,
-timeLimitMs}` on connect; the server holds placement until it knows which kind of
-match is wanted (1.5s grace, then it places anyway). `ai` is the probe's flag:
-a room whose **creator** is brain-driven (`?ai=true`) is marked as a probe room,
-and quick match never sends a stranger into it. See
+The client sends `join {room, password, private, solo, training, ai, name,
+bots, fill, scoreLimit, timeLimitMs}` on connect; the server holds placement until
+it knows which kind of match is wanted (1.5s grace, then it places anyway). `ai`
+is the probe's flag: a room whose **creator** is brain-driven (`?ai=true`) is
+marked as a probe room, and quick match never sends a stranger into it. See
 [deathmatch.md](deathmatch.md) for room sizing and the name gate.
 
 ## Rooms are addressed, not matchmade
@@ -71,6 +71,24 @@ opened the game landed in the same match whether they meant to or not.
   and `timeLimitMs` are read only when the room does not exist yet; later joins
   rebalance to the stored `fillTarget`. Otherwise the last person through the door
   could resize or shorten a match everybody else was already playing.
+- **A room can be private, and a private room can have a password.** `?private=true`
+  makes the room unlisted — friends can still join by link, but strangers will
+  not be sent there. `?password=<text>` makes it locked as well as unlisted: a
+  password implies private (a lock a stranger can discover from a listing is a
+  lock that advertises itself). Both are creator-only, like the room's size, and
+  a late joiner's values are ignored. The converse is not true — a private room
+  with no password is a valid room too, and then the link is the whole
+  invitation, only undiscoverable. `GameRoom.isOpen` excludes private rooms, so
+  quick match and any future server listing never see them.
+- **A password is a room property at creation and a key afterwards.** The creator's
+  text is salted and hashed (scrypt) and stored as `passwordHash`; every join
+  after carries its own password and the server compares it there. By default the
+  password never appears in the address bar — the host form and the prompt hand
+  it off via `sessionStorage` so history and a copied link do not leak it, with
+  an opt-in "Include password in invite link" to make the link carry
+  `?password=`. A wrong or missing one is answered with `room-locked` rather
+  than a seat, and the client shows a prompt that stores the key and reloads.
+  A manually typed `?password=` still works for old share links.
 - **A room lives as long as it has a human in it**, then it and its id are
   released. The same link afterwards creates a fresh room. A room of nothing but
   bots is reaped with the human who asked for them — the id is never held by
@@ -78,10 +96,10 @@ opened the game landed in the same match whether they meant to or not.
 - **Quick match is the one exception to "identified, not searched for", and it
   is still a link join.** `GET /rooms` lists the rooms a stranger may be sent to
   (`GameRoom.isOpen`: a human in the room, a free seat, and not a probe room, a
-  training room, or one sitting out the post-match ceremony, sorted busiest
-  first). The menu asks, picks one, and commits `?room=<id>` — the game boots
-  exactly as if the link had been shared, so there is still no queue to sit in.
-  With none open, quick match creates a `?bots=1` duel, which is itself an open
+  training room, private, or one sitting out the post-match ceremony, sorted
+  busiest first). The menu asks, picks one, and commits `?room=<id>` — the game
+  boots exactly as if the link had been shared, so there is still no queue to sit
+  in. With none open, quick match creates a `?bots=1` duel, which is itself an open
   room for the next player.
 - **A probe room stays out of reach of quick match for its whole life.** The
   `ai` flag of the client that *created* the room marks it; a human joining a
@@ -90,7 +108,10 @@ opened the game landed in the same match whether they meant to or not.
 - **A training room always gets its own fresh id** and ignores the one it was
   given. It is single-human by construction.
 - **A room already holding sixteen humans answers `room-full`** rather than
-  leaving a client connected, receiving nothing and looking broken.
+  leaving a client connected, receiving nothing and looking broken. A locked room
+  answers `room-locked` on the same terms — the only answer this connection will
+  ever get, so the client knows to ask for the key rather than sit on
+  "Connecting…".
 - **Two tabs at the same URL are not in the same match** unless that URL names a
   room. Every multi-client script therefore passes an explicit `room` — and giving
   each one a *fresh* id also stopped consecutive runs joining the room the previous
