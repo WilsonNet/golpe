@@ -643,8 +643,11 @@ export const FIGHT_HUD_CSS = `
    Gameplay tier, wearing the fighter panels' register: the one thing on screen
    whose job is to be picked up by an eye never pointed at it. Just the names,
    the means icon and the means' name — then it is gone. The winner wears the
-   HUD's cyan, the loser a soft red, and the means sits in the killpop's gold:
-   the icon is what happened, the label is what to respect next fight.
+   HUD's cyan and the loser a soft red in a free-for-all; in a team match the
+   inline style overrides both with each fighter's actual team colour, so a
+   row never paints a fixed side as the one that died. The means sits in the
+   killpop's gold: the icon is what happened, the label is what to respect
+   next fight.
    A row one fighter in it is careful to read gets the brighter hairline. */
 .vdh-killfeed {
 	position: absolute;

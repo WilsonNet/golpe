@@ -12,11 +12,18 @@
  * get the codex. The one accent: a row the local fighter is in gets a
  * brighter hairline.
  *
- * **Data.** `Match` emits `hud-kill` with names and the killer's kit already
- * resolved — the feed owns only presentation: how long a row lives, which
- * icon the cause draws, which label it wears. Kills one-shot through the
- * snapshot like melee events, so a row can never claim a frag the server did
- * not award.
+ * **Data.** `Match` emits `hud-kill` with names, the killer's kit and both
+ * fighters' teams already resolved — the feed owns only presentation: how long
+ * a row lives, which icon the cause draws, which label it wears. Kills
+ * one-shot through the snapshot like melee events, so a row can never claim a
+ * frag the server did not award.
+ *
+ * **The names wear their side.** In a team match each fighter's name is the
+ * colour of *their* team — the same `teamCss` the scoreboard and the
+ * nameplates use — so a row reads as EMBER killing AZURE, not as a fixed
+ * winner-loser palette that always paints the victim with the same face.
+ * A free-for-all (or an arena fall) has no side to show, and keeps the
+ * neutral cyan/red.
  */
 
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -24,6 +31,7 @@ import { EventBus } from "../game/EventBus";
 import { HUD_EVENTS, type HudKillEvent } from "../game/hud";
 import type { KillCause } from "../game/online/types";
 import type { HeroId } from "../game/simulation/Heroes";
+import { teamCss } from "../game/teamPalette";
 
 /** How many rows stay before the oldest is pushed off, like TF2's five. */
 const KILL_FEED_KEEP = 5;
@@ -295,7 +303,15 @@ function KillFeedRow({
 				entry.mine ? " vdh-kill-mine" : ""
 			}`}
 		>
-			<span className="vdh-kill-name" title={entry.killer}>
+			<span
+				className="vdh-kill-name"
+				title={entry.killer}
+				style={
+					entry.killerTeam !== null
+						? { color: teamCss(entry.killerTeam) }
+						: undefined
+				}
+			>
 				{fall ? "" : entry.killer}
 			</span>
 			<span className="vdh-kill-means">
@@ -315,7 +331,15 @@ function KillFeedRow({
 					{meansLabel(entry.cause, entry.hero)}
 				</span>
 			</span>
-			<span className="vdh-kill-victim" title={entry.victim}>
+			<span
+				className="vdh-kill-victim"
+				title={entry.victim}
+				style={
+					entry.victimTeam !== null
+						? { color: teamCss(entry.victimTeam) }
+						: undefined
+				}
+			>
 				{entry.victim}
 			</span>
 		</div>

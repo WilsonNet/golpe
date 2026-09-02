@@ -1015,6 +1015,11 @@ export class Match {
 							killerId === null
 								? null
 								: (this.online?.heroOf(killerId) ?? null),
+						killerTeam:
+							killerId === null
+								? null
+								: (this.online?.teamOf(killerId) ?? null),
+						victimTeam: this.online?.teamOf(event.victimId) ?? null,
 						mine:
 							killerId === this.online?.manager.myId ||
 							event.victimId === this.online?.manager.myId,
@@ -3474,6 +3479,8 @@ export class Match {
 				victim: victim.fighter.name,
 				cause,
 				hero: attacker.fighter.local ? this.hero : this.foeHero(),
+				killerTeam: null,
+				victimTeam: null,
 				mine: victim.fighter.local || attacker.fighter.local,
 			});
 			this.resetAt = RESET_DELAY_MS;

@@ -10,6 +10,7 @@
 
 import type { KillCause } from "./online/types";
 import type { HeroId } from "./simulation/Heroes";
+import type { TeamId } from "./simulation/Teams";
 
 /**
  * One frag, ready for the feed. `Match` resolves the ids to names and the
@@ -26,6 +27,12 @@ export interface HudKillEvent {
 	cause: KillCause;
 	/** The killer's kit, so the feed can name the gun or the ultimate. */
 	hero: HeroId | null;
+	/**
+	 * The two fighters' sides, so the feed wears the *actual* team colours —
+	 * `null` in a free-for-all, where the names keep the neutral cyan/red.
+	 */
+	killerTeam: TeamId | null;
+	victimTeam: TeamId | null;
 	/** The local fighter is one of the two — the row gets the accent. */
 	mine: boolean;
 }

@@ -137,10 +137,14 @@ measurement. Never mix in `px` for layout (hairlines at 1-2px are fine).
 - **The kill feed turns away frags.** Top-right under the foe panel
   (`KillFeed.tsx`, gameplay tier: the same translucent strip the panels wear),
   newest on top, five rows, gone after 6s. Anatomy: `KILLER [icon] LABEL
-  VICTIM` — winner in the HUD cyan, loser soft red, and the means (icon +
-  label) in the killpop's gold. The means is the *server's* verdict: the
+  VICTIM` — in a free-for-all the winner wears the HUD cyan and the loser soft
+  red; **in a team match both names wear their own side's `teamCss` colour**,
+  because a fixed winner/loser palette made every row look like the same team
+  was always the one that died. The means (icon +
+  label) is the killpop's gold. The means is the *server's* verdict: the
   snapshot carries `kills: KillEventMsg[]`, drained like `melee`, and `Match`
-  resolves names and the killer's hero before emitting `hud-kill` — the feed
+  resolves names, the killer's hero and both fighters' teams from the snapshot
+  info before emitting `hud-kill` — the feed
   never touches a roster or an info map. Rows are timers held in state (5.58s
   → exit class, 6s → unmount), never a one-render condition; the exit is a
   class flip on a transition, because an entrance keyframe with
