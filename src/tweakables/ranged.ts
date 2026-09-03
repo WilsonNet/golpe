@@ -153,16 +153,16 @@ export const RANGED_WEAPONS: Record<RangedWeaponId, RangedWeaponDef> = {
 		// 17 per pellet, 102 if all six land at point blank — a full bar,
 		// one blast. And then the range: the cone is wide enough that the
 		// edge pellets leave a 32px body around a hundred px out, and the
-		// falloff cuts each pellet's punch from that point on — by 100px the
-		// blast is a half-bar, by 140px a third, by 200px a warning shot. A
+		// falloff cuts each pellet's punch past 80px — by 100px the blast
+		// is most of a bar, by 140px about half, by 200px a warning shot. A
 		// shotgun that killed at a hundred px was the rifle with a cone.
 		damage: 17,
 		speed: 900,
 		pellets: 6,
 		spreadDeg: 16,
-		falloffStartPx: 60,
+		falloffStartPx: 80,
 		falloffEndPx: 200,
-		minDamage: 3,
+		minDamage: 4,
 		// Five shells, TF2's slow shell-by-shell reload: a blast is precious,
 		// and each shell takes *longer* than the 900ms between blasts — the
 		// gun can never keep up with its own trigger, so an emptied shotgun

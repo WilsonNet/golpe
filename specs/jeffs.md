@@ -54,13 +54,13 @@ cone-spread burst.
   fixed, so both sides spawn the same pattern from the same aim and the
   client's prediction never disagrees with the server's.
 - **And the falloff is the range too.** A pellet that lands at a distance does
-  less damage: the full 17 within 60px of the muzzle, sliding linearly down to
-  a 3-per-pellet floor by 200px. This is the second, standard shotgun lever —
+  less damage: the full 17 within 80px of the muzzle, sliding linearly down to
+  a 4-per-pellet floor by 200px. This is the second, standard shotgun lever —
   TF2's scattergun falls 175%→53% over distance, Reaper's hellfire to about a
   third — and it is what makes the blast a point-blank weapon rather than a
-  cone-shaped rifle: at 100px the four pellets that connect are at 13 each (52,
-  half a bar, follow-up territory), at 140px a third of a bar, at 200px a
-  warning shot. Only the shotgun has a falloff; the rifle and the machine gun
+  cone-shaped rifle: at 100px the four pellets that connect are at ~15 each
+  (59, most of a bar, follow-up territory), at 140px about half a bar, at
+  200px a warning shot. Only the shotgun has a falloff; the rifle and the machine gun
   deal their card damage at any range, and a shotgun pellet that never left
   the muzzle hurts for the full 17.
 - **Pellets are bullets.** Each is an ordinary server-owned bullet: blocked

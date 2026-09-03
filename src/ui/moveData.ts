@@ -423,7 +423,7 @@ export const MOVE_LISTS: Record<HeroId, HeroMoveList> = {
 				name: "Shotgun",
 				command: { label: "E, then LMB", actions: ["gun", "attack"] },
 				prose:
-					"A fan of six pellets at point blank — 17 each, 102 if all land, a full bar in one blast. And then the range: the cone widens and each pellet's damage falls off past 60px, so by a hundred px it is a half-bar and by 200 a warning shot. A shotgun that killed at range was the rifle with a cone.",
+					"A fan of six pellets at point blank — 17 each, 102 if all land, a full bar in one blast. And then the range: the cone widens and each pellet's damage falls off past 80px, so by a hundred px it is most of a bar and by 200 a warning shot. A shotgun that killed at range was the rifle with a cone.",
 				stats: [
 					{ label: "DMG", value: "17 / pellet" },
 					{ label: "PELLETS", value: "6" },
