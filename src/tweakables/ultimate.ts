@@ -261,10 +261,12 @@ export const DRAGON_DAMAGE = 30;
 export const DRAGON_KNOCKBACK_PX_S = 650;
 
 /**
- * The brief stun that makes the knockback read. The dragon is a *knockback*
- * ultimate, not a hold like the black hole — the point is the sweep, and the
- * stun is just enough that the victim cannot instantly recover the ground the
- * dragon carried them off.
+ * The brief stun that makes the knockback read, applied before the knockdown
+ * below overwrites it. The dragon is a *knockdown* ultimate as well as a
+ * sweep: everyone it hits goes down for the thrust's own 1500ms
+ * (`MOVES.thrust.knockdownMs`, read off the table in `GameRoom` and the
+ * preview so the two can never drift apart), which is also what ends a Death
+ * Blossom via `applyKnockdown`.
  */
 export const DRAGON_STUN_MS = 300;
 

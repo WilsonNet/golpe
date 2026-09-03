@@ -96,10 +96,12 @@ export interface MeleeEventMsg {
  * An ultimate was denied, for the client to play the typography over the
  * denier.
  *
- * Two ways to deny, one event: kill a fighter while they are holding the
- * button, or block the thrown grenade with a sword guard. Both are one-shot
- * effects with a lasting consequence (the meter is gone), but the consequence
- * travels in the charge meter itself — this is only the "DENY" splash.
+ * Four ways to deny, one event: kill a fighter while they are holding the
+ * button, block the thrown grenade with a sword guard, cut a Death Blossom
+ * short with a thrust or dragon thrust, or swallow a dragon ride with a
+ * hostile black hole. All are one-shot effects with a lasting consequence
+ * (the meter is gone, the channel is over), but the consequence travels in
+ * state itself — this is only the "DENY" splash.
  */
 export interface DenyEventMsg {
 	/** The fighter who denied it — the killer, or the guard that blocked the throw. */

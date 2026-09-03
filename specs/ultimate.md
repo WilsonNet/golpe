@@ -224,11 +224,12 @@ Other rules:
 
 ## Denying it
 
-**An ultimate can be taken away, and the takedown is loud.** Two ways, one
+**An ultimate can be taken away, and the takedown is loud.** Four ways, one
 result: the meter is gone (it was spent at the cast; a deny does not refund
-it), no hole opens, and the fighter who did it gets a comic-book **"DENY"**
-caption popped over their head — heavy italic type, off-angle, the way a comic
-caption announces that somebody's big moment just got taken.
+it), the ultimate ends early or never opens, and the fighter who did it gets
+a comic-book **"DENY"** caption popped over their head — heavy italic type,
+off-angle, the way a comic caption announces that somebody's big moment just
+got taken.
 
 **Kill while holding.** The hold is the aim phase, the fighter's most
 committed moment, and dying in it is the risk that commitment was always
@@ -246,6 +247,16 @@ the release, so a blocked ultimate is simply *gone* — the deny is not a
 refund, it is an execution. The guard only covers the front, so the answer to
 a defender camping the throw lane is the same as the answer to a guard
 anywhere: go around it, or make them use their sword on something else.
+
+**Cut a blossom short.** The knockdown is the Death Blossom's one interrupt,
+so a thrust or dragon thrust that lands it denies the storm: the channel ends
+in state via `applyKnockdown`, and the fighter who landed it gets the caption,
+the counter and the reel note.
+
+**Swallow a dragon.** A hostile black hole is the dragon ride's one counter:
+being caught cancels the ride and the hold takes over on the same tick, and
+the hole's owner gets the caption, the counter and the reel note — the pull
+drags the rider inside, and the deny says who did it.
 
 The deny is a **one-shot event in the snapshot** (`denies`), exactly like a
 melee impact: the consequence travels in the meter, and a client that loses

@@ -8,10 +8,14 @@
  * without a single edit.
  */
 
+import { KNOCKDOWN_SLAM_VY } from "../../tweakables/melee.js";
 import {
 	DRAGON_MIN_RIDE_MS,
 	DRAGON_RIDE_MS,
 } from "../../tweakables/ultimate.js";
+
+export { KNOCKDOWN_SLAM_VY };
+
 import {
 	DEFAULT_WORLD,
 	PLAYER_HEIGHT,
@@ -129,6 +133,7 @@ export type {
  */
 export {
 	applyHitToDefender,
+	applyKnockdown,
 	applyMeleeResult,
 	blocksBullet,
 	blocksUltimate,

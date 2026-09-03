@@ -134,14 +134,22 @@ an obstacle or a hostile black hole.
   the same commitment, so the beam never stops earlier than the cast
   delivers.
 - **The hit:** everyone on the swept line is hit once per cast — **30 damage**,
-  a **650 px/s knockback along the dragon's direction**, and a brief 300ms
-  stun so the shove reads. It goes **through sword blocks**: `blocksUltimate`
+  a **650 px/s knockback along the dragon's direction**, and the thrust's own
+  knockdown (**1500ms**, read off `MOVES.thrust` by construction — the ride is
+  the thrust's full expression, so the floor time is the thrust's floor time).
+  It goes **through sword blocks**: `blocksUltimate`
   exists for thrown ultimates, and this is a ride, not a throw. The ultimate
   pays nobody — its damage feeds no meter, exactly like the hole.
+- **It denies a Death Blossom.** The knockdown is the storm's one interrupt, so
+  a dragon that cuts a blossom channel short ends the ultimate the same way the
+  thrust does: the channel ends in state via `applyKnockdown`, and the rider
+  gets the comic-book **DENY** splash, the scoreboard counter and the reel note.
 - **The one counter:** a **hostile black hole**. Being caught cancels the ride
   and the hold takes over on the same tick — it is the only thing that stops a
   dragon early, and the aim preview is deliberately allowed to show a cast
   into an open hole, because throwing the dragon into one is a real decision.
+  The catch denies the dragon: the hole's owner gets the **DENY** splash, the
+  counter and the reel note, exactly like any other ultimate denied.
 - **The draw:** the caster's own art carries her — the six-cell ride strip
   from `anands-dragon.png` (the lunge into the dragon, then the flight),
   rotated down the dragon's line and mirrored for leftward travel. The

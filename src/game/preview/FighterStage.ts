@@ -110,6 +110,7 @@ import {
 } from "../simulation/Items";
 import {
 	applyHitToDefender,
+	applyKnockdown,
 	applyMeleeResult,
 	bodyRect,
 	bombBlastFor,
@@ -117,6 +118,7 @@ import {
 	bulletDistanceFromMuzzle,
 	canFire,
 	createPlayerState,
+	KNOCKDOWN_SLAM_VY,
 	MASSIVE_BLAST_DAMAGE,
 	MASSIVE_BLAST_KNOCKBACK_PX_S,
 	MASSIVE_BLAST_RADIUS_PX,
@@ -1039,9 +1041,9 @@ export class FighterStage {
 	}
 
 	/**
-	 * The dragon's sweep: everyone on the ridden line is knocked back and
-	 * damaged once per cast, with the server's exact writes and its
-	 * `thrust`-shaped impact event.
+	 * The dragon's sweep: everyone on the ridden line is knocked back, knocked
+	 * down for the thrust's own duration, and damaged once per cast, with the
+	 * server's exact writes and its `thrust`-shaped impact event.
 	 */
 	private resolveDragonHits(f: FighterEntity): void {
 		const box = dragonSweptRect(f.body);
@@ -1051,6 +1053,7 @@ export class FighterStage {
 		}
 		const nx = f.body.dragonVX / DRAGON_SPEED;
 		const ny = f.body.dragonVY / DRAGON_SPEED;
+		const dragonKnockdownMs = MOVES.thrust.knockdownMs ?? 1500;
 		for (const d of this.targets) {
 			const victim = d.entity;
 			if (victim.fighter.hp <= 0) continue;
@@ -1059,6 +1062,8 @@ export class FighterStage {
 			this.dragonLatches.add(victim.fighter.id);
 			const v = victim.body;
 			v.stunTimer = Math.max(v.stunTimer, DRAGON_STUN_MS);
+			applyKnockdown(v, dragonKnockdownMs);
+			v.vy = Math.max(v.vy, KNOCKDOWN_SLAM_VY);
 			v.iframeTimer = MELEE_IFRAME_MS;
 			v.vx += nx * DRAGON_KNOCKBACK_PX_S;
 			v.vy += ny * DRAGON_KNOCKBACK_PX_S;

@@ -246,9 +246,11 @@ invulnerability doing its real job of capping butterfly DPS.
 
 ### The knockdown
 
-Four moves put a target on the floor, and they are priced in the order of how
+Five moves put a target on the floor, and they are priced in the order of how
 much they commit to it: the chain's finisher (**520ms**), both anti-airs
-(**700ms**, `ANTIAIR_KNOCKDOWN_MS`), and the dagger's thrust (**1500ms**).
+(**700ms**, `ANTIAIR_KNOCKDOWN_MS`), and the dagger's thrust and the dragon
+thrust (**1500ms** — the ride reads the thrust's own floor time off
+`MOVES.thrust`, so the two can never drift apart).
 
 The finisher's 520ms is **equal to its own active plus recovery frames**. The
 attacker is free `active + recovery` after the hitbox opened; the victim gets up

@@ -84,6 +84,7 @@ import { PotgRecorder } from "./PlayOfTheGame.js";
 import {
 	addCharge,
 	applyHitToDefender,
+	applyKnockdown,
 	applyMeleeResult,
 	BLOSSOM_DURATION_MS,
 	BLOSSOM_TICK_DAMAGE,
@@ -129,6 +130,7 @@ import {
 	isHeroId,
 	isKnockedDown,
 	isStunned,
+	KNOCKDOWN_SLAM_VY,
 	kitFor,
 	launchGrenade,
 	launchHeGrenade,
@@ -267,9 +269,10 @@ interface ConnectedPlayer {
 	kills: number;
 	deaths: number;
 	/**
-	 * Ultimate denies: a kill while the victim held the cast, or a guard that
-	 * caught the grenade. Both spent the caster's whole meter; both credit the
-	 * fighter who stopped it. The scoreboard's DENIES column.
+	 * Ultimate denies: a kill while the victim held the cast, a guard that
+	 * caught the grenade, a thrust or dragon that cut a blossom short, or a
+	 * hole that swallowed a dragon ride. All spent the caster's whole meter;
+	 * all credit the fighter who stopped it. The scoreboard's DENIES column.
 	 */
 	denies: number;
 	/**
@@ -2603,6 +2606,9 @@ export class GameRoom {
 				action: player.state.meleeAction,
 				timer: player.state.meleeTimer,
 				plunging: player.state.plunging,
+				dragonTimer: player.state.dragonTimer,
+				dragonX: player.state.x,
+				dragonY: player.state.y,
 			};
 			// The hole this fighter is in, if any — already filtered for friendly
 			// fire, so the caster is handed null and walks through their own field.
@@ -2621,6 +2627,29 @@ export class GameRoom {
 				kitFor(player.hero),
 				trapFor(this.traps, player.id, player.team),
 			);
+			// A hostile hole is the one counter to a dragon ride: being caught
+			// cancels the ride and the hold takes over on the same tick, in
+			// `tickPlayer` on both sides. The cancel itself is silent state —
+			// this is the loud part, the DENY the room sees. Only a held grip
+			// counts, so a ride that simply expired or slammed into a wall
+			// earns nothing.
+			if (
+				prev.dragonTimer > 0 &&
+				player.state.dragonTimer <= 0 &&
+				this.singularity
+			) {
+				const mine = fieldFor(this.singularity, player.id, player.team);
+				if (
+					mine &&
+					singularityGrip(mine, prev.dragonX, prev.dragonY) === "held"
+				) {
+					this.creditDeny(
+						this.singularity.ownerId,
+						player.id,
+						"hole-caught-dragon",
+					);
+				}
+			}
 			this.noteBlasts(player, prev);
 
 			// A release edge, not a press edge: `ultimate` is held button state on
@@ -2958,7 +2987,20 @@ export class GameRoom {
 				if (result.outcome === "parried") {
 					this.absorbPotg(defender, MOVES[result.move].damage, attacker);
 				}
+				// A thrust that lands through the normal melee path still cuts
+				// a blossom short the same way the sweep does — the sweep is
+				// the multi-target judge, this is the single-target one, and
+				// both end the channel via `applyKnockdown`.
+				const hadBlossom =
+					result.move === "thrust" && defender.state.blossomTimer > 0;
 				const damage = applyMeleeResult(attacker.state, defender.state, result);
+				if (
+					hadBlossom &&
+					result.move === "thrust" &&
+					defender.state.blossomTimer <= 0
+				) {
+					this.creditDeny(attacker.id, defender.id, "thrust-denied-blossom");
+				}
 
 				this.damage(defender, damage, attacker.id, true, "melee", result.move);
 
@@ -3078,6 +3120,12 @@ export class GameRoom {
 					continue;
 				}
 				latched.add(defender.id);
+				// A thrust that cuts a Death Blossom short denies it: the
+				// knockdown is the storm's one interrupt, and the meter was
+				// already spent at the release, so ending the channel is ending
+				// the ultimate. Effects only — the channel already ended in
+				// state — the splash, the counter and the reel note.
+				const hadBlossom = defender.state.blossomTimer > 0;
 				const damage = applyHitToDefender(defender.state, {
 					move: "thrust",
 					outcome: "hit",
@@ -3086,6 +3134,9 @@ export class GameRoom {
 					y: box.y + box.h / 2,
 					dir: attacker.state.facing >= 0 ? 1 : -1,
 				});
+				if (hadBlossom && defender.state.blossomTimer <= 0) {
+					this.creditDeny(attacker.id, defender.id, "thrust-denied-blossom");
+				}
 				this.damage(defender, damage, attacker.id, true, "melee", "thrust");
 				this.meleeEvents.push({
 					attackerId: attacker.id,
@@ -3106,10 +3157,10 @@ export class GameRoom {
 	 * Same shape as `resolveThrusts` — a swept box, a per-cast latch, everyone
 	 * on the line hit once — with two differences that make it an *ultimate*:
 	 * the sweep is the whole flight (any direction, not just along facing), and
-	 * the hit is an area knockback along the dragon's line rather than a
-	 * knockdown. Nothing blocks it: the dragon ignores guards by design, and
-	 * the only thing that stops the *rider* is a hostile black hole, handled in
-	 * `tickPlayer`.
+	 * the hit is an area knockback along the dragon's line plus the thrust's
+	 * own knockdown. Nothing blocks it: the dragon ignores guards by design,
+	 * and the only thing that stops the *rider* is a hostile black hole,
+	 * handled in `tickPlayer`.
 	 */
 	private resolveDragonHits() {
 		for (const rider of this.players.values()) {
@@ -3128,6 +3179,11 @@ export class GameRoom {
 			}
 			const nx = rider.state.dragonVX / DRAGON_SPEED;
 			const ny = rider.state.dragonVY / DRAGON_SPEED;
+			// The dragon knocks down for the thrust's own duration, by
+			// construction: the ride is the thrust's full expression, so the
+			// floor time is read off the thrust's table rather than written
+			// down twice.
+			const dragonKnockdownMs = MOVES.thrust.knockdownMs ?? 1500;
 			for (const victim of this.players.values()) {
 				if (victim === rider || !victim.alive) continue;
 				if (!hostile(rider.team, victim.team)) continue;
@@ -3137,11 +3193,17 @@ export class GameRoom {
 				}
 				latched.add(victim.id);
 				const v = victim.state;
+				const hadBlossom = v.blossomTimer > 0;
 				// The knockback is the move: a shove along the dragon's line,
-				// hard enough to bowl a fighter over, with a brief stun so the
-				// shove reads. Directional, like a blast, so a line of fighters
-				// is swept rather than scattered.
+				// hard enough to bowl a fighter over, plus the thrust's
+				// knockdown so the sweep reads as a knockdown like the thrust
+				// does. Directional, like a blast, so a line of fighters is
+				// swept rather than scattered. `applyKnockdown` is the one
+				// place that ends a Death Blossom, so the storm ends here on
+				// the same tick both sides simulate.
 				v.stunTimer = Math.max(v.stunTimer, DRAGON_STUN_MS);
+				applyKnockdown(v, dragonKnockdownMs);
+				v.vy = Math.max(v.vy, KNOCKDOWN_SLAM_VY);
 				v.iframeTimer = MELEE_IFRAME_MS;
 				v.vx += nx * DRAGON_KNOCKBACK_PX_S;
 				v.vy += ny * DRAGON_KNOCKBACK_PX_S;
@@ -3153,6 +3215,13 @@ export class GameRoom {
 				v.comboStep = 0;
 				v.comboTimer = 0;
 				v.plungeStuckTimer = 0;
+				// A dragon that cuts a Death Blossom short denies it, exactly
+				// like the thrust does: the meter was spent at the release,
+				// the channel is over, and the rider gets the splash, the
+				// counter and the reel note.
+				if (hadBlossom && v.blossomTimer <= 0) {
+					this.creditDeny(rider.id, victim.id, "dragon-denied-blossom");
+				}
 				// The ultimate pays nobody — the dragon feeds no meter, like the
 				// hole.
 				this.damage(victim, DRAGON_DAMAGE, rider.id, false, "dragon", "dragon");
@@ -3444,6 +3513,38 @@ export class GameRoom {
 		console.log(
 			`[ULT] blossom ${this.blossom.id} at ${Math.round(this.blossom.x)},${Math.round(this.blossom.y)}`,
 		);
+	}
+
+	/**
+	 * Credit an ultimate deny: the DENY splash, the scoreboard counter and
+	 * the Play-of-the-Game note, in one place.
+	 *
+	 * A deny is anytime one fighter's action ends another's ultimate early
+	 * with the meter already spent — a guard catching the grenade, a kill
+	 * mid-hold, a thrust or dragon cutting a blossom short, a hole swallowing
+	 * a dragon ride. The consequence (meter gone, channel over) already
+	 * travelled in state; this is the loud part, effects only like a melee
+	 * event. A dropped datagram costs a caption, never a fact.
+	 */
+	private creditDeny(denierId: string, victimId: string, reason: string) {
+		const denier = this.players.get(denierId);
+		const victim = this.players.get(victimId);
+		if (!denier || !victim) return;
+		console.log(
+			`[DENY] ${denier.name} denied ${victim.name}'s ultimate (${reason})`,
+		);
+		this.potg.note(
+			this.potgClockMs,
+			"deny",
+			{ id: denier.id, name: denier.name },
+			{ id: victim.id, name: victim.name },
+		);
+		this.denies.push({
+			denierId: denier.id,
+			x: denier.state.x + PLAYER_WIDTH / 2,
+			y: denier.state.y + PLAYER_HEIGHT / 2,
+		});
+		denier.denies++;
 	}
 
 	/**

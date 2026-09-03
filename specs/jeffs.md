@@ -168,10 +168,14 @@ announcement** — the same 1100ms freeze and portrait card the black hole has.
   `hostile` predicate, as always.
 - **The one interrupt: a knockdown.** The channel is not stopped by ordinary
   hitstun — a slash's 190ms is a blink inside two seconds — but the big CC
-  ends it instantly: the chain's finisher, the thrust, the shoryuken, a
-  Massive's blast. That is the counterplay, and it is why the storm reads as a
+  ends it instantly: the chain's finisher, the thrust, the dragon thrust, the
+  shoryuken, a Massive's blast. That is the counterplay, and it is why the storm reads as a
   threat rather than a win button: the answer is the same read the sword has
   been teaching since the first match — commit the knockdown, or die.
+- **A thrust or dragon that lands the interrupt denies the blossom.** The meter
+  was spent at the release and the channel is over, so the fighter who cut it
+  short gets the comic-book **DENY** splash, the scoreboard counter and the
+  reel note — the same loud deny a guard or a mid-hold kill earns.
 - **The spin is simulated, the damage is not.** `blossomTimer` rides in
   `PlayerPosition` and both sides tick it — a client predicts its own spin
   exactly as it predicts a dash — while the interval damage is the server's
