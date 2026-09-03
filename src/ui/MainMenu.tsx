@@ -618,9 +618,15 @@ function HostForm({
 							type={showPassword ? "text" : "password"}
 							value={settings.password}
 							maxLength={MAX_PASSWORD_LENGTH}
-							placeholder="set a password"
+							placeholder={
+								isPrivate ? "set a password" : "make the room private first"
+							}
 							autoComplete="new-password"
 							spellCheck={false}
+							disabled={!isPrivate}
+							title={
+								isPrivate ? undefined : "Only a private room takes a password"
+							}
 							onChange={(e) => set({ password: e.target.value })}
 						/>
 						{settings.password !== "" ? (
@@ -660,8 +666,13 @@ function HostForm({
 								separately.
 							</>
 						)
-					) : (
+					) : isPrivate ? (
 						<>A passworded room is always private.</>
+					) : (
+						<>
+							Only a private room takes a password — turn on Private room above
+							to set one.
+						</>
 					)}
 				</p>
 			</div>
