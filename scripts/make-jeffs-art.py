@@ -5,11 +5,12 @@ commits to.
 
 The layout is fixed by the game, not by this script:
 
-- `jeffs.png`  — 288x48, nine 32x48 cells: 0-3 walk left, 4 face-on, 5-8 walk
-  right (mirrors of 0-3). This is the frame budget a human artist must match
-  when the real art lands; every cell is exactly one 32x48 sprite drawn at
-  1:1, the same scale as Chrono Trigger's battle sprites.
-- `jeffs-roll.png` — 640x48, sixteen 40x48 cells: 0-7 roll right, 8-15 roll
+- `jeffs.png`  — 576x96, nine 64x96 cells: 0-3 walk left, 4 face-on, 5-8 walk
+  right (mirrors of 0-3). 2x art drawn at half size through `sheetScale` —
+  the Anands standard: the collider stays 32x48, the pixels double, and the
+  hero-select portrait, the ultimate cinematic and the move list all read
+  crisp instead of blocky.
+- `jeffs-roll.png` — 1280x96, sixteen 80x96 cells: 0-7 roll right, 8-15 roll
   left (mirrors). Derived from the face-on frame by rotation and a curled
   "ball" pose, exactly like `make-roll-art.py` does for the dude.
 
@@ -21,11 +22,9 @@ palette is the sheet's contract — the hit poses are derived from this sheet in
 code (`createHeroPoses`), so the colours here are what the whole hero is drawn
 from.
 
-Pixel-art rules this sheet follows (the old sheet broke all of them, which is
-why it read as a flat block: a head half the sprite tall, single-pixel eyes
-floating in a skin fill, legs that never lifted):
+Pixel-art rules this sheet follows:
 
-- Real proportions: the head is 10px on a 44px figure, with a neck, sloped
+- Real proportions: the head is 20px on an 88px figure, with a neck, sloped
   shoulders and a coat skirt that ends above the knee — a trench covers the
   thigh, so the walk animates the shins, the boots and the hem, not the hips.
 - Light from the upper left: every material carries a light/base/shade ramp
@@ -33,12 +32,16 @@ floating in a skin fill, legs that never lifted):
 - Outline only on the silhouette: the dark navy edge never cuts through the
   face or the shirt, so the features sit in the light instead of in jail.
 - A four-beat walk: contact, passing, contact, passing. The contact frames
-  plant wide and ride 1px low, the passing frames pull the feet under the body
+  plant wide and ride 2px low, the passing frames pull the feet under the body
   and ride high, the hem kicks against the stride and the near arm
   counter-swings. Frame 0 doubles as the idle, so the contacts are closed
   stances, not mid-splits.
-- Rotations stay NEAREST: a BICUBIC spin on 32px art smears every edge into
-  grey mush, which is what the old roll strip did.
+- Rotations stay NEAREST: a BICUBIC spin on pixel art smears every edge into
+  grey mush.
+- 2x earns its keep in the face: eyes carry pupils and glints, brows slope
+  over two rows, stubble is dithered rather than banded, and the hair has
+  strand separations — the face-on frame is the hero-select portrait and the
+  ultimate card, so it is drawn, not doubled.
 
 Usage: python3 scripts/make-jeffs-art.py
 """
@@ -46,8 +49,8 @@ Usage: python3 scripts/make-jeffs-art.py
 from PIL import Image, ImageDraw
 
 OUT_DIR = "public/assets"
-CELL_W, CELL_H = 32, 48
-GROUND_LINE = 46
+CELL_W, CELL_H = 64, 96
+GROUND_LINE = 92
 ROLL_OUT = f"{OUT_DIR}/jeffs-roll.png"
 STRIP_OUT = f"{OUT_DIR}/jeffs.png"
 
@@ -58,13 +61,16 @@ OUT = (26, 20, 44)          # silhouette outline only
 SKIN_L = (250, 222, 190)    # forehead, nose bridge, cheek light
 SKIN = (238, 194, 152)      # weathered skin base
 SKIN_S = (204, 156, 118)    # jaw, right side, under-brow
-STUBBLE = (148, 108, 86)    # jaw checker, sideburns
+STUBBLE = (148, 108, 86)    # jaw dither, sideburns
 HAIR = (74, 64, 60)         # greying brown, slicked back
 HAIR_S = (46, 40, 42)       # under-side, back mass
+HAIR_L = (104, 92, 86)      # strand separations in the light
 GREY = (184, 176, 164)      # temples, top sheen: the middle-aged tell
+GREY_S = (140, 132, 122)    # temple shade
 BROW = (52, 44, 46)         # heavy brows
 EYE_W = (244, 238, 232)     # eye white (kept narrow: narrowed eyes)
 EYE_D = (32, 28, 38)        # pupil / lash line
+GLINT = (255, 255, 255)     # eye catch-light, button shine, buckle shine
 NOSE_S = (170, 126, 96)     # nose shadow
 MOUTH = (96, 52, 52)        # frown
 COAT_L = (104, 116, 140)    # lapel edges, left shoulder light
@@ -78,11 +84,14 @@ SHIRT_S = (198, 190, 180)
 TIE = (186, 58, 48)
 TIE_S = (130, 36, 32)
 TIE_L = (224, 118, 96)      # knot catch-light
+TIE_D = (222, 140, 120)     # tie stripe
 PANTS = (58, 50, 54)
 PANTS_S = (40, 34, 38)
+PANTS_L = (86, 74, 78)      # crease catch-light
 BOOTS = (46, 36, 38)
 BOOTS_S = (28, 22, 26)
 BOOTS_L = (104, 82, 82)     # toe cap light
+SOLE = (20, 14, 16)         # boot sole line
 
 CHARS = {
     ".": None,
@@ -93,10 +102,13 @@ CHARS = {
     "d": STUBBLE,
     "H": HAIR,
     "h": HAIR_S,
+    "F": HAIR_L,
     "G": GREY,
+    "y": GREY_S,
     "B": BROW,
     "W": EYE_W,
     "E": EYE_D,
+    "I": GLINT,
     "N": NOSE_S,
     "M": MOUTH,
     "C": COAT,
@@ -110,18 +122,579 @@ CHARS = {
     "R": TIE,
     "r": TIE_S,
     "n": TIE_L,
+    "J": TIE_D,
     "P": PANTS,
     "p": PANTS_S,
+    "Q": PANTS_L,
     "V": BOOTS,
     "v": BOOTS_S,
     "U": BOOTS_L,
+    "Z": SOLE,
 }
 
 
-def paint(rows: list[str], ox: int = 0, oy: int = 0) -> Image.Image:
-    """Paint row-string maps at 1:1 onto a fresh 32x48 cell.
+# ---- face-on maps (2x base, refined below) ----
+FACE = [
+    "................................................................",
+    "................................................................",
+    "................................................................",
+    "................................................................",
+    ".........................OHHHHHHHHHHHHO.........................",
+    ".........................OHHHHHHHHHHHHO.........................",
+    ".....................OHHGGGGHHhHHhHHGGGGHHO.....................",
+    ".....................OHHGGGGHHhHHhHHGGGGHHO.....................",
+    "...................OGGGGHHHHHHhHHhHHHHHHGGGGO...................",
+    "...................OGGhhHHHHHHhHHhHHHHHHhhGGO...................",
+    "...................OhhHHHHSSSLLLLLLSSSHHHHhhO...................",
+    "...................OddddSSSSSLLLLLLSSSSSddddO...................",
+    "...................OsSSSSSSSSLLLLLLSSSSSSSSsO...................",
+    "...................OsSSSSSSSSLLLLLLSSSSSSSSsO...................",
+    "...................OsssSBBBBBSLLLLSBBBBBSsssO...................",
+    "...................OssSSBBBBBBLLLLBBBBBBSSssO...................",
+    "...................OsssSsEEEESLLLLSEEEESSsssO...................",
+    "...................OsssSSIEEWSLLLLSIEEWSSsssO...................",
+    "...................OsssSLSSSSSNNNNSSSSSsssssO...................",
+    "..................OsSSSSLLSSSSNNNNSSSSSssSSSsO..................",
+    "..................OsdddSSSSSSNNNNNNSSSSSsdddsO..................",
+    "..................OsddddSSSSMMMMMMMMSSSSddddsO..................",
+    "..................OsdddddMMMSSddddSSMMMdddddsO..................",
+    "..................OsdSdSdSdSdSdSSdSdSdSdSdSdsO..................",
+    "..................OsSdSdSdSdSdSddSdSdSdSdSdSsO..................",
+    "...................OsdSdSdSdSdSddSdSdSdSdSdsO...................",
+    "....................OsdSdSdSdSdSSdSdSdSdSdsO....................",
+    ".....................OsSdSdSdSdSSdSdSdSdSsO.....................",
+    ".......................OSdSdSdSSSSdSdSdSO.......................",
+    ".........................OSSSSSSSSSSSSO.........................",
+    "................................................................",
+    "................................................................",
+]
 
-    Every row must be exactly 32 chars: a short row used to silently right-pad
+
+TORSO_FRONT = [
+    "..........................OOSSSSSSSSOO..........................",
+    "..........................OOSSSSSSSSOO..........................",
+    "..........................OOSSSSSSSSOO..........................",
+    "..........................OOSSSSSSSSOO..........................",
+    "................OOOOOOOOTTTTTTTTTTTTTTTTOOOOOOOO................",
+    "................OOOOOOOOTTTTTTTTTTTTTTTTOOOOOOOO................",
+    "..............OOCCCCKKTTTTTTTTTTTTTTTTTTTTKKCCCCOO..............",
+    "..............OOCCCCKKTTTTTTTTTTTTTTTTTTTTKKCCCCOO..............",
+    "............OOCCCCCCKKTTTTTTRRRRRRRRTTTTTTTTKKCCCCCCOO..........",
+    "............OOCCCCCCKKTTTTTTRRRRRRRRTTTTTTTTKKCCCCCCOO..........",
+    "............OOCCKKKKttTTTTRRnnRRRRRRTTTTTTTTttKKCCCCOO..........",
+    "............OOCCKKKKttTTTTRRnnRRRRRRTTTTTTTTttKKCCCCOO..........",
+    "..........OOCCKKKKttTTTTTTRRRRRRRRRRTTTTTTTTttKKKKCCCCOO........",
+    "..........OOCCKKKKttTTTTTTRRRRRRRRRRTTTTTTTTttKKKKCCCCOO........",
+    "..........OOCCKKKKttTTTTTTRRRRJJJJRRTTTTTTTTttKKKKCCCCOO........",
+    "..........OOCCKKKKttTTTTTTRRRRJJJJRRTTTTTTTTttKKKKCCCCOO........",
+    "..........OOCCccKKttTTTTTTRRRRrrRRRRTTTTTTTTttKKccCCCCOO........",
+    "..........OOCCccKKttTTTTTTRRRRrrRRRRTTTTTTTTttKKccCCCCOO........",
+    "..........OOCCccKKttTTTTTTRRRRrrRRRRTTTTTTTTttKKccCCCCOO........",
+    "..........OOCCccKKttTTTTTTRRRRrrRRRRTTTTTTTTttKKccCCCCOO........",
+    "..........OOCCccKKIDTTttTTRRRRrrRRRRTTTTttTTIDKKccCCCCOO........",
+    "..........OOCCccKKDDTTttTTRRRRrrRRRRTTTTttTTDDKKccCCCCOO........",
+    "..........OOCCccKKttTTTTTTRRRRJJJJRRTTTTTTTTttKKccCCCCOO........",
+    "..........OOCCccKKttTTTTTTRRRRJJJJRRTTTTTTTTttKKccCCCCOO........",
+    "..........OOCCccKKIDTTttTTRRRRrrRRRRTTTTttTTIDKKccCCCCOO........",
+    "..........OOCCccKKDDTTttTTRRRRrrRRRRTTTTttTTDDKKccCCCCOO........",
+    "..........OOCCccKKttTTTTTTRRRRrrRRRRttTTTTTTttKKccCCCCOO........",
+    "..........OOCCccKKttTTTTTTRRRRrrRRRRttTTTTTTttKKccCCCCOO........",
+    "..........OOCCccKKKKttttttttttttttttttttttttKKKKccCCCCOO........",
+    "..........OOCCccKKKKttttttttttttttttttttttttKKKKccCCCCOO........",
+    "..........OOCCCCCCCCCCKKccKKKKKKccKKKKKKKKCCCCCCCCCCOO..........",
+    "..........OOCCCCCCCCCCKKccKKKKKKccKKKKKKKKCCCCCCCCCCOO..........",
+    "..........OOCCCCCCCCCCkkkkkkIDDDDDDDDDDIkkkkkkCCCCCCCCCCOO......",
+    "..........OOCCCCCCCCCCkkkkkkDDDDDDDDDDDDkkkkkkCCCCCCCCCCOO......",
+    "..........OOCCCCCCCCCCkkkkkkDDggggggggDDkkkkkkCCCCCCCCCCOO......",
+    "..........OOCCCCCCCCCCkkkkkkDDggggggggDDkkkkkkCCCCCCCCCCOO......",
+    "............OOCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCOO..........",
+    "............OOCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCOO..........",
+    "............OOCCccCCCCCCCCCCCCCCCCCCCCCCCCCCCCccCCCCOO..........",
+    "............OOCCccCCCCCCCCCCCCCCCCCCCCCCCCCCCCccCCCCOO..........",
+    "............OOCCccCCCCCCCCkkCCCCCCCCkkCCCCCCCCccCCCCOO..........",
+    "............OOCCccCCCCCCCCkkCCCCCCCCkkCCCCCCCCccCCCCOO..........",
+    "............OOCCccCCCCCCCCkkCCCCCCCCkkCCCCCCCCccCCCCOO..........",
+    "............OOCCccCCCCCCCCkkCCCCCCCCkkCCCCCCCCccCCCCOO..........",
+    "............OOKKccCCCCCCCCkkCCCCCCCCkkCCCCCCCCccCCCCOO..........",
+    "............OOKKccCCCCCCCCkkCCCCCCCCkkCCCCCCCCccCCCCOO..........",
+    "............OOOOOOCCCCCCCCCCkkCCCCkkCCCCCCCCCCCCOOOOOO..........",
+    "............OOOOOOCCCCCCCCCCkkCCCCkkCCCCCCCCCCCCOOOOOO..........",
+]
+
+
+
+PROFILE_HEAD = [
+    "................................................................",
+    "................................................................",
+    "................................................................",
+    "................................................................",
+    "...........................OHHHHHHHHHHHHO.......................",
+    ".........................OHHHHHHHHHHHHHHHHO.....................",
+    ".......................OHHGGGGHHHHHHHHHHhhO.....................",
+    ".......................OHHGGGGHHHhHHHHhHhhO.....................",
+    ".....................OGGGGHHHHHHHHHHHHHHGGhhO...................",
+    ".....................OGGhhHHHHHHHHHHHHHHhhhhO...................",
+    ".....................OhhHHHSSLLLLSSSSShhhhO.....................",
+    ".....................OhhHHSSSSLLLLSSSShhhhO.....................",
+    ".....................OddddSSSSLLLLSSSSShhhhO....................",
+    ".....................OddddSSSSLLLLSSSSShhhhO....................",
+    ".....................OddddSSSSLLLLSSSSShhhhO....................",
+    ".....................OddddSSBBBBSSSSSSShhhhO....................",
+    ".....................OddddSSBBBBBBSSSShhhhO.....................",
+    ".....................OddddSSEEEESSSSSSSShhO.....................",
+    ".....................OddddSSIEEWWSSSSShhhhO.....................",
+    ".....................OddddSSSSSSSSSSSShhhhO.....................",
+    ".....................OddddSSSSSSSSSSSShhhhO.....................",
+    ".....................OddddSSSSSSSSSSSShhhhO.....................",
+    "...............OSSSSSSSSSSNNNNSSSSSSSShhhhO.....................",
+    "...............OSSSSSSSSSSNNNNSSSSSSSShhhhO.....................",
+    ".................OSSSSSSNNNNSSSSSSSSSShhhhO.....................",
+    "...................OSSSSMMMMSSSSSSSSSShhhhO.....................",
+    "...................OSSddddSdSdSdSSSSSShhhhO.....................",
+    "...................OSSdSdSdSdSdSdSSSSShhhhO.....................",
+    "...................OSSSdSdSdSdSdSdSSSShhhhO.....................",
+    "....................OSSSdSdSdSdSdSdSSShhO.......................",
+    "....................OSSSdSdSdSSSSSSShhO.........................",
+    ".....................OSSSdSdSdSSSSSShhO.........................",
+    "......................OSSSSdSdSSSSSShhO.........................",
+    "........................OSSSSSSSSSShhhO.........................",
+    "..........................OSSSSSSSShhkkkkO......................",
+    "..........................OSSSSSSSShhkkkkO......................",
+    "..........................OOOTTSSkkCCCCkkO......................",
+    "..........................OOOTTTTSSkkCCCCkkO....................",
+    "..........................OOOTTTTSSkkCCCCkkO....................",
+    "..........................OOOTTTTSSkkCCCCkkO....................",
+]
+
+
+PROFILE_TORSO = [
+    "................OOOOOOTTTTSSkkCCCCkkKKOO........................",
+    "................OOOOOOTTTTSSkkCCCCkkKKOO........................",
+    "..............OOCCCCKKTTTTTTSSkkCCCCCCCCCCkkOO..................",
+    "..............OOCCCCKKTTTTTTSSkkCCCCCCCCCCkkOO..................",
+    "............OOCCCCCCKKTTTTTTRRRRSSkkCCCCCCCCCCkkOO..............",
+    "............OOCCCCCCKKTTTTTTRRRRSSkkCCCCCCCCCCkkOO..............",
+    "............OOCCCCKKTTTTTTRRRRRRRRSSkkCCCCCCCCCCkkOO............",
+    "............OOCCCCKKTTTTTTRRRRRRRRSSkkCCCCCCCCCCkkOO............",
+    "............OOCCCCKKTTTTTTRJJRrrRRSSkkCCCCCCCCCCkkOO............",
+    "............OOCCCCKKTTTTTTRJJRrrRRSSkkCCCCCCCCCCkkOO............",
+    "............OOCCCCKKTTTTTTRRRRrrRRSSkkCCCCCCCCCCkkOO............",
+    "............OOCCCCKKTTTTTTRRRRrrRRSSkkCCCCCCCCCCkkOO............",
+    "............OOCCCCKKTTTTTTRRRRrrRRSSkkCCCCCCCCCCkkOO............",
+    "............OOCCCCKKTTTTTTRRRRrrRRSSkkCCCCCCCCCCkkOO............",
+    "............OOCCccKKTTTTTTRRRRrrRRSSkkCCCCCCCCCCkkOO............",
+    "............OOCCccKKTTTTTTRRRRrrRRSSkkCCCCCCCCCCkkOO............",
+    "............OOCCccKKTTTTTTRJJRrrRRSSkkCCCCCCCCCCkkOO............",
+    "............OOCCccKKTTTTTTRJJRrrRRSSkkCCCCCCCCCCkkOO............",
+    "............OOCCccKKIDTTTTRRrrRRSSTTkkCCCCCCCCCCkkOO............",
+    "............OOCCccKKDDTTTTRRrrRRSSTTkkCCCCCCCCCCkkOO............",
+    "............OOCCccKKTTTTTTRRRRrrRRSSkkCCCCCCCCCCkkOO............",
+    "............OOCCccKKTTTTTTRRRRrrRRSSkkCCCCCCCCCCkkOO............",
+    "............OOCCccKKIDTTTTRRrrRRSSTTkkCCCCCCCCCCkkOO............",
+    "............OOCCccKKDDTTTTRRrrRRSSTTkkCCCCCCCCCCkkOO............",
+    "............OOCCccKKKKttttttttttttSSkkCCCCCCCCCCkkOO............",
+    "............OOCCccKKKKttttttttttttSSkkCCCCCCCCCCkkOO............",
+    "............OOCCCCCCCCKKKKKKKKKKKKKKKKCCCCCCCCCCkkOO............",
+    "............OOCCCCCCCCKKKKKKKKKKKKKKKKCCCCCCCCCCkkOO............",
+    "............OOCCCCCCCCkkkkIDDDDDDIkkkkCCCCCCCCCCkkOO............",
+    "............OOCCCCCCCCkkkkDDDDDDDDkkkkCCCCCCCCCCkkOO............",
+    "............OOCCCCCCCCkkkkDDggggDDkkkkCCCCCCCCCCkkOO............",
+    "............OOCCCCCCCCkkkkDDggggDDkkkkCCCCCCCCCCkkOO............",
+    "............OOCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCkkOO..............",
+    "............OOCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCkkOO..............",
+    "............OOCCccCCCCCCCCCCCCCCCCCCCCCCCCccCCkkOO..............",
+    "............OOCCccCCCCCCCCCCCCCCCCCCCCCCCCccCCkkOO..............",
+    "............OOCCccCCCCCCkkCCCCCCCCkkCCCCccCCCCkkOO..............",
+    "............OOCCccCCCCCCkkCCCCCCCCkkCCCCccCCCCkkOO..............",
+    "............OOKKccCCCCCCkkCCCCCCCCkkCCCCccCCCCkkOO..............",
+    "............OOKKccCCCCCCkkCCCCCCCCkkCCCCccCCCCkkOO..............",
+    "............OOOOOOCCCCCCkkCCCCCCCCkkCCCCCCCCCCkkOOOO............",
+    "............OOOOOOCCCCCCkkCCCCCCCCkkCCCCCCCCCCkkOOOO............",
+]
+
+
+
+LEGS_FRONT = [
+    [
+        "............OOOOOO..........................OOOOOO..............",
+        "............OOOOOO..........................OOOOOO..............",
+        "............OOPPPPOO........................OOPPPPOO............",
+        "............OOPPPPOO........................OOPPPPOO............",
+        "............OOPQPPOO........................OOPQPPOO............",
+        "............OOPQPPOO........................OOPQPPOO............",
+        "............OOPQppOO........................OOppPPOO............",
+        "............OOPQppOO........................OOppPPOO............",
+        "............OOPQppOO........................OOppPPOO............",
+        "............OOPQppOO........................OOppPPOO............",
+        "............OOPQppOO........................OOppPPOO............",
+        "............OOPQppOO........................OOppPPOO............",
+        "..........OOVVVVVVOO......................OOVVVVVVOO............",
+        "..........OOVVVVVVOO......................OOVVVVVVOO............",
+        "..........OOVVUUvvOO......................OOUUvvVVOO............",
+        "..........OOVVUUvvOO......................OOUUvvVVOO............",
+        "..........OOvvvvvvOO......................OOvvvvvvOO............",
+        "..........OOZZZZZZOO......................OOZZZZZZOO............",
+    ],
+    [
+        "................................................................",
+        "................................................................",
+        "....................OOOOOOOO........OOOOOOOO....................",
+        "....................OOOOOOOO........OOOOOOOO....................",
+        "....................OOPQPPOO........OOPQPPOO....................",
+        "....................OOPQPPOO........OOPQPPOO....................",
+        "....................OOPQppOO........OOppPPOO....................",
+        "....................OOPQppOO........OOppPPOO....................",
+        "....................OOPQppOO........OOppPPOO....................",
+        "....................OOPQppOO........OOppPPOO....................",
+        "....................OOPQppOO........OOVVVVOO....................",
+        "....................OOPQppOO........OOVVVVOO....................",
+        "....................OOVVVVOO........OOUUvvOO....................",
+        "....................OOVVVVOO........OOUUvvOO....................",
+        "....................OOUUvvOO..........OOvvvvOO..................",
+        "....................OOUUvvOO..........OOvvvvOO..................",
+        "....................OOvvvvOO....................................",
+        "....................OOZZZZOO....................................",
+    ],
+    [
+        "............OOOOOO..........................OOOOOO..............",
+        "............OOOOOO..........................OOOOOO..............",
+        "............OOPPPPOO........................OOPPPPOO............",
+        "............OOPPPPOO........................OOPPPPOO............",
+        "............OOPQPPOO........................OOPQPPOO............",
+        "............OOPQPPOO........................OOPQPPOO............",
+        "............OOppPPOO........................OOPQppOO............",
+        "............OOppPPOO........................OOPQppOO............",
+        "............OOppPPOO........................OOPQppOO............",
+        "............OOppPPOO........................OOPQppOO............",
+        "............OOppPPOO........................OOPQppOO............",
+        "............OOppPPOO........................OOPQppOO............",
+        "............OOVVVVVVOO......................OOVVVVVVOO..........",
+        "............OOVVVVVVOO......................OOVVVVVVOO..........",
+        "............OOVVvvUUOO......................OOVVUUvvOO..........",
+        "............OOVVvvUUOO......................OOVVUUvvOO..........",
+        "............OOvvvvvvOO......................OOvvvvvvOO..........",
+        "............OOZZZZZZOO......................OOZZZZZZOO..........",
+    ],
+    [
+        "................................................................",
+        "................................................................",
+        "....................OOOOOOOO........OOOOOOOO....................",
+        "....................OOOOOOOO........OOOOOOOO....................",
+        "....................OOPQPPOO........OOPQPPOO....................",
+        "....................OOPQPPOO........OOPQPPOO....................",
+        "....................OOPQPPOO........OOppPPOO....................",
+        "....................OOPQPPOO........OOppPPOO....................",
+        "....................OOppPPOO........OOppPPOO....................",
+        "....................OOppPPOO........OOppPPOO....................",
+        "....................OOVVVVOO........OOppPPOO....................",
+        "....................OOVVVVOO........OOppPPOO....................",
+        "....................OOUUvvOO........OOVVVVOO....................",
+        "....................OOUUvvOO........OOVVVVOO....................",
+        "......................OOvvvvOO......OOUUvvOO....................",
+        "......................OOvvvvOO......OOUUvvOO....................",
+        "....................................OOvvvvOO....................",
+        "....................................OOZZZZOO....................",
+    ],
+]
+
+
+
+ARMS_FRONT = [
+    [  # pose 0
+        "............OOCCKKKK............................................",
+        "............OOCCKKKK............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOSSSSKKOO............................................",
+        "..........OOSSSSKKOO............................................",
+        "..........OOSSSSSSOO............................................",
+        "..........OOSSSSSSOO............................................",
+        "............OOSSSSOO............................................",
+        "............OOSSSSOO............................................",
+        "................................................................",
+        "................................................................",
+        "................................................................",
+        "................................................................",
+    ],
+    [  # pose 1
+        "............OOCCKKKK............................................",
+        "............OOCCKKKK............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOCCCCKKOO............................................",
+        "..........OOSSSSKKOO............................................",
+        "..........OOSSSSKKOO............................................",
+        "..........OOSSSSSSOO............................................",
+        "..........OOSSSSSSOO............................................",
+        "............OOSSSSOO............................................",
+        "............OOSSSSOO............................................",
+        "................................................................",
+        "................................................................",
+    ],
+    [  # pose 2
+        "............................................KKKKCCOO............",
+        "............................................KKKKCCOO............",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKSSSSOO..........",
+        "............................................OOKKSSSSOO..........",
+        "............................................OOSSSSSSOO..........",
+        "............................................OOSSSSSSOO..........",
+        "............................................OOSSSSOO............",
+        "............................................OOSSSSOO............",
+        "................................................................",
+        "................................................................",
+        "................................................................",
+        "................................................................",
+    ],
+    [  # pose 3
+        "............................................KKKKCCOO............",
+        "............................................KKKKCCOO............",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKCCCCOO..........",
+        "............................................OOKKSSSSOO..........",
+        "............................................OOKKSSSSOO..........",
+        "............................................OOSSSSSSOO..........",
+        "............................................OOSSSSSSOO..........",
+        "............................................OOSSSSOO............",
+        "............................................OOSSSSOO............",
+        "................................................................",
+        "................................................................",
+    ],
+]
+
+
+LEGS_PROFILE = [
+    [
+        "........OOOOOO..............................OOOO................",
+        "........OOOOOO..............................OOOO................",
+        "......OOPPPPPPOO..........................OOPPPPOO..............",
+        "......OOPPPPPPOO..........................OOPPPPOO..............",
+        "......OOPPppPPOO..........................OOPPppOO..............",
+        "......OOPPppPPOO..........................OOPPppOO..............",
+        "......OOPPppPPOO..........................OOPPppOO..............",
+        "......OOPPppPPOO..........................OOPPppOO..............",
+        "......OOVVVVVVOO..........................OOPPppOO..............",
+        "......OOVVVVVVOO..........................OOPPppOO..............",
+        "......OOUUvvVVOO............................OOVVOO..............",
+        "......OOUUvvVVOO............................OOVVOO..............",
+        "......OOvvvvvvOO............................OOvvOO..............",
+        "......OOZZZZZZOO............................OOZZOO..............",
+    ],
+    [
+        "....................OOOOOO......................................",
+        "....................OOOOOO......................................",
+        "..................OOPPPPPPOO..........OOOOOOOO..................",
+        "..................OOPPPPPPOO..........OOOOOOOO..................",
+        "..................OOPPppPPOO..........OOPPppOO..................",
+        "..................OOPPppPPOO..........OOPPppOO..................",
+        "..................OOPPppPPOO..........OOPPppOO..................",
+        "..................OOPPppPPOO..........OOPPppOO..................",
+        "..................OOVVVVVVOO............OOPPppOO................",
+        "..................OOVVVVVVOO............OOPPppOO................",
+        "..................OOUUvvVVOO............OOVVVVOO................",
+        "..................OOUUvvVVOO............OOVVVVOO................",
+        "..................OOvvvvvvOO............OOUUOO..................",
+        "..................OOZZZZZZOO............OOUUOO..................",
+    ],
+    [
+        "..................OOOO..............................OOOOOO......",
+        "..................OOOO..............................OOOOOO......",
+        "................OOPPPPOO..........................OOPPPPPPOO....",
+        "................OOPPPPOO..........................OOPPPPPPOO....",
+        "................OOPPppOO..........................OOPPppPPOO....",
+        "................OOPPppOO..........................OOPPppPPOO....",
+        "................OOPPppOO..........................OOPPppPPOO....",
+        "................OOPPppOO..........................OOPPppPPOO....",
+        "................OOPPppOO..........................OOVVVVVVOO....",
+        "................OOPPppOO..........................OOVVVVVVOO....",
+        "..................OOVVOO............................OOVVuuVVOO..",
+        "..................OOVVOO............................OOVVuuVVOO..",
+        "..................OOvvOO............................OOvvvvvvOO..",
+        "..................OOZZOO............................OOZZZZZZOO..",
+    ],
+    [
+        "........................................OOOOOO..................",
+        "........................................OOOOOO..................",
+        "....................OOOOOOOO..........OOPPPPPPOO................",
+        "....................OOOOOOOO..........OOPPPPPPOO................",
+        "....................OOPPppOO..........OOPPppPPOO................",
+        "....................OOPPppOO..........OOPPppPPOO................",
+        "....................OOPPppOO..........OOPPppPPOO................",
+        "....................OOPPppOO..........OOPPppPPOO................",
+        "......................OOPPppOO..........OOVVVVVVOO..............",
+        "......................OOPPppOO..........OOVVVVVVOO..............",
+        "......................OOVVVVOO..........OOVVuuVVOO..............",
+        "......................OOVVVVOO..........OOVVuuVVOO..............",
+        "........................OOUUOO..........OOvvvvvvOO..............",
+        "........................OOUUOO..........OOZZZZZZOO..............",
+    ],
+]
+
+
+
+ARMS_PROFILE = [
+    [  # pose 0
+        "..........................CCCC..................................",
+        "..........................CCCC..................................",
+        "..........................CCCC..................................",
+        "..........................CCCC..................................",
+        "..........................CCCCCC................................",
+        "..........................CCCCCC................................",
+        "............................CCCCCC..............................",
+        "............................CCCCCC..............................",
+        "............................CCCCCCCC............................",
+        "............................CCCCCCCC............................",
+        "..............................CCCCCC............................",
+        "..............................CCCCCC............................",
+        "..............................SSSSOO............................",
+        "..............................SSSSOO............................",
+        "..............................SSSSOO............................",
+        "..............................SSSSOO............................",
+    ],
+    [  # pose 1
+        "........................CCCC....................................",
+        "........................CCCC....................................",
+        "........................CCCC....................................",
+        "........................CCCC....................................",
+        "........................CCCC....................................",
+        "........................CCCC....................................",
+        "........................CCCC....................................",
+        "........................CCCC....................................",
+        "........................CCCC....................................",
+        "........................CCCC....................................",
+        "........................CCCC....................................",
+        "........................CCCC....................................",
+        "........................SSSSOO..................................",
+        "........................SSSSOO..................................",
+        "........................SSSSOO..................................",
+        "........................SSSSOO..................................",
+    ],
+    [  # pose 2
+        "......................CCCC......................................",
+        "......................CCCC......................................",
+        "....................CCCCCC......................................",
+        "....................CCCCCC......................................",
+        "..................CCCCCC........................................",
+        "..................CCCCCC........................................",
+        "..................CCCC..........................................",
+        "..................CCCC..........................................",
+        "................CCCCCC..........................................",
+        "................CCCCCC..........................................",
+        "................CCCC............................................",
+        "................CCCC............................................",
+        "..............OOSSSSOO..........................................",
+        "..............OOSSSSOO..........................................",
+        "..............OOSSSSOO..........................................",
+        "..............OOSSSSOO..........................................",
+    ],
+    [  # pose 3
+        "........................CCCC....................................",
+        "........................CCCC....................................",
+        "........................CCCC....................................",
+        "........................CCCC....................................",
+        "........................CCCC....................................",
+        "........................CCCC....................................",
+        "........................CCCC....................................",
+        "........................CCCC....................................",
+        "........................CCCC....................................",
+        "........................CCCC....................................",
+        "........................CCCC....................................",
+        "........................CCCC....................................",
+        "........................SSSSOO..................................",
+        "........................SSSSOO..................................",
+        "........................SSSSOO..................................",
+        "........................SSSSOO..................................",
+    ],
+]
+
+def paint(rows: list[str], ox: int = 0, oy: int = 0) -> Image.Image:
+    """Paint row-string maps at 1:1 onto a fresh 64x96 cell.
+
+    Every row must be exactly 64 chars: a short row used to silently right-pad
     and shift nothing, but it hid typos for a year, so now it fails loudly.
     """
     img = Image.new("RGBA", (CELL_W, CELL_H), (0, 0, 0, 0))
@@ -151,375 +724,33 @@ def layer(base: Image.Image, rows: list[str], oy: int = 0) -> Image.Image:
     return base
 
 
-# ---------------------------------------------------------------------------
-# The face-on frame: the portrait. Head rows 2-14 on a 44px figure — a neck,
-# sloped shoulders and a tapered jaw replace the old sheet's floating block.
-#
-# The face is set and weathered: slicked-back hair with a grey sheen and grey
-# temples, heavy brows sloping down toward the nose, narrowed tieknot eyes
-# (dark lash lines, not googly whites), a small nose with shadow under it,
-# checker stubble across the jaw and a two-row frown. Light strikes the left:
-# the left cheek carries the light tone, the right falls to shade.
-# ---------------------------------------------------------------------------
-FACE = [
-    "................................",  # 0
-    "................................",  # 1
-    "..........OOHHHHHHHHOO..........",  # 2 crown
-    "........OOHHHHHHHHHHHHOO........",  # 3 full hair
-    "........OHGGHHHHHHHHGGHO........",  # 4 grey sheen + temples
-    "........OHhHHHHHHHHHHhHO........",  # 5 shaded sides
-    "........OHhHLLSSSSLHHhHO........",  # 6 hairline, lit forehead
-    "........OddHSSSSSSSSHddO........",  # 7 sideburns start
-    "........OdsSBBBSSBBBSsdO........",  # 8 heavy brows
-    "........OdsSEESSSSEESsdO........",  # 9 narrowed lash-line eyes
-    "........OdsSSSNSSSNSSsdO........",  # 10 nose bridge shadow
-    "........OddSSSNNSNSSSddO........",  # 11 nose + shadow under
-    "........OddSSMMMMMMSSddO........",  # 12 frown, upper lip
-    "........OdsSdMMMMMMdSSsdO.......",  # 13 frown corners pull down
-    "........OdsSdddddddSSsdO........",  # 14 stubble chin
-    "................................",  # 15
-]
-
-# Every row must be exactly one cell wide; fail fast, not silently shifted.
-
-assert all(len(r) == CELL_W for r in FACE), "face map miscounted"
-
-# ---------------------------------------------------------------------------
-# The face-on torso: collar-up trench, white shirt V, knotted red tie,
-# double-breasted gold buttons, gold-buckled belt, skirt with a centre vent.
-# Rows 15-38; the legs (rows 38-46) are per-frame so the walk can stride.
-# {hem} shifts the skirt 1px against the stride for secondary motion.
-# ---------------------------------------------------------------------------
-TORSO_FRONT = [
-    ".............OSSSSO.............",  # 15 neck
-    ".............OSSSSO.............",  # 16 neck meets collar
-    "........OOOOTTTTTTTTOOOO........",  # 17 collar wings + shirt
-    ".......OCCKTTTTTTTTTTKCCO.......",  # 18 shoulders catch light left
-    "......OCCCKTTTRRRRTTTTKCCCO.....",  # 19 lapels open, knot appears
-    "......OCKKtTTRnRRRTTTTtKCCO.....",  # 20 knot with catch-light
-    ".....OCKKtTTTRRRRRTTTTtKKCCO....",  # 21 tie shaft
-    ".....OCKKtTTTRRRRRTTTTtKKCCO....",  # 22
-    ".....OCcKtTTTRRrRRTTTTtKcCCO....",  # 23 shade on the right
-    ".....OCcKtTTTRRrRRTTTTtKcCCO....",  # 24
-    ".....OCcKDTtTRRrRRTTtTDKcCCO....",  # 25 first gold buttons
-    ".....OCcKtTTTRRrRRTTTTtKcCCO....",  # 26
-    ".....OCcKDTtTRRrRRTTtTDKcCCO....",  # 27 second gold buttons
-    ".....OCcKtTTTRRrRRtTTTtKcCCO....",  # 28 shirt narrows to the belt
-    ".....OCcKKttttttttttttKKcCCO....",  # 29 shirt hem shade
-    ".....OCCCCCKKKKKKKKKKCCCCCO.....",  # 30 belt strap, lit top edge
-    ".....OCCCCCkkkDDDDDDkkkCCCCCO...",  # 31 buckle in gold
-    ".....OCCCCCkkkDggggDkkkCCCCCO...",  # 32 buckle shade row
-    "......OCCCCCCCCCCCCCCCCCCCO.....",  # 33 skirt, hem begins
-    "......OCcCCCCCCCCCCCCCCcCCO.....",  # 34 fold shade right
-    "......OCcCCCCkCCCCkCCCCcCCO.....",  # 35 vent folds
-    "......OCcCCCCkCCCCkCCCCcCCO.....",  # 36
-    "......OKcCCCCkCCCCkCCCCcCCO.....",  # 37 left hem catches light
-    "......OOOCCCCCkCCkCCCCCCOOO.....",  # 38 hem points, vent opens
-]
-
-assert all(len(r) == CELL_W for r in TORSO_FRONT), "torso map miscounted"
-
-# Legs, rows 38-46 (9 rows each). A/C are the planted contacts (wide, 1px
-# low — the bob), B/D the passing frames (feet under the body, lifted heels).
-# Every boot has a lit toe cap so the feet read against the dark floor.
-LEGS_FRONT = [
-    [  # A — contact: left foot out, right planted (also the idle)
-        "......OOO.............OOO.......",
-        "......OPPO............OPPO......",
-        "......OPPO............OPPO......",
-        "......OPpO............OpPO......",
-        "......OPpO............OpPO......",
-        "......OPpO............OpPO......",
-        ".....OVVVO...........OVVVO......",
-        ".....OVUvO...........OUvVO......",
-        ".....OvvvO...........OvvvO......",
-    ],
-    [  # B — passing: feet under the body, right heel lifted
-        "................................",
-        "..........OOOO....OOOO..........",
-        "..........OPPO....OPPO..........",
-        "..........OPpO....OpPO..........",
-        "..........OPpO....OpPO..........",
-        "..........OPpO....OVVO..........",
-        "..........OVVO....OUvO..........",
-        "..........OUvO.....OvvO.........",
-        "..........OvvO..................",
-    ],
-    [  # C — contact, mirrored: right foot out
-        "......OOO.............OOO.......",
-        "......OPPO............OPPO......",
-        "......OPPO............OPPO......",
-        "......OpPO............OPpO......",
-        "......OpPO............OPpO......",
-        "......OpPO............OPpO......",
-        "......OVVVO...........OVVVO.....",
-        "......OVvUO...........OVUvO.....",
-        "......OvvvO...........OvvvO.....",
-    ],
-    [  # D — passing, mirrored: left heel lifted
-        "................................",
-        "..........OOOO....OOOO..........",
-        "..........OPPO....OPPO..........",
-        "..........OPPO....OpPO..........",
-        "..........OpPO....OpPO..........",
-        "..........OVVO....OpPO..........",
-        "..........OUvO....OVVO..........",
-        "...........OvvO...OUvO..........",
-        "..................OvvO..........",
-    ],
-]
-
-# Sleeves + hands, rows 17-33 (17 rows). The coat sleeve covers to the wrist;
-# the hand is two skin pixels. Contacts counter-swing against the feet.
-ARMS_FRONT = [
-    [  # A — left arm forward (hand low-front), right arm back
-        "......OCKK......................",
-        ".....OCCKO......................",
-        ".....OCCKO......................",
-        ".....OCCKO......................",
-        ".....OCCKO......................",
-        ".....OCCKO......................",
-        ".....OCCKO......................",
-        ".....OCCKO......................",
-        ".....OCCKO......................",
-        ".....OCCKO......................",
-        ".....OCCKO......................",
-        ".....OCCKO......................",
-        ".....OSSKO......................",
-        ".....OSSSO......................",
-        "......OSSO......................",
-        "................................",
-        "................................",
-    ],
-    [  # B — passing: both sleeves hang mid
-        "......OCKK......................",
-        ".....OCCKO......................",
-        ".....OCCKO......................",
-        ".....OCCKO......................",
-        ".....OCCKO......................",
-        ".....OCCKO......................",
-        ".....OCCKO......................",
-        ".....OCCKO......................",
-        ".....OCCKO......................",
-        ".....OCCKO......................",
-        ".....OCCKO......................",
-        ".....OCCKO......................",
-        ".....OCCKO......................",
-        ".....OSSKO......................",
-        ".....OSSSO......................",
-        "......OSSO......................",
-        "................................",
-    ],
-    [  # C — mirror of A
-        "......................KKCO......",
-        "......................OKCCO.....",
-        "......................OKCCO.....",
-        "......................OKCCO.....",
-        "......................OKCCO.....",
-        "......................OKCCO.....",
-        "......................OKCCO.....",
-        "......................OKCCO.....",
-        "......................OKCCO.....",
-        "......................OKCCO.....",
-        "......................OKCCO.....",
-        "......................OKCCO.....",
-        "......................OKSSO.....",
-        "......................OSSSO.....",
-        "......................OSSO......",
-        "................................",
-        "................................",
-    ],
-    [  # D — mirror of B
-        "......................KKCO......",
-        "......................OKCCO.....",
-        "......................OKCCO.....",
-        "......................OKCCO.....",
-        "......................OKCCO.....",
-        "......................OKCCO.....",
-        "......................OKCCO.....",
-        "......................OKCCO.....",
-        "......................OKCCO.....",
-        "......................OKCCO.....",
-        "......................OKCCO.....",
-        "......................OKCCO.....",
-        "......................OKCCO.....",
-        "......................OKSSO.....",
-        "......................OSSSO.....",
-        "......................OSSO......",
-        "................................",
-    ],
-]
 
 
 def face_frame() -> Image.Image:
     img = paint(FACE, 0, 0)
-    layer(img, TORSO_FRONT, 15)
-    layer(img, LEGS_FRONT[0], 38)
-    layer(img, ARMS_FRONT[1], 17)
+    layer(img, TORSO_FRONT, 30)
+    layer(img, LEGS_FRONT[0], 75)
+    layer(img, ARMS_FRONT[1], 34)
     return img
 
 
 def front_walk_frame(i: int) -> Image.Image:
     """Face-on walk is only used for the turn frame's neighbours; the real
     walk cycle is the profile. Still, keep it honest: bob + stride + swing."""
-    img = paint(FACE, 0, -1 if i in (1, 3) else 0)
-    layer(img, TORSO_FRONT, 15 + (-1 if i in (1, 3) else 0))
-    layer(img, LEGS_FRONT[i], 38)
-    layer(img, ARMS_FRONT[i], 17)
+    bob = -2 if i in (1, 3) else 0
+    img = paint(FACE, 0, bob)
+    layer(img, TORSO_FRONT, 30 + bob)
+    layer(img, LEGS_FRONT[i], 75)
+    layer(img, ARMS_FRONT[i], 34)
     return img
 
 
-# ---------------------------------------------------------------------------
-# The left-profile walk cycle. Side view facing left: the hair sweeps back,
-# the nose protrudes past the face line, one narrowed eye looks left, the
-# collar stands up behind the neck, and the coat opens at the front edge with
-# the tie's edge showing. Legs stride heel-to-toe; the near arm swings from
-# the shoulder against the legs.
-# ---------------------------------------------------------------------------
-PROFILE_HEAD = [
-    "................................",  # 0
-    "................................",  # 1
-    "..........OOHHHHHHHHHHO.........",  # 2 crown sweeps back
-    ".........OHHHHHHHHHHHHHO........",  # 3
-    ".........OHGGHHHHHHHHHHHO.......",  # 4 grey temple at the front
-    ".........OHhHHHHHHHHHHHhO.......",  # 5
-    ".........OhHLLSSSSSSShhO........",  # 6 forehead in profile
-    ".........OddHSSSSSSSSShhO.......",  # 7 temple, front sideburn
-    ".........OddHSBBBSSSSShhO.......",  # 8 brow over the eye's front
-    ".........OddHSEWSSSSSSShO.......",  # 9 eye looks left: pupil front
-    ".........OddHSSSSSSSSShhO.......",  # 10 cheek
-    ".........OddHSSSSSSSSShhO.......",  # 11 nose bridge still inside
-    ".......OSSSSSSSSSSSShhO.........",  # 12 nose tip leaves the face line
-    ".......OSSSSSNNSSSSShhO.........",  # 13 nose base shadow
-    "........OSSSSMMSSSSSShhO........",  # 14 frown under the nose
-    "........OSSSSddSSSShhO..........",  # 15 stubble jaw
-    "........OSSSddSSShhOO...........",  # 16 chin tucks back
-    ".........OSSSddSSShkO...........",  # 17 jaw to the neck
-    ".........OOddHSSSkkO............",  # 18 collar-up flap rises behind
-    ".........OOOTTSkCCkO............",  # 19 neck meets collar
-]
-
-assert all(len(r) == CELL_W for r in PROFILE_HEAD), "profile head miscounted"
-
-PROFILE_TORSO = [
-    "........OOOTTSkCCkKO............",  # 20 collar stands, shirt edge
-    ".......OCCKTTTSkCCCCCkO.........",  # 21 shoulder
-    "......OCCCKTTTRRSkCCCCCkO.......",  # 22 tie edge in the opening
-    "......OCCKTTTRRRRSkCCCCCkO......",  # 23 tie edge in the opening
-    "......OCCKTTTRRrRSkCCCCCkO......",  # 24
-    "......OCCKTTTRRrRSkCCCCCkO......",  # 25 tie shade
-    "......OCCKTTTRRrRSkCCCCCkO......",  # 26
-    "......OCcKTTTRRrRSkCCCCCkO......",  # 27 right edge falls to shade
-    "......OCcKTTTRRrRSkCCCCCkO......",  # 28
-    "......OCcKDTTRrRSTkCCCCCkO......",  # 29 gold button
-    "......OCcKTTTRRrRSkCCCCCkO......",  # 30
-    "......OCcKDTTRrRSTkCCCCCkO......",  # 31 gold button
-    "......OCcKKttttttSkCCCCCkO......",  # 32 shirt hem to belt
-    "......OCCCCKKKKKKKKCCCCCkO......",  # 33 belt, lit top
-    "......OCCCCkkDDDDkkCCCCCkO......",  # 34 buckle
-    "......OCCCCkkDggDkkCCCCCkO......",  # 35 buckle shade
-    "......OCCCCCCCCCCCCCCCCkO.......",  # 36 skirt
-    "......OCcCCCCCCCCCCCCcCkO.......",  # 37 folds
-    "......OCcCCCkCCCCkCCcCCkO.......",  # 38 vent folds
-    "......OKcCCCkCCCCkCCcCCkO.......",  # 39 hem light left
-    "......OOOCCCkCCCCkCCCCCkOO......",  # 40 hem points
-]
-
-assert all(len(r) == CELL_W for r in PROFILE_TORSO), "profile torso miscounted"
-
-# Profile legs, rows 40-46 (7 rows). Facing left: negative x is forward.
-# A: left leg reaches forward, right leg trails back. B: left plants under the
-# body, right knee bends with the heel kicked up. C/D mirror.
-LEGS_PROFILE = [
-    [  # A — stride: front foot forward, rear foot back on its toe
-        "....OOO...............OO........",
-        "...OPPPO.............OPPO.......",
-        "...OPpPO.............OPpO.......",
-        "...OPpPO.............OPpO.......",
-        "...OVVVO.............OPpO.......",
-        "...OUvVO..............OVO.......",
-        "...OvvvO..............OvO.......",
-    ],
-    [  # B — passing: front leg plants, rear heel kicks up behind
-        "..........OOO...................",
-        ".........OPPPO.....OOOO.........",
-        ".........OPpPO.....OPpO.........",
-        ".........OPpPO.....OPpO.........",
-        ".........OVVVO......OPpO........",
-        ".........OUvVO......OVVO........",
-        ".........OvvvO......OUO.........",
-    ],
-    [  # C — stride mirrored: right leg forward
-        ".........OO...............OOO...",
-        "........OPPO.............OPPPO..",
-        "........OPpO.............OPpPO..",
-        "........OPpO.............OPpPO..",
-        "........OPpO.............OVVVO..",
-        ".........OVO..............OVuVO.",
-        ".........OvO..............OvvvO.",
-    ],
-    [  # D — passing mirrored
-        "....................OOO.........",
-        "..........OOOO.....OPPPO........",
-        "..........OPpO.....OPpPO........",
-        "..........OPpO.....OPpPO........",
-        "...........OPpO.....OVVVO.......",
-        "...........OVVO.....OVuVO.......",
-        "............OUO.....OvvvO.......",
-    ],
-]
-
-# Near arm swings from the shoulder (x13, y22). Sleeve 2px, hand 2x2 skin.
-ARMS_PROFILE = [
-    [  # A — arm swings back while the left leg goes forward
-        ".............CC.................",
-        ".............CC.................",
-        ".............CCC................",
-        "..............CCC...............",
-        "..............CCCC..............",
-        "...............CCC..............",
-        "...............SSO..............",
-        "...............SSO..............",
-    ],
-    [  # B — arm hangs mid, hand at the hip
-        "............CC..................",
-        "............CC..................",
-        "............CC..................",
-        "............CC..................",
-        "............CC..................",
-        "............CC..................",
-        "............SSO.................",
-        "............SSO.................",
-    ],
-    [  # C — arm swings forward, hand leading
-        "...........CC...................",
-        "..........CCC...................",
-        ".........CCC....................",
-        ".........CC.....................",
-        "........CCC.....................",
-        "........CC......................",
-        ".......OSSO.....................",
-        ".......OSSO.....................",
-    ],
-    [  # D — arm returns through mid
-        "............CC..................",
-        "............CC..................",
-        "............CC..................",
-        "............CC..................",
-        "............CC..................",
-        "............CC..................",
-        "............SSO.................",
-        "............SSO.................",
-    ],
-]
-
-
 def profile_frame(leg_idx: int) -> Image.Image:
-    bob = -1 if leg_idx in (1, 3) else 0
+    bob = -2 if leg_idx in (1, 3) else 0
     img = paint(PROFILE_HEAD, 0, bob)
-    layer(img, PROFILE_TORSO, 20 + bob)
-    layer(img, LEGS_PROFILE[leg_idx], 40)
-    layer(img, ARMS_PROFILE[leg_idx], 23 + bob)
+    layer(img, PROFILE_TORSO, 40 + bob)
+    layer(img, LEGS_PROFILE[leg_idx], 79)
+    layer(img, ARMS_PROFILE[leg_idx], 46 + bob)
     return img
 
 
@@ -539,16 +770,16 @@ def build_strip() -> None:
 # ---------------------------------------------------------------------------
 # The roll strip: rotation frames stay NEAREST so the pixels survive the spin,
 # and the tucked ball is a stepped pixel ellipse in the coat's own palette —
-# light crown, gold button winking out — with the real head tucked under it.
-# Cells 0-7 roll right; 8-15 mirror them.
+# light crown, gold button winking out — with the real head tucked into the
+# roll's leading end. Cells 0-7 roll right; 8-15 mirror them.
 # ---------------------------------------------------------------------------
-ROLL_CELL_W = 40
+ROLL_CELL_W = 80
 
 
 def stepped_ball(cx: int, ground_y: int) -> Image.Image:
     """A curled body as stepped scanlines: crisp at 1:1, no smeared ellipse.
 
-    A low tuck centred on (cx, ground_y - 7): the coat's crown catches the
+    A low tuck centred on (cx, ground_y - 14): the coat's crown catches the
     light on top, the gold button winks out of the side, and the head (pasted
     separately) tucks into the front, not on top — a snowman is not a roll.
     """
@@ -556,19 +787,19 @@ def stepped_ball(cx: int, ground_y: int) -> Image.Image:
     draw = ImageDraw.Draw(cell)
     # (y-offset from ground, half-width, colour).
     rows = [
-        (1, 7, COAT_D),
-        (2, 10, COAT_S),
-        (3, 12, COAT),
-        (4, 13, COAT),
-        (5, 14, COAT),
-        (6, 14, COAT_L),
-        (7, 13, COAT_L),
-        (8, 12, COAT),
-        (9, 11, COAT),
-        (10, 9, COAT_S),
-        (11, 7, COAT_S),
-        (12, 5, COAT_D),
-        (13, 3, COAT_D),
+        (2, 14, COAT_D),
+        (4, 20, COAT_S),
+        (6, 24, COAT),
+        (8, 26, COAT),
+        (10, 28, COAT),
+        (12, 28, COAT_L),
+        (14, 26, COAT_L),
+        (16, 24, COAT),
+        (18, 22, COAT),
+        (20, 18, COAT_S),
+        (22, 14, COAT_S),
+        (24, 10, COAT_D),
+        (26, 6, COAT_D),
     ]
     for dy, hw, col in rows:
         y = ground_y - dy
@@ -579,17 +810,17 @@ def stepped_ball(cx: int, ground_y: int) -> Image.Image:
         draw.point([(cx - hw - 1, y)], fill=OUT + (255,))
         draw.point([(cx + hw + 1, y)], fill=OUT + (255,))
     # The gold button winks out of the tuck — the coat's signature.
-    draw.point([(cx - 3, ground_y - 6)], fill=GOLD + (255,))
-    draw.point([(cx - 2, ground_y - 6)], fill=GOLD_S + (255,))
+    draw.point([(cx - 6, ground_y - 12)], fill=GOLD + (255,))
+    draw.point([(cx - 4, ground_y - 12)], fill=GOLD_S + (255,))
     return cell
 
 
 def ball_frame(face: Image.Image) -> Image.Image:
-    cell = stepped_ball(ROLL_CELL_W // 2 - 2, GROUND_LINE)
+    cell = stepped_ball(ROLL_CELL_W // 2 - 4, GROUND_LINE)
     # The actual head tucked into the roll's leading (right) end, chin down:
     # the grey temples stay readable so the ball is unmistakably Jeffs.
-    head = face.crop((10, 2, 22, 15)).resize((12, 11), Image.NEAREST)
-    cell.alpha_composite(head, (ROLL_CELL_W // 2 + 4, GROUND_LINE - 10))
+    head = face.crop((20, 4, 44, 30)).resize((22, 20), Image.NEAREST)
+    cell.alpha_composite(head, (ROLL_CELL_W // 2 + 8, GROUND_LINE - 20))
     return cell
 
 
