@@ -375,6 +375,89 @@ export const MENU_CSS = `
 	margin: -4px 0 10px;
 	text-align: right;
 }
+/* ---- the password field ----
+   The host form is label-left / control-right rows, so the password sits in
+   the right corner with the number boxes — never stretched across the middle
+   of the card. The box is wider than a number box (a password needs the
+   room), with space inside for the show/hide toggle. */
+.gd-field-stack {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin-bottom: 10px;
+}
+.gd-password-row {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 14px;
+	font-size: 13px;
+}
+.gd-field-stack .gd-field-label {
+	opacity: 0.75;
+	font-size: 13px;
+	cursor: pointer;
+}
+.gd-field-optional {
+	opacity: 0.5;
+	font-size: 12px;
+}
+.gd-password-wrap {
+	position: relative;
+	display: flex;
+	align-items: center;
+	flex: 0 1 240px;
+	min-width: 0;
+}
+.gd-password-wrap .gd-input {
+	width: 100%;
+	box-sizing: border-box;
+	font-size: 14px;
+	padding: 7px 60px 7px 10px;
+}
+.gd-password-wrap .gd-input::placeholder {
+	color: rgba(255, 255, 255, 0.35);
+	opacity: 1;
+}
+.gd-password-wrap .gd-input:focus-visible {
+	outline: 2px solid #0ec3c9;
+	outline-offset: 2px;
+}
+.gd-password-toggle {
+	position: absolute;
+	right: 6px;
+	flex: 0 0 auto;
+	background: rgba(255, 255, 255, 0.06);
+	border: 1px solid rgba(255, 255, 255, 0.22);
+	border-radius: 6px;
+	color: rgba(255, 255, 255, 0.75);
+	font: inherit;
+	font-size: 12px;
+	padding: 6px 10px;
+	cursor: pointer;
+	transition: border-color 0.15s, color 0.15s;
+}
+.gd-password-toggle:hover {
+	border-color: #0ec3c9;
+	color: #0ec3c9;
+}
+.gd-password-toggle:focus-visible {
+	outline: 2px solid #0ec3c9;
+	outline-offset: 2px;
+}
+/* A phone is too narrow for label-left / box-right: the row stacks, label
+   above and full-width box below, rather than squeezing the password into
+   a sliver. */
+@media (max-width: 520px) {
+	.gd-password-row {
+		flex-direction: column;
+		align-items: stretch;
+		gap: 8px;
+	}
+	.gd-password-wrap {
+		flex-basis: auto;
+	}
+}
 /* The advanced block hides behind a disclosure: the fields in it are for
    measuring and for hosts who already know what they are for, and showing them
    all makes the vanilla options harder to see. */

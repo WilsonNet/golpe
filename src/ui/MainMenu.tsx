@@ -50,9 +50,9 @@ import { lessonsOf, progressOf, tutorialFor } from "../game/campaign";
 import { readStoredHero, storeHero } from "../game/heroPref";
 import { type Action, bindings, codeLabel } from "../game/input/Bindings";
 import type { LaunchParams } from "../game/online/launch";
+import { setPendingPassword } from "../game/online/passwordStore";
 import { ROOM_ID_RE } from "../game/online/room";
 import { MAX_PASSWORD_LENGTH } from "../game/online/types";
-import { setPendingPassword } from "../game/online/passwordStore";
 import { MAX_NAME, readStoredName, storeName } from "../game/playerName";
 import { HERO_IDS, HEROES, type HeroId } from "../game/simulation/Heroes";
 import type { MatchMode } from "../game/simulation/Teams";
@@ -451,6 +451,7 @@ function HostForm({
 }) {
 	const [settings, setSettings] = useState(DEFAULT_SETTINGS);
 	const [showAdvanced, setShowAdvanced] = useState(false);
+	const [showPassword, setShowPassword] = useState(false);
 
 	const set = (patch: Partial<HostSettings>) =>
 		setSettings((s) => ({ ...s, ...patch }));
@@ -605,17 +606,36 @@ function HostForm({
 						: "Unlisted: friends can join by link, but strangers will not be sent here."}
 				</p>
 			</div>
-			<div className="gd-field">
-				<span className="gd-field-label">Password (optional)</span>
-				<input
-					type="text"
-					value={settings.password}
-					maxLength={MAX_PASSWORD_LENGTH}
-					placeholder="leave empty for no password"
-					autoComplete="off"
-					spellCheck={false}
-					onChange={(e) => set({ password: e.target.value })}
-				/>
+			<div className="gd-field-stack">
+				<div className="gd-password-row">
+					<label className="gd-field-label" htmlFor="gd-password">
+						Password <span className="gd-field-optional">(optional)</span>
+					</label>
+					<div className="gd-password-wrap">
+						<input
+							id="gd-password"
+							className="gd-input gd-password-input"
+							type={showPassword ? "text" : "password"}
+							value={settings.password}
+							maxLength={MAX_PASSWORD_LENGTH}
+							placeholder="set a password"
+							autoComplete="new-password"
+							spellCheck={false}
+							onChange={(e) => set({ password: e.target.value })}
+						/>
+						{settings.password !== "" ? (
+							<button
+								className="gd-password-toggle"
+								type="button"
+								aria-pressed={showPassword}
+								aria-label={showPassword ? "Hide password" : "Show password"}
+								onClick={() => setShowPassword(!showPassword)}
+							>
+								{showPassword ? "Hide" : "Show"}
+							</button>
+						) : null}
+					</div>
+				</div>
 				{settings.password.trim() !== "" ? (
 					<label className="gd-field-label" htmlFor="gd-share-pw">
 						<input
@@ -630,9 +650,15 @@ function HostForm({
 				<p className="gd-field-note">
 					{settings.password.trim() !== "" ? (
 						settings.sharePasswordInLink ? (
-							<>The link will carry `?password=` — anyone with the link can join.</>
+							<>
+								The link will carry `?password=` — anyone with the link can
+								join.
+							</>
 						) : (
-							<>Not shown in the link by default — share the password separately.</>
+							<>
+								Not shown in the link by default — share the password
+								separately.
+							</>
 						)
 					) : (
 						<>A passworded room is always private.</>
