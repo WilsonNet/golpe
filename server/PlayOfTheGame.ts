@@ -129,6 +129,7 @@ export class PotgRecorder {
 		actor: { id: string; name: string },
 		victim: { id: string; name: string } = { id: "", name: "" },
 		amount?: number,
+		ult?: HighlightEvent["ult"],
 	) {
 		const event: HighlightEvent = {
 			t,
@@ -138,6 +139,7 @@ export class PotgRecorder {
 			victimId: victim.id,
 			victimName: victim.name,
 			...(amount !== undefined ? { amount } : {}),
+			...(ult !== undefined ? { ult } : {}),
 		};
 		this.tracker.note(event);
 	}

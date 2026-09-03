@@ -88,7 +88,7 @@ one timestamp.
 | `kill` | 100 | The unit. |
 | `deny` | 140 | Rarest thing in the game, and the only one *both* players remember. Killed mid-hold, or the grenade guarded. |
 | `wipeKill` | +90 | The frag that emptied a side. It ended a round. |
-| `ultimateKill` | +80 | Credited to the black hole. |
+| `ultimateKill` | +80 | Credited to an ultimate — the headline names which (`BLACK HOLE`, `DRAGON THRUST`, `DEATH BLOSSOM`). |
 | `clutchKill` | +60 | The killer was on 30 HP or less — one exchange from losing it. |
 | `finisherKill` | +45 | Landed with the combo's overhead finisher or a Massive Strike. |
 | `airKill` | +30 | The victim never touched the floor. |
@@ -99,8 +99,8 @@ Modifiers are **additive, not exclusive**: an airborne finisher that wiped a
 side and left the killer on 12 HP is worth all four, which is exactly the moment
 a highlight reel should be fighting to show.
 
-**The ultimate pays nobody.** The hole's damage never fires a `damageDealt`
-burst — the same gate the ultimate meter uses, so "the hole feeds nothing" is
+**The ultimate pays nobody.** An ultimate's damage never fires a `damageDealt`
+burst — the same gate the ultimate meter uses, so "the ultimate feeds nothing" is
 one rule with one home.
 
 **Each successive frag in a run is worth more than the last** — +45% per frag
@@ -121,7 +121,8 @@ The headline is what a player would say out loud afterwards.
 
 - 2/3/4 frags → `DOUBLE KILL` / `TRIPLE KILL` / `QUADRUPLE KILL`; 5+ → `RAMPAGE`.
 - A multikill **outranks** whatever was unusual about it.
-- A single frag falls through to what *was* unusual: `DENIED`, `BLACK HOLE`,
+- A single frag falls through to what *was* unusual: `DENIED`, `BLACK HOLE` /
+  `DRAGON THRUST` / `DEATH BLOSSOM` (whichever ult landed it),
   `LAST ONE STANDING`, `FINISHER`, `ON THE ROPES`, `OUT OF THE AIR`.
 - A play that won on pressure alone is named for the pressure: `BARRAGE` for
   four-plus bursts of damage dealt, `THE WALL` for absorbed damage that beat
@@ -209,7 +210,7 @@ own, variable speed underneath them.
   what makes it read as emphasis.
 - The zoom **punches +0.28** at a beat and decays over 520ms, with a 9px shake.
   **The punch is scaled by what the beat was** — 1.4x for a deny, 1.3x for a
-  round-wipe, 1.2x for the hole — so the reel's emphasis matches what the server
+  round-wipe, 1.2x for an ultimate — so the reel's emphasis matches what the server
   thought mattered. The shake fires **once per beat**, counted rather than
   time-windowed — slow motion holds a beat inside its window for a dozen frames,
   and a re-triggered shake is a rattle instead of an impact.

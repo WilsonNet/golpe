@@ -1884,7 +1884,16 @@ export class GameRoom {
 			const actor = { id: killer.id, name: killer.name };
 			const target = { id: victim.id, name: victim.name };
 			if (victim.lastHurtByUlt) {
-				this.potg.note(t, "ultimateKill", actor, target);
+				// Which ult it was is the killing blow's cause — hole, dragon or
+				// blossom are the only non-paying damage in the room, so the
+				// cause is one of the three whenever this branch runs. The
+				// headline reads it; the score never does.
+				const cause = victim.lastHurtCause;
+				const ult =
+					cause === "dragon" || cause === "blossom" || cause === "hole"
+						? cause
+						: undefined;
+				this.potg.note(t, "ultimateKill", actor, target, undefined, ult);
 			}
 			if (
 				killer.state.meleeAction === "slash3" ||

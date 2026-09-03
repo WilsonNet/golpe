@@ -226,7 +226,7 @@ const MULTIKILL_MAX = "RAMPAGE";
  *
  * A multikill names itself and outranks everything, because that is what the
  * player will be describing afterwards. A single frag falls through to whatever
- * was *unusual* about it — the hole, the deny, the finisher, the fact that it
+ * was *unusual* about it — the ult, the deny, the finisher, the fact that it
  * happened in mid-air — and a play that won on pressure alone is named for the
  * pressure. Only a completely ordinary kill gets the ordinary name. A play
  * with a headline nobody would say out loud is a play that should have lost to
@@ -261,6 +261,17 @@ export function describePlay(play: PotgPlay): {
 		};
 	}
 	if (kinds.has("ultimateKill")) {
+		// Which ult it was is on the event — the kill feed's cause, carried
+		// through `note`. One actor is one hero for a whole play, so the first
+		// ultimate kill names them all; absent (old events) is the black hole
+		// the headline always used to say.
+		const ult = play.events.find((e) => e.kind === "ultimateKill")?.ult;
+		if (ult === "dragon") {
+			return { headline: "DRAGON THRUST", subtitle: "Nothing stops a line." };
+		}
+		if (ult === "blossom") {
+			return { headline: "DEATH BLOSSOM", subtitle: "The storm is coming." };
+		}
 		return { headline: "BLACK HOLE", subtitle: "Gravity has a winner." };
 	}
 	if (kinds.has("wipeKill")) {

@@ -30,7 +30,11 @@ import type { TeamId } from "../simulation/Teams.js";
 export type HighlightKind =
 	/** An ordinary frag. The unit every play is built out of. */
 	| "kill"
-	/** A frag credited to the black hole. */
+	/**
+	 * A frag credited to an ultimate — see `ult` on the event for which one.
+	 * One kind, not three: the score is the same whatever the ult was, and
+	 * only the headline cares which it was.
+	 */
 	| "ultimateKill"
 	/** A frag landed with the combo's overhead finisher, or a Massive Strike. */
 	| "finisherKill"
@@ -77,6 +81,13 @@ export interface HighlightEvent {
 	 * from; the score uses the kind's weight, never this number.
 	 */
 	amount?: number;
+	/**
+	 * Which ultimate landed an `ultimateKill` — the `KillCause` the server
+	 * recorded on the killing blow (`hole`, `dragon` or `blossom`). Only the
+	 * headline reads it; the score never does. Absent on old events, which
+	 * name the black hole the way they always did.
+	 */
+	ult?: "hole" | "dragon" | "blossom";
 }
 
 /**

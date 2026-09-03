@@ -326,8 +326,14 @@ describe("describePlay", () => {
 		kinds: HighlightKind[],
 		victims: string[] = [],
 		extra: Partial<PotgPlay["stats"]> = {},
+		ult?: HighlightEvent["ult"],
 	): PotgPlay => {
-		const events = kinds.map((k, i) => event(i, k, "a", victims[i] ?? "Foe"));
+		const events = kinds.map((k, i) =>
+			event(i, k, "a", victims[i] ?? "Foe", undefined),
+		);
+		if (ult !== undefined) {
+			for (const e of events) if (e.kind === "ultimateKill") e.ult = ult;
+		}
 		return {
 			actorId: "a",
 			actorName: "A",
@@ -370,6 +376,14 @@ describe("describePlay", () => {
 		expect(describePlay(play(1, ["ultimateKill", "kill"])).headline).toBe(
 			"BLACK HOLE",
 		);
+		expect(
+			describePlay(play(1, ["ultimateKill", "kill"], [], {}, "dragon"))
+				.headline,
+		).toBe("DRAGON THRUST");
+		expect(
+			describePlay(play(1, ["ultimateKill", "kill"], [], {}, "blossom"))
+				.headline,
+		).toBe("DEATH BLOSSOM");
 		expect(describePlay(play(1, ["airKill", "kill"])).headline).toBe(
 			"OUT OF THE AIR",
 		);
