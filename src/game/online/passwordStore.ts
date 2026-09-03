@@ -31,5 +31,3 @@ export function consumePendingPassword(): string | null {
 		return null;
 	}
 }
-
-

@@ -136,7 +136,10 @@ export function ServerBrowser({
 
 	const filtered = useMemo(() => {
 		let out = rooms.filter((r) => {
-			if (search.trim() !== "" && !r.id.toLowerCase().includes(search.trim().toLowerCase()))
+			if (
+				search.trim() !== "" &&
+				!r.id.toLowerCase().includes(search.trim().toLowerCase())
+			)
 				return false;
 			if (modeFilter !== "all" && r.mode !== modeFilter) return false;
 			if (regionFilter !== "all" && r.region !== regionFilter) return false;
@@ -232,7 +235,8 @@ export function ServerBrowser({
 						className={`gd-chip${sortKey === "players" ? " gd-chip-on" : ""}`}
 						onClick={() => toggleSort("players")}
 					>
-						Players {sortKey === "players" ? (sortDir === "asc" ? "↑" : "↓") : ""}
+						Players{" "}
+						{sortKey === "players" ? (sortDir === "asc" ? "↑" : "↓") : ""}
 					</button>
 					<button
 						type="button"
@@ -253,7 +257,9 @@ export function ServerBrowser({
 				<div className="gd-error">{error}</div>
 			) : filtered.length === 0 ? (
 				<p className="gd-field-note">
-					{rooms.length === 0 ? "No open rooms right now — host one or try quick match." : "No rooms match those filters."}
+					{rooms.length === 0
+						? "No open rooms right now — host one or try quick match."
+						: "No rooms match those filters."}
 				</p>
 			) : (
 				<div className="gd-browser-list">
@@ -265,12 +271,17 @@ export function ServerBrowser({
 								</span>
 								<span className="gd-browser-meta">
 									{formatMode(r.mode)} · {r.humanCount}/{r.playerCount} players
-									{r.humanCount !== r.playerCount ? ` (${r.playerCount - r.humanCount} bots)` : ""} ·{" "}
-									{r.screens} screen{r.screens !== 1 ? "s" : ""} · {r.region}
+									{r.humanCount !== r.playerCount
+										? ` (${r.playerCount - r.humanCount} bots)`
+										: ""}{" "}
+									· {r.screens} screen{r.screens !== 1 ? "s" : ""} · {r.region}
 								</span>
 							</div>
 							<div className="gd-browser-side">
-								<span className="gd-browser-ping" title="HTTP latency to the game server">
+								<span
+									className="gd-browser-ping"
+									title="HTTP latency to the game server"
+								>
 									{r.pingMs !== null ? `${r.pingMs}ms` : "—"}
 								</span>
 								<button

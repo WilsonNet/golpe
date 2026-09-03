@@ -1216,10 +1216,10 @@ export class Match {
 					// ("Connecting…") is cleared and the modal takes over.
 					// Whether the attempt carried a password decides the prompt's
 					// wording: "enter" vs "wrong".
-					EventBus.emit(
-						"room-locked",
-						{ roomId, hadPassword: this.roomPassword !== null } as never,
-					);
+					EventBus.emit("room-locked", {
+						roomId,
+						hadPassword: this.roomPassword !== null,
+					} as never);
 					EventBus.emit(HUD_EVENTS.status, "That room is locked.");
 					console.log(`[ONLINE] room ${roomId} is locked`);
 				},
