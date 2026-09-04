@@ -54,8 +54,18 @@ import { inputSettings } from "./input/Scheme";
 import { parseLaunchParams } from "./online/launch";
 import { OnlineSession } from "./online/OnlineSession";
 import { consumePendingPassword } from "./online/passwordStore";
+import {
+	httpBaseFor,
+	type RegionEndpoint,
+	resolveGameEndpoint,
+	signallingUrlFor,
+} from "./online/regions";
 import { requestedRoomId, showRoomInUrl } from "./online/room";
-import type { KillCause, MatchOverMsg } from "./online/types";
+import {
+	GAME_SERVER_PORT,
+	type KillCause,
+	type MatchOverMsg,
+} from "./online/types";
 import { readStoredName, storeName } from "./playerName";
 import { fetchPotgClip } from "./potg/clipSource";
 import { POTG_BAR_FRACTION, type PotgShot } from "./potg/Director";
@@ -344,6 +354,19 @@ export class Match {
 	 * any listing. Creator-only, like the other room properties.
 	 */
 	private privateRoom = false;
+	/**
+	 * Which game server this match is played on.
+	 *
+	 * `?server=` names it outright (a cross-region link); otherwise the host
+	 * the page came from, exactly as before regions existed. The same endpoint
+	 * feeds the netcode, the POTG footage fetch and the status line, so a match
+	 * addressed to São Paulo cannot ask US-E for its replay.
+	 */
+	private gameServer: RegionEndpoint = {
+		region: "local",
+		host: "localhost",
+		port: GAME_SERVER_PORT,
+	};
 	private online: OnlineSession | undefined;
 	private training: TrainingRoom | undefined;
 	private tutorial: TutorialDirector | undefined;
@@ -502,6 +525,13 @@ export class Match {
 		this.installDebugHooks();
 
 		this.aiMode = launch.ai;
+		// Which game server, from the URL — or the page's own host. There is no
+		// matchmaking queue and no region hop: sharing the link is how two
+		// people end up in the same match, on the same server.
+		this.gameServer = resolveGameEndpoint(
+			window.location.search,
+			window.location.hostname,
+		);
 		// Which room, from the URL — or a new one. There is no matchmaking queue:
 		// sharing the link is how two people end up in the same match.
 		this.roomId = requestedRoomId();
@@ -1223,6 +1253,12 @@ export class Match {
 					EventBus.emit(HUD_EVENTS.status, "That room is locked.");
 					console.log(`[ONLINE] room ${roomId} is locked`);
 				},
+			},
+			// Which game server: `?server=` or the page's own host. The browser
+			// chose it; the session just dials it.
+			{
+				serverUrl: signallingUrlFor(this.gameServer, window.location.protocol),
+				serverPort: this.gameServer.port,
 			},
 		);
 		this.online.connect({
@@ -2437,7 +2473,12 @@ export class Match {
 	}
 
 	private async loadPlayOfTheGame(msg: PotgAnnounce) {
-		const clip = await fetchPotgClip(msg.roomId);
+		// The footage lives on the game server the match ran on — which is not
+		// necessarily the host the page came from, once matches span regions.
+		const clip = await fetchPotgClip(
+			msg.roomId,
+			httpBaseFor(this.gameServer, window.location.protocol),
+		);
 		// The match may have restarted, or the player skipped, while this was in
 		// flight. Both clear the announcement, and starting a replay against a
 		// match that has moved on is how a cutscene ends up over a live fight.

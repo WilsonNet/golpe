@@ -305,7 +305,11 @@ Both `diagnose.ts` and `deathmatch-probe.ts` take `--screens=N` to run their
 measurement on a wide arena — the follow camera and the wide-world spawns are
 part of what they must prove.
 
-- Ports: Vite **8084**, Geckos **9208**.
+- Ports: Vite **8084**, Geckos **9208**, directory **9308** (multi-region only).
+- Regions: one identical game-server image per region (`GOLPE_REGION`), picked
+  client-side via `?server=`; the browser filters by `?region=`. Control plane
+  stays TypeScript (`directory/`, Turso later) — no second language until a
+  metric says so. Full record: [`docs/regions.md`](docs/regions.md).
 - **`pnpm run typecheck` covers two projects.** `tsconfig.json` is client-only;
   `tsconfig.server.json` covers `server/`. Running bare `tsc` checks half the
   game — which is how the server's bots silently lost the ability to evade.

@@ -17,12 +17,29 @@
 import type { HeroId } from "../simulation/Heroes";
 import { isHeroId } from "../simulation/Heroes";
 import type { MatchMode } from "../simulation/Teams";
-import { MAX_PASSWORD_LENGTH } from "./types";
+import { parseRegion, parseServerEndpoint } from "./regions";
+import { GAME_SERVER_PORT, MAX_PASSWORD_LENGTH } from "./types";
 
 /** A match the URL can ask for. `undefined` means "not asked". */
 export interface LaunchParams {
 	/** Which room to join, or null to make a new one. */
 	room: string | null;
+	/**
+	 * `?server=host[:port]` — the exact game server to dial.
+	 *
+	 * Client-side server selection: the raw validated value, or null for the
+	 * page's own host. A region never moves a match by itself — only a server
+	 * names an address — so this is what a shared cross-region link carries.
+	 */
+	server: string | null;
+	/**
+	 * `?region=sa` — the server browser's filter hint.
+	 *
+	 * Deliberately not an address and not a boot key: it says which region's
+	 * rooms the browser shows first, never where the match runs. The menu
+	 * commits a region choice as `?server=`, which is what boots.
+	 */
+	region: string | null;
 	/** `?ai=true` — this client's fighter is brain-driven. */
 	ai: boolean;
 	/** The vestigial `?online=` — kept so older links keep their meaning. */
@@ -104,9 +121,15 @@ export interface LaunchParams {
  * `?hero=anands` boots straight into a match, exactly like `?ai=true` does.
  * That is the point — the menu writes `hero` alongside the rest of the launch
  * request, and a probe that wants a dagger needs no ceremony to get one.
+ *
+ * `region` is absent on purpose, like `online`: it is a browser filter hint,
+ * not an address, so `?region=eu` alone shows the menu with EU first rather
+ * than booting a match on a server nobody named. `?server=` is the key that
+ * boots across regions.
  */
 const LAUNCH_KEYS = [
 	"room",
+	"server",
 	"ai",
 	"offline",
 	"training",
@@ -166,6 +189,8 @@ export function parseLaunchParams(search: string): LaunchParams {
 	const params = new URLSearchParams(search);
 	return {
 		room: params.get("room"),
+		server: parseServerParam(params.get("server")),
+		region: parseRegion(params.get("region")),
 		ai: params.get("ai") === "true",
 		online: params.get("online") === "true",
 		offline: params.get("offline") === "true",
@@ -192,6 +217,22 @@ export function parseLaunchParams(search: string): LaunchParams {
 		password: parsePassword(params.get("password")),
 		isPrivate: params.get("private") === "true",
 	};
+}
+
+/**
+ * The game server a URL names, or null when it names none.
+ *
+ * Round-trips exactly: what parses must serialise back to the same string, so
+ * a validated endpoint is re-emitted in canonical `host` / `host:port` form
+ * rather than echoing the raw text.
+ */
+function parseServerParam(raw: string | null): string | null {
+	if (raw === null) return null;
+	const endpoint = parseServerEndpoint(raw);
+	if (!endpoint) return null;
+	return endpoint.port === GAME_SERVER_PORT
+		? endpoint.host
+		: `${endpoint.host}:${endpoint.port}`;
 }
 
 /**
@@ -230,6 +271,8 @@ function parseMode(raw: string | null): MatchMode | null {
 export function serializeLaunchParams(params: LaunchParams): string {
 	const url = new URLSearchParams();
 	if (params.room !== null) url.set("room", params.room);
+	if (params.server !== null) url.set("server", params.server);
+	if (params.region !== null) url.set("region", params.region);
 	if (params.ai) url.set("ai", "true");
 	if (params.online) url.set("online", "true");
 	if (params.offline) url.set("offline", "true");

@@ -47,7 +47,6 @@ marked as a probe room, and quick match never sends a stranger into it. See
 [deathmatch.md](deathmatch.md) for room sizing and the name gate.
 
 ## Rooms are addressed, not matchmade
-
 **`?room=<id>` puts you in that room. No `?room=` makes a new one.** That is the
 whole of matchmaking, and it replaced a shared waiting queue where everybody who
 opened the game landed in the same match whether they meant to or not.
@@ -422,6 +421,32 @@ marks it `INVALID` rather than letting a dead server read as a pass. Likewise
 `netSummary.snapshots: 0` or `rollback.rollbacks: 0` means the client was
 simulating alone and every other number in the report is a statement about
 nothing.
+
+## Regions
+
+**Intent:** a realtime fight cannot be played across an ocean, so the same
+game-server binary runs in every player population (SA, US-E, EU for launch)
+and the player picks the closest one. Regions are a deployment fact, not a
+gameplay feature: nothing in the simulation knows which region it runs in.
+
+- **Rooms never leave their region.** A room is created, played and reaped
+  inside one game server. No replication, migration or proxying of gameplay
+  state between regions — the snapshot is the only authority on who is
+  present, and it never crosses a region boundary.
+- **`?server=host[:port]` names the exact game server to dial**, like
+  `?room=` names the room. Absent, the client dials the host the page came
+  from — the pre-regions behaviour, unchanged. A link carrying `?server=` and
+  `?room=` boots that room on that server, menu or no menu.
+- **`?region=` never moves a match.** It is the server browser's filter hint:
+  which region's rooms show first. Only a server names an address.
+- **Game servers advertise; the directory aggregates.** Every game server
+  reports its region in `/health` and on each `/rooms` entry. The directory
+  (`directory/`) fans out to the configured fleet and merges the listings —
+  busiest first, like one server does. A down region contributes nothing and
+  fails nothing.
+- **The tick never waits on another region.** The directory is read by menus,
+  never by matches. Anything the simulation needs arrives in the snapshot or
+  it does not exist.
 
 ## Not implemented
 

@@ -124,6 +124,8 @@ const DEFAULT_SETTINGS: HostSettings = {
 /** The empty request — the base every menu choice adds one thing to. */
 const NOTHING: LaunchParams = {
 	room: null,
+	server: null,
+	region: null,
 	ai: false,
 	online: false,
 	offline: false,

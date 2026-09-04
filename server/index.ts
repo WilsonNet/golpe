@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import http from "node:http";
 import geckos, { type ServerChannel } from "@geckos.io/server";
+import { parseRegion } from "../src/game/online/regions.js";
 import { GAME_SERVER_PORT, RELIABLE } from "../src/game/online/types.js";
 import { MAX_SCREENS } from "../src/game/simulation/Arena.js";
 import {
@@ -455,6 +456,48 @@ function loop(time: number) {
 const PORT = GAME_SERVER_PORT;
 
 /**
+ * Which region this process serves: `GOLPE_REGION=sa` in São Paulo,
+ * `us-east` in US-E, `eu` in Europe, `local` when nobody says.
+ *
+ * A region is an identity, not a behaviour switch — every game server runs
+ * the same binary and the same rules. It is advertised in `/health` and on
+ * every `/rooms` entry so the directory and the server browser can say where
+ * a room lives. Rooms never leave the region they were created in.
+ */
+const REGION = parseRegion(env("GOLPE_REGION")) ?? "local";
+
+/** Lowest and highest TCP/UDP port this process may bind. */
+const MIN_PORT = 1;
+const MAX_PORT = 65535;
+
+/**
+ * One environment value, by name.
+ *
+ * Indexed by variable rather than by literal: `process.env.PORT` does not
+ * typecheck (`noPropertyAccessFromIndexSignature`) and `process.env["PORT"]`
+ * does not lint (`useLiteralKeys`), so the one helper both call sites share
+ * is the only place that touches the shape.
+ */
+function env(name: string): string | undefined {
+	return process.env[name];
+}
+
+/**
+ * Which port this process binds: `PORT` (or `GAME_SERVER_PORT`) when it names
+ * a real one, the compiled default otherwise. The override is what lets three
+ * regions run side by side on one machine for a local test.
+ */
+function serverPort(): number {
+	const raw = env("PORT") ?? env("GAME_SERVER_PORT");
+	if (raw === undefined) return PORT;
+	const port = Number.parseInt(raw, 10);
+	if (!Number.isSafeInteger(port) || port < MIN_PORT || port > MAX_PORT) {
+		return PORT;
+	}
+	return port;
+}
+
+/**
  * The game server's own HTTP endpoint, for the root menu's status line.
  *
  * Geckos owns `/.wrtc/*` and forwards everything else to listeners registered
@@ -475,7 +518,7 @@ httpServer.on("request", (req, res) => {
 			"Content-Type": "application/json",
 			"Access-Control-Allow-Origin": "*",
 		});
-		res.end(JSON.stringify({ ok: true, rooms: rooms.size }));
+		res.end(JSON.stringify({ ok: true, rooms: rooms.size, region: REGION }));
 		return;
 	}
 
@@ -498,6 +541,7 @@ httpServer.on("request", (req, res) => {
 				playerCount: room.playerCount,
 				humanCount: room.humanCount,
 				screens: room.world.screens,
+				region: REGION,
 			}))
 			.sort((a, b) => b.playerCount - a.playerCount);
 		res.writeHead(HTTP_OK, {
@@ -550,8 +594,11 @@ function potgRequest(url: string | undefined): { body: string | null } | null {
 }
 
 io.addServer(httpServer);
-httpServer.listen(PORT);
-console.log(`[SERVER] golpe server listening on port ${PORT}`);
+const boundPort = serverPort();
+httpServer.listen(boundPort);
+console.log(
+	`[SERVER] golpe server listening on port ${boundPort} (region ${REGION})`,
+);
 console.log(
 	"[SERVER] rooms are addressed by id — share the link to share a room",
 );

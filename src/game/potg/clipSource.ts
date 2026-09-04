@@ -19,16 +19,23 @@ import { POTG_CLIP_VERSION, type PotgClip } from "./types";
 /** Give up rather than hold the ceremony open on a server that is not answering. */
 const FETCH_TIMEOUT_MS = 4000;
 
-function potgClipUrl(roomId: string): string {
+function potgClipUrl(roomId: string, base: string | null): string {
+	if (base !== null) return `${base}/potg/${encodeURIComponent(roomId)}`;
 	return `${location.protocol}//${location.hostname}:${GAME_SERVER_PORT}/potg/${encodeURIComponent(roomId)}`;
 }
 
-export async function fetchPotgClip(roomId: string): Promise<PotgClip | null> {
+export async function fetchPotgClip(
+	roomId: string,
+	/** The game server the match ran on — null dials the page's own host. */
+	base: string | null = null,
+): Promise<PotgClip | null> {
 	if (!roomId) return null;
 	const abort = new AbortController();
 	const timer = window.setTimeout(() => abort.abort(), FETCH_TIMEOUT_MS);
 	try {
-		const res = await fetch(potgClipUrl(roomId), { signal: abort.signal });
+		const res = await fetch(potgClipUrl(roomId, base), {
+			signal: abort.signal,
+		});
 		if (!res.ok) return null;
 		const clip = (await res.json()) as PotgClip;
 		// A version check rather than trust: a client left open across a server

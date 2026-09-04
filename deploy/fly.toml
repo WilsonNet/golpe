@@ -1,0 +1,51 @@
+# Fly.io deployment for one region's game server.
+#
+# One app per region (golpe-sa, golpe-us, golpe-eu), all from
+# `deploy/Dockerfile.game-server` — deploy the same image three times with a
+# different `GOLPE_REGION` each:
+#
+#   fly launch --name golpe-sa --region gru --no-deploy
+#   fly secrets set GOLPE_REGION=sa
+#   fly deploy --config deploy/fly.toml
+#
+# Repeat with `--region iad` / `GOLPE_REGION=us-east` and `--region fra` /
+# `GOLPE_REGION=eu`, then point the menu at the fleet with
+# `VITE_GOLPE_SERVERS=sa=golpe-sa.fly.dev:443,...` — or serve the directory
+# (`directory/`) somewhere and let it aggregate the three `/rooms`.
+#
+# KNOWN RISK — UDP on Fly: Geckos runs on WebRTC/UDP via node-datachannel,
+# and Fly delivers UDP only to apps with a dedicated IPv4 address, bound to
+# the special `fly-global-services` address rather than the wildcard
+# (see https://fly.io/docs/networking/udp-and-tcp/). node-datachannel binds
+# the wildcard, so replies may leave with the wrong source address and never
+# reach the client. If the first Fly deploy shows signalling up but no game
+# traffic, that bind is the suspect — and the fallback is plain per-region
+# VPSs (Hetzner, Lightsail) running this same image behind
+# `deploy/docker-compose.regions.yml`, where UDP behaves like any socket.
+# Prove one region on Fly with `scripts/diagnose.ts --mode=online` pointed
+# at it before committing the launch to this platform.
+
+app = "golpe-sa"
+primary_region = "gru"
+
+[build]
+dockerfile = "deploy/Dockerfile.game-server"
+
+[env]
+PORT = "9208"
+GOLPE_REGION = "sa"
+
+[[services]]
+internal_port = 9208
+protocol = "udp"
+
+[[services.ports]]
+port = 9208
+
+[[services]]
+internal_port = 9208
+protocol = "tcp"
+
+[[services.ports]]
+port = 9208
+handlers = ["tls", "http"]

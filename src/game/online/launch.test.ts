@@ -24,6 +24,8 @@ import {
 /** The empty request: nothing asked for. */
 const NOTHING: LaunchParams = {
 	room: null,
+	server: null,
+	region: null,
 	ai: false,
 	online: false,
 	offline: false,
@@ -51,6 +53,24 @@ const roomArb = fc.oneof(
 
 /** A hero id, or null when not asked for. */
 const heroArb = fc.oneof(fc.constant(null), fc.constantFrom(...HERO_IDS));
+
+/** A `?server=` value in canonical form: a host, or a host with a port. */
+const serverArb = fc.oneof(
+	fc.constant(null),
+	fc.domain().map((host) => host.toLowerCase()),
+	fc
+		.tuple(
+			fc.domain().map((host) => host.toLowerCase()),
+			fc.integer({ min: 1, max: 65535 }).filter((port) => port !== 9208),
+		)
+		.map(([host, port]) => `${host}:${port}`),
+);
+
+/** A `?region=` value, or null when not asked for. */
+const regionArb = fc.oneof(
+	fc.constant(null),
+	fc.constantFrom("sa", "us-east", "eu", "local"),
+);
 
 /** `?mode=` — `null` (deathmatch by default) or an explicit name. */
 const modeArb = fc.oneof(
@@ -90,6 +110,8 @@ const optNum = (a: fc.Arbitrary<number>) =>
 
 const validParams: fc.Arbitrary<LaunchParams> = fc.record({
 	room: roomArb,
+	server: serverArb,
+	region: regionArb,
 	ai: fc.boolean(),
 	online: fc.boolean(),
 	offline: fc.boolean(),
@@ -116,10 +138,12 @@ describe("parseLaunchParams", () => {
 
 	it("reads every field from a full link", () => {
 		const parsed = parseLaunchParams(
-			"?room=abc-123&ai=true&online=true&offline=true&training=true&tutorial=true&hero=anands&botHero=lia&bots=3&fill=8&scoreLimit=9&timeLimit=120&ultCharge=50&mode=tdm&freezeTime=2&screen=4&password=hunter2&private=true",
+			"?room=abc-123&server=sa.golpe.gg&region=sa&ai=true&online=true&offline=true&training=true&tutorial=true&hero=anands&botHero=lia&bots=3&fill=8&scoreLimit=9&timeLimit=120&ultCharge=50&mode=tdm&freezeTime=2&screen=4&password=hunter2&private=true",
 		);
 		expect(parsed).toEqual({
 			room: "abc-123",
+			server: "sa.golpe.gg",
+			region: "sa",
 			ai: true,
 			online: true,
 			offline: true,
@@ -196,6 +220,24 @@ describe("parseLaunchParams", () => {
 		expect(parseLaunchParams("?private=false").isPrivate).toBe(false);
 		expect(parseLaunchParams("?private=true").isPrivate).toBe(true);
 	});
+
+	it("reads the addressed server, canonically", () => {
+		expect(parseLaunchParams("?server=sa.golpe.gg").server).toBe("sa.golpe.gg");
+		expect(parseLaunchParams("?server=sa.golpe.gg%3A9209").server).toBe(
+			"sa.golpe.gg:9209",
+		);
+		// The default port is not an address worth writing down.
+		expect(parseLaunchParams("?server=sa.golpe.gg%3A9208").server).toBe(
+			"sa.golpe.gg",
+		);
+		expect(parseLaunchParams("?server=http://x").server).toBeNull();
+	});
+
+	it("reads the region as a hint, never as a boot", () => {
+		expect(parseLaunchParams("?region=eu").region).toBe("eu");
+		expect(parseLaunchParams("?region=eu").server).toBeNull();
+		expect(isMenuShape("?region=eu")).toBe(true);
+	});
 });
 
 describe("isMenuShape", () => {
@@ -215,6 +257,7 @@ describe("isMenuShape", () => {
 	it("boots when any launch key is present, whatever its value", () => {
 		for (const key of [
 			"room",
+			"server",
 			"ai",
 			"offline",
 			"training",

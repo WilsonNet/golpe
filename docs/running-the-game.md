@@ -37,6 +37,7 @@ either is reachable from another machine on the network:
 |---|---|---|
 | 8084 | Vite dev server | everything |
 | 9208 | Geckos.io game server | every mode except `?offline=true` |
+| 9308 | Directory (control plane) | multi-region listings only — see [regions](regions.md) |
 
 The client connects to the game server at `location.hostname:9208`, so whatever
 address a player loads the page from is the address their game traffic uses too.
@@ -74,6 +75,7 @@ for the full model and the socket-API gotchas.
 pnpm run dev:all      # both servers, interleaved in one terminal via concurrently
 pnpm run dev          # Vite only  — enough for ?offline=true
 pnpm run dev:server   # game server only
+pnpm run dev:regions  # four game servers (local/sa/us-east/eu :9208-9211) + directory :9308
 ```
 
 > **Avoid backgrounding these with `&`.** A detached server is invisible when it
@@ -375,6 +377,8 @@ Defaults and the reasoning behind them are in
 |---|---|
 | *(none)* | **The root menu** — choose a mode there, or see below for a direct boot |
 | `?room=<id>` | Play in that room. **This is how two people meet** |
+| `?server=<host>[:port]` | Play on that game server. **This is how two people meet across regions** |
+| `?region=<id>` | Preselect the server browser's region filter — a hint, never an address |
 | `?online=true` | Vestigial — every room is online. Kept for older links; alone it is the menu |
 | `?bots=N` | **N bots to fight. Absent means none** (`?bots=0` is the empty room) |
 | `?fill=N` | Keep the room at N fighters, bots as ballast |

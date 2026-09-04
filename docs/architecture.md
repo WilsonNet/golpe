@@ -53,6 +53,10 @@ src/game/
     Interpolation.ts what is left of it — the server clock, for dead-reckoning bullets
     wire.ts         packs PlayerPosition and PlayerIntent for the snapshot
     room.ts         which room, and keeping the address bar shareable
+    regions.ts      which *server*: `?server=` endpoint parsing, the fleet format
+                    (`region=host:port,...`), and per-server ping bases — shared
+                    by client, game server and directory so the three cannot
+                    disagree about the fleet. See `docs/regions.md`
     types.ts        the wire messages, shared with the server
   render/         Stage.ts (layers + camera), ArenaRenderer.ts (draws from collider
                   data), assets.ts (per-hero sheets, strips and generated poses),
@@ -98,6 +102,14 @@ server/           Geckos.io authoritative server
   BotNames.ts       gamertags for bots, and sanitising the ones humans type
   TrainingDummy.ts  the scriptable practice dummy: an input source, like EnemyBrain
   index.ts          matchmaking, room sizing and deferred placement
+
+directory/      the control plane's first process: a stateless aggregator over
+                every region's `/rooms` (`GET /rooms`, `/regions`, `/health`),
+                and the future home of auth, persistence and leaderboards.
+                Read by menus, never by matches. See `docs/regions.md`
+deploy/         the distributable game part: `Dockerfile.game-server` (one
+                image, run once per region), `fly.toml`, and
+                `docker-compose.regions.yml` for a local fleet
 
 scripts/          diagnose.ts (Playwright harness), deathmatch-probe.ts (sixteen
                   AI fighters played to a winner), tdm-probe.ts (two sides,

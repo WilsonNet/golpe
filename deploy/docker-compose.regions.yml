@@ -1,0 +1,58 @@
+# Four regions and a directory on one machine — the launch fleet in miniature.
+#
+#   docker compose -f deploy/docker-compose.regions.yml up --build
+#
+# Then open the menu with the fleet in view:
+#   http://localhost:8084/?region=sa
+# (Vite itself still runs on :8084 via `pnpm run dev`.)
+#
+# The same file is the shape of a plain-VPS production deploy: one host per
+# region running this same image with its own `GOLPE_REGION`, plus the
+# directory wherever the menu can reach it. No orchestrator, no mesh — game
+# servers never call each other, so there is nothing to orchestrate between
+# them.
+
+services:
+  golpe-local:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.game-server
+    environment:
+      PORT: "9208"
+      GOLPE_REGION: local
+    ports:
+      - "9208:9208/udp"
+      - "9208:9208/tcp"
+
+  golpe-sa:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.game-server
+    environment:
+      PORT: "9208"
+      GOLPE_REGION: sa
+    ports:
+      - "9209:9208/udp"
+      - "9209:9208/tcp"
+
+  golpe-us:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.game-server
+    environment:
+      PORT: "9208"
+      GOLPE_REGION: us-east
+    ports:
+      - "9210:9208/udp"
+      - "9210:9208/tcp"
+
+  golpe-eu:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.game-server
+    environment:
+      PORT: "9208"
+      GOLPE_REGION: eu
+    ports:
+      - "9211:9208/udp"
+      - "9211:9208/tcp"

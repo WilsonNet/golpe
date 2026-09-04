@@ -1,5 +1,5 @@
 /**
- * Server browser: the discoverable face of `GET /rooms`.
+ * Server browser: the discoverable face of `GET /rooms`, across regions.
  *
  * Quick match is the one-click path, but a player who wants to choose
  * needs a listing — what rooms are open, how busy they are, what mode
@@ -11,13 +11,23 @@
  * `/health` is timed and the result is shown as "ping". It is not a
  * WebRTC round-trip, but it is a useful ordering — a room on the far
  * side of the planet will still take longer to answer a health check.
- * The measurement is taken once per refresh and applied to every room
- * from that server, because all rooms currently live on one `geckos`
- * host. The UI is ready for the day there are more.
+ * The measurement is taken once per refresh and per game server, because
+ * rooms now live on more than one host: the page's own server first, then
+ * every fleet entry the operator configured in `VITE_GOLPE_SERVERS`
+ * (`region=host:port,...`). Joining a room commits its server into the
+ * launch URL as `?server=`, so the match boots where the room lives.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { LaunchParams } from "../game/online/launch";
+import {
+	buildEndpointList,
+	httpBaseFor,
+	parseRegion,
+	parseServerList,
+	type RegionEndpoint,
+} from "../game/online/regions";
+import { GAME_SERVER_PORT } from "../game/online/types";
 import type { HeroId } from "../game/simulation/Heroes";
 import type { MatchMode } from "../game/simulation/Teams";
 
@@ -27,50 +37,97 @@ interface RoomEntry {
 	playerCount: number;
 	humanCount: number;
 	screens: number;
+	/** The region the serving game server reported. Absent from older builds. */
+	region?: string;
 }
 
 interface RoomWithMeta extends RoomEntry {
 	region: string;
 	pingMs: number | null;
+	/**
+	 * The `?server=` value that boots this room's match — null when it lives
+	 * on the page's own server and needs no address in the URL.
+	 */
+	server: string | null;
 }
 
 type ModeFilter = "all" | MatchMode;
 type RegionFilter = "all" | string;
 type SortKey = "ping" | "players" | "mode";
 
-function serverBase(): string {
-	return `http://${window.location.hostname}:9208`;
+/** The env key carrying the operator's fleet (`region=host:port,...`). */
+const FLEET_ENV_KEY = "VITE_GOLPE_SERVERS";
+
+/** The fleet the operator configured, if any — empty in a bare dev setup. */
+function configuredEndpoints(): RegionEndpoint[] {
+	try {
+		const env = (
+			import.meta as unknown as {
+				env?: Record<string, string | undefined>;
+			}
+		).env;
+		return parseServerList(env?.[FLEET_ENV_KEY]);
+	} catch {
+		return [];
+	}
 }
 
-async function fetchWithPing(): Promise<{
-	rooms: RoomEntry[];
-	pingMs: number | null;
-}> {
-	const url = `${serverBase()}/rooms`;
+function localEndpoint(): RegionEndpoint {
+	return {
+		region: "local",
+		host: window.location.hostname,
+		port: GAME_SERVER_PORT,
+	};
+}
+
+/** `?region=` preselects the browser's filter — a hint, never an address. */
+function initialRegionFilter(): RegionFilter {
+	return (
+		parseRegion(new URLSearchParams(window.location.search).get("region")) ??
+		"all"
+	);
+}
+
+/** The `?server=` value for an endpoint: null when it is the local server. */
+function serverParamFor(
+	endpoint: RegionEndpoint,
+	local: RegionEndpoint,
+): string | null {
+	if (endpoint.host === local.host && endpoint.port === local.port) {
+		return null;
+	}
+	return endpoint.port === GAME_SERVER_PORT
+		? endpoint.host
+		: `${endpoint.host}:${endpoint.port}`;
+}
+
+async function fetchOne(
+	endpoint: RegionEndpoint,
+	server: string | null,
+): Promise<RoomWithMeta[]> {
+	const base = httpBaseFor(endpoint, window.location.protocol);
 	const start = performance.now();
 	try {
 		const ctrl = new AbortController();
 		const timer = window.setTimeout(() => ctrl.abort(), 2500);
-		const res = await fetch(url, { signal: ctrl.signal });
+		const res = await fetch(`${base}/rooms`, { signal: ctrl.signal });
 		const pingMs = Math.round(performance.now() - start);
 		window.clearTimeout(timer);
-		if (!res.ok) return { rooms: [], pingMs: null };
+		if (!res.ok) return [];
 		const data = (await res.json()) as { rooms?: RoomEntry[] | null };
-		return { rooms: (data.rooms ?? []) as RoomEntry[], pingMs };
+		return (data.rooms ?? []).map((r) => ({
+			...r,
+			region: r.region ?? endpoint.region,
+			pingMs,
+			server,
+		}));
 	} catch {
-		return { rooms: [], pingMs: null };
+		return [];
 	}
 }
 
 function formatMode(mode: MatchMode): string {
 	return mode === "tdm" ? "Team DM" : "Deathmatch";
-}
-
-function regionFor(_room: RoomEntry): string {
-	// All rooms currently live on the single geckos host the page was
-	// served from — so the region is the host itself. A future multi-host
-	// listing can branch here without changing the browser's shape.
-	return "Local";
 }
 
 export function ServerBrowser({
@@ -80,54 +137,70 @@ export function ServerBrowser({
 	onJoin: (params: LaunchParams) => void;
 	hero: HeroId;
 }) {
+	const endpoints = useMemo(() => {
+		const local = localEndpoint();
+		return buildEndpointList(local, configuredEndpoints()).map((endpoint) => ({
+			endpoint,
+			server: serverParamFor(endpoint, local),
+		}));
+	}, []);
 	const [rooms, setRooms] = useState<RoomWithMeta[]>([]);
-	const [pingMs, setPingMs] = useState<number | null>(null);
+	const [reachable, setReachable] = useState(true);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 
 	const [search, setSearch] = useState("");
 	const [modeFilter, setModeFilter] = useState<ModeFilter>("all");
-	const [regionFilter, setRegionFilter] = useState<RegionFilter>("all");
+	const [regionFilter, setRegionFilter] = useState<RegionFilter>(() =>
+		initialRegionFilter(),
+	);
 	const [sortKey, setSortKey] = useState<SortKey>("ping");
 	const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
-	const refresh = async () => {
+	const refresh = useCallback(async () => {
 		setLoading(true);
 		setError(null);
-		const { rooms: fetched, pingMs: ping } = await fetchWithPing();
-		// `GET /rooms` already filters to `isOpen`; a network failure is
-		// the only case where an empty list is not "no rooms" but "unknown".
-		if (ping === null && fetched.length === 0) {
-			// Distinguish "no rooms" from "could not reach server" by
-			// probing health once more — if that fails, the server is down.
-			try {
-				const ctrl = new AbortController();
-				const t = window.setTimeout(() => ctrl.abort(), 2000);
-				const r = await fetch(`${serverBase()}/health`, {
-					signal: ctrl.signal,
-				});
-				window.clearTimeout(t);
-				if (!r.ok) setError("Game server is offline — cannot list rooms.");
-			} catch {
-				setError("Could not reach game server — is it running?");
-			}
-		}
-		setPingMs(ping);
-		setRooms(
-			fetched.map((r) => ({
-				...r,
-				region: regionFor(r),
-				pingMs: ping,
-			})),
+		const lists = await Promise.all(
+			endpoints.map(({ endpoint, server }) => fetchOne(endpoint, server)),
 		);
+		const fetched = lists.flat();
+		// `GET /rooms` already filters to `isOpen`; an empty list from every
+		// server is "no rooms", but nothing answering at all is "unknown" —
+		// and worth saying out loud rather than showing an empty browser.
+		if (fetched.length === 0) {
+			let anyAlive = false;
+			for (const { endpoint } of endpoints) {
+				try {
+					const ctrl = new AbortController();
+					const t = window.setTimeout(() => ctrl.abort(), 2000);
+					const r = await fetch(
+						`${httpBaseFor(endpoint, window.location.protocol)}/health`,
+						{ signal: ctrl.signal },
+					);
+					window.clearTimeout(t);
+					if (r.ok) {
+						anyAlive = true;
+						break;
+					}
+				} catch {
+					// This server is down; the next one may not be.
+				}
+			}
+			setReachable(anyAlive);
+			if (!anyAlive)
+				setError("Could not reach any game server — is one running?");
+		} else {
+			setReachable(true);
+		}
+		setRooms(fetched);
 		setLoading(false);
-	};
+	}, [endpoints]);
 
 	useEffect(() => {
-		refresh();
-		const id = window.setInterval(refresh, 5000);
+		void refresh();
+		const id = window.setInterval(() => void refresh(), 5000);
 		return () => window.clearInterval(id);
-	}, []);
+	}, [refresh]);
 
 	const regions = useMemo(() => {
 		const s = new Set(rooms.map((r) => r.region));
@@ -173,8 +246,9 @@ export function ServerBrowser({
 		<div className="gd-server-browser">
 			<div className="gd-section-head">Server browser</div>
 			<p className="gd-field-note">
-				Open rooms from the same server quick match uses — private, probe and
-				full rooms never appear. {pingMs !== null ? `Ping ~${pingMs}ms.` : ""}
+				Open rooms from the same servers quick match uses — private, probe and
+				full rooms never appear.
+				{endpoints.length > 1 ? ` ${endpoints.length} regions.` : ""}
 			</p>
 
 			<div className="gd-browser-filters">
@@ -257,14 +331,14 @@ export function ServerBrowser({
 				<div className="gd-error">{error}</div>
 			) : filtered.length === 0 ? (
 				<p className="gd-field-note">
-					{rooms.length === 0
+					{rooms.length === 0 && reachable
 						? "No open rooms right now — host one or try quick match."
 						: "No rooms match those filters."}
 				</p>
 			) : (
 				<div className="gd-browser-list">
 					{filtered.map((r) => (
-						<div key={r.id} className="gd-browser-row">
+						<div key={`${r.region}:${r.id}`} className="gd-browser-row">
 							<div className="gd-browser-main">
 								<span className="gd-browser-id" title={r.id}>
 									{r.id.slice(0, 8)}…{r.id.slice(-4)}
@@ -280,7 +354,7 @@ export function ServerBrowser({
 							<div className="gd-browser-side">
 								<span
 									className="gd-browser-ping"
-									title="HTTP latency to the game server"
+									title="HTTP latency to the game server hosting this room"
 								>
 									{r.pingMs !== null ? `${r.pingMs}ms` : "—"}
 								</span>
@@ -290,6 +364,8 @@ export function ServerBrowser({
 									onClick={() =>
 										onJoin({
 											room: r.id,
+											server: r.server,
+											region: r.region,
 											ai: false,
 											online: false,
 											offline: false,

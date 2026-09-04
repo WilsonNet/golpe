@@ -340,12 +340,13 @@ export class OnlineSession {
 		private readonly startY: number,
 		private readonly world: World = DEFAULT_WORLD,
 		private readonly callbacks: OnlineCallbacks,
+		endpoint: { serverUrl: string; serverPort: number } | null = null,
 	) {
 		this.predicted = new PredictedPlayer(startX, startY, world);
 		this.bulletPool = new SpritePool(layer, bulletTexture);
 		this.manager = new OnlineManager(
-			`${location.protocol}//${location.hostname}`,
-			GAME_SERVER_PORT,
+			endpoint?.serverUrl ?? `${location.protocol}//${location.hostname}`,
+			endpoint?.serverPort ?? GAME_SERVER_PORT,
 		);
 	}
 

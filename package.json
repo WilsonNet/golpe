@@ -33,6 +33,8 @@
     "format": "biome format --write src",
     "knip": "knip",
     "dev:server": "tsx server/index.ts",
+    "dev:directory": "tsx directory/index.ts",
+    "dev:regions": "concurrently \"PORT=9208 GOLPE_REGION=local tsx server/index.ts\" \"PORT=9209 GOLPE_REGION=sa tsx server/index.ts\" \"PORT=9210 GOLPE_REGION=us-east tsx server/index.ts\" \"PORT=9211 GOLPE_REGION=eu tsx server/index.ts\" \"PORT=9308 GOLPE_SERVERS=local=localhost:9208,sa=localhost:9209,us-east=localhost:9210,eu=localhost:9211 tsx directory/index.ts\"",
     "dev:all": "concurrently \"pnpm run dev\" \"pnpm run dev:server\"",
     "test": "vitest run",
     "dev:herdr": "tsx scripts/dev-herdr.ts up",
@@ -41,7 +43,7 @@
     "dev:herdr:logs": "tsx scripts/dev-herdr.ts logs",
     "diagnose": "tsx scripts/diagnose.ts",
     "deathmatch": "tsx scripts/deathmatch-probe.ts",
-    "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json && tsc -p tsconfig.scripts.json",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json && tsc -p tsconfig.scripts.json && tsc -p tsconfig.directory.json",
     "verify": "pnpm run typecheck && pnpm run test && pnpm run build && pnpm run knip"
   },
   "dependencies": {
