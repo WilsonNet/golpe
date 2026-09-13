@@ -44,6 +44,8 @@ export function zeroCounters(): LessonCounters {
 		parries: 0,
 		backstabs: 0,
 		knockdowns: 0,
+		safeFalls: 0,
+		instaFalls: 0,
 		blasts: 0,
 		bombs: 0,
 		explosions: 0,
@@ -76,6 +78,9 @@ interface BodySample {
 	massiveReady: boolean;
 	plunging: boolean;
 	reloadTimer: number;
+	/** The launch debt and the floor it becomes — the safe fall's two halves. */
+	knockdownPendingTimer: number;
+	knockdownTimer: number;
 }
 
 function sample(body: PlayerPosition): BodySample {
@@ -93,6 +98,8 @@ function sample(body: PlayerPosition): BodySample {
 		massiveReady: body.massiveReady,
 		plunging: body.plunging,
 		reloadTimer: body.reloadTimer,
+		knockdownPendingTimer: body.knockdownPendingTimer,
+		knockdownTimer: body.knockdownTimer,
 	};
 }
 
@@ -211,6 +218,19 @@ export class LessonTracker {
 		if (!before.massiveReady && now.massiveReady) this.counters.massiveArmed++;
 		if (!before.plunging && now.plunging) this.counters.plunges++;
 		if (before.reloadTimer <= 0 && now.reloadTimer > 0) this.counters.reloads++;
+
+		// -- the safe fall -------------------------------------------------------
+		// The launch debt left without a knockdown behind it: the fighter caught
+		// themselves on the way down. The floor pays it into a knockdown and the
+		// Insta Fall spikes it into one, so neither is this — the transition is
+		// read off the body the player is actually watching.
+		if (
+			before.knockdownPendingTimer > 0 &&
+			now.knockdownPendingTimer === 0 &&
+			now.knockdownTimer === 0
+		) {
+			this.counters.safeFalls++;
+		}
 	}
 
 	/**
@@ -228,6 +248,13 @@ export class LessonTracker {
 					if (MOVES[event.move].knockdown) this.counters.knockdowns++;
 					break;
 				}
+				case "instaFall":
+					// The spike is a landed hit that is also a knockdown — the
+					// one way a slash puts somebody on the floor.
+					this.counters.movesLanded[event.move]++;
+					this.counters.instaFalls++;
+					this.counters.knockdowns++;
+					break;
 				case "parried":
 					this.counters.guardBreaksSuffered++;
 					break;

@@ -13,7 +13,9 @@
  */
 
 import {
+	ANTIAIR_HITSTUN_MS,
 	ANTIAIR_KNOCKDOWN_MS,
+	ANTIAIR_LAUNCH_VY,
 	BACKSTAB_BONUS_STUN_MS,
 	BLOCK_PUSHBACK,
 	BLOCK_STARTUP_MS,
@@ -67,7 +69,9 @@ import {
 import { MS_PER_SECOND } from "./units.js";
 
 export {
+	ANTIAIR_HITSTUN_MS,
 	ANTIAIR_KNOCKDOWN_MS,
+	ANTIAIR_LAUNCH_VY,
 	BACKSTAB_BONUS_STUN_MS,
 	BLOCK_STARTUP_MS,
 	CHARGE_LOCK_MS,
@@ -81,6 +85,7 @@ export {
 	DASH_SPEED,
 	GUARD_BREAK_STUN_MS,
 	KNOCKDOWN_MS,
+	KNOCKDOWN_SLAM_VY,
 	MASSIVE_BLAST_DAMAGE,
 	MASSIVE_BLAST_KNOCKBACK_PX_S,
 	MASSIVE_BLAST_RADIUS_PX,
@@ -980,11 +985,26 @@ export function meleeHitbox(s: MeleeBody): Rect | null {
  * What happened to one swing — or one blast.
  *
  * `blast` and `bomb` are not swing outcomes: nothing can block or parry a floor
- * blast, so the server emits them as events of their own. They share the type
- * so the wire format and the effect renderer have one vocabulary for "a sword
- * just hurt somebody".
+ * blast, so the server emits them as events of their own. `instaFall` is not a
+ * different swing either: it is what a swing *means* when it catches a launched
+ * fighter in the air. They share the type so the wire format and the effect
+ * renderer have one vocabulary for "a sword just hurt somebody".
  */
-export type MeleeOutcome = "hit" | "backstab" | "parried" | "blast" | "bomb";
+export type MeleeOutcome =
+	| "hit"
+	| "backstab"
+	| "parried"
+	| "blast"
+	| "bomb"
+	/**
+	 * The **Insta Fall**: an airborne melee hit on a fighter the uppercut (or
+	 * shoryuken) put in the air. The launch arc is cut, the victim is spiked
+	 * down, and the knockdown is no longer cancellable — the safe fall cannot
+	 * save them. GunZ's answer to a safe fall that was coming; ours is decided
+	 * in `resolveMelee`, where the attacker's feet and the victim's debt are
+	 * both visible.
+	 */
+	| "instaFall";
 
 export interface MeleeResult {
 	move: MeleeMove;
@@ -1094,6 +1114,23 @@ export function resolveMelee(
 	const dir = attacker.facing >= 0 ? 1 : -1;
 	const x = box.x + box.w / 2;
 	const y = box.y + box.h / 2;
+
+	// **The Insta Fall.** A fighter the anti-air launched is horizontal in the
+	// air, and an attacker who followed them up — feet off the floor — cuts the
+	// arc instead of trading with it: the spike is immediate (`applyHitToDefender`),
+	// so the knockdown lands before the safe fall can, and the debt is gone
+	// with it. Both fighters must be airborne: a swing on the tick the victim's
+	// feet are already down is an ordinary hit, and the debt the floor is about
+	// to collect stays the floor's. Deliberately ahead of the guard check:
+	// nobody holds a front guard while horizontal on their back. See
+	// specs/melee.md.
+	if (
+		defender.knockdownPendingTimer > 0 &&
+		!defender.grounded &&
+		!attacker.grounded
+	) {
+		return { move, outcome: "instaFall", damage: def.damage, x, y, dir };
+	}
 
 	if (defender.blocking && def.blockable && !behind) {
 		// Every guard that stops a sword attack breaks it. There is no
@@ -1217,7 +1254,15 @@ export function applyHitToDefender(
 		defender.vy = def.launchVy;
 		defender.grounded = false;
 	}
-	if (def.knockdown) {
+	if (result.outcome === "instaFall") {
+		// The launch arc is cut: the spike replaces whatever upward speed the
+		// anti-air gave, and the floor time is the anti-air's own — paid on the
+		// spot. `applyKnockdown` clears the debt, so the safe fall has nothing
+		// left to cancel: the victim is helpless and falling, which is the
+		// whole of the Insta Fall.
+		applyKnockdown(defender, ANTIAIR_KNOCKDOWN_MS);
+		defender.vy = Math.max(defender.vy, KNOCKDOWN_SLAM_VY);
+	} else if (def.knockdown) {
 		const ms = def.knockdownMs ?? KNOCKDOWN_MS;
 		if (def.knockdownOnLanding) {
 			// A launch and a slam are the same tick apart and opposite in

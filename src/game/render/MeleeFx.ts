@@ -1144,6 +1144,19 @@ export class MeleeFx {
 				this.stage.startShake(150, 5);
 				break;
 
+			case "instaFall": {
+				// The arc is cut: the spike is a downward read, so the impact
+				// throws its shards with extra gravity and shakes harder than
+				// the slash it was. This is the tell that the safe fall is no
+				// longer coming.
+				const tint = COLOR[move];
+				sparks(18, tint, 380);
+				shards(16, tint);
+				this.ring(x, y, teamTint(tint, team, TINT.medium), 1.2, 400);
+				this.stage.startShake(220, 6);
+				break;
+			}
+
 			default: {
 				const tint = COLOR[move];
 				const finisher = move === "slash3";

@@ -29,7 +29,7 @@
  * end to end and reports the ones that never clear. An unreachable objective is
  * the one tutorial bug with no symptom — the lesson stages perfectly, the enemy
  * does its thing, and the player simply never gets to leave. It is opt-in only
- * because it plays forty-odd drills at human speed.
+ * because it plays fifty-odd drills at human speed.
  *
  * Run with the dev servers up (`pnpm run dev:herdr`).
  *
@@ -344,6 +344,8 @@ type Drill =
 	| "ultimate"
 	| "thrust"
 	| "shoryuken"
+	| "safeFall"
+	| "instaFall"
 	| "mash";
 
 /** Longest suffix wins, so `-basics-walk` beats `-walk` would-be matches. */
@@ -358,6 +360,8 @@ const DRILLS: [suffix: string, drill: Drill][] = [
 	["-guard", "guard"],
 	["-butterfly", "butterfly"],
 	["-uppercut", "uppercut"],
+	["-safe-fall", "safeFall"],
+	["-insta-fall", "instaFall"],
 	["-backstab", "backstab"],
 	["-massive", "massive"],
 	["-plunge", "plunge"],
@@ -566,6 +570,70 @@ async function drill(page: Page, kind: Drill) {
 					await sleep(600);
 				}
 				break;
+			case "safeFall": {
+				// Walk into the dummy's uppercut, then catch the *observed* fall.
+				// The launch often bonks MID's underside in the default drill
+				// arena, so the fall window is short and a blind jump cadence
+				// misses it.
+				const done = () =>
+					window.__tutorial?.state().objectives.some(
+						(o) => o.id === "safe-fall" && o.done,
+					) ?? false;
+				for (let i = 0; i < 8 && !done(); i++) {
+					await closeIn();
+					for (let w = 0; w < 500; w++) {
+						const p = window.__gameState!().playerPhys;
+						if (p.knockdownPendingTimer > 0) break;
+						await sleep(10);
+					}
+					for (let w = 0; w < 500; w++) {
+						const p = window.__gameState!().playerPhys;
+						if (p.knockdownPendingTimer === 0 || p.vy > 0) break;
+						await sleep(10);
+					}
+					await t.input({ up: true }, 100);
+					await sleep(600);
+				}
+				break;
+			}
+			case "instaFall": {
+				const done = () =>
+					window.__tutorial?.state().objectives.some(
+						(o) => o.id === "insta-fall" && o.done,
+					) ?? false;
+				// Three catches against a hopping dummy: the objective is 3, and
+				// the dummy is a moving target — so the launcher waits for it to
+				// touch down first. A launch from mid-hop starts too high for the
+				// follow-up to climb into.
+				for (let i = 0; i < 24 && !done(); i++) {
+					// Throw the launcher, then drive the follow-up to the
+					// *observed* launch: the uppercut's 340ms recovery ends while
+					// the victim is still rising, and the jump-and-slash has to
+					// open its active frames as the arc crosses the falling body.
+					await closeIn();
+					for (let w = 0; w < 300; w++) {
+						const d = window.__gameState!().enemyPhys;
+						if (d && d.grounded) break;
+						await sleep(10);
+					}
+					await t.input({ uppercut: true }, 60, aim());
+					for (let w = 0; w < 250; w++) {
+						const s = window.__gameState!();
+						const d = s.enemyPhys;
+						if (
+							d &&
+							d.knockdownPendingTimer > 0 &&
+							s.playerPhys.meleeAction === "none"
+						) {
+							break;
+						}
+						await sleep(10);
+					}
+					await t.input({ up: true, attack: true }, 200, aim());
+					await sleep(900);
+				}
+				break;
+			}
 			case "mash":
 				for (let i = 0; i < 30; i++) {
 					const g = gap();

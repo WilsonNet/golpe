@@ -64,6 +64,8 @@ const CLIPS = {
 	"right-idle": { frames: [5], fps: 1, sheet: "dude" },
 	disabled: { frames: [], fps: 1, sheet: "dude" },
 	downed: { frames: [], fps: 1, sheet: "dude" },
+	// Horizontal in the air: the launch and the airborne half of a knockdown.
+	launched: { frames: [], fps: 1, sheet: "dude" },
 	helpless: { frames: [], fps: 1, sheet: "dude" },
 	slam: { frames: [], fps: 1, sheet: "dude" },
 	plunge: { frames: [], fps: 1, sheet: "dude" },
@@ -175,6 +177,7 @@ function stripFor(hero: HeroId, sheet: string): ReturnType<typeof heroFrames> {
 type PoseKey =
 	| "disabled"
 	| "downed"
+	| "launched"
 	| "helpless"
 	| "slam"
 	| "plunge"
@@ -200,6 +203,7 @@ const POSE_BY_CLIP: Record<ClipName, PoseKey> = {
 	"right-idle": "disabled",
 	disabled: "disabled",
 	downed: "downed",
+	launched: "launched",
 	helpless: "helpless",
 	slam: "slam",
 	plunge: "plunge",
@@ -421,19 +425,27 @@ export function animationSystem(queries: Queries, dtMs: number) {
 			continue;
 		}
 
+		// A launched fighter is **horizontal from the first tick**: the launch
+		// arms `knockdownPendingTimer` on the hit, and the pose that reads as
+		// "on their back" must not wait for the floor. The same clip covers the
+		// airborne half of a real knockdown — a spiked victim is horizontal on
+		// the way down — while the grounded pose keeps its dust.
+		const launched = body.knockdownPendingTimer > 0;
 		const downed = body.knockdownTimer > 0;
-		if (downed || body.stunTimer > 0) {
+		if (launched || downed || body.stunTimer > 0) {
 			// A guard break is drawn as its own helplessness — the sword raised
 			// and useless — so the reward for a block is visible from across the
 			// arena, not just to the two fighters doing it.
 			const broken = body.guardBroken;
-			driveClip(
-				e.anim,
-				e.sprite,
-				hero,
-				downed ? "downed" : broken ? "helpless" : "disabled",
-				dtMs,
-			);
+			const clip: ClipName =
+				launched || (downed && !body.grounded)
+					? "launched"
+					: downed
+						? "downed"
+						: broken
+							? "helpless"
+							: "disabled";
+			driveClip(e.anim, e.sprite, hero, clip, dtMs);
 			continue;
 		}
 

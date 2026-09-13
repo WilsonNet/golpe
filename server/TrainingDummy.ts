@@ -18,7 +18,7 @@
  */
 
 import type { AIInput, AIOutput } from "../src/game/characters/types.js";
-import { scriptFor, slashBeats } from "../src/game/training/scripts.js";
+import { JUMP_HOLD_MS, scriptFor, slashBeats } from "../src/game/training/scripts.js";
 import {
 	type DummyBeat,
 	type DummyStatus,
@@ -87,6 +87,9 @@ export class TrainingDummy {
 
 	/** Reactive state. All of it is derived from `AIInput` transitions. */
 	private wasStunned = false;
+	/** `bounce`: ms left holding the hop, and ms before the next one is allowed. */
+	private bounceHoldMs = 0;
+	private bounceRestMs = 0;
 	/**
 	 * Negative until the first perception arrives.
 	 *
@@ -139,6 +142,8 @@ export class TrainingDummy {
 		this.beatFresh = true;
 		this.blockRemaining = 0;
 		this.counterTimer = -1;
+		this.bounceHoldMs = 0;
+		this.bounceRestMs = 0;
 		this.playbackIndex = 0;
 	}
 
@@ -166,6 +171,8 @@ export class TrainingDummy {
 		this.lastHp = -1;
 		this.enemyWasActive = false;
 		this.walkDir = 1;
+		this.bounceHoldMs = 0;
+		this.bounceRestMs = 0;
 	}
 
 	/**
@@ -227,6 +234,9 @@ export class TrainingDummy {
 				break;
 			case "playback":
 				this.playback(out);
+				break;
+			case "bounce":
+				this.bounce(input, out, dtMs);
 				break;
 			default:
 				this.playScript(out, dtMs);
@@ -304,6 +314,28 @@ export class TrainingDummy {
 		else if (input.selfX >= right) this.walkDir = -1;
 		out.moveLeft = this.walkDir < 0;
 		out.moveRight = this.walkDir > 0;
+	}
+
+	/**
+	 * A dummy that keeps hopping — but only while its feet are down.
+	 *
+	 * The reactive half is the whole point: a press in the air would spend the
+	 * air jump, and a press after a launch would be the **safe fall**, cancelling
+	 * the knockdown the Insta Fall drill exists to punish. Reacting to
+	 * `touchingDown` makes it a moving, bouncing target that still cannot
+	 * escape a launch — it lands, gets up, and hops again.
+	 */
+	private bounce(input: AIInput, out: AIOutput, dtMs: number) {
+		if (this.bounceHoldMs > 0) {
+			this.bounceHoldMs -= dtMs;
+			out.jump = true;
+			return;
+		}
+		if (this.bounceRestMs > 0) this.bounceRestMs -= dtMs;
+		if (!input.touchingDown || this.bounceRestMs > 0) return;
+		this.bounceHoldMs = JUMP_HOLD_MS;
+		this.bounceRestMs = Math.max(0, this.cfg.timing.periodMs - JUMP_HOLD_MS);
+		out.jump = true;
 	}
 
 	/**

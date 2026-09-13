@@ -34,7 +34,14 @@ import {
 function zeroOutcomesByMove(): Record<MeleeMove, Record<MeleeOutcome, number>> {
 	const out = {} as Record<MeleeMove, Record<MeleeOutcome, number>>;
 	for (const move of MELEE_MOVES) {
-		out[move] = { hit: 0, backstab: 0, parried: 0, blast: 0, bomb: 0 };
+		out[move] = {
+			hit: 0,
+			backstab: 0,
+			parried: 0,
+			blast: 0,
+			bomb: 0,
+			instaFall: 0,
+		};
 	}
 	return out;
 }
@@ -418,6 +425,7 @@ export class PhysicsDiagnostics {
 		parried: 0,
 		blast: 0,
 		bomb: 0,
+		instaFall: 0,
 	};
 	private outcomeByMove: Record<MeleeMove, Record<MeleeOutcome, number>> =
 		zeroOutcomesByMove();
@@ -445,8 +453,17 @@ export class PhysicsDiagnostics {
 	 * hit, one where the launch runs its whole arc and the victim goes down on the
 	 * landing. The arc is the move — a knockdown that ate it is the old uppercut
 	 * with a new number beside it — so the pair is the measurement, not either.
+	 *
+	 * The other two ways a debt can end are counted beside it: the **safe fall**
+	 * (`knockdownsRecovered`) cancels it with a jump on the way down, and an
+	 * airborne attacker's **Insta Fall** (`instaFalls`) spends it on the spike.
+	 * Armed = paid + recovered + insta-falled.
 	 */
 	private knockdownsPaidOnLanding = 0;
+	/** Debt cancelled by the safe fall: a jump pressed on the way down. */
+	private knockdownsRecovered = 0;
+	/** Debt spent by an airborne attacker's spike — the Insta Fall, on the hit. */
+	private instaFalls = 0;
 	private longestChain = 0;
 	private stunsTaken = 0;
 	private massivesArmed = 0;
@@ -583,7 +600,14 @@ export class PhysicsDiagnostics {
 
 		this.meleeTracks.clear();
 		this.moveCounts = zeroMoveCounts();
-		this.outcomeCounts = { hit: 0, backstab: 0, parried: 0, blast: 0, bomb: 0 };
+		this.outcomeCounts = {
+			hit: 0,
+			backstab: 0,
+			parried: 0,
+			blast: 0,
+			bomb: 0,
+			instaFall: 0,
+		};
 		this.outcomeByMove = zeroOutcomesByMove();
 		this.meleeViolations = [];
 		this.meleeReplacements = [];
@@ -596,6 +620,8 @@ export class PhysicsDiagnostics {
 		this.knockdowns = 0;
 		this.knockdownsArmed = 0;
 		this.knockdownsPaidOnLanding = 0;
+		this.knockdownsRecovered = 0;
+		this.instaFalls = 0;
 		this.longestChain = 0;
 		this.stunsTaken = 0;
 		this.massivesArmed = 0;
@@ -1202,9 +1228,21 @@ export class PhysicsDiagnostics {
 		const downed = s.knockdownTimer > 0;
 		const owing = s.knockdownPendingTimer > 0;
 		if (owing && !t.wasOwingKnockdown) this.knockdownsArmed++;
+		// A debt that vanished without the floor collecting it was either the
+		// victim's safe fall or an airborne attacker's Insta Fall. Grounded and
+		// downed tell the three apart: the spike applies a knockdown while still
+		// airborne, the floor pays while grounded, and the safe fall leaves them
+		// upright.
+		if (t.wasOwingKnockdown && !owing) {
+			if (downed && !s.grounded) this.instaFalls++;
+			else if (!downed) this.knockdownsRecovered++;
+		}
 		if (downed && !t.wasKnockedDown) {
 			this.knockdowns++;
-			if (t.wasOwingKnockdown) this.knockdownsPaidOnLanding++;
+			// Paid on the floor only when the floor is what collected it: a
+			// spiked victim is down while still airborne, and that is the
+			// Insta Fall's edge above, not a landing.
+			if (t.wasOwingKnockdown && s.grounded) this.knockdownsPaidOnLanding++;
 		}
 		t.wasOwingKnockdown = owing;
 		// A knockdown is a stun that also puts you down. If the two ever come apart,
@@ -1253,9 +1291,13 @@ export class PhysicsDiagnostics {
 			comboLinks: this.comboLinks,
 			combosFinished: this.combosFinished,
 			knockdowns: this.knockdowns,
-			/** The uppercut's launch: armed, and paid on the floor. Both > 0. */
+			/** The anti-air launch: armed, and how the debt ended. */
 			knockdownsArmed: this.knockdownsArmed,
 			knockdownsPaidOnLanding: this.knockdownsPaidOnLanding,
+			/** Safe falls: jumps that cancelled a launch debt on the way down. */
+			knockdownsRecovered: this.knockdownsRecovered,
+			/** Debts an airborne attacker spent on the spike — the Insta Fall. */
+			instaFalls: this.instaFalls,
 			uppercuts: this.moveCounts.uppercut,
 			massives: this.moveCounts.massive,
 			blocks: this.blocksRaised,

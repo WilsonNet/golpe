@@ -71,6 +71,8 @@ export const TEX = {
 	disabled: "dude_disabled",
 	/** Flat on the floor, after the chain's finisher. */
 	downed: "dude_downed",
+	/** Horizontal in the air: launched by the anti-air, or spiked on the way down. */
+	launched: "dude_launched",
 	/** Guard-broken: a full second with the sword raised helplessly. */
 	helpless: "dude_helpless",
 	/** Mid-slam: the massive's swing, leaning into the planted blade. */
@@ -124,6 +126,7 @@ export const TEX = {
 export type HeroPose =
 	| "disabled"
 	| "downed"
+	| "launched"
 	| "helpless"
 	| "slam"
 	| "plunge"
@@ -928,6 +931,26 @@ function createHeroPoses(
 	down.addChild(dust);
 
 	pose("downed", down);
+
+	// ---- launched: horizontal in the air ----
+	//
+	// A fighter the anti-air launched is horizontal from the first tick
+	// (`knockdownPendingTimer`), not just once the floor collects the debt — so
+	// the same quarter-turn, minus the floor's dust and pinned to the centre of
+	// the pose instead of its bottom edge. It doubles as the airborne half of a
+	// knockdown: a spiked victim (the Insta Fall, the plunge's landing) flies
+	// down horizontal, and only the grounded pose has dust under it.
+	const launched = new Container();
+	launched.addChild(canvas());
+
+	const tumbling = new Sprite(source);
+	tumbling.anchor.set(0.5, 1);
+	tumbling.rotation = -Math.PI / 2;
+	tumbling.position.set(CW / 2 + CH / 2, CH / 2);
+	tumbling.tint = 0xe0a0a0;
+	launched.addChild(tumbling);
+
+	pose("launched", launched);
 
 	// ---- helpless: the guard-break pose ----
 	//

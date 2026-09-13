@@ -252,7 +252,7 @@ Neither replaces the other — a training scenario is 850ms of two fighters doin
 exactly one thing, which is a terrible sample of a match and a perfect sample of
 a mechanic.
 
-Two traps specific to the training room, both of which produce a confident wrong
+Traps specific to the training room, all of which produce a confident wrong
 answer rather than an error:
 
 - **A stale server.** `tsx` does not hot-reload, and `src/game/training/` is
@@ -261,6 +261,29 @@ answer rather than an error:
 - **A scenario that measures its own setup.** A punish test whose setup move
   *lands* stuns the dummy, and the stun eats the counter-attack it was supposed
   to demonstrate. Whiff on purpose when recovery is the thing under test.
+- **The script does not own facing; the cursor does.** Between aimed holds the
+  override is released and facing follows the headless cursor — which sits at the
+  screen's top-left, so the local fighter turns *left*. A row that stages the
+  dummy to the player's right and leaves gaps gets backstabs, and a backstab adds
+  `BACKSTAB_BONUS_STUN_MS` (500ms) — long enough to outlive an anti-air arc and
+  silently make a safe-fall row impossible. Stage the player on the dummy's
+  right, so the left-facing default looks *at* the dummy, or keep every gap
+  aimed.
+- **A launch under a ledge bonks.** The arena's low ledges have 46px of
+  headroom and MID exactly `JUMP_HEIGHT_PX` (136px), so an anti-air row staged
+  under either measures a truncated arc, a short fall window and a false "the
+  follow-up never connects". The one clean ground-floor column is between
+  `LOW_LEFT` and `PILLAR_LEFT` (x ≈ 220–280).
+- **Reactive objectives cannot be scheduled.** The Insta Fall needs a jump+slash
+  whose active frames land as the launched body falls; fixed `holdMs`/`restMs`
+  steps spend their margin on aim leads and release gaps and swing at a fighter
+  already on the floor. Poll `__gameState()` in the page (or Node) and drive the
+  follow-up to the observed launch/fall — see the `safe fall` and `insta fall`
+  rows in `scripts/training-probe.ts`, and the `safeFall`/`instaFall` drills in
+  `scripts/tutorial-probe.ts`. And a drill that wants a *moving* victim must use
+  the `bounce` dummy behaviour, not `jump`: `bounce` presses jump only while
+  `touchingDown`, so the dummy keeps hopping without safe-falling the very
+  launch the row is trying to punish.
 
 Its determinism row is not a nicety: if the same script produces different events
 on two runs, nothing measured with the training room means anything, and that is

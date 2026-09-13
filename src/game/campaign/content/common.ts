@@ -150,6 +150,32 @@ export function swordChapter(hero: HeroId): Chapter {
 				outro: "Unblockable, short, and slow to recover. Read, then throw.",
 			},
 			{
+				id: `${hero}-safe-fall`,
+				title: "Catch yourself",
+				brief:
+					"A launched fighter goes **horizontal** in the air — helpless until the floor, or until you press jump **on the way down**. That is the safe fall: the knockdown the launch owed you is dropped, and you land on your feet. This dummy throws uppercuts; walk into one, then catch yourself as you come down.",
+				stage: {
+					...SAFE,
+					behaviour: "uppercut",
+					timing: { periodMs: 1500 },
+				},
+				objectives: [o.safeFall(1)],
+				outro: "The rise belongs to the launch. The fall is yours.",
+			},
+			{
+				id: `${hero}-insta-fall`,
+				title: "The Insta Fall",
+				brief:
+					"A foe who safe-falls escapes your uppercut — unless you follow them. Jump after the launch and land a swing while they are still in the air and the arc is **cut short**: they are spiked down, and no jump can cancel the knockdown that lands. GunZ players called it the Insta Fall. This dummy keeps **hopping** — a moving target that will bounce back to its feet if you let it — so catch it **three times**.",
+				stage: BOUNCING_DUMMY,
+				objectives: [
+					o.land("uppercut", "an uppercut", 1),
+					o.instaFall(3),
+				],
+				outro:
+					"The launch is the setup. The air is where the punish lives.",
+			},
+			{
 				id: `${hero}-backstab`,
 				title: "Behind the guard",
 				brief:
@@ -248,6 +274,20 @@ export function gunLesson(
 
 /** The stage every "use the thing on a target" lesson wants: a pacing dummy. */
 export const PACING_DUMMY = { ...SAFE, behaviour: "walk" } as const;
+
+/**
+ * A dummy that keeps hopping: a moving target for the Insta Fall drill. Its hop
+ * is reactive — it only presses jump while its feet are down — so it cannot
+ * safe-fall the launch it is given, and after every landing it bounces straight
+ * back up. The landing the Insta Fall creates is therefore repeated and visible.
+ */
+export const BOUNCING_DUMMY = {
+	...SAFE,
+	behaviour: "bounce",
+	// A long enough grounded pause that an uppercut can catch it standing —
+	// hopping permanently would make every launch start from mid-air.
+	timing: { periodMs: 1500 },
+} as const;
 
 /** The stage for a drill that needs the dummy to stand still and take it. */
 export const IDLE_DUMMY = idle;

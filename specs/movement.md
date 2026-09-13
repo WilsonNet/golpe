@@ -21,9 +21,9 @@ JUMP_HEIGHT_PX = JUMP_VELOCITY² / (2 × GRAVITY) = 700² / 3600 = 136px
 asserts this. Re-check the arena whenever these move.
 
 It also changes **combat**: the uppercut's launch velocity is chosen relative to
-the jump so that a launched fighter rises slightly *less* than they could jump.
-Retuning the jump silently retunes what being launched feels like — see
-[melee.md](melee.md).
+the jump so that a launched fighter rises *higher* than they could jump — the
+space is the move, and the escape is the timed safe fall. Retuning the jump
+silently retunes what being launched feels like — see [melee.md](melee.md).
 
 ## Basic movement
 
@@ -268,10 +268,14 @@ disagree about who can move.
 - **While stunned, all intent is discarded**: no walking, no jump, no attack, no
   block, no stance change. Gravity and collision continue as normal, so a
   stunned fighter still falls and still lands.
-- **A launch is an impulse**, like a dash: the uppercut sets `vy = -620` and
-  clears `grounded`, then ordinary physics carries the arc. The launch is
-  deliberately weaker than a jump (−700), so being launched leaves you lower than
-  you could have jumped — helpless, but not automatically thrown off the level.
+- **A launch is an impulse**, like a dash: the uppercut sets `vy = -700` — a
+  jump's own height — and clears `grounded`, then ordinary physics carries the
+  arc. The launch owns the rise (the arena's central platform is exactly a jump
+  above the floor, so higher would bonk), and the victim's way out is not the
+  arc but the **safe fall** — a jump pressed on the way down (`vy >= 0`), which
+  cancels the knockdown debt the launch armed. A press during the rise does
+  nothing, which is what leaves the window for an airborne attacker to cut the
+  arc (the **Insta Fall**). See [melee.md](melee.md).
 - **Knockback is also just an impulse** on `vx`.
 
 Because all three live in the replayed simulation state, prediction reconciles

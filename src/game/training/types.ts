@@ -21,7 +21,8 @@ import type { MeleeAction, MeleePhase } from "../simulation/Physics.js";
  *
  * Every one of these is expressible as a `DummyScript` except the four that
  * need to *react* to something — `blockAfterFirstHit`, `counterAttack`,
- * `mirror` and `playback` — plus `walk`, which needs to know where it is.
+ * `mirror` and `playback` — plus `walk`, which needs to know where it is, and
+ * `bounce`, which hops only while its feet are down.
  * That split is deliberate: a script is a recording of a controller, and a
  * controller cannot see the game.
  *
@@ -33,6 +34,7 @@ export type DummyBehaviour =
 	| "blockAll"
 	| "blockAfterFirstHit"
 	| "jump"
+	| "bounce"
 	| "walk"
 	| "slash"
 	| "uppercut"

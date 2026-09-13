@@ -79,6 +79,16 @@ export interface LessonCounters {
 	backstabs: number;
 	/** Hits of yours that knocked the target down. */
 	knockdowns: number;
+	/**
+	 * Launches of yours that a jump on the way down **cancelled** — the safe
+	 * fall, read off your own predicted body: the debt left without a knockdown.
+	 */
+	safeFalls: number;
+	/**
+	 * The **Insta Fall**: an airborne hit of yours that spiked a launched
+	 * fighter out of their arc. Server-judged, like every hit.
+	 */
+	instaFalls: number;
 	/** Massive ground blasts of yours that caught somebody. */
 	blasts: number;
 	/** Plunge-bomb landings of yours that caught somebody. */

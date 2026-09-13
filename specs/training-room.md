@@ -66,6 +66,7 @@ controller, and a controller cannot see the game.
 | `blockAll` | Holds block permanently — front only, per [melee.md](melee.md). |
 | `blockAfterFirstHit` | Idle until it takes a hit, then guards for `blockMs`, then idle again. |
 | `jump` | Full-height jump every `periodMs`. |
+| `bounce` | Keeps hopping every `periodMs`, but **only presses jump while `touchingDown`** — the reactive half is the point: a press in the air spends the air jump, and one after a launch is the safe fall, so a plain `jump` behaviour cannot be the victim of an Insta Fall drill. It lands, gets up and hops again. |
 | `walk` | Paces between `walkLeftX` and `walkRightX`. |
 | `slash` / `uppercut` / `massive` | That move, once per `periodMs`. |
 | `butterfly` | Slash cancelled into block, repeatedly. The cancel resets the chain, so this is an endless run of openers — see [melee.md](melee.md). |

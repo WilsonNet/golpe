@@ -12,6 +12,7 @@ import * as o from "../objectives.js";
 import type { CampaignModule } from "../types.js";
 import {
 	basicsChapter,
+	BOUNCING_DUMMY,
 	graduationChapter,
 	gunLesson,
 	IDLE_DUMMY,
@@ -70,6 +71,31 @@ export const ANANDS_COURSE: CampaignModule = {
 						o.land("shoryuken", "a shoryuken", 1),
 					],
 					outro: "Anti-air, not a mixup. A read guard stops it cold.",
+				},
+				{
+					id: "anands-safe-fall",
+					title: "Catch yourself",
+					brief:
+						"The shoryuken throws its target into the air, horizontal from the first tick — and they can escape the same way you can: press jump **on the way down** and the knockdown is dropped. This dummy throws uppercuts; walk into one, then catch yourself on the fall.",
+					stage: {
+						...SAFE,
+						behaviour: "uppercut",
+						timing: { periodMs: 1500 },
+					},
+					objectives: [o.safeFall(1)],
+					outro: "The rise belongs to the launch. The fall is yours.",
+				},
+				{
+					id: "anands-insta-fall",
+					title: "The Insta Fall",
+					brief:
+						"Rise with them. The shoryuken leaves you airborne beside the foe it launched — press jump into a midair stab and the arc is **cut short**: they are spiked down, and no safe fall can cancel it. GunZ's Insta Fall, with a dagger. This dummy keeps **hopping** — a moving target that will bounce back to its feet if you let it — so catch it **three times**.",
+					stage: BOUNCING_DUMMY,
+					objectives: [
+						o.land("shoryuken", "a shoryuken", 1),
+						o.instaFall(3),
+					],
+					outro: "The anti-air is the setup. The air is where the punish lives.",
 				},
 				{
 					id: "anands-pressure",

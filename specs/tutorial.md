@@ -103,14 +103,14 @@ Two of these are deltas rather than levels, and both bit during development:
 
 ## The courses
 
-Sixteen lessons for Lia and Jeffs, twelve for Anands. Every id is hero-prefixed
+Eighteen lessons for Lia and Jeffs, fourteen for Anands. Every id is hero-prefixed
 — the basics read the same for all three, but a player picking up a new hero is
 entitled to be walked through the feet again.
 
 | Chapter | Lia | Anands | Jeffs |
 |---|---|---|---|
 | First steps | walk & jump · the second jump · the dash · two stances | same | same |
-| The blade | slash · the chain · the guard · the butterfly · the uppercut vs a turtle · behind the guard · the Massive · the plunge bomb | stab · the thrust · the shoryuken · living in the gap | *(same as Lia)* |
+| The blade | slash · the chain · the guard · the butterfly · the uppercut vs a turtle · the safe fall · the Insta Fall · behind the guard · the Massive · the plunge bomb | stab · the thrust · the shoryuken · the safe fall · the Insta Fall · living in the gap | *(same as Lia)* |
 | The arsenal | rifle · HE grenade · black hole | machine gun · trap · dragon thrust | shotgun · smoke · Death Blossom |
 | Graduation | put down a counter-attacking dummy | same | same |
 
@@ -167,7 +167,7 @@ reload.
 tutorial exists for: **every drill is played to the end**, and the ones that
 never clear are reported. An unreachable objective is the one tutorial bug with
 no symptom — the lesson stages perfectly, the enemy does its thing, and the
-player simply never gets to leave. Opt-in, because it plays forty-four drills at
+player simply never gets to leave. Opt-in, because it plays fifty drills at
 human speed.
 
 `src/game/campaign/Campaign.test.ts` covers what needs no browser: unique lesson

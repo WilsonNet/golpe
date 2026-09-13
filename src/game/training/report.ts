@@ -111,6 +111,10 @@ interface MeleeSummaryView {
 	knockdownsArmed: number;
 	/** …and the ones the floor then collected. */
 	knockdownsPaidOnLanding: number;
+	/** …and the ones a jump on the way down cancelled — the safe fall. */
+	knockdownsRecovered: number;
+	/** …and the ones an airborne attacker spiked — the Insta Fall. */
+	instaFalls: number;
 	uppercuts: number;
 	massives: number;
 	/** Bomb dives begun — the airborne half of the massive. */

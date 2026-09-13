@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+	ANTIAIR_HITSTUN_MS,
 	ANTIAIR_KNOCKDOWN_MS,
+	ANTIAIR_LAUNCH_VY,
 	applyHitToDefender,
 	applyMeleeResult,
 	BACKSTAB_BONUS_STUN_MS,
@@ -19,6 +21,7 @@ import {
 	isCharging,
 	isCommitted,
 	KNOCKDOWN_MS,
+	KNOCKDOWN_SLAM_VY,
 	MASSIVE_CHARGE_MS,
 	MASSIVE_SLAM_OFFSET_PX,
 	MELEE_IFRAME_MS,
@@ -971,13 +974,18 @@ describe("hit consequences", () => {
 		expect(defender.grounded).toBe(false);
 	});
 
-	it("launches less hard than a fighter can jump", () => {
-		// A launch must be helpless without being an automatic ring-out, so it is
-		// tuned against the jump rather than in isolation. Retuning the jump
-		// retunes what being launched feels like, and this is what says so.
-		expect(Math.abs(MOVES.uppercut.launchVy)).toBeLessThan(
+	it("launches as high as a fighter can jump, and no higher", () => {
+		// The launch is deliberately a jump's own height — up from the old
+		// −620, but capped there by the arena: MID's underside is exactly
+		// JUMP_HEIGHT_PX above the floor, so anything taller bonks the central
+		// platform. Tuned against the jump rather than in isolation, so
+		// retuning the jump retunes the launch and this is what says the two
+		// are still related.
+		expect(Math.abs(MOVES.uppercut.launchVy)).toBeLessThanOrEqual(
 			Math.abs(JUMP_VELOCITY),
 		);
+		expect(Math.abs(MOVES.uppercut.launchVy)).toBeGreaterThan(620);
+		expect(MOVES.shoryuken.launchVy).toBe(MOVES.uppercut.launchVy);
 	});
 
 	it("grants melee immunity so faster swinging stops paying", () => {
@@ -1107,16 +1115,19 @@ describe("the knockdown a launch owes the floor", () => {
 		expect(s.knockdownTimer).toBeGreaterThan(ANTIAIR_KNOCKDOWN_MS / 2);
 	});
 
-	it("is the only move that defers it, and both anti-airs go down the same length of time", () => {
+	it("defers it for both anti-airs, and both go down the same length of time", () => {
 		expect(MOVES.uppercut.knockdown).toBe(true);
 		expect(MOVES.uppercut.knockdownOnLanding).toBe(true);
 		expect(MOVES.uppercut.knockdownMs).toBe(ANTIAIR_KNOCKDOWN_MS);
-		// The dagger's anti-air knocks down on the hit — it has no launch to
-		// contradict it — for the same short floor time.
+		expect(MOVES.uppercut.launchVy).toBe(ANTIAIR_LAUNCH_VY);
+		expect(MOVES.uppercut.hitstunMs).toBe(ANTIAIR_HITSTUN_MS);
+		// The dagger's anti-air launches too now: the same arc, the same
+		// deferred floor time, the same safe fall and Insta Fall to answer it.
 		expect(MOVES.shoryuken.knockdown).toBe(true);
-		expect(MOVES.shoryuken.knockdownOnLanding).toBeUndefined();
+		expect(MOVES.shoryuken.knockdownOnLanding).toBe(true);
 		expect(MOVES.shoryuken.knockdownMs).toBe(ANTIAIR_KNOCKDOWN_MS);
-		expect(MOVES.shoryuken.hitstunMs).toBe(MOVES.shoryuken.knockdownMs);
+		expect(MOVES.shoryuken.launchVy).toBe(ANTIAIR_LAUNCH_VY);
+		expect(MOVES.shoryuken.hitstunMs).toBe(ANTIAIR_HITSTUN_MS);
 		// Both shorter than the committed lunge, which is what the lunge's 260ms
 		// tell and 480ms recovery buy.
 		expect(ANTIAIR_KNOCKDOWN_MS).toBeLessThan(MOVES.thrust.knockdownMs ?? 0);
@@ -1127,10 +1138,132 @@ describe("the knockdown a launch owes the floor", () => {
 			"massive",
 			"stab",
 			"thrust",
-			"shoryuken",
 		] as const) {
 			expect(MOVES[move].knockdownOnLanding).toBeUndefined();
 		}
+	});
+
+	it("drops the debt for a jump pressed on the way down — the safe fall", () => {
+		let s = launched();
+		// The rise belongs to the launch: nothing pressed during it cancels the
+		// debt, and a held button is not a fresh press anyway.
+		let guard = 0;
+		while (s.vy < 0 && guard++ < 600) s = tickPlayer(s, intent(), DT);
+		expect(s.knockdownPendingTimer).toBeGreaterThan(0);
+		expect(s.airJumps).toBe(1);
+
+		const airJumpsBefore = s.airJumps;
+		s = tickPlayer(s, intent({ up: true }), DT);
+		expect(s.knockdownPendingTimer).toBe(0);
+		// Catching yourself *uses* the second jump — and it is given back by the
+		// landing that now happens on the feet.
+		expect(s.airJumps).toBe(airJumpsBefore - 1);
+		expect(s.vy).toBeLessThan(0);
+
+		guard = 0;
+		while (!s.grounded && guard++ < 600) s = tickPlayer(s, intent(), DT);
+		expect(s.grounded).toBe(true);
+		expect(s.knockdownTimer).toBe(0);
+	});
+
+	it("still flips without an air jump in hand", () => {
+		let s = launched();
+		s.airJumps = 0;
+		let guard = 0;
+		while (s.vy < 0 && guard++ < 600) s = tickPlayer(s, intent(), DT);
+		s = tickPlayer(s, intent({ up: true }), DT);
+		expect(s.knockdownPendingTimer).toBe(0);
+		expect(s.airJumps).toBe(0);
+
+		guard = 0;
+		while (!s.grounded && guard++ < 600) s = tickPlayer(s, intent(), DT);
+		expect(s.knockdownTimer).toBe(0);
+	});
+});
+
+/**
+ * The **Insta Fall**: the uppercutter follows the launch into the air and
+ * swings. The arc is cut, the victim is spiked, and the debt is spent on the
+ * spot — so the safe fall that would have cancelled a normal launch has
+ * nothing left to cancel.
+ */
+describe("the Insta Fall", () => {
+	/** A launched defender, and an attacker parked mid-slash in the air. */
+	function setup(attackerAirborne: boolean): {
+		attacker: PlayerPosition;
+		defender: PlayerPosition;
+	} {
+		const { attacker, defender } = duel({ move: "uppercut" });
+		attacker.y = 200;
+		defender.y = 200;
+		defender.grounded = true;
+		applyMeleeResult(
+			attacker,
+			defender,
+			connects(resolveMelee(attacker, defender)),
+		);
+		// Now the follow-up: the attacker jumps and swings.
+		attacker.meleeAction = "slash";
+		attacker.meleeTimer = MOVES.slash.startupMs + MOVES.slash.activeMs / 2;
+		attacker.hitLatch = false;
+		attacker.grounded = !attackerAirborne;
+		defender.iframeTimer = 0;
+		return { attacker, defender };
+	}
+
+	it("cuts a launched arc into an immediate, uncancellable knockdown", () => {
+		const { attacker, defender } = setup(true);
+		const result = connects(resolveMelee(attacker, defender));
+		expect(result.outcome).toBe("instaFall");
+		expect(applyMeleeResult(attacker, defender, result)).toBe(
+			MOVES.slash.damage,
+		);
+		// The launch's debt is gone and the floor time is already running.
+		expect(defender.knockdownPendingTimer).toBe(0);
+		expect(defender.knockdownTimer).toBe(ANTIAIR_KNOCKDOWN_MS);
+		// The upward trajectory is cut: the spike owns `vy` now.
+		expect(defender.vy).toBeGreaterThanOrEqual(KNOCKDOWN_SLAM_VY);
+
+		// No jump can cancel it: the safe fall reads the debt, and the debt is
+		// spent.
+		let s = defender;
+		const before = s.knockdownTimer;
+		s = tickPlayer(s, intent({ up: true }), DT);
+		expect(s.knockdownPendingTimer).toBe(0);
+		expect(s.knockdownTimer).toBeLessThan(before);
+	});
+
+	it("needs an airborne attacker — the ground swing is an ordinary hit", () => {
+		const { attacker, defender } = setup(false);
+		const result = connects(resolveMelee(attacker, defender));
+		expect(result.outcome).not.toBe("instaFall");
+		expect(defender.knockdownPendingTimer).toBeGreaterThan(0);
+		applyMeleeResult(attacker, defender, result);
+		expect(defender.knockdownTimer).toBe(0);
+	});
+
+	it("needs an airborne victim too — the landing tick belongs to the floor", () => {
+		const { attacker, defender } = setup(true);
+		defender.grounded = true;
+		const result = connects(resolveMelee(attacker, defender));
+		expect(result.outcome).not.toBe("instaFall");
+	});
+
+	it("ignores the guard: nobody blocks while horizontal on their back", () => {
+		const { attacker, defender } = setup(true);
+		defender.blocking = true;
+		defender.blockTimer = 500;
+		const result = connects(resolveMelee(attacker, defender));
+		expect(result.outcome).toBe("instaFall");
+	});
+
+	it("is a launched fighter's problem only — a grounded foe takes a normal hit", () => {
+		const { attacker, defender } = duel({ move: "slash" });
+		attacker.meleeAction = "slash";
+		attacker.grounded = false;
+		defender.knockdownPendingTimer = 0;
+		const result = connects(resolveMelee(attacker, defender));
+		expect(result.outcome).not.toBe("instaFall");
 	});
 });
 

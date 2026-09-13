@@ -34,6 +34,11 @@ const BEHAVIOURS: { value: DummyBehaviour; label: string; hint: string }[] = [
 		hint: "Idle until hit, then guards for the block duration.",
 	},
 	{ value: "jump", label: "Jump", hint: "Full-height jump on a period." },
+	{
+		value: "bounce",
+		label: "Bounce",
+		hint: "Keeps hopping while grounded; never safe-falls a launch.",
+	},
 	{ value: "walk", label: "Walk", hint: "Paces between the walk bounds." },
 	{ value: "slash", label: "Slash", hint: "One slash per period." },
 	{ value: "uppercut", label: "Uppercut", hint: "One uppercut per period." },

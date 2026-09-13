@@ -282,7 +282,7 @@ stops the butterfly being the only option.
   for the finisher being uncancellable, and `Melee.test.ts` asserts the identity
   rather than trusting the two numbers to stay in step.
 - **A knockdown the victim is airborne for is a debt in the state, not a choice
-  made by the renderer.** The uppercut both launches (−620 px/s) and knocks down,
+  made by the renderer.** The uppercut both launches (−700 px/s, a jump's own height) and knocks down,
   and on the tick of the hit those two point in opposite directions: a knockdown
   forces `KNOCKDOWN_SLAM_VY` downward and a launch *is* the upward impulse, so
   paying both at once ate the arc whole (`vy` measured 0, "dummy never rose").
@@ -297,9 +297,17 @@ stops the butterfly being the only option.
   and it caught it, 4 flags in the first online training run. Paying it at the top
   makes the arrival indistinguishable from any other stun that landed between
   ticks, so the stun gate remains the one place that knows what a stun takes away.
-  Measured as a pair, `knockdownsArmed` / `knockdownsPaidOnLanding`: a run's
-  `knockdowns` total reads identically whether the victim was spiked out of the
-  air or put down on the landing, and only one of those is the move as specified.
+  **The debt has three endings and all three are measured**: the floor pays it
+  (`knockdownsPaidOnLanding`), a jump pressed on the way down cancels it
+  (`knockdownsRecovered` — the safe fall, gated on `vy >= 0` so the rise is the
+  launch's), or an airborne attacker's swing spikes it (`instaFalls` — the Insta
+  Fall, which applies the knockdown immediately so the safe fall has nothing left
+  to cancel). The accounting `armed = paid + recovered + insta-falled` is the
+  invariant: a run's `knockdowns` total reads identically whether the victim was
+  spiked out of the air or put down on the landing, and only one of those is the
+  move as specified. The victim is **drawn horizontal from the hit tick** — the
+  debt *is* "on your back in the air" — because a state nobody can see is a state
+  that does not exist.
 - **A landed hit must be visible on the fighter that took it.** Hitstun with no
   sprite for it read as nothing happening for a whole LAN playtest. The disabled
   and knocked-down poses are generated from the character strip at boot, so they

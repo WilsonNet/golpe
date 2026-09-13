@@ -496,6 +496,174 @@ const BATTERY: BatteryRow[] = [
 	},
 	{
 		/**
+		 * The safe fall: a launched fighter who presses jump on the way down
+		 * cancels the knockdown the launch owed the floor.
+		 *
+		 * The press is driven to the *observed* fall rather than to a blind
+		 * cadence: the dummy's uppercut often catches a hopping player low, and
+		 * a short arc leaves a window too narrow for a fixed rhythm to hit. The
+		 * accounting is the proof — the debt was armed, and it ended with the
+		 * fall, not with the floor. The player stands on the dummy's *right* so
+		 * the headless cursor keeps them facing it; a backstab's extra 500ms
+		 * stun outlives the arc and would make the row untestable.
+		 */
+		name: "the safe fall cancels the launch debt",
+		async run(page) {
+			await page.evaluate(() =>
+				window.__training!.set({
+					behaviour: "uppercut",
+					facing: "foe",
+					// The one clean column on the ground floor: between LOW_LEFT
+					// and PILLAR_LEFT there is no ledge overhead, so the launch
+					// runs its whole arc instead of bonking a 46px ceiling. The
+					// player stands on the dummy's right so the headless cursor
+					// keeps them facing it — a backstab's extra 500ms stun
+					// outlives the arc and would make the row untestable.
+					spawn: { player: { x: 244, y: 480 }, dummy: { x: 224, y: 480 } },
+					timing: { periodMs: 1200 },
+				}),
+			);
+
+			let attempts = 0;
+			let report: TrainingReport | null = null;
+			while (attempts < 5) {
+				attempts++;
+				await page.evaluate(() => window.__training!.reset());
+				// The dummy's first uppercut lands a couple of hundred ms after
+				// the reset, so the wait is armed for the *hit* first — waiting
+				// straight for the fall raced the launch and arrived after the
+				// floor had already collected it.
+				const hit = await page
+					.waitForFunction(
+						() => {
+							const p = window.__gameState!().playerPhys;
+							return p.stunTimer > 0 && p.knockdownPendingTimer > 0;
+						},
+						undefined,
+						{ timeout: 6000, polling: 16 },
+					)
+					.then(() => true)
+					.catch(() => false);
+				if (!hit) continue;
+				const falling = await page
+					.waitForFunction(
+						() => {
+							const p = window.__gameState!().playerPhys;
+							return p.knockdownPendingTimer > 0 && p.vy > 0;
+						},
+						undefined,
+						{ timeout: 3000, polling: 16 },
+					)
+					.then(() => true)
+					.catch(() => false);
+				if (!falling) continue;
+				await page.evaluate(() =>
+					window.__training!.input({ up: true }, 100),
+				);
+				await page.waitForTimeout(500);
+				report = await page.evaluate(() => window.__training!.report());
+				if ((report.melee?.knockdownsRecovered ?? 0) > 0) break;
+			}
+
+			return {
+				report:
+					report ?? (await page.evaluate(() => window.__training!.report())),
+				extra: { attempts },
+			};
+		},
+		verify(report, _extra) {
+			const c = checks(report);
+			const m = report.melee;
+			c.atLeast("debts armed by the launch", m?.knockdownsArmed ?? 0, 1);
+			c.atLeast("safe falls", m?.knockdownsRecovered ?? 0, 1);
+			c.eq(
+				"armed = paid + recovered + insta-felled",
+				m?.knockdownsArmed ?? 0,
+				(m?.knockdownsPaidOnLanding ?? 0) +
+					(m?.knockdownsRecovered ?? 0) +
+					(m?.instaFalls ?? 0),
+			);
+			return c.fails;
+		},
+	},
+	{
+		/**
+		 * The Insta Fall: follow the launch into the air and cut the arc. The
+		 * spike is immediate — the debt is spent on the hit, so no jump can
+		 * cancel it — which is exactly what this row measures.
+		 *
+		 * Driven relative to the *observed* launch rather than to a wall-clock
+		 * schedule. The follow-up window is a beat: the uppercut's 340ms
+		 * recovery keeps the attacker on the floor while the victim rises, and
+		 * by the time the jump and the swing are legal the victim is already
+		 * falling. A scripted fixed delay spent its margin on the training
+		 * room's aim leads and release gaps and swung at a fighter already on
+		 * the floor.
+		 */
+		name: "insta fall: an airborne slash spikes a launched dummy",
+		async run(page) {
+			await page.evaluate(() =>
+				window.__training!.set({
+					behaviour: "idle",
+					facing: "foe",
+					// The default spawn, under MID. The launch is exactly a
+					// jump's height, so it fits the 136px headroom the arena
+					// gives its central platform; a taller launch would bonk
+					// and the follow-up window would vanish.
+					spawn: { player: { x: 360, y: 480 }, dummy: { x: 420, y: 480 } },
+				}),
+			);
+
+			let attempts = 0;
+			let report: TrainingReport | null = null;
+			while (attempts < 4) {
+				attempts++;
+				await page.evaluate(() => window.__training!.reset());
+				await page.evaluate(() =>
+					window.__training!.input({ uppercut: true }, 60, 0),
+				);
+				// The launch, and the end of the swing that caused it: a press
+				// during the recovery is discarded outright, so the jump has to
+				// wait for the melee state to clear.
+				await page
+					.waitForFunction(
+						() => {
+							const s = window.__gameState!();
+							return (
+								(s.enemyPhys?.knockdownPendingTimer ?? 0) > 0 &&
+								s.playerPhys.meleeAction === "none"
+							);
+						},
+						undefined,
+						{ timeout: 4000, polling: 16 },
+					)
+					.catch(() => undefined);
+				// Jump and swing on the same press: the slash starts on the
+				// jump tick and its active frames open as the arc rises into
+				// the falling victim.
+				await page.evaluate(() =>
+					window.__training!.input({ up: true, attack: true }, 200, 0),
+				);
+				await page.waitForTimeout(900);
+				report = await page.evaluate(() => window.__training!.report());
+				if ((report.outcomes.instaFall ?? 0) > 0) break;
+			}
+
+			return {
+				report: report ?? (await page.evaluate(() => window.__training!.report())),
+				extra: { attempts },
+			};
+		},
+		verify(report, _extra) {
+			const c = checks(report);
+			c.swung("uppercut");
+			c.outcome("instaFall", "slash");
+			c.atLeast("insta falls", report.melee?.instaFalls ?? 0, 1);
+			return c.fails;
+		},
+	},
+	{
+		/**
 		 * The back-massive, end to end: a 1.6s charge *away* from a turtling
 		 * opponent, then a release that slams the floor in front of the player.
 		 * The turtle is behind the player — outside the swing, inside the
@@ -1497,7 +1665,9 @@ async function main() {
 		);
 	}
 
-	const rows = BATTERY.filter((r) => !ONLY || r.name.includes(ONLY)).filter(
+	const rows = BATTERY.filter((r) =>
+		!ONLY || r.name.toLowerCase().includes(ONLY.toLowerCase()),
+	).filter(
 		// The sword rows press buttons that mean different things to the
 		// dagger (attack = stab, not slash), so a dagger run keeps only the
 		// rows that are actually about the dagger, and a sword run drops

@@ -188,8 +188,8 @@ const MOVEMENT_ENTRIES: MoveEntry[] = [
 		name: "Jump / Double Jump",
 		command: { label: "JUMP", actions: ["jump"] },
 		prose:
-			"Press jump to leave the ground, and again in the air for a second, weaker hop. The airborne jump refills only on landing. A jump clears the trap's patch entirely and is the read that beats a lunging thrust.",
-		tags: "TWO JUMPS · AIR JUMP REFILLS ON LANDING",
+			"Press jump to leave the ground, and again in the air for a second, weaker hop. The airborne jump refills only on landing. A jump clears the trap's patch entirely and is the read that beats a lunging thrust. **Launched by an anti-air?** Press jump **on the way down** for the **safe fall**: the knockdown is dropped and you land on your feet. Press it too early and the launch owns the rise; leave it too late and an airborne swing can cut the arc into the **Insta Fall**.",
+		tags: "TWO JUMPS · AIR JUMP REFILLS ON LANDING · SAFE FALL",
 	},
 	{
 		id: "dash",
@@ -211,20 +211,20 @@ const MOVEMENT_ENTRIES: MoveEntry[] = [
 
 const MELEE_PROSE: Partial<Record<MeleeMove, string>> = {
 	slash:
-		"The bread and butter — a diagonal cut, right to left, 48px of reach and 7 damage. The whole sword game hangs off it: it is cancellable into a block (the butterfly) and it is the first link of the three-hit chain. A slash is fast enough to poke, short enough that it has to be walked into range.",
+		"The bread and butter — a diagonal cut, right to left, 48px of reach and 7 damage. The whole sword game hangs off it: it is cancellable into a block (the butterfly) and it is the first link of the three-hit chain. A slash is fast enough to poke, short enough that it has to be walked into range. It is also the swing that becomes the **Insta Fall** in the air: catch a launched foe with it while your feet are off the floor and the arc is cut short, the knockdown locked.",
 	slash2:
 		"The second link — the mirror diagonal, left to right. Same frame data as the opener on purpose: the chain is a rhythm in your hands, and what changes between the links is the angle the defender reads to know whether the finisher is coming. It pierces the opener's invulnerability, so a landed combo keeps landing.",
 	slash3:
 		"The finisher — a straight overhead that knocks the target down for 520ms. It cannot be cancelled: this is the commitment that ends the chain, and what it commits to is neutral, not a punish. The whole chain is 7 + 7 + 11 = 25, a shade more than a Massive, for three hits that each have to connect on the ground.",
 	uppercut:
-		"The answer to a turtle. An unblockable upward thrust that launches its target into the air — but only 34px of reach, so it has to be walked into, and 340ms of recovery you cannot cancel. The foe goes up on the launch and comes **down on the floor**: the knockdown is paid when their feet return, so recovering mid-arc does not escape it. A whiffed uppercut loses you the exchange.",
+		"The answer to a turtle. An unblockable upward thrust that launches its target **higher than a jump** — but only 34px of reach, so it has to be walked into, and 340ms of recovery you cannot cancel. The foe goes up **horizontal** and comes down on the floor: the knockdown is paid when their feet return. Unless they press jump on the way down — the **safe fall** cancels it. Follow them into the air and land a swing instead and the arc is **cut short**: the **Insta Fall**, a spike no jump can cancel. A whiffed uppercut loses you the exchange.",
 	massive:
 		"The payoff for a 1.6s charge or a guard break. Held, it slams the sword into the floor 56px ahead; the swing itself is blockable, and the blast that follows is front *and* back of the slam point, stunning through a guard. Released in the air it becomes the plunge bomb instead.",
 	stab: "The dagger's bread and butter — fast, weak, and cancellable into the thrust. Where the slash is 330ms the stab is 190; where the slash deals 7 the stab deals 5. A dagger in range interrupts the gap between a sword wielder's swings, and trading with the sword still loses.",
 	thrust:
 		"The dagger's whole identity and its Shift move: a committed lunge that knocks down everyone in its path for 1.5s. It is the answer to having no guard — the 260ms wind-up is the tell, and a jump clears the flat line entirely. The dash is unblockable once committed.",
 	shoryuken:
-		"The dagger's anti-air, on the uppercut button. A rising stab with a wide reach that spikes its target into the floor for 700ms — the same short knockdown as the sword's uppercut, paid on the hit instead of on the landing. It only fires while the second jump is still in hand, so it can never be a third jump — and unlike the sword's uppercut it is blockable, so a read guard stops it.",
+		"The dagger's anti-air, on the uppercut button. A rising stab with a wide reach that **launches like the sword's uppercut** — the same arc, the same horizontal body, the same 700ms floor time, and the same safe fall and Insta Fall to escape or punish it. It only fires while the second jump is still in hand, so it can never be a third jump — and unlike the sword's uppercut it is blockable, so a read guard stops it.",
 };
 
 function meleeEntry(move: MeleeMove): MoveEntry {

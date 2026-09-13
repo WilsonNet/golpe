@@ -204,6 +204,24 @@ export const knockdown = (target = 1, opts: Opts = {}): Objective =>
 		opts,
 	);
 
+export const safeFall = (target = 1, opts: Opts = {}): Objective =>
+	build(
+		"safe-fall",
+		`Catch yourself on the way down — press jump while falling${times(target)}`,
+		target,
+		(c) => c.safeFalls,
+		{ keys: ["jump"], ...opts },
+	);
+
+export const instaFall = (target = 1, opts: Opts = {}): Objective =>
+	build(
+		"insta-fall",
+		`Cut a launch short — jump and hit the dummy in the air${times(target)}`,
+		target,
+		(c) => c.instaFalls,
+		{ keys: ["jump", "attack"], ...opts },
+	);
+
 export const armMassive = (target = 1, opts: Opts = {}): Objective =>
 	build(
 		"massive-armed",

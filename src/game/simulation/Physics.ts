@@ -848,6 +848,29 @@ export function tickPlayer(
 			// and its reduced hitbox must not ride a jump into the air.
 			s.dashActiveTimer = 0;
 			s.tumbleActiveTimer = 0;
+		} else if (s.knockdownPendingTimer > 0 && s.vy >= 0) {
+			// **The safe fall.** A fighter the anti-air launched is horizontal
+			// in the air, and a jump pressed *on the way down* catches them
+			// instead of spending the air jump on another hop: the knockdown
+			// the launch armed is simply dropped and they land on their feet.
+			//
+			// Gated on `vy >= 0` — GunZ's safe fall is a timed press, and the
+			// timing is the counterplay to the Insta Fall: press early and the
+			// press is wasted (the launch owns the rise), press late and an
+			// airborne attacker cuts the arc first. The press spends the air
+			// jump when one is in hand, because catching yourself is using it;
+			// when the budget is already spent the flip still works, so the
+			// escape is never withheld from a fighter who chose to jump into
+			// the uppercut in the first place.
+			s.knockdownPendingTimer = 0;
+			s.jumpBufferTimer = 0;
+			s.jumping = true;
+			s.dashActiveTimer = 0;
+			s.tumbleActiveTimer = 0;
+			if (s.airJumps > 0) {
+				s.airJumps--;
+				s.vy = AIR_JUMP_VELOCITY;
+			}
 		} else if (s.wallTouch !== "none" && s.wallJumpTimer <= 0) {
 			const away = s.wallTouch === "left" ? 1 : -1;
 			s.vx = away * WALL_JUMP_HORIZONTAL;

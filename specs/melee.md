@@ -107,7 +107,7 @@ On hit:
 | Slash | 190ms | — | 130 px/s | — |
 | Slash 2 | 210ms | — | 150 px/s | — |
 | Slash 3 | 520ms | — | 300 px/s | **yes** |
-| Uppercut | 260ms | **−620 px/s** | 90 px/s | **yes, on the landing** |
+| Uppercut | 260ms | **−700 px/s** | 90 px/s | **yes, on the landing** |
 | Massive Strike | 650ms | — | 420 px/s | — |
 
 The Massive Strike's *blast* is not in this table, because it is not a swing:
@@ -138,11 +138,15 @@ it is an area event judged by the server when the swing reaches the floor. See
   than that leaves no reaction budget at all, which is not a hard mechanic but an
   absent one: at the original 55ms, three measured matches raised 19 guards and
   intercepted nothing. **Any change to the snapshot rate changes this number.**
-- **Uppercut launch is −620 px/s** against `JUMP_VELOCITY = -700`. A launched
-  fighter rises slightly less than their own jump: high enough to be helpless,
-  low enough that it is not an instant ring-out from every platform. It is
-  derived from the jump, so **changing `JUMP_VELOCITY` or `GRAVITY` changes what
-  a launch means** — see [movement.md](movement.md).
+- **Uppercut launch is −700 px/s** — exactly `JUMP_VELOCITY`, and up from the old
+  −620. The launch is the anti-air's *space*: 13% higher than it used to be and
+  ~70ms slower through the arc, so the victim hangs while the uppercutter can
+  follow. It stops at a jump's height because **the arena says so**: `MID`'s
+  underside sits exactly `JUMP_HEIGHT_PX` above the floor, and a taller launch
+  would bonk the game's central platform instead of going higher — the ceiling
+  is part of the move's geometry, not a detail. It is still derived from the
+  jump, so **changing `JUMP_VELOCITY` or `GRAVITY` changes what a launch means**
+  — see [movement.md](movement.md).
 - **Massive recovery (460ms) is longer than a whiffed uppercut's entire
   duration.** Missing a Massive is meant to lose you the exchange outright.
 - **Massive damage (24) is a bit over three slashes** but takes more than twice
@@ -266,13 +270,19 @@ single place the state is written.
 
 #### The knockdown a launch owes the floor
 
-The sword's uppercut both **launches** (−620 px/s) and **knocks down**, and on the
+The sword's uppercut both **launches** (−700 px/s) and **knocks down**, and on the
 tick of the hit those two contradict each other: a knockdown spikes its victim
 downward and a launch sends them up. So the uppercut spends the launch and *arms*
 the floor time, in `knockdownPendingTimer` — the debt is simulation state on the
 wire, not a renderer's guess, because the tick a fighter goes down is a fact both
 sides must agree on and a knockdown applied on top of predicted state would be
 erased by the next reconciliation.
+
+**A fighter who owes the debt is horizontal**, drawn that way from the tick of
+the hit rather than from the tick they land — the state *is* "on your back in the
+air", so waiting for the floor to draw it would be the picture disagreeing with
+the simulation. The dagger's shoryuken launches too, and owes the same debt: both
+anti-airs are the same answer wearing different weapons.
 
 `tickPlayer` collects the debt on the tick the feet are next found on the floor,
 **wherever in the arena that turns out to be** — and it collects it *before* the
@@ -283,19 +293,49 @@ still holding the guard they had out on the way down, which is the state the
 `illegalActions` diagnostic exists to catch (and which it caught, online, on the
 first run).
 
-The consequences:
+The debt has exactly three endings, and they are all measured:
 
-- The victim's arc is unchanged. They rise, and the 260ms hitstun expires
-  mid-flight, so an uppercut still opens the juggle it always opened, and a foe
-  with their air dash or second jump still in hand can spend it on the way down.
-- Escaping the stun is **not** escaping the move. Whoever falls, falls on their
-  back: the knockdown is delivered on the landing rather than never.
-- A knockdown that lands *first* (a thrust catching the launched fighter) clears
-  the debt, so the landing cannot shorten a longer sentence by re-arming a
-  shorter one.
+- **The floor collects it.** Whoever falls, falls on their back. Escaping the
+  stun is not escaping the move unless they use one of the two below.
+- **The safe fall cancels it.** A jump pressed while falling drops the debt
+  outright, and the fighter lands on their feet. This is GunZ's safe fall, and
+  it is *timed*: the rise belongs to the launch, so a press made before the
+  fall is wasted. The press spends the air jump when one is in hand (catching
+  yourself is using it) and the flip still works when it is not, so a fighter
+  who already double-jumped into the uppercut is not locked out of their own
+  escape.
+- **The Insta Fall spends it.** An attacker who follows the launch into the air
+  and lands a swing cuts the arc: the debt is paid on the spot as an immediate
+  knockdown, the victim is spiked down (`KNOCKDOWN_SLAM_VY`), and no jump can
+  cancel it — the debt the safe fall reads is gone. GunZ called the technique
+  the *Insta Fall*, and it is the reason the safe fall has to be a read rather
+  than a reflex.
 
-The dagger's shoryuken knocks down **on the hit** — it has no launch to contradict
-it, so its victim is spiked straight into the floor.
+A knockdown that lands *first* (a thrust catching the launched fighter) also
+clears the debt, so the landing cannot shorten a longer sentence by re-arming a
+shorter one.
+
+##### The safe fall
+
+While the debt is owed and the fighter is airborne, a fresh jump press on the
+way down (`vy >= 0`) clears it in `tickPlayer`'s jump chain — before the wall
+jump and the air jump, because the player who presses jump while horizontal
+means *recover*, not *hop*. It is deliberately not available during the rise:
+the press is a read on the arc, exactly as GunZ's safe fall was, and that read
+is what the Insta Fall punishes.
+
+##### The Insta Fall
+
+In `resolveMelee`, a defender who owes the debt **and is still in the air**, and
+an **attacker with their feet off the floor**, is an `instaFall` outcome: damage
+and hitstun as normal, then `applyKnockdown` immediately and the spike velocity
+applied on top. Both fighters must be airborne — a swing on the tick the
+victim's feet are already down is an ordinary hit, and the debt the floor is
+about to collect stays the floor's. It sits ahead of the guard check — nobody
+holds a front guard while horizontal on their back — and it is what makes
+following the launch a real option rather than a waste of a jump. The
+diagnostic counts all three endings and asserts they add up: `knockdownsArmed =
+knockdownsPaidOnLanding + knockdownsRecovered + instaFalls`.
 
 ### What it looks like
 
@@ -602,14 +642,21 @@ then puts them on the floor.
 - It out-ranges nothing — **34px, the shortest reach of the three** — so it must
   be walked into.
 - It cannot be cancelled and recovers for 340ms.
-- A launched fighter is airborne *and* stunned for 260ms, which is a combo
-  opening rather than a kill on its own.
+- A launched fighter is airborne *and* stunned for 260ms, then **horizontal** for
+  the rest of the arc, which is a combo opening rather than a kill on its own.
+- It launches **a jump's own height, and hangs longer** (−700 px/s against
+  `JUMP_VELOCITY = -700`; up from the old −620): the space is the move, and it
+  stops there because the arena's central platform sits exactly one jump above
+  the floor. The escape is the safe fall, a jump pressed on the way down — and
+  the punish for a safe fall that comes too late or too predictably is the Insta
+  Fall, an airborne swing that cuts the arc and locks the knockdown. See *The
+  knockdown a launch owes the floor*.
 - Its **knockdown is paid on the landing** (`700ms`, the same short floor time as
   the dagger's shoryuken), because a launch and a slam cannot happen on the same
-  tick. See *The knockdown a launch owes the floor*.
+  tick.
 
-Its whole job is to answer a block. It loses to spacing, and it loses badly to
-being whiffed.
+Its whole job is to answer a block. It loses to spacing, to the safe fall, and it
+loses badly to being whiffed.
 
 ## Cancels and the butterfly
 
@@ -659,11 +706,15 @@ table. A disabled fighter:
 - **is drawn as disabled** — a distinct sprite, not the walk cycle. A knocked down
   fighter gets its own, lying on the surface it is standing on.
 
-Both hit sprites are **generated from the shipped character strip** at boot
-(`createHitTextures`): the same fighter, flushed and rocked off balance for a
-stagger, rotated flat with a puff of dust for a knockdown. They are placeholders
-in the honest sense — they line up perfectly with the walk cycle they came from,
-and the real art replaces them by deleting one function.
+The hit poses and the horizontal states are **generated from the shipped
+character strip** at boot (`createHeroPoses`): the same fighter, flushed and
+rocked off balance for a stagger, quarter-turned flat for the horizontal ones.
+The **launched** pose is the quarter-turn with no dust, centred on the body —
+a fighter the anti-air put in the air is drawn horizontal **from the hit tick**,
+and the pose doubles as the airborne half of a spiked knockdown — while the
+**downed** pose keeps its dust and lies along the floor it is standing on. They
+are placeholders in the honest sense — they line up perfectly with the walk
+cycle they came from, and the real art replaces them by deleting one function.
 
 `knockdownTimer` is separate from `stunTimer` even though a knockdown is always
 also a stun: the renderer has to tell "staggered" from "on the floor", and a
@@ -689,10 +740,7 @@ fire illegally**:
 | `meleeDesyncFrames` | **0** — predicted move matches the authoritative one |
 | `slashes`, `massives`, `plunges`, `uppercuts`, `blocks`, `parries`, `backstabs`, `stuns`, `butterflyChains`, `blasts`, `bombs` | **> 0** across a few runs |
 | `comboLinks`, `combosFinished`, `knockdowns` | **> 0** across a few runs |
-| `knockdownsArmed` / `knockdownsPaidOnLanding` | **both > 0, and equal** — a launched
-  victim's debt was armed by the hit and collected by the floor. `knockdowns` alone
-  cannot tell the arc-and-a-landing from a spike on the hit, and only one of those is
-  the uppercut |
+| `knockdownsArmed` / `knockdownsPaidOnLanding` / `knockdownsRecovered` / `instaFalls` | **armed = paid + recovered + insta-falled**, and the two anti-air endings both **> 0** where the battery exercises them. The debt's four counters are one accounting: it was armed by the hit, and it ended on the floor, on a safe fall, or on a spike. `knockdowns` alone cannot tell the arc-and-a-landing from a spike on the hit, and only one of those is the uppercut |
 | `plungeCatches` | **> 0** when the runs include dives — a dive that never catches is a fancy fall |
 
 The second row matters as much as the first. Every must-be-zero metric is
@@ -701,6 +749,14 @@ no violations *and no moves* is a failed run, not a passing one. Both of the
 worst bugs found while building this — reactive blocking being impossible, and
 the backstab firing on overlapping bodies — showed up as a **zero in the second
 row while the first row was perfectly clean**.
+
+**The safe fall and the Insta Fall are measured as transitions, not events.**
+`knockdownsRecovered` counts the debt leaving the body without a knockdown
+behind it — the local fighter's own predicted jump, so a safe fall the server
+later corrects away cannot count — and `instaFalls` counts the airborne spike.
+The training battery drives both deterministically (`--only=safe` / `--only=insta`);
+the duel can legitimately show neither, because a bot that never presses jump on
+the way down is not owed a recovery.
 
 **`parries` is the guard-break counter now.** Every guard that stops a sword
 attack is a parry — there is no rewardless "blocked" tier left — so a run where

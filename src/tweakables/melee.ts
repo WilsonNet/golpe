@@ -155,6 +155,35 @@ export const COMBO_CHAIN = ["slash", "slash2", "slash3"] as const;
  */
 export const ANTIAIR_KNOCKDOWN_MS = 700;
 
+/**
+ * How hard either anti-air launches: **as high as a jump (−700), and slower
+ * down than before** — up from the old −620.
+ *
+ * The ceiling is the arena: `MID`'s underside sits exactly `JUMP_HEIGHT_PX`
+ * above the floor, so a jump is the tallest arc that fits under the game's
+ * central platform, and a launch taller than one bonks in the middle of the
+ * arena instead of going higher. At −700 the launch is 13% higher than the old
+ * −620 and hangs ~70ms longer — space the anti-air can follow into — without
+ * turning the arena's own furniture into an invisible cap.
+ *
+ * The escape is still the safe fall: the launch owns the rise, and a jump on
+ * the way down cancels the knockdown. Both anti-airs share the number, exactly
+ * like the floor time, because one being a harder launcher than the other would
+ * just be an accident of the kit table.
+ */
+export const ANTIAIR_LAUNCH_VY = -700;
+
+/**
+ * How long either anti-air stuns its victim: covers the first beat of the rise,
+ * not the whole arc.
+ *
+ * The rest of the launch is the **horizontal** state — `knockdownPendingTimer`
+ * on the body — and its one action is the safe fall. A hitstun long enough to
+ * cover the arc would make the recovery press impossible even when the victim
+ * is falling, which is the window the whole mechanic exists to open.
+ */
+export const ANTIAIR_HITSTUN_MS = 260;
+
 export const MOVES: Record<MeleeMove, MoveDef> = {
 	/**
 	 * The bread and butter. Its 330ms total against a 160ms cancelled length is
@@ -253,8 +282,11 @@ export const MOVES: Record<MeleeMove, MoveDef> = {
 	 * means walking into it wrong loses the exchange.
 	 *
 	 * It also **knocks down**, on the landing rather than on the hit: the foe goes
-	 * up on the launch and stays up for the arc exactly as they always did, and the
-	 * floor is what puts them on their back. See `knockdownOnLanding`.
+	 * up on the launch and stays up for the arc, horizontal from the first tick,
+	 * and the floor is what puts them on their back — unless they press jump on
+	 * the way down (the safe fall), or the uppercutter follows them into the air
+	 * and cuts the arc short (the Insta Fall, in `resolveMelee`). See
+	 * `knockdownOnLanding` and specs/melee.md.
 	 */
 	uppercut: {
 		startupMs: 110,
@@ -268,18 +300,13 @@ export const MOVES: Record<MeleeMove, MoveDef> = {
 		cancellable: false,
 		piercesIframes: false,
 		/**
-		 * Covers the rise, not the fall. A launched fighter who recovers mid-arc
-		 * still has their air dash and second jump to spend on the way down — the
-		 * knockdown waits for their feet, so escaping the stun is not escaping
-		 * the move.
+		 * Covers the first beat of the rise, not the fall. The victim is
+		 * horizontal for the rest of the arc (`knockdownPendingTimer`), and the
+		 * safe-fall press is gated on the fall — so a hold of input during the
+		 * rise cannot pre-empt the read.
 		 */
-		hitstunMs: 260,
-		/**
-		 * Deliberately weaker than JUMP_VELOCITY (-700): a launched fighter rises
-		 * slightly less than they could have jumped. High enough to be helpless,
-		 * low enough that a launch is not a free ring-out from every platform.
-		 */
-		launchVy: -620,
+		hitstunMs: ANTIAIR_HITSTUN_MS,
+		launchVy: ANTIAIR_LAUNCH_VY,
 		knockbackVx: 90,
 		knockdown: true,
 		knockdownMs: ANTIAIR_KNOCKDOWN_MS,
@@ -409,10 +436,11 @@ export const MOVES: Record<MeleeMove, MoveDef> = {
 	},
 	/**
 	 * The dagger's anti-air on the uppercut button. A rising stab that hits
-	 * into the air, knocks down, and — unlike the sword's uppercut — is
-	 * blockable. The trade for a knockdown that lands: a read guard stops it,
-	 * and it only fires while the second jump is still in hand, so it can
-	 * never be a third jump.
+	 * into the air and **launches** — the same arc, the same horizontal state
+	 * and the same floor time as the sword's uppercut, paid on the landing
+	 * instead of on the hit — and unlike the sword's uppercut it is blockable.
+	 * The trade for a launch: a read guard stops it, and it only fires while
+	 * the second jump is still in hand, so it can never be a third jump.
 	 */
 	shoryuken: {
 		startupMs: 90,
@@ -433,16 +461,15 @@ export const MOVES: Record<MeleeMove, MoveDef> = {
 		blockable: true,
 		cancellable: false,
 		piercesIframes: false,
-		/**
-		 * The same short knockdown as the sword's uppercut (`ANTIAIR_KNOCKDOWN_MS`),
-		 * and paid on the hit rather than on a landing, because the dagger's
-		 * anti-air does not launch anybody — it spikes them straight down.
-		 */
-		hitstunMs: ANTIAIR_KNOCKDOWN_MS,
-		launchVy: 0,
+		/** The same first beat of the rise as the sword's uppercut. */
+		hitstunMs: ANTIAIR_HITSTUN_MS,
+		/** The same launch as the sword's uppercut. See `ANTIAIR_LAUNCH_VY`. */
+		launchVy: ANTIAIR_LAUNCH_VY,
 		knockbackVx: 120,
 		knockdown: true,
 		knockdownMs: ANTIAIR_KNOCKDOWN_MS,
+		/** Deferred to the floor like the uppercut's — a launch cannot slam. */
+		knockdownOnLanding: true,
 		/** The rise: a clean anti-air hop, not a jump (see `selfVy`). */
 		selfVy: -420,
 	},

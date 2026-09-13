@@ -74,13 +74,13 @@ On hit:
   reach is the widest of any melee box in the game. It is **not a third
   jump**: it only fires while the second jump is still in hand
   (`airJumps > 0`), so a fighter who double-jumped has spent its vertical
-  options. And it is **blockable** — unlike the sword's uppercut —
-  with the game's **short knockdown: 700ms** (`ANTIAIR_KNOCKDOWN_MS`), the same
-  floor time the sword's uppercut pays on the landing, and well under the
-  thrust's second and a half. Two anti-airs, one number: they are the same
+  options. And it is **blockable** — unlike the sword's uppercut — and it
+  **launches like it**: the same −700 px/s arc, the same horizontal body, the
+  same floor debt paid on the landing, and the same safe fall and Insta Fall to
+  answer it. Two anti-airs, one launch and one number: they are the same
   *answer* — a foe who chose the air — wearing different weapons, and one being
   a harder knockdown than the other would be an accident of the kit table. The
-  trade for a knockdown that lands is that a read guard stops it. **The one
+  trade for a launch that lands is that a read guard stops it. **The one
   thing the anti-air loses to is the plunge bomb**: the dive is immune to melee,
   and the shoryuken's own launch puts its user in the dive's column — a
   shoryuken into a dive is a shoryuken into a ride down (see

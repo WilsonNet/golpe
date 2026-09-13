@@ -217,15 +217,18 @@ One line each; the war story behind every one is in
   blocks the second hit. The chain also pierces melee iframes, and only the chain.
 - **A landed hit must be visible on the fighter that took it.** A disabled state
   with no sprite for it read as nothing happening for an entire playtest.
-- **A knockdown the victim is airborne for is a debt, not an effect.** The
-  uppercut launches *and* knocks down, and those two contradict each other on the
-  hit's tick, so the hit arms `knockdownPendingTimer` and `tickPlayer` collects it
-  the next tick the feet are on the floor — before `tickMelee`, where the stun gate
-  takes the guard away with everything else. Paid at the end of the landing tick it
-  left a fighter lying on the floor holding a block, and `illegalActions` said so
-  on the first online run. Measured as a pair (`knockdownsArmed` /
-  `knockdownsPaidOnLanding`), because `knockdowns` alone cannot tell the arc from
-  a spike out of the air.
+- **A knockdown the victim is airborne for is a debt, not an effect, and the debt
+  has three endings.** The uppercut launches *and* knocks down, and those two
+  contradict each other on the hit's tick, so the hit arms `knockdownPendingTimer`
+  and `tickPlayer` collects it the next tick the feet are on the floor — before
+  `tickMelee`, where the stun gate takes the guard away with everything else. Paid
+  at the end of the landing tick it left a fighter lying on the floor holding a
+  block, and `illegalActions` said so on the first online run. The victim is drawn
+  horizontal from the hit tick; the floor pays it (`knockdownsPaidOnLanding`), a
+  jump pressed on the way down cancels it (the **safe fall**,
+  `knockdownsRecovered`), and an airborne attacker's swing spikes it (the **Insta
+  Fall**, `instaFalls`). `armed = paid + recovered + insta-falled` is the
+  accounting — `knockdowns` alone cannot tell the arc from a spike out of the air.
 - **Changing gravity or jump velocity changes level reachability** — and retunes
   combat, because the uppercut's launch is derived from the jump.
 - **Anything that moves a fighter travels in the intent.** A dash applied
@@ -452,11 +455,15 @@ anti-aired** — a diving fighter is immune to melee, so the shoryuken and the
 uppercut lose to it (only the black hole and the dragon thrust can stop a
 dive). The swing itself is blockable: a front massive into a read guard is a gift, and
 the uppercut is the third answer to a turtle. **The uppercut also knocks down**,
-and it is the knockdown the victim is *airborne* for: it launches at −620 px/s and
-arms a 700ms floor time that `tickPlayer` collects on the landing (the same short
-knockdown the dagger's shoryuken pays on its hit — `ANTIAIR_KNOCKDOWN_MS`; the
-thrust keeps its 1500ms for its 260ms tell). Sword damage pays double ultimate
-charge.
+and it is the knockdown the victim is *airborne* for: it launches at −700 px/s —
+a jump's own height — and the victim is drawn **horizontal** from the hit tick,
+owing a 700ms floor time that `tickPlayer` collects on the landing. The launch is
+escapable: press **jump on the way down** and the debt is dropped (GunZ's **safe
+fall**). Follow them into the air and land a swing instead and the arc is **cut
+short** — the **Insta Fall**: spiked down, knockdown locked, no jump can cancel
+it. The dagger's shoryuken is the same launch wearing a dagger
+(`ANTIAIR_KNOCKDOWN_MS`, and the thrust keeps its 1500ms for its 260ms tell).
+Sword damage pays double ultimate charge.
 
 **An airborne dash is a flat line** — no gravity, same Y throughout — and the
 **air jump refills only on landing**. Both change reachability, which is a rule
@@ -651,7 +658,7 @@ playing**, so it stages, counts and reports — and never decides an outcome.
   overlay or the menu changes to add one.
 - **Lesson ids are stable and hero-prefixed**, because progress is stored by id
   in `localStorage` and never on the wire.
-- Measured by `scripts/tutorial-probe.ts`; `--play` finishes all forty-four
+- Measured by `scripts/tutorial-probe.ts`; `--play` finishes all fifty
   drills, which is the only way to catch an objective nobody can satisfy. See
   [specs/tutorial.md](specs/tutorial.md).
 
