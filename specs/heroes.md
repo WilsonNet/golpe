@@ -120,12 +120,12 @@ Each hero's art has one source, and the game only ever loads what it made:
 - **The draw scale is the collider over the sheet's body height** (`bodyH`,
   default the cell height). Lia's cells are padded to whatever her raised
   sword needs, and that never changes her on-screen size.
-- **Anands' art stays hand-drawn — deliberately.** Her boards *are* the look
-  the rendered heroes are chasing (flat front elevation, a flat fill with a
-  shade band on the far edge, a face turned to the viewer, chunky
-  proportions). Moving her to the rendered pipeline must not cost that; the
-  plan is [`docs/anands-art.md`](../docs/anands-art.md), and it starts by
-  fixing her extraction, not by re-rendering her.
+- **Anands' art is still her hand-drawn boards.** They *are* the look the
+  rendered heroes are chasing (flat front elevation, a flat fill with a shade
+  band on the far edge, a face turned to the viewer, chunky proportions).
+  She moves to Blender only through a model that keeps that style, and a
+  rendered frame replaces a drawn one only after a side-by-side against the
+  boards. The plan is [`docs/anands-art.md`](../docs/anands-art.md).
 - **Lia's and Jeffs' art draws the sword, so they get the trail and no
   stand-in blade.** Their cuts, the uppercut and the massive are *move-driven* clips: the frame is
   her progress through the move, so the steel is where the hitbox is. The

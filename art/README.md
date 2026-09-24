@@ -14,7 +14,7 @@ python3 scripts/make-hero-art.py lia    # render + pack → public/assets/lia.{p
 |---|---|---|---|
 | Lia | `art/lia/lia.blend` | `scripts/blender/lia_build.py` | Toriyama chibi swordswoman: teal ponytail, circlet, crimson tunic, sword and rifle |
 | Jeffs | `art/jeffs/jeffs.blend` | `scripts/blender/jeffs_build.py` | the executioner: grey-templed slick hair, stubble, trench coat with tails, sword and pump shotgun |
-| Anands | hand-drawn boards (`unprocessed-sprites/`) | `scripts/make-anands-art.py` | **not rendered, on purpose** — her boards are the reference this whole look chases. The plan that keeps her style is [`docs/anands-art.md`](../docs/anands-art.md) |
+| Anands | hand-drawn boards (`unprocessed-sprites/`) | `scripts/make-anands-art.py` | **not rendered yet** — her boards are the reference this whole look chases. She moves to Blender through a better model (image-to-3D from her boards, or handmade), gated against the boards: [`docs/anands-art.md`](../docs/anands-art.md) |
 
 Every hero shares one skeleton, shader, camera and set of clip poses
 (`scripts/blender/sprite_rig.py`); a hero's build module is only their

@@ -1,12 +1,31 @@
 # Anands' art — the plan (start here)
 
 **Status (2026-09-24): not started. This is the brief for the next session.**
-Lia and Jeffs moved to Blender renders (`art/README.md`). Anands must **not**
-go down that road as-is: her hand-drawn boards are the look the whole project
-is chasing, and the renders — good as they are — are basic next to them. The
+Lia and Jeffs moved to Blender renders (`art/README.md`). Anands goes to
+Blender too, but **not as-is**: her hand-drawn boards are the look the whole
+project is chasing, and Lia's and Jeffs' procedural models are basic next to
+them. The route in is a better model (generated from her boards, or
+handmade), and it has to pass a side-by-side against the boards. The
 goal of this work is to make the *game* show her boards faithfully and give
 her the clips she lacks, **without losing the boards' style**. Treat it as a
 long job; do it in measured steps.
+
+## The objective: HD-2D characters
+
+The target is **Octopath Traveler / the Dragon Quest III HD-2D remake**. What
+that means in practice:
+
+- **HD-2D characters are pixel sprites, not 3D models.** The "3D" is the
+  world (a diorama with real-time lights, depth of field, bloom) and the
+  lighting that falls on the sprites. So the character bar is crisp,
+  true-resolution pixel art in her boards' style, whatever tool produces the
+  pixels.
+- **What a 3D source adds on top is lighting.** A Blender-rendered hero can
+  export a **normal map for every frame** alongside the colour, as Dead Cells
+  did. The game can then light sprites dynamically: the black hole's violet,
+  explosions, a torch. That is the HD-2D look on the character side, and a
+  hand-drawn board cannot give it. It is a later feature for every rendered
+  hero (Lia and Jeffs too), not a prerequisite for Anands.
 
 ## What "her soul" is
 
@@ -73,11 +92,65 @@ body height.
    JPEG noise). The cutter resamples them to 168x152 cells, which bakes that
    softness in.
 
+## Paths to a 3D Anands (every one behind the same gate)
+
+The user models in 3D, and wants her in Blender with her style intact. Three
+routes, to try in this order. **The gate is the same for all of them:**
+render the poses the boards already have (idle, run, gun, stab), show them
+side by side with the drawn originals, and measure palette distance and
+silhouette overlap. A rendered frame replaces a drawn one only if the user
+prefers it.
+
+1. **Image-to-3D through the Blender MCP (first prototype).** The Blender MCP
+   server lets Claude drive a live Blender (run Python, read viewport
+   screenshots). It also exposes image-to-3D generators (Hyper3D Rodin,
+   Hunyuan3D) that turn her board art (front and side idle) into a textured
+   mesh carrying her actual colours and drawn details.
+   - Expected work: clean up the mesh; flatten the baked lighting out of the
+     texture; rig it to `sprite_rig.py`'s skeleton; then the user fixes the
+     face, hands and silhouette by hand.
+   - Setup is its own step: the Blender add-on plus `claude mcp add`, and API
+     keys for the generator. Look up the current instructions when doing it;
+     do not guess them.
+2. **A handmade model by the user**, built to the pipeline contract so it
+   drops into `make-hero-art.py`:
+   - scale and orientation: 1 m = 32 px, 3 m tall, feet at z=0, facing +X;
+   - the shared bone names and rest pose (arms down, not a T-pose), skinned
+     or rigid-parented;
+   - details exaggerated for 96 px;
+   - the face, goggle lenses and scarf stripes as small painted pixel
+     textures (Closest interpolation);
+   - LiaToon materials with colours sampled from the boards;
+   - a `Dagger` object on the weapon bone and a `Gun`.
+
+   Claude prepares a **template `art/anands/anands.blend`** containing the
+   rig, camera, shader, every clip posed, the three boards as reference
+   images, and a stand-in figure to model over.
+3. **A cut-out puppet from her own pixels.** Her head, torso, limbs, pack and
+   dagger are cut from the (cleanly extracted) boards and placed on bone-rigged
+   planes, then snapped back to her palette after rendering. It is the most
+   faithful route to her drawn style, and the least flexible.
+
+The extraction fix (steps 1-2 below) comes first whatever route wins: the
+image-to-3D input, the texture references and the puppet pieces all need her
+cut cleanly from the boards, and the portrait stays board-based.
+
+## Next session, in order
+
+1. Read this doc. Do steps 1-2 of the recommended order below: measure, then
+   fix the extraction. Show the user the fixed sheet in-game.
+2. Set up the Blender MCP and an image-to-3D generator (look up the current
+   setup), generate one Anands model from her clean front/side idle frames.
+3. Rig it to `sprite_rig.py`'s skeleton, render idle/run/gun/stab, run the
+   gate against the boards, show the user.
+4. In parallel, build the template `art/anands/anands.blend` for the user's
+   handmade model.
+
 ## Constraints
 
-- **Her drawn frames stay authoritative.** Replace a drawn frame only when the
-  user has seen and approved the replacement. A Blender render of her is a
-  *reference*, never a ship candidate on its own.
+- **Her drawn frames stay authoritative until the gate says otherwise.**
+  Replace a drawn frame only when the user has seen the side-by-side and
+  prefers the render.
 - **The game's contracts still apply:**
   - the scale comes from the body box (`bodyH`), never the cell;
   - the cell centre is the collider centre, and the feet sit on the floor line;
