@@ -324,7 +324,12 @@ edits, and a re-render that drops or misnames a clip still draws *something* —
 a generated placeholder pose. `window.__animStats()` tallies every clip drawn
 per hero and every frame that fell back; the probe plays 30s of Lia-vs-Lia AI
 and fails on any fallback or on a whole family of clips (cuts, air, gun, hit
-states) never drawn. Baseline: ~40 distinct clips, 0 fallbacks. The pixel-level
+states) never drawn. Baseline: ~40 distinct clips, 0 fallbacks. It also
+buckets the rifle's drawn elevation (9 buckets, 0 up … 8 down) for the local
+fighter and for remotes: before the snapshot carried `aim`, remotes read
+`{4: 285}` — level, always — and after, all nine. **Bucket by the elevation
+drawn, never by clip band index**: hold has 9 bands and run 5, and counting
+indices made a level rifle look like three aims. The pixel-level
 half — feet on the collider floor, figure 96px — is measured by
 `scripts/make-lia-art.py` itself, and the shipped atlas by `liaAtlas.test.ts`.
 

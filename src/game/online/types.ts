@@ -214,6 +214,15 @@ export interface SnapshotPlayer {
 	 */
 	ult: number;
 	/**
+	 * Where this fighter is aiming, radians (screen space, 0 = right, negative
+	 * = up), rounded to 0.01. **Presentation only**: the aim is input, and the
+	 * snapshot's `input` deliberately carries intent, not aim — but the rifle in
+	 * a remote fighter's hands has to point where their shots will go. Nothing
+	 * simulates with it, so a stale or missing value costs a drawn angle and
+	 * never a desync. Optional for an older server.
+	 */
+	aim?: number;
+	/**
 	 * Item charges left this life. Server-counted like the ultimate's charge:
 	 * only the server knows a use spent one. Resets to the kit's maximum on
 	 * respawn and on a round reset — see specs/items.md.

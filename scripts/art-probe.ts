@@ -26,8 +26,22 @@ const MUST_DRAW: string[][] = [
 	["right-idle", "left-idle"],
 	["jump", "jump-left", "fall", "fall-left"],
 	["slash", "slash-left", "slash2", "slash2-left", "slash3", "slash3-left"],
-	["gun-hold", "gun-hold-left", "gun-run", "gun-run-left", "gun-fire", "gun-fire-left"],
-	["disabled", "disabled-left", "launched", "launched-left", "downed", "downed-left"],
+	[
+		"gun-hold",
+		"gun-hold-left",
+		"gun-run",
+		"gun-run-left",
+		"gun-fire",
+		"gun-fire-left",
+	],
+	[
+		"disabled",
+		"disabled-left",
+		"launched",
+		"launched-left",
+		"downed",
+		"downed-left",
+	],
 ];
 
 const browser = await chromium.launch();
@@ -35,7 +49,9 @@ const ctx = await browser.newContext();
 const errors: string[] = [];
 const a = await ctx.newPage();
 a.on("pageerror", (e) => errors.push(e.message));
-await a.goto(`${BASE}/?online=true&ai=true&hero=lia&room=${room}&bots=2&mute=1`);
+await a.goto(
+	`${BASE}/?online=true&ai=true&hero=lia&room=${room}&bots=2&mute=1`,
+);
 const b = await ctx.newPage();
 await b.goto(`${BASE}/?online=true&ai=true&hero=lia&room=${room}&mute=1`);
 await a.waitForTimeout(seconds * 1000);
@@ -43,12 +59,18 @@ await a.waitForTimeout(seconds * 1000);
 const stats = (await a.evaluate(() => window.__animStats?.())) ?? {};
 await browser.close();
 
-const lia = stats.lia ?? { clips: {}, fallbacks: {} };
+const lia = stats.lia ?? {
+	clips: {},
+	fallbacks: {},
+	aimBands: { local: {}, remote: {} },
+};
 const rows = Object.entries(lia.clips).sort((x, y) => y[1] - x[1]);
 console.log(`Lia drew ${rows.length} distinct clips over ${seconds}s:`);
 for (const [name, n] of rows) {
 	const fb = lia.fallbacks[name] ?? 0;
-	console.log(`  ${name.padEnd(18)} ${String(n).padStart(6)}${fb ? `  FALLBACK x${fb}` : ""}`);
+	console.log(
+		`  ${name.padEnd(18)} ${String(n).padStart(6)}${fb ? `  FALLBACK x${fb}` : ""}`,
+	);
 }
 
 let failed = false;
@@ -57,11 +79,28 @@ const check = (ok: boolean, label: string, detail = "") => {
 	if (!ok) failed = true;
 };
 const fallbacks = Object.values(lia.fallbacks).reduce((s, n) => s + n, 0);
-check(fallbacks === 0, "no placeholder poses drawn over Lia's art", `fallbacks=${fallbacks}`);
+check(
+	fallbacks === 0,
+	"no placeholder poses drawn over Lia's art",
+	`fallbacks=${fallbacks}`,
+);
 for (const group of MUST_DRAW) {
 	const hit = group.filter((c) => (lia.clips[c] ?? 0) > 0);
 	check(hit.length > 0, `drew one of ${group[0]}…`, hit.join(",") || "none");
 }
+// The rifle follows the aim — for the fighter on the other side of the wire
+// too. Before the snapshot carried aim, every remote rifle was drawn level.
+const localBands = Object.keys(lia.aimBands.local).length;
+const remoteBands = Object.keys(lia.aimBands.remote).length;
+console.log(
+	`aim bands drawn: local ${JSON.stringify(lia.aimBands.local)} remote ${JSON.stringify(lia.aimBands.remote)}`,
+);
+check(localBands >= 3, "the local rifle tracks the aim", `bands=${localBands}`);
+check(
+	remoteBands >= 3,
+	"a remote rifle tracks its aim",
+	`bands=${remoteBands}`,
+);
 check(errors.length === 0, "no page errors", errors.slice(0, 3).join(" | "));
 console.log(failed ? "ART PROBE FAIL" : "ART PROBE PASS");
 process.exit(failed ? 1 : 0);

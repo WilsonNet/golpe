@@ -170,6 +170,13 @@ them at 20Hz is ~128 KB/s per client and a datagram well past any sane MTU.
   dragging its own side into a hole the server is not pulling them into — a
   divergence with nothing in any metric to explain it. See
   [team-deathmatch.md](team-deathmatch.md).
+- **Each fighter's aim rides the snapshot as `aim`, for drawing only.** The
+  snapshot's `input` is intent — aim is deliberately not in it — so a remote's
+  rifle had nothing to point with and was drawn level forever. `aim` is the
+  last simulated input's `aimAngle` (bots included), rounded to 0.01 rad; no
+  client simulates with it, so a stale or missing one costs an angle on screen
+  and never a desync. Missing means *level*, never 0 rad: 0 is "aim right",
+  which a left-facing fighter draws aimed at the floor.
 
 ## What does not go on the wire at all
 

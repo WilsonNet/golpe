@@ -203,6 +203,13 @@ function newStats(): Omit<TrainingFighterStats, "hp"> {
 	};
 }
 
+/**
+ * The snapshot's aim is rounded to 1/100 rad (~0.6 deg): finer than any band
+ * the rifle art is drawn at, and every digit dropped is a digit nobody pays
+ * for twenty times a second.
+ */
+const AIM_WIRE_STEPS = 100;
+
 /** The bomb's small horizontal shove off the crater, alongside the knockup. */
 const BOMB_KNOCKBACK_VX = 120;
 
@@ -306,6 +313,12 @@ interface ConnectedPlayer {
 	queue: PlayerInput[];
 	/** Most recent input consumed; repeated when the queue runs dry. */
 	lastInput: PlayerInput;
+	/**
+	 * The aim of the last input simulated for this fighter, human or bot —
+	 * sent in the snapshot so every client draws the rifle where the shots
+	 * go. Presentation only; nothing simulates with it.
+	 */
+	aim: number;
 	lastSeq: number;
 	/** Consecutive ticks with no input available. */
 	starvedTicks: number;
@@ -1062,6 +1075,7 @@ export class GameRoom {
 			lastAttackTime: 0,
 			queue: [],
 			lastInput: idleInput(),
+			aim: 0,
 			lastSeq: 0,
 			starvedTicks: 0,
 			tickInput: null,
@@ -2411,6 +2425,8 @@ export class GameRoom {
 				// Rounded: the HUD draws a bar, and a fractional trickle would make
 				// every snapshot differ in a digit nobody can see.
 				ult: Math.round(p.ult),
+				// Presentation only: the rifle in a remote's hands follows it.
+				aim: Math.round(p.aim * AIM_WIRE_STEPS) / AIM_WIRE_STEPS,
 				// Charges are whole numbers by construction — each use spends one.
 				itemCharges: p.itemCharges,
 			});
@@ -2607,6 +2623,7 @@ export class GameRoom {
 			}
 
 			player.simulatedIntent = input;
+			player.aim = input.aimAngle;
 			// What the fighter was doing before this tick, for the blast judge:
 			// whether a massive's swing crossed the end of its active window and
 			// whether a dive was in the air. Both are transitions only this side

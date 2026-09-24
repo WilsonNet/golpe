@@ -818,6 +818,8 @@ def make_clip(arm, name, poses, right, left, fps=10, loop=True, drive="", props=
     if act.slots:
         arm.animation_data.action_slot = act.slots[0]
     act["lia_ground"] = ground
+    if drive == "aim":
+        act["lia_bands"] = AIM_BANDS_RUN if name == "gun-run" else AIM_BANDS_HOLD
     for i, p in enumerate(poses):
         key_pose(arm, p, 1 + i * FRAME_STEP, ground=ground)
     # Constant interpolation: every key is a drawn frame (pose-to-pose).
@@ -1115,59 +1117,82 @@ def massive_clip():
     )
 
 
-def gun_upper(recoil=0.0, b=0.0):
+# The rifle follows the aim. Banded clips: the frames are laid out band-major,
+# one band per aim elevation from straight up (-90 deg) to straight down
+# (+90 deg), and the game picks the band from the fighter's aim relative to
+# its facing (see `lia_bands` and `animationSystem`).
+AIM_BANDS_HOLD = 9
+AIM_BANDS_RUN = 5
+
+
+def aim_elevations(bands):
+    return [-math.pi / 2 + math.pi * i / (bands - 1) for i in range(bands)]
+
+
+def gun_upper(recoil=0.0, b=0.0, e=0.0):
+    """Arms and rifle aimed at elevation `e` (radians, negative = up).
+
+    The rifle pivots about the shoulder line rather than its own grip, so
+    aiming up lifts it past the face and aiming down tucks it to the hip —
+    the way a body actually shoulders a gun — and the chest and head lean
+    into the aim a little so the whole figure points, not just the barrel.
+    """
+    pivot = Vector((0.02, -0.24, 1.42))
+    reach = 0.28 - 0.06 * recoil
+    steep = abs(math.sin(e))
+    # Steep aims carry the rifle out in front of the face and chest, or the
+    # head and hair swallow it exactly when the aim matters most.
+    grip = pivot + Vector((math.cos(e) * reach + 0.2 * steep, -0.1 * steep, -math.sin(e) * reach + b))
     return dict(
-        weapon=((0.22 - 0.06 * recoil, -0.26, 1.34 + 0.02 * recoil + b), -0.05 * recoil, 6, 0),
+        weapon=(tuple(grip), e - 0.05 * recoil, 6 + 18 * steep, 0),
         ikL=1.0,
         offhand=(0.48, 0.0, 0.0),
-        chest=(4 - 4 * recoil, -6, 0),
-        head=(-4, 6, 0),
+        chest=(4 - 4 * recoil + math.degrees(e) * 0.3, -6, 0),
+        head=(-4 + math.degrees(e) * 0.35, 6, 0),
     )
 
 
-def gun_hold_clip():
-    p = pose(
-        root=(0, 0, -0.04),
+def gun_legs(r=0.0):
+    return pose(
+        root=(-0.02 * r, 0, -0.04),
         thighR=(14, 6),
         kneeR=14,
         footR=-6,
         thighL=(-14, 6),
         kneeL=10,
         footL=8,
-        cape=4,
-        pony=-4,
+        cape=4 + 4 * r,
+        pony=-4 + 6 * r,
     )
-    p.update(gun_upper())
-    return [p]
+
+
+def gun_hold_clip():
+    frames = []
+    for e in aim_elevations(AIM_BANDS_HOLD):
+        p = gun_legs()
+        p.update(gun_upper(e=e))
+        frames.append(p)
+    return frames
 
 
 def gun_fire_clip():
-    out = []
-    for r in (1.0, 0.0):
-        p = pose(
-            root=(-0.02 * r, 0, -0.04),
-            thighR=(14, 6),
-            kneeR=14,
-            footR=-6,
-            thighL=(-14, 6),
-            kneeL=10,
-            footL=8,
-            cape=4 + 4 * r,
-            pony=-4 + 6 * r,
-        )
-        p.update(gun_upper(recoil=r))
-        out.append(p)
-    return out
+    frames = []
+    for e in aim_elevations(AIM_BANDS_HOLD):
+        for r in (1.0, 0.0):
+            p = gun_legs(r)
+            p.update(gun_upper(recoil=r, e=e))
+            frames.append(p)
+    return frames
 
 
 def gun_run_clip():
     frames = []
-    for i in range(8):
-        t = i / 8
-        p = run_pose(t)
-        p.update(gun_upper(b=0.03 * abs(math.cos(2 * math.pi * t))))
-        p["chest"] = (10, 0, 0)
-        frames.append(p)
+    for e in aim_elevations(AIM_BANDS_RUN):
+        for i in range(8):
+            t = i / 8
+            p = run_pose(t)
+            p.update(gun_upper(b=0.03 * abs(math.cos(2 * math.pi * t)), e=e))
+            frames.append(p)
     return frames
 
 
@@ -1394,9 +1419,9 @@ CLIPS = [
     ("massive", massive_clip, "slam", "slam-left", 0, False, "move", "sword"),
     ("plunge", plunge_clip, "plunge", "plunge-left", 12, True, "", "sword"),
     ("stuck", stuck_clip, "stuck", "stuck-left", 1, False, "", "sword"),
-    ("gun-hold", gun_hold_clip, "gun-hold", "gun-hold-left", 1, False, "", "rifle"),
-    ("gun-fire", gun_fire_clip, "gun-fire", "gun-fire-left", 12, True, "", "rifle"),
-    ("gun-run", gun_run_clip, "gun-run", "gun-run-left", 16, True, "", "rifle"),
+    ("gun-hold", gun_hold_clip, "gun-hold", "gun-hold-left", 1, False, "aim", "rifle"),
+    ("gun-fire", gun_fire_clip, "gun-fire", "gun-fire-left", 12, True, "aim", "rifle"),
+    ("gun-run", gun_run_clip, "gun-run", "gun-run-left", 16, True, "aim", "rifle"),
     ("roll", roll_clip, "roll-right", "roll-left", 25, True, "", "none"),
     ("disabled", disabled_clip, "disabled", "disabled-left", 8, True, "", "none"),
     ("helpless", helpless_clip, "helpless", "helpless-left", 6, True, "", "sword"),

@@ -168,8 +168,14 @@ export interface PackedClip {
 	frames: number[];
 	fps: number;
 	loop: boolean;
-	/** `"move"`: the frame is picked by progress through the melee move. */
-	drive?: "move";
+	/**
+	 * `"move"`: the frame is picked by progress through the melee move.
+	 * `"aim"`: the frames are `bands` runs of equal length, one per aim
+	 * elevation from straight up to straight down; the band is picked by where
+	 * the fighter aims, the frame within it by the clock.
+	 */
+	drive?: "move" | "aim";
+	bands?: number;
 }
 
 /** The packed atlas JSON the Blender pipeline writes. */

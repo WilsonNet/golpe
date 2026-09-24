@@ -46,7 +46,9 @@ export interface Clip {
 	 * through the melee move it is in, so a swing's drawn blade is exactly as
 	 * far through its arc as the simulation's hitbox is.
 	 */
-	drive?: "move";
+	drive?: "move" | "aim";
+	/** For an `"aim"` clip: how many elevation bands the frames are split into. */
+	bands?: number;
 }
 
 /**
@@ -207,6 +209,7 @@ function packedClip(hero: HeroId, name: ClipName): Clip | undefined {
 		fps: packed.fps,
 		sheet,
 		...(packed.drive ? { drive: packed.drive } : {}),
+		...(packed.bands ? { bands: packed.bands } : {}),
 	};
 }
 
@@ -349,26 +352,66 @@ function poseFor(hero: HeroId, pose: PoseKey) {
  * — a sheet that silently lost a clip still draws *something*, and only this
  * says it was the wrong thing.
  */
-const animStats = new Map<
-	HeroId,
-	{ clips: Record<string, number>; fallbacks: Record<string, number> }
->();
+interface AnimStats {
+	clips: Record<string, number>;
+	fallbacks: Record<string, number>;
+	/**
+	 * Frames drawn per rifle aim band, split by who is holding it. A remote's
+	 * aim arrives in the snapshot; before it did, every remote rifle was drawn
+	 * level, and only `remote` spreading across bands says it no longer is.
+	 */
+	aimBands: { local: Record<number, number>; remote: Record<number, number> };
+}
 
-export function animationStats(): Record<
-	string,
-	{ clips: Record<string, number>; fallbacks: Record<string, number> }
-> {
+const animStats = new Map<HeroId, AnimStats>();
+
+export function animationStats(): Record<string, AnimStats> {
 	return Object.fromEntries(animStats);
 }
 
-function tally(hero: HeroId, name: ClipName, fallback: boolean) {
+function statsFor(hero: HeroId): AnimStats {
 	let stats = animStats.get(hero);
 	if (!stats) {
-		stats = { clips: {}, fallbacks: {} };
+		stats = { clips: {}, fallbacks: {}, aimBands: { local: {}, remote: {} } };
 		animStats.set(hero, stats);
 	}
+	return stats;
+}
+
+function tally(hero: HeroId, name: ClipName, fallback: boolean) {
+	const stats = statsFor(hero);
 	stats.clips[name] = (stats.clips[name] ?? 0) + 1;
 	if (fallback) stats.fallbacks[name] = (stats.fallbacks[name] ?? 0) + 1;
+}
+
+const HALF_PI = Math.PI / 2;
+
+/** `__animStats` buckets the drawn aim in eighths of a half turn: 0 up, 8 down. */
+const AIM_STAT_BUCKETS = 9;
+
+function clamp(v: number, lo: number, hi: number): number {
+	return Math.min(hi, Math.max(lo, v));
+}
+
+/**
+ * The aim as an elevation off the fighter's facing: 0 straight ahead,
+ * negative up, positive down, clamped to a half turn — you face the cursor,
+ * so an aim behind you is a facing that has not caught up yet.
+ */
+function aimElevation(aim: number | undefined, facingLeft: boolean): number {
+	if (aim === undefined) return 0;
+	const e = Math.atan2(
+		Math.sin(aim),
+		facingLeft ? -Math.cos(aim) : Math.cos(aim),
+	);
+	return clamp(e, -HALF_PI, HALF_PI);
+}
+
+/** Which of `bands` elevation runs an aim falls in: 0 straight up, last straight down. */
+function aimBand(aim: number | undefined, bands: number): number {
+	if (bands <= 1) return 0;
+	const e = clamp(aim ?? 0, -HALF_PI, HALF_PI);
+	return Math.round(((e + HALF_PI) / Math.PI) * (bands - 1));
 }
 
 function playClip(anim: AnimState, clip: ClipName) {
@@ -390,6 +433,7 @@ function driveClip(
 	name: ClipName,
 	dtMs: number,
 	progress?: number,
+	aim?: number,
 ) {
 	playClip(anim, name);
 	const clip = clipFor(hero, name);
@@ -414,16 +458,23 @@ function driveClip(
 		if (texture && sprite.texture !== texture) sprite.texture = texture;
 		return;
 	}
+	// An aim clip is `bands` runs of frames, one per elevation: the clock runs
+	// within a run, and the aim picks which run — so turning the rifle mid-stride
+	// keeps the stride.
+	const bands = clip.drive === "aim" && clip.bands ? clip.bands : 1;
+	const perBand = Math.max(1, Math.floor(clip.frames.length / bands));
+	const band = aimBand(aim, bands);
 	anim.elapsedMs += dtMs;
 	const frameMs = 1000 / clip.fps;
-	while (anim.elapsedMs >= frameMs && clip.frames.length > 1) {
+	while (anim.elapsedMs >= frameMs && perBand > 1) {
 		anim.elapsedMs -= frameMs;
-		anim.frame = (anim.frame + 1) % clip.frames.length;
+		anim.frame = (anim.frame + 1) % perBand;
 	}
+	if (anim.frame >= perBand) anim.frame = 0;
 
 	// The hit clips carry no frames — they are assigned above and never reach
 	// here — so a missing index means the strip, not the clip, is wrong.
-	const frameIndex = clip.frames[anim.frame] ?? clip.frames[0];
+	const frameIndex = clip.frames[band * perBand + anim.frame] ?? clip.frames[0];
 	const frames = stripFor(hero, clip.sheet);
 	const texture = frameIndex === undefined ? undefined : frames[frameIndex];
 	if (texture && sprite.texture !== texture) sprite.texture = texture;
@@ -463,7 +514,11 @@ const DRAGON_SCALE = 0.62;
  * walk cycle is cut from and the generated poses both come from the fighter's
  * own sheet (see `HERO_CLIPS` for the hero whose art is hand-drawn).
  */
-export function animationSystem(queries: Queries, dtMs: number) {
+export function animationSystem(
+	queries: Queries,
+	dtMs: number,
+	aimOf?: (id: string, local: boolean) => number | undefined,
+) {
 	for (const e of queries.animated) {
 		const body = e.body;
 		const hero = e.fighter.hero;
@@ -656,30 +711,33 @@ export function animationSystem(queries: Queries, dtMs: number) {
 		// cycle is driven by the magazine dropping — ammo is server-ticked, so
 		// both the local fighter and the remotes fire on the same evidence.
 		if (body.stance === "gun") {
-			if (ammoDropped(e)) {
-				driveClip(
-					e.anim,
-					e.sprite,
-					hero,
-					facingLeft ? "gun-fire-left" : "gun-fire",
-					dtMs,
-				);
-			} else if (moving) {
-				driveClip(
-					e.anim,
-					e.sprite,
-					hero,
-					facingLeft ? "gun-run-left" : "gun-run",
-					dtMs,
-				);
-			} else {
-				driveClip(
-					e.anim,
-					e.sprite,
-					hero,
-					facingLeft ? "gun-hold-left" : "gun-hold",
-					dtMs,
-				);
+			// The rifle points where the shots go: an aim clip picks its band
+			// from this fighter's aim — the local one's live, a remote's from the
+			// snapshot. A strip hero's gun clips have no bands and ignore it.
+			const aim = aimElevation(
+				aimOf?.(e.fighter.id, e.fighter.local),
+				facingLeft,
+			);
+			const clip: ClipName = ammoDropped(e)
+				? facingLeft
+					? "gun-fire-left"
+					: "gun-fire"
+				: moving
+					? facingLeft
+						? "gun-run-left"
+						: "gun-run"
+					: facingLeft
+						? "gun-hold-left"
+						: "gun-hold";
+			driveClip(e.anim, e.sprite, hero, clip, dtMs, undefined, aim);
+			// Tallied as the elevation drawn, in 22.5-degree buckets (0 = up, 8 =
+			// down), not as clip bands: hold and run have different band counts,
+			// and mixing them made "level" look like three different aims.
+			if (clipFor(hero, clip).bands) {
+				const side =
+					statsFor(hero).aimBands[e.fighter.local ? "local" : "remote"];
+				const bucket = aimBand(aim, AIM_STAT_BUCKETS);
+				side[bucket] = (side[bucket] ?? 0) + 1;
 			}
 			continue;
 		}

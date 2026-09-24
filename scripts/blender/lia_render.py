@@ -100,6 +100,7 @@ for act in actions:
             "fps": act.get("lia_fps", 10),
             "loop": bool(act.get("lia_loop", True)),
             "drive": act.get("lia_drive", ""),
+            "bands": int(act.get("lia_bands", 0)),
             "files": files,
             "scale": portrait_scale if portrait else 1,
         }

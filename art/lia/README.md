@@ -50,6 +50,7 @@ a flat colour.
    | `lia_right` / `lia_left` | the game's clip names (`slash` / `slash-left`); must be `ClipName`s in `src/game/ecs/systems.ts` |
    | `lia_fps`, `lia_loop` | playback for clock-driven clips |
    | `lia_drive` | `"move"` = the frame is chosen by progress through the melee move, so the blade is where the hitbox is. Samples are evenly spaced over the move's whole duration (`lia_ms`) |
+   | `lia_drive` = `"aim"`, `lia_bands` | an aim-banded clip (the rifle): keys are laid out band-major — `lia_bands` equal runs, one per elevation from straight up to straight down — and the game picks the run from where the fighter aims. Keep every run the same length |
    | `lia_props` | `sword` (sword in hand), `rifle` (rifle in hands, sword on back), `none` (sword on back) |
    | `lia_ground` | the build planted the lowest sole on the floor for these poses; keep it there when you edit (the measurement will tell you) |
 

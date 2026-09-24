@@ -125,7 +125,13 @@ def measure(frames, clips, centre, body_h):
     for c in clips:
         if c["right"] not in ("right-idle", "gun-hold", "block"):
             continue
-        for f in c["files"]:
+        # A banded (aim) clip is measured at its level band only: a rifle
+        # raised overhead is not the top of her head.
+        files = c["files"]
+        if c.get("bands"):
+            per = len(files) // c["bands"]
+            files = files[per * (c["bands"] // 2) : per * (c["bands"] // 2) + 1]
+        for f in files:
             a = frames[f].split()[3]
             # The body only: the column under the body centre, ±1m, so a
             # sword poking below the feet does not count as a foot.
@@ -199,6 +205,8 @@ def main():
         meta = {"fps": c["fps"], "loop": c["loop"]}
         if c["drive"]:
             meta["drive"] = c["drive"]
+        if c.get("bands"):
+            meta["bands"] = c["bands"]
         out_clips[c["right"]] = {"frames": right, **meta}
         if c["left"]:
             out_clips[c["left"]] = {"frames": left, **meta}

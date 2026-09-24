@@ -29,7 +29,13 @@ interface Meta {
 	}[];
 	clips: Record<
 		string,
-		{ frames: number[]; fps: number; loop: boolean; drive?: string }
+		{
+			frames: number[];
+			fps: number;
+			loop: boolean;
+			drive?: string;
+			bands?: number;
+		}
 	>;
 }
 
@@ -114,6 +120,20 @@ describe("Lia's atlas", () => {
 		for (const name of ["slash", "slash2", "slash3", "uppercut", "slam"]) {
 			expect(meta.clips[name]?.drive).toBe("move");
 			expect(meta.clips[`${name}-left`]?.drive).toBe("move");
+		}
+	});
+
+	it("splits the rifle clips into aim bands the frames divide evenly", () => {
+		// The rifle follows the aim: each gun clip is `bands` equal runs, one
+		// per elevation from straight up to straight down. A band count that
+		// does not divide the frames would draw the wrong elevation's pose.
+		for (const name of ["gun-hold", "gun-fire", "gun-run"]) {
+			for (const clip of [meta.clips[name], meta.clips[`${name}-left`]]) {
+				expect(clip?.drive).toBe("aim");
+				const bands = clip?.bands ?? 0;
+				expect(bands % 2, "an odd band count has a level band").toBe(1);
+				expect((clip?.frames.length ?? 0) % bands).toBe(0);
+			}
 		}
 	});
 

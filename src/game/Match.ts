@@ -1646,7 +1646,7 @@ export class Match {
 
 		// Presentation, in dependency order: animation picks the frame, sync moves
 		// the sprites, effects read the same state, then the camera settles.
-		animationSystem(this.queries, dtMs);
+		animationSystem(this.queries, dtMs, (id, local) => this.aimOf(id, local));
 		spriteSyncSystem(this.queries);
 		nameplateSystem(this.queries, this.plates);
 		shadowSystem(this.queries, this.shadows);
@@ -3345,6 +3345,16 @@ export class Match {
 	private localAttackAt = 0;
 	private remoteAttackAt = 0;
 	private remoteBrainAim = 0;
+
+	/**
+	 * Where a fighter aims, for drawing the rifle in their hands: the local
+	 * fighter's live aim, a remote's as the last snapshot reported it, and the
+	 * offline foe's from its brain. Presentation only.
+	 */
+	private aimOf(id: string, local: boolean): number | undefined {
+		if (local) return this.aimAngle;
+		return this.online ? this.online.aimOf(id) : this.remoteBrainAim;
+	}
 	/** The escape hatch's own magazines, mirrored from the server's model. */
 	private localAmmo = 0;
 	private remoteAmmo = 0;

@@ -97,6 +97,12 @@ interface FighterInfo {
 	alive: boolean;
 	/** Ultimate charge, 0..100. Server-owned; the client only draws it. */
 	ult: number;
+	/**
+	 * Where the fighter aims (radians), for drawing the rifle. Never simulated.
+	 * `undefined` until a snapshot reports it: 0 would mean "aiming right",
+	 * which a left-facing fighter draws as aiming at the floor.
+	 */
+	aim: number | undefined;
 	/** Item charges left this life. Server-owned; the HUD only draws it. */
 	itemCharges: number;
 	/**
@@ -121,6 +127,7 @@ function newInfo(): FighterInfo {
 		blocked: 0,
 		alive: true,
 		ult: 0,
+		aim: undefined,
 		itemCharges: 0,
 		team: null,
 		hero: "lia",
@@ -452,6 +459,11 @@ export class OnlineSession {
 	/** The local fighter's side. What every "is that a teammate" question starts from. */
 	get myTeam(): TeamId | null {
 		return this.teamOf(this.manager.myId);
+	}
+
+	/** Where one fighter aims, radians, as the server last saw it. Presentation only. */
+	aimOf(id: string): number | undefined {
+		return this.info.get(id)?.aim;
 	}
 
 	/** Ultimate charge for one fighter, 0..100. */
@@ -1117,6 +1129,7 @@ export class OnlineSession {
 		info.blocked = p.blocked;
 		info.alive = p.alive;
 		info.ult = p.ult ?? 0;
+		info.aim = p.aim ?? info.aim;
 		info.itemCharges = p.itemCharges ?? 0;
 		info.team = p.team ?? null;
 		// The hero is an argument to `tickPlayer` on the replay path, so it is

@@ -124,6 +124,11 @@ Each hero's art has one source, and the game only ever loads what it made:
   Her cuts, the uppercut and the massive are *move-driven* clips: the frame is
   her progress through the move, so the steel is where the hitbox is. The
   other heroes keep the walk cycle under `MeleeFx`'s drawn blade.
+- **Lia's rifle follows the aim.** The rifle clips are *aim-banded*: nine
+  elevations from straight up to straight down for the hold and the shot, five
+  for the run (the stride keeps its clock when the band changes). The local
+  fighter uses the live aim; a remote uses the snapshot's `aim` (see
+  [netcode.md](netcode.md)).
 - Lia also draws states the strips do not: the guard, the charge (standing and
   walking), jump and fall, and a left-facing twin of every pose.
   `scripts/art-probe.ts` counts every clip drawn in a live match and any frame

@@ -126,6 +126,12 @@ sends ctrl+c to the panes and does not pattern-match anything.
 ### Gotchas found the hard way
 
 - **`herdr pane read` returns plain text, not JSON.** Parsing it as JSON throws.
+- **Two scripted edits to one file inside the same second can leave Vite
+  serving the first.** A `sed` then a `python` rewrite of `systems.ts` left the
+  dev server's module with the constant's *use* and not its declaration — a
+  `ReferenceError` in every page, with `tsc` clean. `curl
+  localhost:8084/src/<file>.ts | grep <symbol>` shows what the browser gets;
+  `touch` the file to force a re-transform.
 - **Use `--source visible`.** The default `recent` source returns *empty* for a
   long-running process that is simply sitting there logging. `--lines` applies
   to the JSON sources, so slice the text yourself.

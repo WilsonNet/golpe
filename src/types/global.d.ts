@@ -339,7 +339,14 @@ declare global {
 		 */
 		__animStats?: () => Record<
 			string,
-			{ clips: Record<string, number>; fallbacks: Record<string, number> }
+			{
+				clips: Record<string, number>;
+				fallbacks: Record<string, number>;
+				aimBands: {
+					local: Record<number, number>;
+					remote: Record<number, number>;
+				};
+			}
 		>;
 		/**
 		 * Switch aiming scheme from a script.
