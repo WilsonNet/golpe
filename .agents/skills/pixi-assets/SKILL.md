@@ -70,7 +70,7 @@ Note `source`, not `baseTexture` — **`BaseTexture` is gone in v8**, replaced b
 
 ## A packed, trimmed atlas (Lia's)
 
-A sheet rendered from 3D (`scripts/make-lia-art.py`) is packed with every
+A sheet rendered from 3D (`scripts/make-hero-art.py`) is packed with every
 frame **trimmed** to its content, plus the offset it had inside a uniform cell.
 Restore the cell with `orig` + `trim`, and a centre anchor lands on the cell
 centre exactly as if the frame had never been trimmed:

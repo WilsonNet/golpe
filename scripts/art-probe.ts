@@ -1,26 +1,29 @@
 /**
- * The art probe: does Lia's rendered sheet actually get drawn?
+ * The art probe: does a rendered hero's sheet actually get drawn?
  *
- *     tsx scripts/art-probe.ts [--seconds=30]
+ *     tsx scripts/art-probe.ts [--hero=lia|jeffs] [--seconds=30]
  *
- * Two online AI clients play Lia against Lia (plus two bots for traffic) and
- * the first one reports `window.__animStats()` — every clip the animation
- * system drew for her, and every frame it fell back to a generated
- * placeholder pose. The sheet is generated from `art/lia/lia.blend`, and a
+ * Two online AI clients play the hero against itself (plus two bots for
+ * traffic) and the first one reports `window.__animStats()` — every clip the
+ * animation system drew for the hero, and every frame it fell back to a
+ * generated placeholder pose. The sheet is generated from
+ * `art/<hero>/<hero>.blend`, and a
  * re-render that dropped or misnamed a clip still draws *something*: only
  * this count says it was the wrong thing. The scale contract itself is
- * measured where the pixels are made (`scripts/make-lia-art.py`) and checked
- * on the shipped atlas by `liaAtlas.test.ts`.
+ * measured where the pixels are made (`scripts/make-hero-art.py`) and checked
+ * on the shipped atlas by `heroAtlas.test.ts`.
  */
 import { chromium } from "playwright";
 
 const seconds = Number(
 	process.argv.find((a) => a.startsWith("--seconds="))?.split("=")[1] ?? 30,
 );
+const hero =
+	process.argv.find((a) => a.startsWith("--hero="))?.split("=")[1] ?? "lia";
 const BASE = "http://localhost:8084";
 const room = `art-${Date.now().toString(36)}`;
 
-/** Clips an AI Lia reliably reaches in half a minute of fighting. */
+/** Clips an AI sword-and-gun hero reliably reaches in half a minute of fighting. */
 const MUST_DRAW: string[][] = [
 	["right", "left"],
 	["right-idle", "left-idle"],
@@ -50,24 +53,24 @@ const errors: string[] = [];
 const a = await ctx.newPage();
 a.on("pageerror", (e) => errors.push(e.message));
 await a.goto(
-	`${BASE}/?online=true&ai=true&hero=lia&room=${room}&bots=2&mute=1`,
+	`${BASE}/?online=true&ai=true&hero=${hero}&room=${room}&bots=2&mute=1`,
 );
 const b = await ctx.newPage();
-await b.goto(`${BASE}/?online=true&ai=true&hero=lia&room=${room}&mute=1`);
+await b.goto(`${BASE}/?online=true&ai=true&hero=${hero}&room=${room}&mute=1`);
 await a.waitForTimeout(seconds * 1000);
 
 const stats = (await a.evaluate(() => window.__animStats?.())) ?? {};
 await browser.close();
 
-const lia = stats.lia ?? {
+const drawn = stats[hero] ?? {
 	clips: {},
 	fallbacks: {},
 	aimBands: { local: {}, remote: {} },
 };
-const rows = Object.entries(lia.clips).sort((x, y) => y[1] - x[1]);
-console.log(`Lia drew ${rows.length} distinct clips over ${seconds}s:`);
+const rows = Object.entries(drawn.clips).sort((x, y) => y[1] - x[1]);
+console.log(`${hero} drew ${rows.length} distinct clips over ${seconds}s:`);
 for (const [name, n] of rows) {
-	const fb = lia.fallbacks[name] ?? 0;
+	const fb = drawn.fallbacks[name] ?? 0;
 	console.log(
 		`  ${name.padEnd(18)} ${String(n).padStart(6)}${fb ? `  FALLBACK x${fb}` : ""}`,
 	);
@@ -78,22 +81,22 @@ const check = (ok: boolean, label: string, detail = "") => {
 	console.log(`${ok ? "OK  " : "FAIL"} ${label.padEnd(44)} ${detail}`);
 	if (!ok) failed = true;
 };
-const fallbacks = Object.values(lia.fallbacks).reduce((s, n) => s + n, 0);
+const fallbacks = Object.values(drawn.fallbacks).reduce((s, n) => s + n, 0);
 check(
 	fallbacks === 0,
-	"no placeholder poses drawn over Lia's art",
+	`no placeholder poses drawn over ${hero}'s art`,
 	`fallbacks=${fallbacks}`,
 );
 for (const group of MUST_DRAW) {
-	const hit = group.filter((c) => (lia.clips[c] ?? 0) > 0);
+	const hit = group.filter((c) => (drawn.clips[c] ?? 0) > 0);
 	check(hit.length > 0, `drew one of ${group[0]}…`, hit.join(",") || "none");
 }
 // The rifle follows the aim — for the fighter on the other side of the wire
 // too. Before the snapshot carried aim, every remote rifle was drawn level.
-const localBands = Object.keys(lia.aimBands.local).length;
-const remoteBands = Object.keys(lia.aimBands.remote).length;
+const localBands = Object.keys(drawn.aimBands.local).length;
+const remoteBands = Object.keys(drawn.aimBands.remote).length;
 console.log(
-	`aim bands drawn: local ${JSON.stringify(lia.aimBands.local)} remote ${JSON.stringify(lia.aimBands.remote)}`,
+	`aim bands drawn: local ${JSON.stringify(drawn.aimBands.local)} remote ${JSON.stringify(drawn.aimBands.remote)}`,
 );
 check(localBands >= 3, "the local rifle tracks the aim", `bands=${localBands}`);
 check(

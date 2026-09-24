@@ -1,8 +1,8 @@
 /**
- * Lia's rendered atlas keeps the contract the renderer relies on.
+ * Every Blender-rendered hero's atlas keeps the contract the renderer relies on.
  *
- * The sheet is generated (`scripts/make-lia-art.py` from `art/lia/lia.blend`),
- * and an artist edits the .blend by hand — so a re-render is the moment a
+ * The sheets are generated (`scripts/make-hero-art.py <hero>` from
+ * `art/<hero>/<hero>.blend`), and an artist edits the .blend by hand — so a re-render is the moment a
  * clip goes missing, a frame index points past the atlas, or the body height
  * the draw scale is computed from drifts. Each of those is a fighter that
  * draws wrong in-game with nothing else to report it: the first version of
@@ -39,11 +39,17 @@ interface Meta {
 	>;
 }
 
-const meta = JSON.parse(readFileSync("public/assets/lia.json", "utf8")) as Meta;
-const png = readFileSync("public/assets/lia.png");
-// PNG IHDR: width and height are big-endian at bytes 16 and 20.
-const atlasW = png.readUInt32BE(16);
-const atlasH = png.readUInt32BE(20);
+/** The heroes whose art is a packed sheet rendered from Blender. */
+const RENDERED_HEROES = ["lia", "jeffs"];
+
+function load(hero: string) {
+	const meta = JSON.parse(
+		readFileSync(`public/assets/${hero}.json`, "utf8"),
+	) as Meta;
+	const png = readFileSync(`public/assets/${hero}.png`);
+	// PNG IHDR: width and height are big-endian at bytes 16 and 20.
+	return { meta, atlasW: png.readUInt32BE(16), atlasH: png.readUInt32BE(20) };
+}
 
 /** Every clip `animationSystem` can pick for a sword-and-gun hero. */
 const REQUIRED = [
@@ -94,7 +100,9 @@ const REQUIRED = [
 	"launched-left",
 ];
 
-describe("Lia's atlas", () => {
+describe.each(RENDERED_HEROES)("%s's atlas", (hero) => {
+	const { meta, atlasW, atlasH } = load(hero);
+
 	it("draws the fighter at collider height, whatever the cell grew to", () => {
 		// The scale comes from the body box, never the cell: a longer sword
 		// grows the cell and must not shrink (or grow) the fighter.

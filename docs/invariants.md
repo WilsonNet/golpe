@@ -356,7 +356,7 @@ camera is centred there.
 **A pose that lowers the body must plant the feet.** The first render's crouch
 poses moved the rig's root down and sank the soles 4-5px through the floor
 line; nothing in-game would ever have reported it. `lia_build.py` now solves the
-lowest sole onto z=0 for every grounded pose, and `make-lia-art.py` measures
+lowest sole onto z=0 for every grounded pose, and `make-hero-art.py` measures
 feet-on-floor and figure height on each render and refuses to ship on drift.
 
 **Art that draws its weapon gets no stand-in blade.** `MeleeFx` draws a

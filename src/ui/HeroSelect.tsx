@@ -13,39 +13,27 @@ import { HERO_IDS, HEROES, type HeroId } from "../game/simulation/Heroes";
 import { HUD_CSS } from "./hudStyles";
 
 /**
- * The sheet-frame drawing rules shared by the hero select and the root menu's
- * compact fighter picker. One source of truth for how a hero's sprite is
- * rendered: the face-on frame (cell 4 of every nine-cell strip) from the
- * hero's own sheet, blown up pixel-perfect.
- *
- * Lia and Anands are the exceptions: their sheets have their own geometry
- * (Lia's is a packed atlas rendered from Blender, Anands' is hand-drawn), so
- * each has a dedicated portrait — `lia-portrait.png`, rendered by
- * `scripts/make-lia-art.py` at 4x the sprite density, and
- * `anands-portrait.png` — instead of a cell index into a shared layout.
+ * The portrait drawing rules shared by the hero select and the root menu's
+ * compact fighter picker. One source of truth for how a hero is drawn on a
+ * card: the hero's own portrait, rendered from the same source as their
+ * sprites — `lia-portrait.png` and `jeffs-portrait.png` by
+ * `scripts/make-hero-art.py` (their Blender models at 4x the sprite
+ * density), `anands-portrait.png` cut from her hand-drawn boards.
  */
 export const HERO_SPRITE_CSS = `
 .hp-sprite {
 	width: 64px;
 	height: 96px;
-	background-size: 576px 96px;
-	image-rendering: pixelated;
-	image-rendering: crisp-edges;
-	/* The face-on frame is cell 4 of every nine-cell strip. */
-	background-position: -256px 0;
-}
-.hp-sprite-lia,
-.hp-sprite-anands {
 	background-size: 64px 96px;
 	background-position: 0 0;
+	background-repeat: no-repeat;
 }
 .hp-sprite-lia { background-image: url("assets/lia-portrait.png"); }
 .hp-sprite-anands {
 	background-image: url("assets/anands-portrait.png");
-	background-size: 64px 96px;
-	background-position: 0 0;
+	image-rendering: pixelated;
 }
-.hp-sprite-jeffs { background-image: url("assets/jeffs.png"); }
+.hp-sprite-jeffs { background-image: url("assets/jeffs-portrait.png"); }
 `;
 
 /** The ultimate's name per hero, so the card never invents one. */

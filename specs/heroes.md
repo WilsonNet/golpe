@@ -113,23 +113,29 @@ Each hero's art has one source, and the game only ever loads what it made:
 
 | Hero | Source | Made by | Ships |
 |---|---|---|---|
-| Lia | `art/lia/lia.blend` — a toon-shaded 3D model, rig and one Action per clip | `scripts/make-lia-art.py` (see `art/lia/README.md`) | `lia.png` + `lia.json` (packed, trimmed, every clip incl. both facings), `lia-portrait.png` |
+| Lia | `art/lia/lia.blend` — an SNES-shaded 3D model, rig and one Action per clip | `scripts/make-hero-art.py lia` (see `art/README.md`) | `lia.png` + `lia.json` (packed, trimmed, every clip incl. both facings), `lia-portrait.png` |
 | Anands | hand-drawn boards in `unprocessed-sprites/` | `scripts/make-anands-art.py` | `anands*.png` strips |
-| Jeffs | pixel rows in code | `scripts/make-jeffs-art.py` | `jeffs*.png` strips |
+| Jeffs | `art/jeffs/jeffs.blend` — the same rig and clips, his own model | `scripts/make-hero-art.py jeffs` | `jeffs.png` + `jeffs.json`, `jeffs-portrait.png` |
 
 - **The draw scale is the collider over the sheet's body height** (`bodyH`,
   default the cell height). Lia's cells are padded to whatever her raised
   sword needs, and that never changes her on-screen size.
-- **Lia's art draws her sword, so she gets the trail and no stand-in blade.**
-  Her cuts, the uppercut and the massive are *move-driven* clips: the frame is
+- **Anands' art stays hand-drawn — deliberately.** Her boards *are* the look
+  the rendered heroes are chasing (flat front elevation, a flat fill with a
+  shade band on the far edge, a face turned to the viewer, chunky
+  proportions). Moving her to the rendered pipeline must not cost that; until
+  there is a plan that keeps it, her sheets are not rendered.
+- **Lia's and Jeffs' art draws the sword, so they get the trail and no
+  stand-in blade.** Their cuts, the uppercut and the massive are *move-driven* clips: the frame is
   her progress through the move, so the steel is where the hitbox is. The
   other heroes keep the walk cycle under `MeleeFx`'s drawn blade.
-- **Lia's rifle follows the aim.** The rifle clips are *aim-banded*: nine
+- **The gun follows the aim** (Lia's rifle, Jeffs' shotgun). The gun clips
+  are *aim-banded*: nine
   elevations from straight up to straight down for the hold and the shot, five
   for the run (the stride keeps its clock when the band changes). The local
   fighter uses the live aim; a remote uses the snapshot's `aim` (see
   [netcode.md](netcode.md)).
-- Lia also draws states the strips do not: the guard, the charge (standing and
+- The rendered heroes also draw states the strips do not: the guard, the charge (standing and
   walking), jump and fall, and a left-facing twin of every pose.
   `scripts/art-probe.ts` counts every clip drawn in a live match and any frame
   that fell back to a generated placeholder (must be zero).

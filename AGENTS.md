@@ -54,7 +54,7 @@ skill({ name: "feedback-loop" })    # the full workflow
 | How do I measure anything? | [`docs/diagnostics.md`](docs/diagnostics.md) + the `feedback-loop` skill |
 | How do I write a unit test — example or property? | the `property-testing` skill — when fast-check's `.prop` beats a hand-picked example, and the traps |
 | How do I run the game? | [`docs/running-the-game.md`](docs/running-the-game.md) |
-| How do I edit Lia's art — or build a hero in Blender? | [`art/lia/README.md`](art/lia/README.md) — the .blend is the source; one command renders the atlas |
+| How do I edit a hero's art — or build a new one in Blender? | [`art/README.md`](art/README.md) — Lia's and Jeffs' .blend files are the source; one command renders the atlas |
 | How do I slice a raw art board into a game sheet? | [`docs/sprite-slicer.md`](docs/sprite-slicer.md) — the `?slicer=true` workshop |
 | Why are there symlinks everywhere? | [`docs/agent-config.md`](docs/agent-config.md) |
 
@@ -165,7 +165,7 @@ One line each; the war story behind every one is in
 - **A sprite's draw scale comes from its body box, never its cell.** A sheet
   whose cells are padded to fit a raised sword names its `bodyH`; scaling by
   the cell made every longer blade shrink the fighter. Lia's cell centre *is*
-  the collider centre, and `make-lia-art.py` measures feet-on-floor and figure
+  the collider centre, and `make-hero-art.py` measures feet-on-floor and figure
   height on every render.
 - **Art that draws its own weapon gets no `MeleeFx` blade** (`sheetDrawsBlade`)
   — only the trail. The stand-in steel over rendered art was a second, bigger
@@ -310,8 +310,8 @@ tsx scripts/audio-probe.ts                           # the sound loop: music lat
 python3 scripts/make-audio.py                        # re-render the music loops from their MIDI sources (→ public/audio/)
 python3 scripts/make-potg-art.py                       # regenerate the ceremony's sunburst and medal
 python3 scripts/make-anands-art.py                       # compose the second hero's hand-drawn art into the shipped sheets
-python3 scripts/make-lia-art.py                        # render Lia from art/lia/lia.blend → lia.png/.json + portrait (needs blender)
-tsx scripts/art-probe.ts                              # Lia's rendered clips are what gets drawn: zero placeholder fallbacks
+python3 scripts/make-hero-art.py lia                   # render a hero from art/<hero>/<hero>.blend → <hero>.png/.json + portrait (lia|jeffs, needs blender)
+tsx scripts/art-probe.ts --hero=jeffs                 # a rendered hero's clips are what gets drawn: zero placeholder fallbacks, the gun tracks the aim
 ```
 
 Both `diagnose.ts` and `deathmatch-probe.ts` take `--screens=N` to run their

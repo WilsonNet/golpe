@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-"""Render Lia from her Blender source and pack the shipped sprite atlas.
+"""Render a hero from their Blender source and pack the shipped sprite atlas.
 
-    python3 scripts/make-lia-art.py              # render + pack
-    python3 scripts/make-lia-art.py --pack-only  # re-pack the last render
+    python3 scripts/make-hero-art.py lia               # render + pack
+    python3 scripts/make-hero-art.py jeffs --pack-only # re-pack the last render
 
-The source of truth is `art/lia/lia.blend` (see art/lia/README.md). This
+The source of truth is `art/<hero>/<hero>.blend` (see art/README.md). This
 script never edits it: Blender renders every `clip.*` action's keyed frames
-(`scripts/blender/lia_render.py`), and this side turns those raw canvases
+(`scripts/blender/hero_render.py`), and this side turns those raw canvases
 into what the game loads:
 
-- `public/assets/lia.png`  — the trimmed, packed atlas (right-facing frames
-  plus their mirrors for the left-facing clips).
-- `public/assets/lia.json` — the cell size, the body height the draw scale is
-  computed from, every frame's rect and its offset inside the cell, and the
-  clips (frames, fps, loop, drive).
-- `public/assets/lia-portrait.png` — the hero shot for the menus and the
+- `public/assets/<hero>.png`  — the trimmed, packed atlas (right-facing
+  frames plus their mirrors for the left-facing clips).
+- `public/assets/<hero>.json` — the cell size, the body height the draw
+  scale is computed from, every frame's rect and its offset inside the cell,
+  and the clips (frames, fps, loop, drive, bands).
+- `public/assets/<hero>-portrait.png` — the hero shot for the menus and the
   ultimate's card, rendered at 4x the sprite density.
 
 The scale contract (the fix for "the sword gets bigger"): the draw scale is
@@ -35,12 +35,16 @@ import numpy as np
 from PIL import Image, ImageOps
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-BLEND = os.path.join(ROOT, "art", "lia", "lia.blend")
-RENDER = os.path.join(ROOT, "scripts", "blender", "lia_render.py")
-RAW = os.path.join(ROOT, "art", "lia", ".render")
-OUT_PNG = os.path.join(ROOT, "public", "assets", "lia.png")
-OUT_JSON = os.path.join(ROOT, "public", "assets", "lia.json")
-OUT_PORTRAIT = os.path.join(ROOT, "public", "assets", "lia-portrait.png")
+HEROES = ("lia", "jeffs")
+HERO = next((a for a in sys.argv[1:] if not a.startswith("--")), "")
+if HERO not in HEROES:
+    sys.exit(f"usage: make-hero-art.py <{'|'.join(HEROES)}> [--pack-only]")
+BLEND = os.path.join(ROOT, "art", HERO, f"{HERO}.blend")
+RENDER = os.path.join(ROOT, "scripts", "blender", "hero_render.py")
+RAW = os.path.join(ROOT, "art", HERO, ".render")
+OUT_PNG = os.path.join(ROOT, "public", "assets", f"{HERO}.png")
+OUT_JSON = os.path.join(ROOT, "public", "assets", f"{HERO}.json")
+OUT_PORTRAIT = os.path.join(ROOT, "public", "assets", f"{HERO}-portrait.png")
 
 INK = (24, 16, 34, 255)
 ATLAS_MAX_W = 2048
@@ -251,8 +255,8 @@ def main():
     atlas.save(OUT_PNG, optimize=True)
 
     out = {
-        "name": "lia",
-        "source": "art/lia/lia.blend — regenerate with scripts/make-lia-art.py",
+        "name": HERO,
+        "source": f"art/{HERO}/{HERO}.blend — regenerate with scripts/make-hero-art.py {HERO}",
         "cellW": cell_w,
         "cellH": cell_h,
         "bodyH": manifest["bodyH"],

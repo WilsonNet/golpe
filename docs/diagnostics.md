@@ -331,7 +331,7 @@ fighter and for remotes: before the snapshot carried `aim`, remotes read
 drawn, never by clip band index**: hold has 9 bands and run 5, and counting
 indices made a level rifle look like three aims. The pixel-level
 half — feet on the collider floor, figure 96px — is measured by
-`scripts/make-lia-art.py` itself, and the shipped atlas by `liaAtlas.test.ts`.
+`scripts/make-hero-art.py` itself, and the shipped atlas by `heroAtlas.test.ts`.
 
 ## The play-of-the-game probe
 

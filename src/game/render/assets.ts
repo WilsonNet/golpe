@@ -22,8 +22,8 @@ import { PLAYER_HEIGHT, PLAYER_WIDTH } from "../simulation/Arena";
 export const TEX = {
 	/**
 	 * Lia's packed atlas, rendered from her Blender source (`art/lia/lia.blend`)
-	 * by `scripts/make-lia-art.py` — every clip she plays, roll included, lives
-	 * in this one sheet. See `PACKED_SHEETS`.
+	 * by `scripts/make-hero-art.py lia` — every clip she plays, roll included,
+	 * lives in this one sheet. See `PACKED_SHEETS`.
 	 */
 	lia: "lia",
 	/** Anands' character strip — see `anandsFrames`. */
@@ -36,10 +36,8 @@ export const TEX = {
 	/** Anands' portrait: the face-on frame blown up for the hero select and
 	 * the ultimate cinematic's card. */
 	"anands-portrait": "anands-portrait",
-	/** Jeffs' character strip — see `jeffsFrames`. */
+	/** Jeffs' packed atlas, rendered from `art/jeffs/jeffs.blend` like Lia's. */
 	jeffs: "jeffs",
-	/** Jeffs' roll strip, derived from his own sheet like the others'. */
-	"jeffs-roll": "jeffs-roll",
 	fireball: "fireball",
 	platform: "platform",
 	sky: "sky",
@@ -120,8 +118,6 @@ let anandsFrames: Texture[] = [];
 /** Anands' roll strip: 0-7 right, 8-15 left. */
 let anandsRollFrames: Texture[] = [];
 /** Jeffs' strip and roll, sliced exactly like the other two heroes'. */
-let jeffsFrames: Texture[] = [];
-let jeffsRollFrames: Texture[] = [];
 
 /** Every hero's nine-frame strip, keyed by the hero's sheet name. */
 const FRAME_SETS: Record<string, Texture[]> = {};
@@ -129,25 +125,20 @@ const FRAME_SETS: Record<string, Texture[]> = {};
 /** Every hero's roll strip. */
 const ROLL_SETS: Record<string, Texture[]> = {};
 
-/** One roll cell is wider than the body: a tumbled figure sprawls past it. */
-const ROLL_FRAME_W = 80;
-
 /**
  * The cell geometry of every strip, keyed by the sheet's TEX alias.
  *
  * Sheets stopped being one-size-fits-all the day the hand-drawn Anands art
  * landed: her cells are 168x152 (a ~140px fighter standing in a padded box)
- * and her dragon's are 352x176, while Lia and Jeffs ship 2x art (64x96
- * character cells, 80x96 roll cells) drawn at half size through `sheetScale`.
- * A clip indexes a strip; a strip's cells are whatever this table says they
+ * and her dragon's are 352x176. Lia and Jeffs are packed sheets rendered from
+ * Blender (see `PACKED_SHEETS`), which register their own cells at load. A
+ * clip indexes a strip; a strip's cells are whatever this table says they
  * are.
  */
 const SHEET_CELLS: Record<string, SheetCell> = {
 	[TEX.anands]: { w: 168, h: 152 },
 	[TEX["anands-roll"]]: { w: 168, h: 152 },
 	[TEX["anands-dragon"]]: { w: 352, h: 176 },
-	[TEX.jeffs]: { w: 64, h: 96 },
-	[TEX["jeffs-roll"]]: { w: ROLL_FRAME_W, h: 96 },
 };
 
 /**
@@ -163,7 +154,7 @@ interface SheetCell {
 	bodyH?: number;
 }
 
-/** One clip of a packed sheet, as `scripts/make-lia-art.py` writes it. */
+/** One clip of a packed sheet, as `scripts/make-hero-art.py` writes it. */
 export interface PackedClip {
 	frames: number[];
 	fps: number;
@@ -207,6 +198,7 @@ interface PackedMeta {
  */
 const PACKED_SHEETS: Record<string, { png: string; json: string }> = {
 	[TEX.lia]: { png: "assets/lia.png", json: "assets/lia.json" },
+	[TEX.jeffs]: { png: "assets/jeffs.png", json: "assets/jeffs.json" },
 };
 
 /** Each packed sheet's clips, from its JSON. */
@@ -335,8 +327,6 @@ export async function loadAssets(): Promise<void> {
 		[TEX.anands]: "assets/anands.png",
 		[TEX["anands-roll"]]: "assets/anands-roll.png",
 		[TEX["anands-dragon"]]: "assets/anands-dragon.png",
-		[TEX.jeffs]: "assets/jeffs.png",
-		[TEX["jeffs-roll"]]: "assets/jeffs-roll.png",
 		[TEX.fireball]: "assets/fireball.png",
 		[TEX.platform]: "assets/platform.png",
 		[TEX.sky]: "assets/sky.png",
@@ -355,9 +345,9 @@ export async function loadAssets(): Promise<void> {
 
 	// Every strip is sliced by its own cell geometry — `SHEET_CELLS` owns the
 	// sizes, this is the only place a strip becomes a texture set. Anands'
-	// hand-drawn art (see `scripts/make-anands-art.py`) and Jeffs' generated
-	// art are plain horizontal strips; Lia's Blender-rendered atlas is a
-	// packed sheet with its own JSON, loaded below.
+	// hand-drawn art (see `scripts/make-anands-art.py`) is a plain horizontal
+	// strip; Lia's and Jeffs' Blender-rendered atlases are packed sheets with
+	// their own JSON, loaded below.
 	anandsFrames = sliceStrip(TEX.anands, 35);
 	FRAME_SETS[TEX.anands] = anandsFrames;
 
@@ -368,11 +358,6 @@ export async function loadAssets(): Promise<void> {
 	// hero strip — the ride clip indexes it directly (see `HERO_CLIPS`).
 	FRAME_SETS[TEX["anands-dragon"]] = sliceStrip(TEX["anands-dragon"], 6);
 
-	jeffsFrames = sliceStrip(TEX.jeffs, 9);
-	FRAME_SETS[TEX.jeffs] = jeffsFrames;
-
-	jeffsRollFrames = sliceStrip(TEX["jeffs-roll"], 16);
-	ROLL_SETS[TEX["jeffs-roll"]] = jeffsRollFrames;
 
 	// Sheets shipped from the sprite workshop: one strip, sliced by its own
 	// JSON instead of by a hand-kept table. The strips are uniform grids, so
@@ -664,18 +649,19 @@ export function createFxTextures(renderer: Renderer): void {
 	}
 	bake(renderer, TEX.shadow, shadow);
 
-	// Lia's art covers every pose she can be in; the generated set is only
-	// the fallback for a clip a future re-render leaves out, cut from her
-	// face-on frame.
-	const liaTurn = PACKED_CLIPS[TEX.lia]?.["turn"]?.frames[0];
-	const liaFrames = FRAME_SETS[TEX.lia] ?? [];
-	createHeroPoses(
-		renderer,
-		TEX.lia,
-		liaTurn === undefined ? liaFrames : [liaFrames[liaTurn] ?? Texture.EMPTY],
-	);
+	// A rendered hero's art covers every pose they can be in; the generated
+	// set is only the fallback for a clip a future re-render leaves out, cut
+	// from their face-on frame.
+	for (const sheet of Object.keys(PACKED_SHEETS)) {
+		const turn = PACKED_CLIPS[sheet]?.["turn"]?.frames[0];
+		const frames = FRAME_SETS[sheet] ?? [];
+		createHeroPoses(
+			renderer,
+			sheet,
+			turn === undefined ? frames : [frames[turn] ?? Texture.EMPTY],
+		);
+	}
 	createHeroPoses(renderer, "anands", anandsFrames);
-	createHeroPoses(renderer, "jeffs", jeffsFrames);
 	createUltimateTextures(renderer);
 }
 

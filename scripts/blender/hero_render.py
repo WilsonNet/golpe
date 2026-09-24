@@ -1,6 +1,6 @@
-"""Render every clip in `art/lia/lia.blend` to raw PNG frames.
+"""Render every clip in a hero's .blend to raw PNG frames.
 
-    blender -b art/lia/lia.blend -P scripts/blender/lia_render.py -- OUT_DIR [--only clip.slash,...]
+    blender -b art/<hero>/<hero>.blend -P scripts/blender/hero_render.py -- OUT_DIR [--only clip.slash,...]
 
 Builds nothing — the .blend is the source of truth. For each Action named
 `clip.*` it assigns the action to the rig, shows the weapon objects its
@@ -9,7 +9,7 @@ Builds nothing — the .blend is the source of truth. For each Action named
     OUT_DIR/<action>/<nnn>.png   one per keyed frame, the full raw canvas
     OUT_DIR/manifest.json        the clips' game metadata, in order
 
-`scripts/make-lia-art.py` turns that into the shipped sheet. The portrait
+`scripts/make-hero-art.py` turns that into the shipped sheet. The portrait
 action is rendered at `lia_portrait_scale`x the pixel density.
 """
 
@@ -26,17 +26,18 @@ if "--only" in argv:
     ONLY = set(argv[argv.index("--only") + 1].split(","))
 
 scene = bpy.context.scene
-arm = bpy.data.objects["LiaRig"]
+arm = next(ob for ob in bpy.data.objects if ob.type == "ARMATURE")
 cam = scene.camera
 canvas = int(scene.get("lia_canvas_px", 320))
 px_per_m = float(scene.get("lia_px_per_m", 32))
 portrait_scale = int(scene.get("lia_portrait_scale", 4))
 
 # Which objects each weapon mode shows. Anything not listed is always shown.
+GUNS = ("Rifle", "Shotgun", "Gun")
 PROPS = {
-    "sword": {"Sword": True, "Rifle": False, "SwordBack": False},
-    "rifle": {"Sword": False, "Rifle": True, "SwordBack": True},
-    "none": {"Sword": False, "Rifle": False, "SwordBack": True},
+    "sword": {"Sword": True, "SwordBack": False, **dict.fromkeys(GUNS, False)},
+    "rifle": {"Sword": False, "SwordBack": True, **dict.fromkeys(GUNS, True)},
+    "none": {"Sword": False, "SwordBack": True, **dict.fromkeys(GUNS, False)},
 }
 
 

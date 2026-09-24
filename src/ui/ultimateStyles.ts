@@ -147,10 +147,10 @@ export const ULTIMATE_CSS = `
 }
 
 /* ---- the character ----
-   The shipped sprite sheet, sliced to the face-on frame and blown up 6x with
-   nearest-neighbour. Using the real character rather than drawn artwork is the
-   honest choice: it is unmistakably this fighter, it can never fall out of
-   sync with what is on the field, and it costs no new asset. The hue rotation
+   The hero's own portrait, made from the same source as their sprites (the
+   Blender model, or Anands' boards). Using the real character rather than
+   separate artwork is the honest choice: it is unmistakably this fighter and
+   it can never fall out of sync with what is on the field. The hue rotation
    is per-fighter, so two casters in one match are not the same portrait. */
 .vu-sprite {
 	position: relative;
@@ -160,13 +160,10 @@ export const ULTIMATE_CSS = `
 	width: 128px;
 	height: 192px;
 	margin-bottom: 14px;
-	/* The nine-cell strip layout (Jeffs'); Lia and Anands override it with
-	   their own whole-card portraits below. */
-	background-image: url("assets/jeffs.png");
+	/* Every hero ships a whole-card portrait (see the per-hero rules below). */
 	background-repeat: no-repeat;
-	/* 9 frames of 64x96 at 2x = 1152x192, with frame 4 (face-on) at -512px. */
-	background-size: 1152px 192px;
-	background-position: -512px 0;
+	background-size: 128px 192px;
+	background-position: 0 0;
 	image-rendering: pixelated;
 	filter:
 		drop-shadow(0 3px 10px rgba(0, 0, 0, 0.7))
@@ -185,17 +182,17 @@ export const ULTIMATE_CSS = `
 	background-size: 128px 192px;
 	background-position: 0 0;
 }
-/* Lia's portrait, rendered from her Blender source at 4x the sprite
-   density by scripts/make-lia-art.py — the same whole-card crop. */
+/* Lia's and Jeffs' portraits, rendered from their Blender sources at 4x the
+   sprite density by scripts/make-hero-art.py — the same whole-card crop. */
 .vu-sprite-lia {
 	background-image: url("assets/lia-portrait.png");
 	background-size: 128px 192px;
 	background-position: 0 0;
 	image-rendering: auto;
 }
-/* Jeffs' own sheet, same layout: the executioner's portrait is his own coat. */
 .vu-sprite-jeffs {
-	background-image: url("assets/jeffs.png");
+	background-image: url("assets/jeffs-portrait.png");
+	image-rendering: auto;
 }
 
 /* The floor the figure stands on: an ellipse of light under the feet. It costs
@@ -330,8 +327,7 @@ export const ULTIMATE_CSS = `
 /* A phone in portrait has no room for a 232px frame beside letterbox bars. */
 @media (max-width: 640px), (max-height: 520px) {
 	.vu-frame { width: 152px; height: 168px; }
-	.vu-sprite { width: 88px; height: 132px; margin-bottom: 10px; background-size: 792px 132px; background-position: -352px 0; }
-	.vu-sprite-anands, .vu-sprite-lia { background-size: 88px 132px; background-position: 0 0; }
+	.vu-sprite { width: 88px; height: 132px; margin-bottom: 10px; background-size: 88px 132px; background-position: 0 0; }
 	.vu-sprite::after { width: 80px; height: 16px; bottom: -8px; }
 	.vu-ability-name { font-size: 22px; }
 	.vu-name { font-size: 15px; }
