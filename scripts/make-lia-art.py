@@ -31,7 +31,8 @@ import shutil
 import subprocess
 import sys
 
-from PIL import Image, ImageChops, ImageOps
+import numpy as np
+from PIL import Image, ImageOps
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 BLEND = os.path.join(ROOT, "art", "lia", "lia.blend")
@@ -63,16 +64,47 @@ def harden(im):
 
 
 def ink_outline(im, width=1):
-    """A clean ink line around the silhouette (4-neighbour, `width` px)."""
+    """The silhouette line, 4-neighbour, `width` px — *selective* outline.
+
+    SNES sprites rarely outline in one flat black: the line takes a dark
+    shade of the colour it borders (dark red against the tunic, dark teal
+    against the hair), which is what keeps a small sprite from looking like
+    a sticker. Each ring pixel is ink mixed with its inner neighbour's colour.
+    """
     for _ in range(width):
-        a = im.split()[3]
-        grown = a.copy()
+        px = np.array(im, dtype=np.int32)
+        alpha = px[..., 3] > 0
+        ring = np.zeros_like(alpha)
+        colour = np.zeros(px.shape[:2] + (3,), dtype=np.int32)
         for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-            grown = ImageChops.lighter(grown, ImageChops.offset(a, dx, dy))
-        ring = ImageChops.subtract(grown, a)
-        ink = Image.new("RGBA", im.size, INK)
-        im = Image.composite(ink, im, ring)
+            shifted = np.roll(np.roll(alpha, dy, 0), dx, 1)
+            src = np.roll(np.roll(px[..., :3], dy, 0), dx, 1)
+            new = shifted & ~alpha & ~ring
+            colour[new] = src[new]
+            ring |= new
+        ink = np.array(INK[:3], dtype=np.int32)
+        line = (ink * 0.6 + colour * 0.4 * 0.45).astype(np.int32)
+        px[ring, :3] = line[ring]
+        px[ring, 3] = 255
+        im = Image.fromarray(px.astype(np.uint8), "RGBA")
     return im
+
+
+def clean_orphans(im):
+    """Remove single stray pixels: a pixel unlike all four of its neighbours,
+    when those four agree, takes their colour. A render's band edges leave
+    these wherever a curve crosses a threshold; a pixel artist never would."""
+    px = np.array(im, dtype=np.int32)
+    rgb = px[..., :3]
+    opaque = px[..., 3] > 0
+    n = [np.roll(np.roll(rgb, dy, 0), dx, 1) for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))]
+    na = [np.roll(np.roll(opaque, dy, 0), dx, 1) for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))]
+    same = np.all([np.all(n[0] == k, axis=-1) for k in n[1:]], axis=0)
+    differs = ~np.any([np.all(rgb == k, axis=-1) for k in n], axis=0)
+    fix = opaque & same & differs & np.all(na, axis=0)
+    rgb[fix] = n[0][fix]
+    px[..., :3] = rgb
+    return Image.fromarray(px.astype(np.uint8), "RGBA")
 
 
 def pack(images):
@@ -164,7 +196,7 @@ def main():
     for c in clips:
         for f in c["files"]:
             im = harden(Image.open(os.path.join(RAW, f)).convert("RGBA"))
-            frames[f] = ink_outline(im, 1)
+            frames[f] = ink_outline(clean_orphans(im), 1)
 
     # 2. The cell: every frame's content, symmetric about the body centre.
     half_w = half_h = 0

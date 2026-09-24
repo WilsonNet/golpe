@@ -40,9 +40,15 @@ BLEND = os.path.join(ROOT, "art", "lia", "lia.blend")
 PX_PER_M = 32
 BODY_CENTRE = Vector((0.0, 0.0, 1.5))
 # The 3/4 view: how far the fighter is turned toward the camera.
-VIEW_YAW_DEG = -25.0
-# Camera looks slightly down, so the top of the head reads (the SNES RPG view).
-CAM_TILT_DEG = 10.0
+VIEW_YAW_DEG = -20.0
+# A flat front elevation, like a drawn sprite: no tilt, so nothing reads as
+# a solid seen from above.
+CAM_TILT_DEG = 0.0
+# How far the head turns toward the camera on top of any pose.
+HEAD_TO_VIEWER_DEG = -22.0
+# The blade's travel through the screen, in degrees per unit of SWING depth:
+# kept small, because pixel art swings in the picture plane.
+SWING_DEPTH_DEG = 10.0
 # ~1 px of ink at the sprite scale.
 OUTLINE_M = 0.034
 
@@ -73,7 +79,7 @@ PALETTE = {
     "wood": ((0.66, 0.40, 0.22), (0.42, 0.22, 0.16), (0.82, 0.56, 0.34)),
     "gem": ((0.72, 0.44, 1.00), (0.42, 0.18, 0.82), (0.95, 0.85, 1.00)),
 }
-SHINY = {"hair", "steel", "gold", "gem", "gunmetal", "leather"}
+SHINY = {"hair", "steel", "gold", "gem"}
 FLAT = {
     "ink": (0.09, 0.06, 0.13),
     "eye_white": (1.0, 1.0, 1.0),
@@ -87,13 +93,25 @@ def srgb_to_linear(c):
     return tuple(x / 12.92 if x <= 0.04045 else ((x + 0.055) / 1.055) ** 2.4 for x in c)
 
 
-def toon_group():
-    """The shared toon shader: three flat bands (shade / lit / highlight).
+# The light, in *camera* space (+X right, +Y up, +Z toward the viewer): from
+# the upper left and mostly from the front, the SNES convention.
+LIGHT_CAM = (-0.5, 0.55, 0.67)
 
-    Diffuse → Shader to RGB → brightness → two hard thresholds. Emission out,
-    so the band colours land in the PNG exactly (the scene uses the Standard
-    view transform). Edit a material's look by changing the group node's
-    colour inputs; edit the banding for everyone by editing this group.
+
+def toon_group():
+    """The shared SNES shader: a flat fill, a shade band on the far edge.
+
+    Pixel art does not shade *form* — a sphere is not a gradient of bands
+    wrapping around it — it fills a shape flat and runs a darker band along
+    the edge that faces away from the light. So the normal is taken in camera
+    space and **flattened toward the viewer** (`Flatten` adds that much +Z)
+    before it is lit: everything facing the camera reads as one lit fill, and
+    only surfaces turning away at the silhouette cross into shade. The light
+    is a fixed camera-space direction, not a scene lamp, so a sprite is lit
+    the same way whatever pose it is in.
+
+    Edit a material's colours on its group node; edit the look for everyone
+    here (`Flatten` up = flatter, `Shade Below` up = more shade).
     """
     ng = bpy.data.node_groups.get("LiaToon")
     if ng:
@@ -103,19 +121,32 @@ def toon_group():
     iface.new_socket("Lit", in_out="INPUT", socket_type="NodeSocketColor")
     iface.new_socket("Shade", in_out="INPUT", socket_type="NodeSocketColor")
     iface.new_socket("Highlight", in_out="INPUT", socket_type="NodeSocketColor")
-    s = iface.new_socket("Shade Below", in_out="INPUT", socket_type="NodeSocketFloat")
-    s.default_value = 0.42
-    s = iface.new_socket("Highlight Above", in_out="INPUT", socket_type="NodeSocketFloat")
-    s.default_value = 0.93
+    sk = iface.new_socket("Shade Below", in_out="INPUT", socket_type="NodeSocketFloat")
+    sk.default_value = 0.3
+    sk = iface.new_socket("Highlight Above", in_out="INPUT", socket_type="NodeSocketFloat")
+    sk.default_value = 1.01
+    sk = iface.new_socket("Flatten", in_out="INPUT", socket_type="NodeSocketFloat")
+    sk.default_value = 0.9
     iface.new_socket("Shader", in_out="OUTPUT", socket_type="NodeSocketShader")
     n = ng.nodes
-    l = ng.links
+    ln = ng.links
     gi = n.new("NodeGroupInput")
     go = n.new("NodeGroupOutput")
-    diff = n.new("ShaderNodeBsdfDiffuse")
-    diff.inputs["Color"].default_value = (1, 1, 1, 1)
-    s2r = n.new("ShaderNodeShaderToRGB")
-    bw = n.new("ShaderNodeRGBToBW")
+    geo = n.new("ShaderNodeNewGeometry")
+    to_cam = n.new("ShaderNodeVectorTransform")
+    to_cam.vector_type = "NORMAL"
+    to_cam.convert_from = "WORLD"
+    to_cam.convert_to = "CAMERA"
+    flat = n.new("ShaderNodeCombineXYZ")
+    add = n.new("ShaderNodeVectorMath")
+    add.operation = "ADD"
+    norm = n.new("ShaderNodeVectorMath")
+    norm.operation = "NORMALIZE"
+    dot = n.new("ShaderNodeVectorMath")
+    dot.operation = "DOT_PRODUCT"
+    lx, ly, lz = LIGHT_CAM
+    k = (lx * lx + ly * ly + lz * lz) ** 0.5
+    dot.inputs[1].default_value = (lx / k, ly / k, lz / k)
     gt1 = n.new("ShaderNodeMath")
     gt1.operation = "GREATER_THAN"
     gt2 = n.new("ShaderNodeMath")
@@ -125,22 +156,26 @@ def toon_group():
     mix2 = n.new("ShaderNodeMix")
     mix2.data_type = "RGBA"
     em = n.new("ShaderNodeEmission")
-    l.new(diff.outputs[0], s2r.inputs[0])
-    l.new(s2r.outputs["Color"], bw.inputs[0])
-    l.new(bw.outputs[0], gt1.inputs[0])
-    l.new(gi.outputs["Shade Below"], gt1.inputs[1])
-    l.new(bw.outputs[0], gt2.inputs[0])
-    l.new(gi.outputs["Highlight Above"], gt2.inputs[1])
-    l.new(gt1.outputs[0], mix1.inputs[0])
-    l.new(gi.outputs["Shade"], mix1.inputs[6])
-    l.new(gi.outputs["Lit"], mix1.inputs[7])
-    l.new(gt2.outputs[0], mix2.inputs[0])
-    l.new(mix1.outputs[2], mix2.inputs[6])
-    l.new(gi.outputs["Highlight"], mix2.inputs[7])
-    l.new(mix2.outputs[2], em.inputs["Color"])
-    l.new(em.outputs[0], go.inputs[0])
-    for i, node in enumerate([gi, diff, s2r, bw, gt1, gt2, mix1, mix2, em, go]):
-        node.location = (i * 180, 0)
+    ln.new(geo.outputs["Normal"], to_cam.inputs[0])
+    ln.new(gi.outputs["Flatten"], flat.inputs["Z"])
+    ln.new(to_cam.outputs[0], add.inputs[0])
+    ln.new(flat.outputs[0], add.inputs[1])
+    ln.new(add.outputs[0], norm.inputs[0])
+    ln.new(norm.outputs[0], dot.inputs[0])
+    ln.new(dot.outputs["Value"], gt1.inputs[0])
+    ln.new(gi.outputs["Shade Below"], gt1.inputs[1])
+    ln.new(dot.outputs["Value"], gt2.inputs[0])
+    ln.new(gi.outputs["Highlight Above"], gt2.inputs[1])
+    ln.new(gt1.outputs[0], mix1.inputs[0])
+    ln.new(gi.outputs["Shade"], mix1.inputs[6])
+    ln.new(gi.outputs["Lit"], mix1.inputs[7])
+    ln.new(gt2.outputs[0], mix2.inputs[0])
+    ln.new(mix1.outputs[2], mix2.inputs[6])
+    ln.new(gi.outputs["Highlight"], mix2.inputs[7])
+    ln.new(mix2.outputs[2], em.inputs["Color"])
+    ln.new(em.outputs[0], go.inputs[0])
+    for idx, node in enumerate([gi, geo, to_cam, flat, add, norm, dot, gt1, gt2, mix1, mix2, em, go]):
+        node.location = (idx * 170, 0)
     return ng
 
 
@@ -159,7 +194,7 @@ def toon_material(name):
     g.inputs["Shade"].default_value = (*srgb_to_linear(shade), 1)
     g.inputs["Highlight"].default_value = (*srgb_to_linear(hi), 1)
     # Only the shiny things get a highlight band; cloth and skin stay two-tone.
-    g.inputs["Highlight Above"].default_value = 0.9 if name in SHINY else 1.01
+    g.inputs["Highlight Above"].default_value = 0.97 if name in SHINY else 1.01
     out = nt.nodes.new("ShaderNodeOutputMaterial")
     nt.links.new(g.outputs[0], out.inputs["Surface"])
     out.location = (300, 0)
@@ -461,10 +496,10 @@ def build_model(arm, col):
         hair.spike(on_cap(az, el), tip, r0, "hair", bend=(0.04, 0, 0.08))
     # Crown: up and back, the silhouette's flame.
     for az, el, tip, r0 in [
-        (150, 70, (-0.42, 0.12, 2.78), 0.2),
-        (-150, 70, (-0.42, -0.12, 2.78), 0.2),
-        (30, 75, (0.28, 0.08, 2.76), 0.19),
-        (-30, 75, (0.28, -0.08, 2.76), 0.19),
+        (150, 70, (-0.4, 0.12, 2.7), 0.18),
+        (-150, 70, (-0.4, -0.12, 2.7), 0.18),
+        (30, 75, (0.26, 0.08, 2.68), 0.17),
+        (-30, 75, (0.26, -0.08, 2.68), 0.17),
     ]:
         hair.spike(on_cap(az, el), tip, r0, "hair", bend=(0.0, 0, 0.1))
     # Back and side locks: down past the ears.
@@ -505,7 +540,7 @@ def build_model(arm, col):
     torso = Part("Torso")
     torso.tube(
         [(0, 0, 1.06), (0.01, 0, 1.3), (0.0, 0, 1.52), (-0.01, 0, 1.64)],
-        [(0.3, 0.26), (0.32, 0.27), (0.3, 0.24), (0.2, 0.17)],
+        [(0.36, 0.3), (0.38, 0.31), (0.35, 0.28), (0.22, 0.19)],
         "tunic",
         up=(1, 0, 0),
     )
@@ -516,8 +551,8 @@ def build_model(arm, col):
         a = 2 * math.pi * k / 16
         collar.append((math.cos(a) * 0.2, math.sin(a) * 0.23, 1.64 - 0.02 * math.cos(a)))
     torso.tube(collar, [0.07] * 17, "cape", sides=8, cap_start=False, cap_end=False)
-    torso.tube([(0, 0, 1.0), (0, 0, 1.11)], [(0.32, 0.28), (0.32, 0.28)], "belt", up=(1, 0, 0))
-    torso.box((0.285, 0, 1.055), (0.05, 0.12, 0.1), "gold", bevel=0.01)
+    torso.tube([(0, 0, 1.0), (0, 0, 1.11)], [(0.38, 0.32), (0.38, 0.32)], "belt", up=(1, 0, 0))
+    torso.box((0.325, 0, 1.055), (0.05, 0.13, 0.11), "gold", bevel=0.01)
     torso.box((0.05, -0.29, 1.03), (0.14, 0.06, 0.12), "leather", bevel=0.01)  # pouch
     # The pauldron on the sword arm's shoulder.
     torso.ellipsoid((0.0, -0.35, 1.54), (0.15, 0.12, 0.08), "steel", rot=(22, 0, 0))
@@ -528,11 +563,11 @@ def build_model(arm, col):
     skirt = Part("Skirt")
     skirt.tube(
         [(0, 0, 1.08), (0.02, 0, 0.9), (0.05, 0, 0.72)],
-        [(0.31, 0.27), (0.36, 0.33), (0.42, 0.4)],
+        [(0.37, 0.31), (0.41, 0.36), (0.46, 0.43)],
         "tunic",
         up=(1, 0, 0),
     )
-    skirt.tube([(0.05, 0, 0.745), (0.05, 0, 0.7)], [(0.425, 0.405), (0.43, 0.41)], "gold", up=(1, 0, 0))
+    skirt.tube([(0.05, 0, 0.745), (0.05, 0, 0.7)], [(0.465, 0.435), (0.47, 0.44)], "gold", up=(1, 0, 0))
     skirt.build(col)
 
     cape = Part("Cape")
@@ -560,25 +595,27 @@ def build_model(arm, col):
     parts = {}
     for side, s in (("R", -1), ("L", 1)):
         up = Part(f"UpperArm.{side}")
-        up.tube([(0, s * 0.33, 1.5), (-0.05, s * 0.38, 1.2)], [0.1, 0.09], "tunic", sides=10)
+        # Bare upper arms: skin against the crimson tunic is what lets an arm
+        # read in front of the body at sprite size.
+        up.tube([(0, s * 0.33, 1.5), (-0.05, s * 0.38, 1.2)], [0.12, 0.11], "skin", sides=10)
         parts[f"upperarm.{side}"] = up
         fo = Part(f"Forearm.{side}")
-        fo.ellipsoid((-0.05, s * 0.38, 1.2), (0.085, 0.085, 0.085), "skin")
-        fo.tube([(-0.04, s * 0.385, 1.17), (0.02, s * 0.4, 0.98)], [0.075, 0.085], "leather", sides=10)
-        fo.tube([(0.0, s * 0.395, 1.08), (0.01, s * 0.398, 1.03)], [0.098, 0.098], "gold", sides=10)
-        fo.ellipsoid((0.03, s * 0.4, 0.9), (0.11, 0.1, 0.11), "leather")  # mitten hand
+        fo.ellipsoid((-0.05, s * 0.38, 1.2), (0.115, 0.115, 0.115), "skin")
+        fo.tube([(-0.04, s * 0.385, 1.17), (0.02, s * 0.4, 0.98)], [0.11, 0.12], "leather", sides=10)
+        fo.tube([(0.0, s * 0.395, 1.08), (0.01, s * 0.398, 1.03)], [0.135, 0.135], "gold", sides=10)
+        fo.ellipsoid((0.03, s * 0.4, 0.89), (0.14, 0.13, 0.14), "leather")  # mitten hand
         parts[f"forearm.{side}"] = fo
         th = Part(f"Thigh.{side}")
-        th.tube([(0, s * 0.15, 0.95), (0.02, s * 0.16, 0.55)], [0.12, 0.1], "tights", sides=10)
+        th.tube([(0, s * 0.15, 0.95), (0.02, s * 0.16, 0.55)], [0.16, 0.14], "tights", sides=10)
         parts[f"thigh.{side}"] = th
         sh = Part(f"Shin.{side}")
-        sh.ellipsoid((0.02, s * 0.16, 0.55), (0.1, 0.1, 0.1), "tights")
-        sh.tube([(0.02, s * 0.16, 0.5), (0, s * 0.16, 0.16)], [0.13, 0.12], "leather", sides=10)
-        sh.tube([(0.02, s * 0.16, 0.51), (0.02, s * 0.16, 0.45)], [0.15, 0.15], "gold", sides=10)
+        sh.ellipsoid((0.02, s * 0.16, 0.55), (0.14, 0.14, 0.14), "tights")
+        sh.tube([(0.02, s * 0.16, 0.5), (0, s * 0.16, 0.16)], [0.165, 0.155], "leather", sides=10)
+        sh.tube([(0.02, s * 0.16, 0.51), (0.02, s * 0.16, 0.45)], [0.185, 0.185], "gold", sides=10)
         parts[f"shin.{side}"] = sh
         ft = Part(f"Boot.{side}")
-        ft.ellipsoid((0.1, s * 0.16, 0.1), (0.21, 0.13, 0.11), "leather")
-        ft.box((0.1, s * 0.16, 0.0), (0.4, 0.24, 0.035), "belt", bevel=0.01)
+        ft.ellipsoid((0.11, s * 0.16, 0.11), (0.25, 0.16, 0.13), "leather")
+        ft.box((0.11, s * 0.16, 0.0), (0.48, 0.3, 0.04), "belt", bevel=0.01)
         parts[f"foot.{side}"] = ft
     objs = {k: p.build(col) for k, p in parts.items()}
 
@@ -721,7 +758,7 @@ NEUTRAL = dict(
     footL=0,
     cape=0,
     pony=0,
-    weapon=((0.36, -0.36, 1.02), 0.55, 10, 0),
+    weapon=((0.36, -0.36, 1.02), 0.55, 4, 0),
     ikR=1.0,
     ikL=0.0,
     offhand=(-0.14, 0.0, 0.0),
@@ -748,7 +785,9 @@ def apply_pose(arm, p):
     set_root(arm, off=p["root"], pitch=p["root_pitch"], yaw=p["root_yaw"], pivot=p["root_pivot"])
     set_bone(arm, "hips", rot3(pitch=p["hips"][0], yaw=p["hips"][1], roll=p["hips"][2]))
     set_bone(arm, "chest", rot3(pitch=p["chest"][0], yaw=p["chest"][1], roll=p["chest"][2]))
-    set_bone(arm, "head", rot3(pitch=p["head"][0], yaw=p["head"][1], roll=p["head"][2]))
+    # The SNES convention: the body goes side-on, the face stays turned to the
+    # viewer, so both eyes read at sprite size.
+    set_bone(arm, "head", rot3(pitch=p["head"][0], yaw=p["head"][1] + HEAD_TO_VIEWER_DEG, roll=p["head"][2]))
     for side, s in (("R", -1), ("L", 1)):
         fwd, out = p[f"arm{side}"]
         set_bone(arm, f"upperarm.{side}", rot3(pitch=-fwd, roll=s * out))
@@ -791,7 +830,9 @@ def key_pose(arm, p, frame, ground=False):
         # (Measured by make-lia-art.py: feet must land on the floor line.)
         p = dict(p)
         rx, ry, rz = p["root"]
-        p["root"] = (rx, ry, rz - lowest_point(arm))
+        # The ink hull hangs OUTLINE_M below the sole; it is the sprite's
+        # bottom edge, so it is what touches the floor.
+        p["root"] = (rx, ry, rz - lowest_point(arm) + OUTLINE_M)
         apply_pose(arm, p)
     for pb in arm.pose.bones:
         pb.keyframe_insert("rotation_quaternion", frame=frame)
@@ -861,7 +902,7 @@ def idle_clip():
                 elbowL=38 + 4 * b,
                 cape=3 + 3 * b,
                 pony=-4 * b,
-                weapon=((0.4, -0.38, 1.02 - 0.02 * b), 0.62, 12, 0),
+                weapon=((0.4, -0.38, 1.02 - 0.02 * b), 0.62, 4, 0),
             )
         )
     return frames
@@ -872,21 +913,24 @@ def run_pose(t, upper=None):
     a = 2 * math.pi * t
     s = math.sin(a)
     c = math.cos(a)
-    kR = 12 + 70 * max(0.0, math.cos(a - 0.6))
-    kL = 12 + 70 * max(0.0, math.cos(a + math.pi - 0.6))
+    # The knee folds as the leg swings through (high knee at the pass), kicks
+    # up behind, and is nearly straight when the leg reaches out in front —
+    # the extended-stride silhouette a drawn run is built on.
+    kR = 15 + 80 * max(0.0, math.cos(a + 0.5))
+    kL = 15 + 80 * max(0.0, math.cos(a + math.pi + 0.5))
     p = pose(
         root=(0, 0, -0.03 + 0.09 * abs(math.cos(a))),
-        chest=(14, 6 * s, 0),
+        chest=(18, 4 * s, 0),
         hips=(4, -8 * s, 0),
         head=(-8, -4 * s, 0),
-        thighR=(42 * s, 4),
+        thighR=(56 * s, 4),
         kneeR=kR,
-        footR=-12 * s + 10,
-        thighL=(-42 * s, 4),
+        footR=-14 * s + 10,
+        thighL=(-56 * s, 4),
         kneeL=kL,
-        footL=12 * s + 10,
-        armL=(40 * s, 10),
-        elbowL=70,
+        footL=14 * s + 10,
+        armL=(55 * s, 8),
+        elbowL=85,
         cape=18 + 6 * c,
         pony=-12 - 5 * c,
         # The sword trails low and back, riding the right arm's swing.
@@ -991,7 +1035,7 @@ def block_clip():
             cape=6,
             pony=-4,
             # The blade upright across the body: the guard is the sword.
-            weapon=((0.46, -0.2, 1.42), -1.35, 28, 0),
+            weapon=((0.46, -0.2, 1.42), -1.35, 10, 0),
         )
     ]
 
@@ -1026,7 +1070,7 @@ def swing_clip(move, samples, body_keys):
             theta = frm + (to - frm) * e
             z = depth * (e * 2 - 1)
             hand = body_keys_hand(move, e, z, lift)
-            body["weapon"] = (hand, theta, z * 40, 0)
+            body["weapon"] = (hand, theta, z * SWING_DEPTH_DEG, 0)
         else:
             r = smoothstep((t_ms - swing_ms) / m["recovery"])
             e = 1.0
@@ -1036,7 +1080,7 @@ def swing_clip(move, samples, body_keys):
             body["weapon"] = (
                 lerp(hand_end, r_pos, r),
                 to + (r_theta - to) * r,
-                z * 40 + (r_depth - z * 40) * r,
+                z * SWING_DEPTH_DEG + (r_depth - z * SWING_DEPTH_DEG) * r,
                 0,
             )
         out.append(body)
@@ -1144,7 +1188,7 @@ def gun_upper(recoil=0.0, b=0.0, e=0.0):
     # head and hair swallow it exactly when the aim matters most.
     grip = pivot + Vector((math.cos(e) * reach + 0.2 * steep, -0.1 * steep, -math.sin(e) * reach + b))
     return dict(
-        weapon=(tuple(grip), e - 0.05 * recoil, 6 + 18 * steep, 0),
+        weapon=(tuple(grip), e - 0.05 * recoil, 3 + 8 * steep, 0),
         ikL=1.0,
         offhand=(0.48, 0.0, 0.0),
         chest=(4 - 4 * recoil + math.degrees(e) * 0.3, -6, 0),
@@ -1394,7 +1438,7 @@ def portrait_pose():
         elbowL=80,
         cape=8,
         pony=-6,
-        weapon=((0.18, -0.46, 1.62), -2.3, 30, 0),
+        weapon=((0.18, -0.46, 1.62), -2.3, 14, 0),
     )
     return [p]
 

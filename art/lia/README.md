@@ -23,10 +23,10 @@ a flat colour.
 
 | What | Where in the .blend |
 |---|---|
-| Flat banded shading | node group **LiaToon** — every material is one group node with *Lit*, *Shade*, *Highlight* colours and the two band thresholds. Recolour a part by changing its material's group inputs; change the banding for everyone by editing the group. |
-| Ink lines | each part's **Outline** modifier (Solidify, flipped normals, `outline` material with back-face culling) — the inverted hull. `make-lia-art.py` adds a 1px silhouette line on top. |
-| The light | the **Key** sun, upper-left-front (the SNES convention). No shadows — self-shadowing turns to noise at this size. |
-| The camera | **SpriteCam**, orthographic, 32 px per metre, tilted 10° down. Don't move it: its centre is the collider's centre. |
+| Flat SNES shading | node group **LiaToon** — every material is one group node with *Lit*, *Shade*, *Highlight* colours. It lights a **camera-space normal flattened toward the viewer** (`Flatten`), so each shape is one flat fill with a shade band only along the edge facing away from the light — pixel-art shading, not form shading. `Flatten` up = flatter, `Shade Below` up = more shade; only hair, steel, gold and the gem get a highlight. The light direction is `LIGHT_CAM` in the build script (upper-left, frontal). |
+| Ink lines | each part's **Outline** modifier (Solidify, flipped normals, `outline` material with back-face culling) — the inverted hull, for lines between overlapping parts. `make-lia-art.py` adds the silhouette line as a *selective outline* (ink tinted by the colour it borders) and removes single stray pixels. |
+| The camera | **SpriteCam**, orthographic, 32 px per metre, **no tilt** — a flat front elevation like a drawn sprite. Don't move it: its centre is the collider's centre. (The **Key** sun is unused by the shader.) |
+| Flat poses | limbs and swings stay in the picture plane: `SWING_DEPTH_DEG` keeps a blade's travel through the screen small, and every pose turns the head `HEAD_TO_VIEWER_DEG` toward the camera — body side-on, face to the viewer, the SNES convention. The reference is Anands' hand-drawn boards (`unprocessed-sprites/`). |
 
 ## Rules the game depends on
 
