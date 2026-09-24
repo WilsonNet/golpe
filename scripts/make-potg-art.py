@@ -2,7 +2,7 @@
 """
 Generate the Play of the Game splash art.
 
-They exist for the same reason `make-roll-art.py` exists: the game ships
+They exist for the same reason the generated hero sheets exist: the game ships
 generated art rather than hand-drawn art, so a piece of the interface can be
 *derived* from the palette it has to sit in instead of being a PNG somebody
 colour-picked once and nobody dares re-tint.

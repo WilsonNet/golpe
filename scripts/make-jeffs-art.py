@@ -12,7 +12,7 @@ The layout is fixed by the game, not by this script:
   crisp instead of blocky.
 - `jeffs-roll.png` — 1280x96, sixteen 80x96 cells: 0-7 roll right, 8-15 roll
   left (mirrors). Derived from the face-on frame by rotation and a curled
-  "ball" pose, exactly like `make-roll-art.py` does for the dude.
+  "ball" pose.
 
 Jeffs is a middle-aged man in a fancy trench coat: greying slicked-back hair
 with grey temples, heavy brows over narrowed eyes, a small nose with shadow

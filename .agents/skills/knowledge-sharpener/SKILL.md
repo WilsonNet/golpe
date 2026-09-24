@@ -56,6 +56,7 @@ Prefer the most specific home:
 | A pointer every session needs | `AGENTS.md` — **one line, then a link** |
 | Deep detail about one workflow | that workflow's `SKILL.md` |
 | A number/threshold and its rationale | next to the constant, in code |
+| How a hero's art is made or edited | `art/<hero>/README.md`, with the source-per-hero table in `specs/heroes.md` ("The art") |
 | What a *player* is taught about the game | `src/ui/moveData.ts` (the in-game move list) and `src/game/campaign/content/` (the tutorial). A behaviour change that players can feel belongs there as well as in `specs/` — the tests cannot see an undocumented mechanic |
 
 **`AGENTS.md` is an index, not a wiki.** It loads into every single session, so

@@ -13,6 +13,7 @@ import {
 	heroFrames,
 	heroPose,
 	heroRollFrames,
+	sheetClips,
 	sheetScale,
 	TEX,
 } from "../render/assets";
@@ -20,7 +21,7 @@ import type { MeleeFx } from "../render/MeleeFx";
 import type { Nameplates } from "../render/Nameplates";
 import type { Shadows } from "../render/Shadows";
 import { HEROES, type HeroId } from "../simulation/Heroes";
-import { meleePhase } from "../simulation/Melee";
+import { meleePhase, moveDuration } from "../simulation/Melee";
 import { PLAYER_WIDTH } from "../simulation/Physics";
 import { BLOSSOM_SPIN_RAD_PER_MS } from "../simulation/Ultimate";
 import { TINT, teamTint } from "../teamPalette";
@@ -29,7 +30,7 @@ import type { AnimState, Queries } from "./world";
 /**
  * A clip: a frame range into a strip, at a cadence.
  *
- * `sheet` is *relative* for the two shared layouts — `"dude"` means "the
+ * `sheet` is *relative* for the two shared layouts — `"own"` means "the
  * hero's own character strip" and `"roll"` means "the hero's own roll strip"
  * — and concrete for a strip that belongs to one hero (Anands' dragon).
  * `frames` may be empty: that clip is a *generated pose* (disabled, downed,
@@ -40,10 +41,16 @@ export interface Clip {
 	frames: readonly number[];
 	fps: number;
 	sheet: string;
+	/**
+	 * `"move"`: the frame is not on a clock — it is the fighter's progress
+	 * through the melee move it is in, so a swing's drawn blade is exactly as
+	 * far through its arc as the simulation's hitbox is.
+	 */
+	drive?: "move";
 }
 
 /**
- * The default clips — the `dude` strip's layout, which every generated hero
+ * The default clips — the nine-cell strip layout every generated hero
  * shares: 0-3 walk left, 4 face-on, 5-8 walk right.
  *
  * `disabled` and `downed` are the exception: their frame lists are empty because
@@ -57,38 +64,67 @@ export interface Clip {
  * 8 x 40ms at 25fps — so the roll spins exactly once per gesture.
  */
 const CLIPS = {
-	left: { frames: [0, 1, 2, 3], fps: 10, sheet: "dude" },
-	right: { frames: [5, 6, 7, 8], fps: 10, sheet: "dude" },
-	turn: { frames: [4], fps: 1, sheet: "dude" },
-	"left-idle": { frames: [0], fps: 1, sheet: "dude" },
-	"right-idle": { frames: [5], fps: 1, sheet: "dude" },
-	disabled: { frames: [], fps: 1, sheet: "dude" },
-	downed: { frames: [], fps: 1, sheet: "dude" },
+	left: { frames: [0, 1, 2, 3], fps: 10, sheet: "own" },
+	right: { frames: [5, 6, 7, 8], fps: 10, sheet: "own" },
+	turn: { frames: [4], fps: 1, sheet: "own" },
+	"left-idle": { frames: [0], fps: 1, sheet: "own" },
+	"right-idle": { frames: [5], fps: 1, sheet: "own" },
+	disabled: { frames: [], fps: 1, sheet: "own" },
+	downed: { frames: [], fps: 1, sheet: "own" },
 	// Horizontal in the air: the launch and the airborne half of a knockdown.
-	launched: { frames: [], fps: 1, sheet: "dude" },
-	helpless: { frames: [], fps: 1, sheet: "dude" },
-	slam: { frames: [], fps: 1, sheet: "dude" },
-	plunge: { frames: [], fps: 1, sheet: "dude" },
-	stuck: { frames: [], fps: 1, sheet: "dude" },
+	launched: { frames: [], fps: 1, sheet: "own" },
+	helpless: { frames: [], fps: 1, sheet: "own" },
+	slam: { frames: [], fps: 1, sheet: "own" },
+	plunge: { frames: [], fps: 1, sheet: "own" },
+	stuck: { frames: [], fps: 1, sheet: "own" },
 	// The dagger's own poses — generated per hero, like the hit poses.
-	"thrust-windup": { frames: [], fps: 1, sheet: "dude" },
-	"thrust-dash": { frames: [], fps: 1, sheet: "dude" },
-	shoryuken: { frames: [], fps: 1, sheet: "dude" },
-	dragon: { frames: [], fps: 1, sheet: "dude" },
+	"thrust-windup": { frames: [], fps: 1, sheet: "own" },
+	"thrust-dash": { frames: [], fps: 1, sheet: "own" },
+	shoryuken: { frames: [], fps: 1, sheet: "own" },
+	dragon: { frames: [], fps: 1, sheet: "own" },
 	// The dagger's left-facing variants of the same moves.
-	"thrust-windup-left": { frames: [], fps: 1, sheet: "dude" },
-	"thrust-dash-left": { frames: [], fps: 1, sheet: "dude" },
-	"shoryuken-left": { frames: [], fps: 1, sheet: "dude" },
+	"thrust-windup-left": { frames: [], fps: 1, sheet: "own" },
+	"thrust-dash-left": { frames: [], fps: 1, sheet: "own" },
+	"shoryuken-left": { frames: [], fps: 1, sheet: "own" },
 	// The stab, and the gun stance's own walk of clips. The generated heroes
 	// never play them — they exist so the clip union is total.
-	stab: { frames: [4], fps: 1, sheet: "dude" },
-	"stab-left": { frames: [4], fps: 1, sheet: "dude" },
-	"gun-hold": { frames: [4], fps: 1, sheet: "dude" },
-	"gun-hold-left": { frames: [4], fps: 1, sheet: "dude" },
-	"gun-fire": { frames: [4], fps: 1, sheet: "dude" },
-	"gun-fire-left": { frames: [4], fps: 1, sheet: "dude" },
-	"gun-run": { frames: [4], fps: 1, sheet: "dude" },
-	"gun-run-left": { frames: [4], fps: 1, sheet: "dude" },
+	stab: { frames: [4], fps: 1, sheet: "own" },
+	"stab-left": { frames: [4], fps: 1, sheet: "own" },
+	"gun-hold": { frames: [4], fps: 1, sheet: "own" },
+	"gun-hold-left": { frames: [4], fps: 1, sheet: "own" },
+	"gun-fire": { frames: [4], fps: 1, sheet: "own" },
+	"gun-fire-left": { frames: [4], fps: 1, sheet: "own" },
+	"gun-run": { frames: [4], fps: 1, sheet: "own" },
+	"gun-run-left": { frames: [4], fps: 1, sheet: "own" },
+	// Clips only a rendered sheet ships (Lia's): the sword's own cuts, the
+	// guard, the charge, the air, and a left-facing twin of every pose the
+	// generated heroes draw one-sided. A hero without them never picks them —
+	// `ownClip` gates every use — but the union must be total.
+	slash: { frames: [], fps: 1, sheet: "own" },
+	"slash-left": { frames: [], fps: 1, sheet: "own" },
+	slash2: { frames: [], fps: 1, sheet: "own" },
+	"slash2-left": { frames: [], fps: 1, sheet: "own" },
+	slash3: { frames: [], fps: 1, sheet: "own" },
+	"slash3-left": { frames: [], fps: 1, sheet: "own" },
+	uppercut: { frames: [], fps: 1, sheet: "own" },
+	"uppercut-left": { frames: [], fps: 1, sheet: "own" },
+	block: { frames: [], fps: 1, sheet: "own" },
+	"block-left": { frames: [], fps: 1, sheet: "own" },
+	charge: { frames: [], fps: 1, sheet: "own" },
+	"charge-left": { frames: [], fps: 1, sheet: "own" },
+	"charge-walk": { frames: [], fps: 1, sheet: "own" },
+	"charge-walk-left": { frames: [], fps: 1, sheet: "own" },
+	jump: { frames: [], fps: 1, sheet: "own" },
+	"jump-left": { frames: [], fps: 1, sheet: "own" },
+	fall: { frames: [], fps: 1, sheet: "own" },
+	"fall-left": { frames: [], fps: 1, sheet: "own" },
+	"slam-left": { frames: [], fps: 1, sheet: "own" },
+	"plunge-left": { frames: [], fps: 1, sheet: "own" },
+	"stuck-left": { frames: [], fps: 1, sheet: "own" },
+	"disabled-left": { frames: [], fps: 1, sheet: "own" },
+	"downed-left": { frames: [], fps: 1, sheet: "own" },
+	"launched-left": { frames: [], fps: 1, sheet: "own" },
+	"helpless-left": { frames: [], fps: 1, sheet: "own" },
 	"roll-right": { frames: [0, 1, 2, 3, 4, 5, 6, 7], fps: 25, sheet: "roll" },
 	"roll-left": {
 		frames: [8, 9, 10, 11, 12, 13, 14, 15],
@@ -109,6 +145,11 @@ const CLIPS = {
  * the strip's indices in a second file.
  */
 export type ClipName = keyof typeof CLIPS;
+
+/** Is this string a clip the animation system knows? (A packed sheet's JSON is checked with it.) */
+export function isClipName(name: string): name is ClipName {
+	return Object.hasOwn(CLIPS, name);
+}
 
 /**
  * Anands' own clip table — the hand-drawn sheets are her format, not the
@@ -152,24 +193,62 @@ const HERO_CLIPS: Partial<Record<HeroId, Partial<Record<ClipName, Clip>>>> = {
 };
 
 /**
- * The clip a hero plays for a state: the hero's own table wins, the default
- * layout (the generated heroes) is the fallback.
+ * The clip a packed sheet ships for this name, as a `Clip` over that sheet.
+ * Lia's clips live in her atlas JSON, not here: the Blender pipeline names
+ * them with exactly these `ClipName`s, so a re-render with more frames or a
+ * re-timed loop reaches the game with no code change.
+ */
+function packedClip(hero: HeroId, name: ClipName): Clip | undefined {
+	const sheet = HEROES[hero].sheet;
+	const packed = sheetClips(sheet)?.[name];
+	if (!packed || packed.frames.length === 0) return undefined;
+	return {
+		frames: packed.frames,
+		fps: packed.fps,
+		sheet,
+		...(packed.drive ? { drive: packed.drive } : {}),
+	};
+}
+
+/**
+ * The clip a hero plays for a state: the hero's own table wins, then the
+ * hero's packed sheet, and the default layout (the generated heroes) is the
+ * fallback.
  */
 function clipFor(hero: HeroId, name: ClipName): Clip {
-	return HERO_CLIPS[hero]?.[name] ?? CLIPS[name];
+	return HERO_CLIPS[hero]?.[name] ?? packedClip(hero, name) ?? CLIPS[name];
+}
+
+/** Does this hero's art actually draw this clip (rather than falling back)? */
+function ownClip(hero: HeroId, name: ClipName): boolean {
+	return (
+		HERO_CLIPS[hero]?.[name] !== undefined ||
+		packedClip(hero, name) !== undefined
+	);
+}
+
+/**
+ * The facing-correct variant of a clip: `<name>-left` for a left-facing
+ * fighter when the hero's art ships one, the clip itself otherwise (a
+ * generated pose, or Anands' rear-facing hit poses, serve both directions).
+ */
+function sided(hero: HeroId, name: ClipName, facingLeft: boolean): ClipName {
+	if (!facingLeft) return name;
+	const left = `${name}-left` as ClipName;
+	return left in CLIPS && ownClip(hero, left) ? left : name;
 }
 
 /**
  * The texture set a clip's indices index into, for this fighter's hero.
  *
- * `"dude"` resolves to the hero's own character strip and `"roll"` to the
+ * `"own"` resolves to the hero's own character strip and `"roll"` to the
  * hero's own roll strip, so a clip written against the shared layout slices
  * any generated hero's sheet; a concrete sheet name (`anands-dragon`) is the
  * strip itself. This is the one place a hero's sheet name becomes a texture
  * set.
  */
 function stripFor(hero: HeroId, sheet: string): ReturnType<typeof heroFrames> {
-	if (sheet === "dude") return heroFrames(HEROES[hero].sheet);
+	if (sheet === "own") return heroFrames(HEROES[hero].sheet);
 	if (sheet === "roll") return heroRollFrames(`${HEROES[hero].sheet}-roll`);
 	return heroFrames(sheet);
 }
@@ -225,17 +304,71 @@ const POSE_BY_CLIP: Record<ClipName, PoseKey> = {
 	"gun-run-left": "disabled",
 	"roll-right": "disabled",
 	"roll-left": "disabled",
+	slash: "disabled",
+	"slash-left": "disabled",
+	slash2: "disabled",
+	"slash2-left": "disabled",
+	slash3: "disabled",
+	"slash3-left": "disabled",
+	uppercut: "disabled",
+	"uppercut-left": "disabled",
+	block: "disabled",
+	"block-left": "disabled",
+	charge: "slam",
+	"charge-left": "slam",
+	"charge-walk": "slam",
+	"charge-walk-left": "slam",
+	jump: "disabled",
+	"jump-left": "disabled",
+	fall: "disabled",
+	"fall-left": "disabled",
+	"slam-left": "slam",
+	"plunge-left": "plunge",
+	"stuck-left": "stuck",
+	"disabled-left": "disabled",
+	"downed-left": "downed",
+	"launched-left": "launched",
+	"helpless-left": "helpless",
 };
 
 /**
  * The generated pose texture for this fighter's hero.
  *
- * `heroPose` falls back to the dude's pose when one was not generated for the
+ * `heroPose` falls back to an empty texture when one was not generated for the
  * hero — every hero gets the same ten poses, because they are all derived from
  * whatever sheet the hero actually ships with.
  */
 function poseFor(hero: HeroId, pose: PoseKey) {
 	return heroPose(HEROES[hero].sheet, pose);
+}
+
+/**
+ * What the animation system actually drew, per hero: frames per clip, and
+ * frames where a hero whose art is a packed sheet fell back to a generated
+ * placeholder pose. Read by `window.__animStats` (see `scripts/art-probe.ts`)
+ * — a sheet that silently lost a clip still draws *something*, and only this
+ * says it was the wrong thing.
+ */
+const animStats = new Map<
+	HeroId,
+	{ clips: Record<string, number>; fallbacks: Record<string, number> }
+>();
+
+export function animationStats(): Record<
+	string,
+	{ clips: Record<string, number>; fallbacks: Record<string, number> }
+> {
+	return Object.fromEntries(animStats);
+}
+
+function tally(hero: HeroId, name: ClipName, fallback: boolean) {
+	let stats = animStats.get(hero);
+	if (!stats) {
+		stats = { clips: {}, fallbacks: {} };
+		animStats.set(hero, stats);
+	}
+	stats.clips[name] = (stats.clips[name] ?? 0) + 1;
+	if (fallback) stats.fallbacks[name] = (stats.fallbacks[name] ?? 0) + 1;
 }
 
 function playClip(anim: AnimState, clip: ClipName) {
@@ -256,12 +389,29 @@ function driveClip(
 	hero: HeroId,
 	name: ClipName,
 	dtMs: number,
+	progress?: number,
 ) {
 	playClip(anim, name);
 	const clip = clipFor(hero, name);
+	tally(
+		hero,
+		name,
+		clip.frames.length === 0 && sheetClips(HEROES[hero].sheet) !== undefined,
+	);
 	if (clip.frames.length === 0) {
 		const pose = poseFor(hero, POSE_BY_CLIP[name]);
 		if (sprite.texture !== pose) sprite.texture = pose;
+		return;
+	}
+	if (clip.drive === "move" && progress !== undefined) {
+		const n = clip.frames.length;
+		anim.frame = Math.min(n - 1, Math.max(0, Math.floor(progress * n)));
+		const frameIndex = clip.frames[anim.frame];
+		const texture =
+			frameIndex === undefined
+				? undefined
+				: stripFor(hero, clip.sheet)[frameIndex];
+		if (texture && sprite.texture !== texture) sprite.texture = texture;
 		return;
 	}
 	anim.elapsedMs += dtMs;
@@ -332,11 +482,17 @@ export function animationSystem(queries: Queries, dtMs: number) {
 		// plant after it. They are commitments, not reactions — nothing else may
 		// interrupt them — so they draw over everything.
 		if (body.plunging) {
-			driveClip(e.anim, e.sprite, hero, "plunge", dtMs);
+			driveClip(
+				e.anim,
+				e.sprite,
+				hero,
+				sided(hero, "plunge", facingLeft),
+				dtMs,
+			);
 			continue;
 		}
 		if (body.plungeStuckTimer > 0) {
-			driveClip(e.anim, e.sprite, hero, "stuck", dtMs);
+			driveClip(e.anim, e.sprite, hero, sided(hero, "stuck", facingLeft), dtMs);
 			continue;
 		}
 
@@ -376,7 +532,38 @@ export function animationSystem(queries: Queries, dtMs: number) {
 		// sells the blade coming down. The blade itself is drawn by `MeleeFx`;
 		// this is the body that is doing the smashing.
 		if (body.meleeAction === "massive") {
-			driveClip(e.anim, e.sprite, hero, "slam", dtMs);
+			driveClip(
+				e.anim,
+				e.sprite,
+				hero,
+				sided(hero, "slam", facingLeft),
+				dtMs,
+				body.meleeTimer / moveDuration("massive"),
+			);
+			continue;
+		}
+
+		// The sword's own cuts, for a hero whose art draws them (Lia's): the
+		// frame is the move's progress, so the drawn blade is exactly as far
+		// through its arc as the hitbox — the swing trail and the steel agree
+		// by construction. Heroes without the clips keep the walk cycle under
+		// `MeleeFx`'s drawn blade.
+		const cut = body.meleeAction;
+		if (
+			(cut === "slash" ||
+				cut === "slash2" ||
+				cut === "slash3" ||
+				cut === "uppercut") &&
+			ownClip(hero, cut)
+		) {
+			driveClip(
+				e.anim,
+				e.sprite,
+				hero,
+				sided(hero, cut, facingLeft),
+				dtMs,
+				body.meleeTimer / moveDuration(cut),
+			);
 			continue;
 		}
 
@@ -445,7 +632,7 @@ export function animationSystem(queries: Queries, dtMs: number) {
 						: broken
 							? "helpless"
 							: "disabled";
-			driveClip(e.anim, e.sprite, hero, clip, dtMs);
+			driveClip(e.anim, e.sprite, hero, sided(hero, clip, facingLeft), dtMs);
 			continue;
 		}
 
@@ -494,6 +681,36 @@ export function animationSystem(queries: Queries, dtMs: number) {
 					dtMs,
 				);
 			}
+			continue;
+		}
+
+		// The sword stance's readable states, for a hero whose art draws them.
+		// The guard is the sword held across the body; the massive's charge is
+		// the blade raised overhead the whole time it fills and is carried —
+		// the counter's tell — walking or standing; and the air is a jump
+		// until the apex and a fall after it.
+		if (body.blocking && ownClip(hero, "block")) {
+			driveClip(e.anim, e.sprite, hero, sided(hero, "block", facingLeft), dtMs);
+			continue;
+		}
+		if (body.chargeTimer > 0 && ownClip(hero, "charge")) {
+			driveClip(
+				e.anim,
+				e.sprite,
+				hero,
+				sided(hero, moving ? "charge-walk" : "charge", facingLeft),
+				dtMs,
+			);
+			continue;
+		}
+		if (!body.grounded && ownClip(hero, "jump")) {
+			driveClip(
+				e.anim,
+				e.sprite,
+				hero,
+				sided(hero, body.vy < 0 ? "jump" : "fall", facingLeft),
+				dtMs,
+			);
 			continue;
 		}
 

@@ -22,7 +22,7 @@ table (see `SHEET_CELLS` and `HERO_CLIPS` in the game):
   Every directional move is stored facing both ways, exactly like the walk
   cycle always has been.
 - `anands-roll.png` — 16 cells of 168x152: the tumble, derived from the
-  face-on frame by rotation, like `make-roll-art.py` does for the dude.
+  face-on frame by rotation.
 - `anands-dragon.png` — 6 cells of 352x176: the dragon-thrust ride, the
   ultimate's own art: the lunge into the dragon and the flight it carries.
 - `anands-portrait.png` — 128x192: the face-on frame blown up for the hero
@@ -321,7 +321,7 @@ def build_character_strip():
 
 def build_roll_strip():
     """The tumble, derived from the face-on frame exactly like
-    `make-roll-art.py` derives the dude's: rotations about the feet plus a
+    the generated heroes derive theirs: rotations about the feet plus a
     tucked ball pose, cells 0-7 rolling right and 8-15 their mirrors."""
     face = extract("running", CELLS["running"]["idle_front"])
     face = face.resize(
@@ -331,7 +331,7 @@ def build_roll_strip():
     for i in range(8):
         if i in (3, 4):
             # The ball: the tucked body — the face frame's torso — with the
-            # real head pasted on top, like `make-roll-art.py`'s ellipse.
+            # real head pasted on top.
             fw, fh = face.size
             head = face.crop((0, 0, fw, round(fh * 0.32)))
             head = head.resize((max(1, round(head.width * 44 / head.height)), 44), Image.NEAREST)

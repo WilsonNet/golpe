@@ -33,6 +33,7 @@ import {
 } from "./diagnostics/PhysicsDiagnostics";
 import { EventBus } from "./EventBus";
 import {
+	animationStats,
 	animationSystem,
 	bindFxBodies,
 	idleTexture,
@@ -1367,6 +1368,7 @@ export class Match {
 		// `Record<string, unknown>`: the harness drives the game through these, so
 		// they are a contract and should break the build when they change.
 		window.__toggleAIVsAI = () => this.toggleAiVsAi();
+		window.__animStats = animationStats;
 		window.__gameState = () => ({
 			aiVsAIMode: !!this.localBrain,
 			onlineMode: this.onlineMode,

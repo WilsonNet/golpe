@@ -59,7 +59,8 @@ src/game/
                     disagree about the fleet. See `docs/regions.md`
     types.ts        the wire messages, shared with the server
   render/         Stage.ts (layers + camera), ArenaRenderer.ts (draws from collider
-                  data), assets.ts (per-hero sheets, strips and generated poses),
+                  data), assets.ts (per-hero sheets, strips, Lia's packed atlas and
+                  generated poses),
                   SpritePool.ts, Particles.ts, MeleeFx.ts (per-hero blades and the
                   dagger's motion tells), DragonFx.ts (the dragon's wake),
                   Shadows.ts (team-tinted cast shadows, in their own layer)

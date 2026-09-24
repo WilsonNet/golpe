@@ -25,7 +25,7 @@ import {
 } from "../simulation/Physics";
 import type { TeamId } from "../simulation/Teams";
 import { TINT, teamTint } from "../teamPalette";
-import { sheetScale, TEX, tex } from "./assets";
+import { sheetDrawsBlade, sheetScale, TEX, tex } from "./assets";
 import { ParticleSystem } from "./Particles";
 import type { Stage } from "./Stage";
 import { VIOLET } from "./UltAimLine";
@@ -411,6 +411,10 @@ export class MeleeFx {
 		this.drawSwing(f, s, cx, cy, dir);
 		this.drawDaggerMoves(f, s, cx, cy, dir, dtMs);
 		this.drawPostureBlade(f, s, cx, cy, dir);
+		// Art that draws its own sword (Lia's rendered sheet) gets the trail
+		// and never the stand-in steel: two swords, one of them bigger and
+		// out of step with the hand, was the rendered art's first bug.
+		if (sheetDrawsBlade(HEROES[hero].sheet)) f.blade.visible = false;
 		this.drawGuard(f, s, cx, cy, dir);
 		this.drawDashWind(f, s, cx, cy, dtMs);
 		this.drawTumbleDust(f, s, cx, cy, dtMs);

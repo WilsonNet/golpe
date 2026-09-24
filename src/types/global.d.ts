@@ -334,6 +334,14 @@ declare global {
 		/** The end-of-match ceremony: the announcement, the clip, and the camera edit. */
 		__potgState?: () => PotgSnapshot;
 		/**
+		 * Per hero: frames drawn per animation clip, and frames where a hero
+		 * with a rendered sheet fell back to a generated placeholder pose.
+		 */
+		__animStats?: () => Record<
+			string,
+			{ clips: Record<string, number>; fallbacks: Record<string, number> }
+		>;
+		/**
 		 * Switch aiming scheme from a script.
 		 *
 		 * Deliberately the same store the Esc menu writes, so an automated run

@@ -44,7 +44,7 @@ export interface HeroDef {
 	/** The item this hero carries. Not unique — a future hero can share one. */
 	item: ItemDef;
 	/** The sprite sheet this hero is drawn from. See `render/assets.ts`. */
-	sheet: "dude" | "anands" | "jeffs";
+	sheet: "lia" | "anands" | "jeffs";
 }
 
 export const HEROES: Record<HeroId, HeroDef> = {
@@ -57,7 +57,7 @@ export const HEROES: Record<HeroId, HeroDef> = {
 		ranged: RANGED_WEAPONS.rifle,
 		ultimate: "black-hole",
 		item: ITEMS["he-grenade"],
-		sheet: "dude",
+		sheet: "lia",
 	},
 	anands: {
 		id: "anands",

@@ -20,12 +20,15 @@ import {
 import { PLAYER_HEIGHT, PLAYER_WIDTH } from "../simulation/Arena";
 
 export const TEX = {
-	dude: "dude",
-	/** The tumble roll strip — see `rollFrames`. */
-	roll: "roll",
+	/**
+	 * Lia's packed atlas, rendered from her Blender source (`art/lia/lia.blend`)
+	 * by `scripts/make-lia-art.py` — every clip she plays, roll included, lives
+	 * in this one sheet. See `PACKED_SHEETS`.
+	 */
+	lia: "lia",
 	/** Anands' character strip — see `anandsFrames`. */
 	anands: "anands",
-	/** Anands' roll strip, derived from her own sheet like the dude's. */
+	/** Anands' roll strip, derived from her own sheet. */
 	"anands-roll": "anands-roll",
 	/** Anands' dragon-thrust ride: the ultimate's own art, cut from the
 	 * reference boards by `scripts/make-anands-art.py`. */
@@ -67,29 +70,6 @@ export const TEX = {
 	/** The dragon's mane and wake: a soft red-gold wisp, tintable. */
 	dragonMane: "fx_dragon_mane",
 	dragonGlow: "fx_dragon_glow",
-	/** Staggered by a sword hit. Derived from the fighter's own strip. */
-	disabled: "dude_disabled",
-	/** Flat on the floor, after the chain's finisher. */
-	downed: "dude_downed",
-	/** Horizontal in the air: launched by the anti-air, or spiked on the way down. */
-	launched: "dude_launched",
-	/** Guard-broken: a full second with the sword raised helplessly. */
-	helpless: "dude_helpless",
-	/** Mid-slam: the massive's swing, leaning into the planted blade. */
-	slam: "dude_slam",
-	/** The plunge bomb's dive: sword first, straight down. */
-	plunge: "dude_plunge",
-	/** Planted after a bomb: the sword is in the ground and the fighter is stuck. */
-	stuck: "dude_stuck",
-	/**
-	 * The dagger's three poses, derived from the fighter's own strip like the
-	 * hit poses: the thrust's anticipation (blade cocked back), the thrust's
-	 * dash (a horizontal streak), the shoryuken's rise, and the dragon ride.
-	 */
-	thrustWindup: "anands_thrust_windup",
-	thrustDash: "anands_thrust_dash",
-	shoryukenRise: "anands_shoryuken_rise",
-	dragonRide: "anands_dragon_ride",
 	/** The black hole's own art — see `createUltimateTextures`. */
 	singularity: "fx_singularity",
 	horizon: "fx_horizon",
@@ -120,8 +100,7 @@ export const TEX = {
 /**
  * The pose textures that are derived per hero from that hero's own strip.
  * Keyed `"<hero>:<pose>"` (e.g. `"anands:disabled"`) so every hero gets a
- * stagger that lines up with their own walk cycle. The `TEX.*` names above are
- * the *dude's* copies, kept for the pre-hero callers.
+ * stagger that lines up with their own walk cycle.
  */
 export type HeroPose =
 	| "disabled"
@@ -136,17 +115,9 @@ export type HeroPose =
 	| "shoryukenRise"
 	| "dragonRide";
 
-/** The `dude` strip, sliced into its nine 64x96 frames (2x art, drawn half-size). */
-let dudeFrames: Texture[] = [];
-/**
- * The roll strip, sliced into sixteen 80x96 frames: 0-7 roll right, 8-15 roll
- * left (the same frames mirrored, so a left roll does not read as a right roll
- * viewed backwards — feet lead the wrong way otherwise).
- */
-let rollFrames: Texture[] = [];
-/** Anands' strip, sliced like the dude's: 0-3 walk left, 4 face-on, 5-8 right. */
+/** Anands' strip: 35 hand-drawn cells, see `HERO_CLIPS` in `ecs/systems.ts`. */
 let anandsFrames: Texture[] = [];
-/** Anands' roll strip: 0-7 right, 8-15 left, exactly like the dude's. */
+/** Anands' roll strip: 0-7 right, 8-15 left. */
 let anandsRollFrames: Texture[] = [];
 /** Jeffs' strip and roll, sliced exactly like the other two heroes'. */
 let jeffsFrames: Texture[] = [];
@@ -171,15 +142,69 @@ const ROLL_FRAME_W = 80;
  * A clip indexes a strip; a strip's cells are whatever this table says they
  * are.
  */
-const SHEET_CELLS: Record<string, { w: number; h: number }> = {
-	[TEX.dude]: { w: 64, h: 96 },
-	[TEX.roll]: { w: ROLL_FRAME_W, h: 96 },
+const SHEET_CELLS: Record<string, SheetCell> = {
 	[TEX.anands]: { w: 168, h: 152 },
 	[TEX["anands-roll"]]: { w: 168, h: 152 },
 	[TEX["anands-dragon"]]: { w: 352, h: 176 },
 	[TEX.jeffs]: { w: 64, h: 96 },
 	[TEX["jeffs-roll"]]: { w: ROLL_FRAME_W, h: 96 },
 };
+
+/**
+ * A strip's cell geometry. `bodyH` is the height, in the sheet's pixels, of
+ * the fighter's 48px collider — the number the draw scale is computed from.
+ * It defaults to the cell height, which is right for a sheet whose cells are
+ * the body; a sheet whose cells are padded to fit a raised sword (Lia's)
+ * names it, so the padding grows the cell and never shrinks the fighter.
+ */
+interface SheetCell {
+	w: number;
+	h: number;
+	bodyH?: number;
+}
+
+/** One clip of a packed sheet, as `scripts/make-lia-art.py` writes it. */
+export interface PackedClip {
+	frames: number[];
+	fps: number;
+	loop: boolean;
+	/** `"move"`: the frame is picked by progress through the melee move. */
+	drive?: "move";
+}
+
+/** The packed atlas JSON the Blender pipeline writes. */
+interface PackedMeta {
+	name: string;
+	cellW: number;
+	cellH: number;
+	bodyH: number;
+	/** Each frame's rect in the atlas and its offset inside the (untrimmed) cell. */
+	frames: {
+		x: number;
+		y: number;
+		w: number;
+		h: number;
+		ox: number;
+		oy: number;
+	}[];
+	clips: Record<string, PackedClip>;
+}
+
+/**
+ * Sheets rendered from a 3D source and packed with trimmed frames.
+ *
+ * Every frame of these is a trimmed rect plus its offset inside a uniform
+ * cell, and the cell's centre is the body's centre — so a centre-anchored
+ * sprite sits on the collider exactly like a strip cell does. Pixi's
+ * `orig`/`trim` pair carries the offset, and nothing downstream knows the
+ * frame was ever trimmed.
+ */
+const PACKED_SHEETS: Record<string, { png: string; json: string }> = {
+	[TEX.lia]: { png: "assets/lia.png", json: "assets/lia.json" },
+};
+
+/** Each packed sheet's clips, from its JSON. */
+const PACKED_CLIPS: Record<string, Record<string, PackedClip>> = {};
 
 /**
  * Sheets defined by the sprite workshop's exported atlas JSON, not by the
@@ -223,12 +248,12 @@ export function tex(key: string): Texture {
  * are cut from does not change.
  */
 export function heroFrames(sheet: string): Texture[] {
-	return FRAME_SETS[sheet] ?? dudeFrames;
+	return FRAME_SETS[sheet] ?? FRAME_SETS[TEX.lia] ?? [];
 }
 
 /** A hero's roll strip. */
 export function heroRollFrames(sheet: string): Texture[] {
-	return ROLL_SETS[sheet] ?? rollFrames;
+	return ROLL_SETS[sheet] ?? [];
 }
 
 /** A hero's derived pose texture (disabled, downed, the dagger's thrust…). */
@@ -245,7 +270,29 @@ export function heroPose(sheet: string, pose: HeroPose): Texture {
  */
 export function sheetScale(sheet: string): number {
 	const cell = SHEET_CELLS[sheet];
-	return cell ? PLAYER_HEIGHT / cell.h : 1;
+	return cell ? PLAYER_HEIGHT / (cell.bodyH ?? cell.h) : 1;
+}
+
+/**
+ * The clips a packed sheet ships in its own JSON, or `undefined` for a sheet
+ * whose clips are code (`HERO_CLIPS` in `ecs/systems.ts`). The Blender
+ * pipeline writes clip names that are exactly the game's `ClipName`s, so a
+ * re-render with a new frame count or a re-timed loop needs no code change.
+ */
+export function sheetClips(
+	sheet: string,
+): Readonly<Record<string, PackedClip>> | undefined {
+	return PACKED_CLIPS[sheet];
+}
+
+/**
+ * Does this hero's art draw its own melee weapon? A sheet rendered with the
+ * sword in hand (Lia's) must not also get `MeleeFx`'s placeholder blade laid
+ * over it — that second, bigger sword was the art's first bug. The trail
+ * (the hitbox's read) stays; only the stand-in steel goes.
+ */
+export function sheetDrawsBlade(sheet: string): boolean {
+	return PACKED_CLIPS[sheet]?.["slash"] !== undefined;
 }
 
 /**
@@ -279,8 +326,6 @@ let manifestRegistered = false;
 
 export async function loadAssets(): Promise<void> {
 	const sources: Record<string, string> = {
-		[TEX.dude]: "assets/dude.png",
-		[TEX.roll]: "assets/roll.png",
 		[TEX.anands]: "assets/anands.png",
 		[TEX["anands-roll"]]: "assets/anands-roll.png",
 		[TEX["anands-dragon"]]: "assets/anands-dragon.png",
@@ -303,19 +348,10 @@ export async function loadAssets(): Promise<void> {
 	await Assets.load(Object.keys(sources));
 
 	// Every strip is sliced by its own cell geometry — `SHEET_CELLS` owns the
-	// sizes, this is the only place a sheet becomes a texture set. The dude
-	// sheet is a plain horizontal strip with no atlas JSON, so the frames are
-	// cut by hand: 0-3 walk left, 4 face-on, 5-8 walk right. The roll strips
-	// follow the same pattern, generated by `scripts/make-roll-art.py` from
-	// the same dude strip — see that script for why the roll is wider than
-	// the walk. Anands' hand-drawn art (see `scripts/make-anands-art.py`) and
-	// Jeffs' generated art are the same idea with their own cell sizes.
-	dudeFrames = sliceStrip(TEX.dude, 9);
-	FRAME_SETS[TEX.dude] = dudeFrames;
-
-	rollFrames = sliceStrip(TEX.roll, 16);
-	ROLL_SETS[TEX.roll] = rollFrames;
-
+	// sizes, this is the only place a strip becomes a texture set. Anands'
+	// hand-drawn art (see `scripts/make-anands-art.py`) and Jeffs' generated
+	// art are plain horizontal strips; Lia's Blender-rendered atlas is a
+	// packed sheet with its own JSON, loaded below.
 	anandsFrames = sliceStrip(TEX.anands, 35);
 	FRAME_SETS[TEX.anands] = anandsFrames;
 
@@ -336,11 +372,45 @@ export async function loadAssets(): Promise<void> {
 	// JSON instead of by a hand-kept table. The strips are uniform grids, so
 	// this is the same slice as `sliceStrip` with the cell size read from the
 	// file rather than from `SHEET_CELLS`.
-	await Promise.all(
-		Object.entries(ATLAS_SHEETS).map(([name, { png, json }]) =>
+	await Promise.all([
+		...Object.entries(ATLAS_SHEETS).map(([name, { png, json }]) =>
 			loadAtlasSheet(name, png, json),
 		),
+		...Object.entries(PACKED_SHEETS).map(([name, { png, json }]) =>
+			loadPackedSheet(name, png, json),
+		),
+	]);
+}
+
+/**
+ * One packed sheet: every frame a trimmed rect restored to its cell with
+ * `orig` + `trim`, the clips kept for `sheetClips`, and the cell registered
+ * with its body height so `sheetScale` draws the fighter at collider size.
+ */
+async function loadPackedSheet(
+	name: string,
+	png: string,
+	json: string,
+): Promise<void> {
+	const res = await fetch(json);
+	if (!res.ok) {
+		throw new Error(
+			`packed sheet "${name}": missing ${json} — run scripts/make-${name}-art.py`,
+		);
+	}
+	const meta = (await res.json()) as PackedMeta;
+	const texture = await Assets.load<Texture>({ alias: name, src: png });
+	FRAME_SETS[name] = meta.frames.map(
+		(f) =>
+			new Texture({
+				source: texture.source,
+				frame: new Rectangle(f.x, f.y, f.w, f.h),
+				orig: new Rectangle(0, 0, meta.cellW, meta.cellH),
+				trim: new Rectangle(f.ox, f.oy, f.w, f.h),
+			}),
 	);
+	SHEET_CELLS[name] = { w: meta.cellW, h: meta.cellH, bodyH: meta.bodyH };
+	PACKED_CLIPS[name] = meta.clips;
 }
 
 /**
@@ -588,7 +658,16 @@ export function createFxTextures(renderer: Renderer): void {
 	}
 	bake(renderer, TEX.shadow, shadow);
 
-	createHeroPoses(renderer, "dude", dudeFrames);
+	// Lia's art covers every pose she can be in; the generated set is only
+	// the fallback for a clip a future re-render leaves out, cut from her
+	// face-on frame.
+	const liaTurn = PACKED_CLIPS[TEX.lia]?.["turn"]?.frames[0];
+	const liaFrames = FRAME_SETS[TEX.lia] ?? [];
+	createHeroPoses(
+		renderer,
+		TEX.lia,
+		liaTurn === undefined ? liaFrames : [liaFrames[liaTurn] ?? Texture.EMPTY],
+	);
 	createHeroPoses(renderer, "anands", anandsFrames);
 	createHeroPoses(renderer, "jeffs", jeffsFrames);
 	createUltimateTextures(renderer);
@@ -844,7 +923,7 @@ function createHeroPoses(
 ): void {
 	// The face-on frame. Staggering is not a direction, so the fighter turns to
 	// the camera for it, exactly as the existing `turn` clip does.
-	const source = frames[4] ?? frames[0];
+	const source = frames.length === 1 ? frames[0] : (frames[4] ?? frames[0]);
 	if (!source) return;
 
 	// The pose canvas follows the sheet's own cells, not the collider: a pose
@@ -876,11 +955,6 @@ function createHeroPoses(
 		const texture = bakeShared(renderer, node);
 		poseTextures.set(`${sheet}:${name}`, texture);
 		node.destroy({ children: true });
-		// The dude's poses keep their old TEX keys, so the pre-hero callers
-		// (the ultimate cinematic's CSS aside) keep working unchanged.
-		if (sheet === "dude") {
-			generated.set(TEX[name] ?? `dude_${name}`, texture);
-		}
 	};
 
 	// ---- staggered ----

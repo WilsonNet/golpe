@@ -160,9 +160,11 @@ export const ULTIMATE_CSS = `
 	width: 128px;
 	height: 192px;
 	margin-bottom: 14px;
-	background-image: url("assets/dude.png");
+	/* The nine-cell strip layout (Jeffs'); Lia and Anands override it with
+	   their own whole-card portraits below. */
+	background-image: url("assets/jeffs.png");
 	background-repeat: no-repeat;
-	/* 9 frames of 32x48 at 4x = 1152x192, with frame 4 (face-on) at -512px. */
+	/* 9 frames of 64x96 at 2x = 1152x192, with frame 4 (face-on) at -512px. */
 	background-size: 1152px 192px;
 	background-position: -512px 0;
 	image-rendering: pixelated;
@@ -182,6 +184,14 @@ export const ULTIMATE_CSS = `
 	background-image: url("assets/anands-portrait.png");
 	background-size: 128px 192px;
 	background-position: 0 0;
+}
+/* Lia's portrait, rendered from her Blender source at 4x the sprite
+   density by scripts/make-lia-art.py — the same whole-card crop. */
+.vu-sprite-lia {
+	background-image: url("assets/lia-portrait.png");
+	background-size: 128px 192px;
+	background-position: 0 0;
+	image-rendering: auto;
 }
 /* Jeffs' own sheet, same layout: the executioner's portrait is his own coat. */
 .vu-sprite-jeffs {
@@ -321,7 +331,7 @@ export const ULTIMATE_CSS = `
 @media (max-width: 640px), (max-height: 520px) {
 	.vu-frame { width: 152px; height: 168px; }
 	.vu-sprite { width: 88px; height: 132px; margin-bottom: 10px; background-size: 792px 132px; background-position: -352px 0; }
-	.vu-sprite-anands { background-size: 88px 132px; background-position: 0 0; }
+	.vu-sprite-anands, .vu-sprite-lia { background-size: 88px 132px; background-position: 0 0; }
 	.vu-sprite::after { width: 80px; height: 16px; bottom: -8px; }
 	.vu-ability-name { font-size: 22px; }
 	.vu-name { font-size: 15px; }

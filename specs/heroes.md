@@ -101,9 +101,33 @@ unique (`slash` is the sword's, `stab` is the dagger's), which is what keeps
 - A shared room link (`?room=…`) deliberately does **not** carry a hero: a
   joiner plays whoever the menu last picked. Only a boot URL the menu wrote
   (or a probe) carries `?hero=`.
-- The hero cards render the hero's actual sprite sheet, blown up with
-  `image-rendering: pixelated` — the sheet is the character, and a card that
-  drew something else would be a card that lied.
+- The hero cards render the hero's actual art — a cell of the sheet, or the
+  hero's portrait rendered from the same source (Lia's `lia-portrait.png` is
+  her Blender model at 4x density; Anands' is cut from her boards) — the
+  sheet is the character, and a card that drew something else would be a
+  card that lied.
+
+## The art
+
+Each hero's art has one source, and the game only ever loads what it made:
+
+| Hero | Source | Made by | Ships |
+|---|---|---|---|
+| Lia | `art/lia/lia.blend` — a toon-shaded 3D model, rig and one Action per clip | `scripts/make-lia-art.py` (see `art/lia/README.md`) | `lia.png` + `lia.json` (packed, trimmed, every clip incl. both facings), `lia-portrait.png` |
+| Anands | hand-drawn boards in `unprocessed-sprites/` | `scripts/make-anands-art.py` | `anands*.png` strips |
+| Jeffs | pixel rows in code | `scripts/make-jeffs-art.py` | `jeffs*.png` strips |
+
+- **The draw scale is the collider over the sheet's body height** (`bodyH`,
+  default the cell height). Lia's cells are padded to whatever her raised
+  sword needs, and that never changes her on-screen size.
+- **Lia's art draws her sword, so she gets the trail and no stand-in blade.**
+  Her cuts, the uppercut and the massive are *move-driven* clips: the frame is
+  her progress through the move, so the steel is where the hitbox is. The
+  other heroes keep the walk cycle under `MeleeFx`'s drawn blade.
+- Lia also draws states the strips do not: the guard, the charge (standing and
+  walking), jump and fall, and a left-facing twin of every pose.
+  `scripts/art-probe.ts` counts every clip drawn in a live match and any frame
+  that fell back to a generated placeholder (must be zero).
 
 ## The HUD
 

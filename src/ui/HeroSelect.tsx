@@ -18,10 +18,11 @@ import { HUD_CSS } from "./hudStyles";
  * rendered: the face-on frame (cell 4 of every nine-cell strip) from the
  * hero's own sheet, blown up pixel-perfect.
  *
- * Anands is the exception that proves the rule: her sheets are hand-drawn
- * (see `scripts/make-anands-art.py`) with their own cell geometry, so her
- * portrait is a dedicated crop — `anands-portrait.png` — instead of a cell
- * index into a shared layout.
+ * Lia and Anands are the exceptions: their sheets have their own geometry
+ * (Lia's is a packed atlas rendered from Blender, Anands' is hand-drawn), so
+ * each has a dedicated portrait — `lia-portrait.png`, rendered by
+ * `scripts/make-lia-art.py` at 4x the sprite density, and
+ * `anands-portrait.png` — instead of a cell index into a shared layout.
  */
 export const HERO_SPRITE_CSS = `
 .hp-sprite {
@@ -33,7 +34,12 @@ export const HERO_SPRITE_CSS = `
 	/* The face-on frame is cell 4 of every nine-cell strip. */
 	background-position: -256px 0;
 }
-.hp-sprite-lia { background-image: url("assets/dude.png"); }
+.hp-sprite-lia,
+.hp-sprite-anands {
+	background-size: 64px 96px;
+	background-position: 0 0;
+}
+.hp-sprite-lia { background-image: url("assets/lia-portrait.png"); }
 .hp-sprite-anands {
 	background-image: url("assets/anands-portrait.png");
 	background-size: 64px 96px;

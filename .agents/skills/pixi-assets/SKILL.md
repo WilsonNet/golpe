@@ -11,10 +11,10 @@ license: MIT
 ```ts
 import { Assets } from "pixi.js";
 
-Assets.add({ alias: "dude", src: "assets/dude.png" });
-await Assets.load(["dude", "fireball"]);
+Assets.add({ alias: "jeffs", src: "assets/jeffs.png" });
+await Assets.load(["jeffs", "fireball"]);
 
-const texture = Assets.get("dude");
+const texture = Assets.get("jeffs");
 ```
 
 - **The application must be initialised first.** `Assets` needs the renderer's
@@ -55,7 +55,7 @@ A bare PNG of evenly spaced frames has no atlas, so cut it yourself:
 ```ts
 import { Rectangle, Texture } from "pixi.js";
 
-const sheet = Assets.get("dude") as Texture;
+const sheet = Assets.get("jeffs") as Texture;
 const frames: Texture[] = [];
 for (let i = 0; i < 9; i++) {
   frames.push(new Texture({
@@ -67,6 +67,27 @@ for (let i = 0; i < 9; i++) {
 
 Note `source`, not `baseTexture` — **`BaseTexture` is gone in v8**, replaced by
 `TextureSource`. All frames share one source, so this costs one upload.
+
+## A packed, trimmed atlas (Lia's)
+
+A sheet rendered from 3D (`scripts/make-lia-art.py`) is packed with every
+frame **trimmed** to its content, plus the offset it had inside a uniform cell.
+Restore the cell with `orig` + `trim`, and a centre anchor lands on the cell
+centre exactly as if the frame had never been trimmed:
+
+```ts
+new Texture({
+	source: atlas.source,
+	frame: new Rectangle(f.x, f.y, f.w, f.h),        // where it is in the atlas
+	orig: new Rectangle(0, 0, meta.cellW, meta.cellH), // the untrimmed cell
+	trim: new Rectangle(f.ox, f.oy, f.w, f.h),        // where it sat in the cell
+});
+```
+
+The cell's centre is the collider's centre by construction (the camera is
+centred there), and the draw scale is `PLAYER_HEIGHT / meta.bodyH` — never the
+cell height, which grows with the sword. See `loadPackedSheet` in
+`render/assets.ts`.
 
 ## Generating textures at runtime
 

@@ -34,3 +34,5 @@ fight-logs*.txt
 audio/soundfonts/
 __pycache__/
 .venv-audio/
+art/lia/.render/
+*.blend1

@@ -317,6 +317,17 @@ unpredicted pull would show there as double-digit correction on every one of the
 instead of taking ~285s to fill. It is honoured in the training room too, which is
 where a human practising the throw wants it.
 
+## The art probe
+
+`tsx scripts/art-probe.ts`. Lia's sheet is generated from a .blend an artist
+edits, and a re-render that drops or misnames a clip still draws *something* —
+a generated placeholder pose. `window.__animStats()` tallies every clip drawn
+per hero and every frame that fell back; the probe plays 30s of Lia-vs-Lia AI
+and fails on any fallback or on a whole family of clips (cuts, air, gun, hit
+states) never drawn. Baseline: ~40 distinct clips, 0 fallbacks. The pixel-level
+half — feet on the collider floor, figure 96px — is measured by
+`scripts/make-lia-art.py` itself, and the shipped atlas by `liaAtlas.test.ts`.
+
 ## The play-of-the-game probe
 
 `node scripts/potg-probe.ts`. It is the only thing in the suite that reads

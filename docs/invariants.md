@@ -343,6 +343,27 @@ stops the butterfly being the only option.
   button does nothing. A rhythm that ran to completion left the bot deaf for up to
   ~950ms — longer than any window it was supposed to react inside.
 
+## Rendered art
+
+**A sprite's draw scale is the collider over the sheet's *body* height, never
+its cell height.** `sheetScale` used `PLAYER_HEIGHT / cell.h`, which is right
+only while a cell *is* the body. Lia's Blender cells are padded to whatever her
+raised sword needs (146x166 around a 96px body), so the old formula would have
+drawn her at 48/166 — every longer blade a smaller fighter. The packed JSON
+names `bodyH`; the cell's centre is the collider's centre because the render
+camera is centred there.
+
+**A pose that lowers the body must plant the feet.** The first render's crouch
+poses moved the rig's root down and sank the soles 4-5px through the floor
+line; nothing in-game would ever have reported it. `lia_build.py` now solves the
+lowest sole onto z=0 for every grounded pose, and `make-lia-art.py` measures
+feet-on-floor and figure height on each render and refuses to ship on drift.
+
+**Art that draws its weapon gets no stand-in blade.** `MeleeFx` draws a
+placeholder sword for strip heroes; over Lia's rendered sword it was a second,
+bigger one, out of step with the hand. `sheetDrawsBlade` (a packed sheet with a
+`slash` clip) hides it; the trail stays, because the trail is the hitbox's read.
+
 ## Input and aim
 
 - **Convert the cursor against the logical view, never `canvas.width`.** Under

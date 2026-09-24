@@ -271,6 +271,7 @@ export const MENU_CSS = `
 }
 /* Anands' chip draws her own portrait, not a cell of the shared nine-cell
    strip — her sheets are hand-drawn with their own geometry. */
+.gd-hero-chip .hp-sprite-lia,
 .gd-hero-chip .hp-sprite-anands {
 	background-size: 48px 72px;
 	background-position: 0 0;
