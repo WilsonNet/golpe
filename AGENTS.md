@@ -54,6 +54,7 @@ skill({ name: "feedback-loop" })    # the full workflow
 | How do I measure anything? | [`docs/diagnostics.md`](docs/diagnostics.md) + the `feedback-loop` skill |
 | How do I write a unit test — example or property? | the `property-testing` skill — when fast-check's `.prop` beats a hand-picked example, and the traps |
 | How do I run the game? | [`docs/running-the-game.md`](docs/running-the-game.md) |
+| **Anands' art — the next big job?** | [`docs/anands-art.md`](docs/anands-art.md) — the brief: keep her hand-drawn style, fix the keying that eats 21% of her silhouette, then fill her missing clips |
 | How do I edit a hero's art — or build a new one in Blender? | [`art/README.md`](art/README.md) — Lia's and Jeffs' .blend files are the source; one command renders the atlas |
 | How do I slice a raw art board into a game sheet? | [`docs/sprite-slicer.md`](docs/sprite-slicer.md) — the `?slicer=true` workshop |
 | Why are there symlinks everywhere? | [`docs/agent-config.md`](docs/agent-config.md) |

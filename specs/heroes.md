@@ -123,8 +123,9 @@ Each hero's art has one source, and the game only ever loads what it made:
 - **Anands' art stays hand-drawn — deliberately.** Her boards *are* the look
   the rendered heroes are chasing (flat front elevation, a flat fill with a
   shade band on the far edge, a face turned to the viewer, chunky
-  proportions). Moving her to the rendered pipeline must not cost that; until
-  there is a plan that keeps it, her sheets are not rendered.
+  proportions). Moving her to the rendered pipeline must not cost that; the
+  plan is [`docs/anands-art.md`](../docs/anands-art.md), and it starts by
+  fixing her extraction, not by re-rendering her.
 - **Lia's and Jeffs' art draws the sword, so they get the trail and no
   stand-in blade.** Their cuts, the uppercut and the massive are *move-driven* clips: the frame is
   her progress through the move, so the steel is where the hitbox is. The
