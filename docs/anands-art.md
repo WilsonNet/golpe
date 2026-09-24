@@ -133,9 +133,9 @@ body height.
    Sources, best first:
    1. **panels already on the boards** that are not cut yet (item use,
       victory, the ultimate transitions, the contextual idles);
-   2. **new boards generated the same way the originals were**: the same
-      character, style and panel layout. The user can produce these; then
-      run them through the same extraction;
+   2. **new boards generated the same way the originals were** (Gemini /
+      Nano Banana — see Decisions): the same character, style and panel
+      layout, run through the same extraction;
    3. **paint-overs** in a pixel editor (LibreSprite is free; Aseprite is the
       standard), optionally over a Blender pose from `sprite_rig.py` used
       only as a skeleton guide.
@@ -143,12 +143,21 @@ body height.
    `art-probe --hero=anands`, and a side-by-side against the board shown to
    the user.
 
-## Open questions for the user
+## Decisions (from the user, 2026-09-24)
 
-- Can more boards be generated in the same style (for the missing clips), and
-  with the same prompt/seed as the originals?
-- Is recovering the native pixel grid wanted? It makes her crisper and closer
-  to Lia and Jeffs in pixel density. The alternative is keeping the boards'
-  soft, painterly look.
-- Should the dagger be drawn in her frames (like Lia's and Jeffs' swords) or
-  stay a `MeleeFx` overlay?
+- **More boards: yes.** The originals were made with Gemini ("Nano Banana")
+  and it got the look right. New clips should come from **new boards
+  generated the same way**: same character, same style, same panel layout.
+  Then they go through the same extraction. This is the preferred source for
+  every missing clip (step 4). Before generating anything, write the prompt
+  down in this doc, reusing the originals' wording where it is known, so
+  every board is asked for the same way.
+- **Crisp, like the spritesheet: yes.** The target is the boards as they
+  look: clean pixel art at its true resolution, with hard edges and flat
+  colours. It is not a resampled, softened copy. Recovering the native pixel
+  grid and quantizing to her palette (step 2) is in scope.
+- **The dagger goes into her frames.** In the future her art draws the
+  dagger, like Lia's and Jeffs' swords, and `MeleeFx` keeps only the trail
+  (`sheetDrawsBlade`). Every stab, thrust and shoryuken frame then needs the
+  dagger drawn at the right angle, so board prompts for her moves should ask
+  for the dagger visible in hand.
