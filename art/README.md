@@ -1,6 +1,6 @@
 # Hero art — edit in Blender, render to sprites
 
-`art/<hero>/<hero>.blend` **is that hero's art** — Lia's and Jeffs' today.
+`art/<hero>/<hero>.blend` **is that hero's art** — Lia's, Jeffs' and Anands'.
 Every sprite they draw in-game, and their portraits on the menus and the
 ultimate card, are rendered from these files. Open one, change anything,
 save, run one command:
@@ -13,7 +13,7 @@ python3 scripts/make-hero-art.py lia    # render + pack → public/assets/lia.{p
 | Hero | Source | Look module | Notes |
 |---|---|---|---|
 | Lia | `art/lia/lia.blend` | `scripts/blender/lia_build.py` | Toriyama chibi swordswoman: teal ponytail, circlet, crimson tunic, sword and rifle |
-| Jeffs | `art/jeffs/jeffs.blend` | `scripts/blender/jeffs_build.py` | the executioner: grey-templed slick hair, stubble, trench coat with tails, sword and pump shotgun |
+| Jeffs | `art/jeffs/jeffs.blend` | `scripts/blender/jeffs_rig.py` · `jeffs_look.py` · `jeffs_clips.py` | the executioner, from his Gemini boards: a Tripo mesh of his T-pose turnaround, salt-and-pepper hair, charcoal trench coat, katana and pump shotgun. See *Jeffs* below. |
 | Anands | `art/anands/anands.blend` | `scripts/blender/anands_rig.py` (rig) · `scripts/blender/anands_clips.py` (weapons, clips) | **the flagship** — her Tripo mesh from her Gemini boards, rendered unlit and snapped back to her boards' palette (`art/anands/palette.json`). See *Anands* below and [`docs/anands-art.md`](../docs/anands-art.md). |
 
 Every hero shares one skeleton, shader, camera and set of clip poses
@@ -105,7 +105,7 @@ procedurally (model, rig, materials, every clip). It refuses to overwrite
 the .blend unless told to:
 
 ```bash
-blender -b --factory-startup -P scripts/blender/jeffs_build.py -- --force   # DISCARDS every hand edit
+blender -b --factory-startup -P scripts/blender/jeffs_build.py -- --force   # DISCARDS every hand edit (and Jeffs' Tripo model)
 ```
 
 **A new hero** is a new `<hero>_build.py` (copy Jeffs', change the palette
@@ -120,6 +120,41 @@ truth once anyone has touched it.
 longer exists — keys live in `action.layers[].strips[].channelbags[].fcurves` —
 and switching the rig's action also needs `animation_data.action_slot =
 action.slots[0]`, or it plays nothing. Both scripts already do this.
+
+## Jeffs — a Tripo mesh, Anands' pipeline
+
+Built the way Anands was (the `ai-art-pipeline` skill), 2026-09-26.
+`art/jeffs/jeffs.blend`:
+
+| Collection | What it is |
+|---|---|
+| **Tripo** | **What ships.** `Jeffs.tripo` — the Tripo multi-view mesh of his A-pose turnaround (`unprocessed-sprites/jeffs-apose-v3.jpeg` → `art/jeffs/generated/jeffs-tripo-apose.glb`, 27.2k verts), skinned to `Rig`; `Sword` (the katana) and `Shotgun` (big, ×1.45) on the `weapon` bone, `SwordBack` (the katana sheathed) on the chest. Every `clip.*` action is his. |
+| **Jeffs.primitive** (hidden) | The procedural primitive model he shipped with first (`jeffs_build.py`). Never renders. |
+
+The modules, run in order in the live Blender (the .blend is the source once edited):
+
+- `jeffs_rig.py` — `import_glb(path)` (bake, 3 m, front measured from the
+  nose and turned to +X, UV seams merged), then `rig()`: Anands' procedure
+  (`anands_rig.rig`) at his joints — the A-pose arms are weighted away from
+  the body and dropped 25° more to rest.
+- `jeffs_look.py` — `apply()`: he wears near-black, and the texture's coat,
+  shirt, trousers and boots are one grey, so the **texture decides only skin
+  and hair** (grey vs black) and **geometry decides the clothes** (below the
+  cuff is boot, hugging a leg bone is trouser, the V on his chest is shirt,
+  the rest is coat). Shading uses **bone-capsule normals** (each vertex's
+  normal points away from its bones' axes): smoothed-copy normals left a
+  generated coat's folds striped with shade.
+- `jeffs_clips.py` — `build()`: the katana, the big shotgun and the sheath,
+  every shared clip carried into his reach by `rebase` (the reach factor
+  capped at 1.3: his 1.07 m arm at the full ×1.84 threw the grips off past
+  his face), his own block and portrait grips (his shoulder sits 0.5 m above
+  Lia's), the item throw, rig scale 0.97 for the contract.
+
+His smoke canister is a model too: `scripts/blender/smoke_grenade.py`,
+rendered by `python3 scripts/make-smoke-grenade-art.py [--save]` to
+`public/assets/smoke-grenade.png` — 16 cells of one end-over-end flip about
+an axis leaning toward the camera, with a roll about its length, so the
+tumble goes through depth. `--save` writes `art/props/smoke-grenade.blend`.
 
 ## Anands — the flagship
 

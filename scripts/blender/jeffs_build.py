@@ -1,5 +1,10 @@
 """Bootstrap Jeffs' Blender source file on the shared sprite rig.
 
+**Retired (2026-09-26).** Jeffs now ships from a Tripo mesh of his Gemini
+turnaround (`jeffs_rig.py`, `jeffs_look.py`, `jeffs_clips.py`); this
+primitive model is kept in the .blend's hidden `Jeffs.primitive` collection.
+`--force` rebuilds the file from scratch and DISCARDS the Tripo model.
+
 Run ONCE (or with --force to start over) — after that `art/jeffs/jeffs.blend`
 is the source of truth and is edited by hand in Blender:
 

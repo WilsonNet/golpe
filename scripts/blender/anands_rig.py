@@ -91,15 +91,19 @@ BONES_TPOSE = [
 ARM_DROP_DEG = 72     # how far below horizontal the arms hang at rest
 
 
-def rig(bones=None, tpose=False):
+def rig(bones=None, tpose=False, mesh_name=MESH, collection=COLLECTION, neck_z=NECK_Z, core=(1.15, 1.75),
+        arm_drop_deg=ARM_DROP_DEG):
+    """Rig `mesh_name` on the shared skeleton. The defaults are Anands'; a
+    hero with another generated mesh passes its own bones and landmarks
+    (`jeffs_rig.py`)."""
     global HEAD_HALF_W
     HEAD_HALF_W = 0.4 if tpose else 10.0
     bones = bones or (BONES_TPOSE if tpose else BONES)
-    col = bpy.data.collections[COLLECTION]
+    col = bpy.data.collections[collection]
     old = bpy.data.objects.get(sprite_rig.RIG_NAME)
     if old:
         bpy.data.objects.remove(old, do_unlink=True)
-    mesh = bpy.data.objects[MESH]
+    mesh = bpy.data.objects[mesh_name]
     mesh.parent = None
     for md in [m for m in mesh.modifiers if m.type == "ARMATURE"]:
         mesh.modifiers.remove(md)
@@ -122,15 +126,15 @@ def rig(bones=None, tpose=False):
     arm.select_set(True)
     bpy.context.view_layer.objects.active = arm
     bpy.ops.object.parent_set(type="ARMATURE_AUTO")
-    fix_weights(mesh)
+    fix_weights(mesh, bones, neck_z, core)
     if tpose:
-        drop_arms(arm, mesh)
+        drop_arms(arm, mesh, arm_drop_deg)
     arm.rotation_euler = (0, 0, math.radians(sprite_rig.VIEW_YAW_DEG))
     arm.animation_data_create()
     return arm
 
 
-def drop_arms(arm, mesh):
+def drop_arms(arm, mesh, arm_drop_deg=ARM_DROP_DEG):
     """Pose the T-pose arms down to hang at her sides, bake that into the
     mesh, and make it the rest pose — the shared poses rotate arms that hang."""
     import math
@@ -149,7 +153,7 @@ def drop_arms(arm, mesh):
         pb = arm.pose.bones[f"upperarm.{side}"]
         pb.rotation_mode = "QUATERNION"
         # About the armature's X axis, expressed in the bone's rest frame.
-        R = Matrix.Rotation(math.radians(-s * ARM_DROP_DEG), 4, "X")
+        R = Matrix.Rotation(math.radians(-s * arm_drop_deg), 4, "X")
         L = arm.data.bones[pb.name].matrix_local
         pb.rotation_quaternion = (L.inverted() @ R @ L).to_quaternion()
     bpy.context.view_layer.update()
@@ -172,9 +176,9 @@ def drop_arms(arm, mesh):
         bpy.ops.object.modifier_move_up(modifier="Armature")
 
 
-def fix_weights(mesh):
+def fix_weights(mesh, bones=BONES, neck_z=NECK_Z, core=(1.15, 1.75)):
     groups = {g.name: g for g in mesh.vertex_groups}
-    deform = [n for n, *_ in BONES if n not in ("weapon", "hand_ik.R", "hand_ik.L", "cape", "pony", "root")]
+    deform = [n for n, *_ in bones if n not in ("weapon", "hand_ik.R", "hand_ik.L", "cape", "pony", "root")]
     for g in list(mesh.vertex_groups):
         if g.name not in deform:
             mesh.vertex_groups.remove(g)
@@ -183,21 +187,22 @@ def fix_weights(mesh):
         if n not in groups:
             groups[n] = mesh.vertex_groups.new(name=n)
     arms = [groups[n] for n in ("upperarm.R", "forearm.R", "upperarm.L", "forearm.L")]
+    hips_z = next(head[2] for n, head, *_ in bones if n == "hips")
     for v in mesh.data.vertices:
         co = v.co
-        if co.z > NECK_Z and abs(co.y) < HEAD_HALF_W:
+        if co.z > neck_z and abs(co.y) < HEAD_HALF_W:
             for g in groups.values():
                 g.remove([v.index])
             groups["head"].add([v.index], 1.0, "REPLACE")
             continue
-        if abs(co.y) < CORE_HALF_W and 1.15 < co.z < 1.75:
+        if abs(co.y) < CORE_HALF_W and core[0] < co.z < core[1]:
             had = sum(g.weight(v.index) for g in arms if _has(g, v.index))
             if had:
                 for g in arms:
                     g.remove([v.index])
                 groups["chest"].add([v.index], had, "ADD")
         if not v.groups:
-            groups["chest" if co.z > 0.92 else "hips"].add([v.index], 1.0, "REPLACE")
+            groups["chest" if co.z > hips_z else "hips"].add([v.index], 1.0, "REPLACE")
     heal_weightless(mesh)
 
 

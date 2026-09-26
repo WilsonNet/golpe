@@ -24,6 +24,7 @@ import {
 	HE_GRENADE_FUSE_MS,
 	type HeGrenadeState,
 	SMOKE_GRENADE_FUSE_MS,
+	SMOKE_GRENADE_SPEED,
 	SMOKE_PUFF_SCALE,
 	type TrapCanisterState,
 	tickHeGrenade,
@@ -31,7 +32,7 @@ import {
 	tickTrapCanister,
 } from "../simulation/Items";
 import { sameTeam, type TeamId } from "../simulation/Teams";
-import { TEX, tex } from "./assets";
+import { smokeGrenadeFrames, TEX, tex } from "./assets";
 import { ParticleSystem } from "./Particles";
 import type { Stage } from "./Stage";
 
@@ -58,6 +59,22 @@ interface HeFlight {
 	lastMs: number;
 	sprite: Sprite;
 }
+
+/**
+ * A smoke canister in flight: a grenade, plus where it is in its flip. The
+ * strip is one end-over-end turn rendered from the canister's model, so the
+ * tumble goes through depth instead of spinning a sticker in the plane.
+ */
+interface SmokeFlight extends HeFlight {
+	/** Turns of the flip so far; the strip frame is its fractional part. */
+	flip: number;
+}
+
+/**
+ * Flips per second at throw speed. The flip slows with the canister, so one
+ * that has come to rest on the floor lies still instead of spinning in place.
+ */
+const SMOKE_FLIPS_PER_S = 2.2;
 
 /** A trap canister the client is running off its own clock, like a grenade. */
 interface TrapFlight {
@@ -112,7 +129,7 @@ export class ItemFx {
 	private readonly heGrenades = new Map<number, HeFlight>();
 	private readonly trapFlights = new Map<number, TrapFlight>();
 	private readonly trapSprites = new Map<number, Sprite>();
-	private readonly smokeFlights = new Map<number, HeFlight>();
+	private readonly smokeFlights = new Map<number, SmokeFlight>();
 	private readonly smokeClouds = new Map<number, CloudPuffs>();
 	private readonly rings: BlastRing[] = [];
 
@@ -329,8 +346,13 @@ export class ItemFx {
 			seen.add(g.id);
 			let flight = this.smokeFlights.get(g.id);
 			if (!flight) {
-				const sprite = new Sprite(tex(TEX.smokeGrenade));
+				const sprite = new Sprite(smokeGrenadeFrames()[0] ?? tex(TEX.smoke));
 				sprite.anchor.set(0.5);
+				// The strip is a throw to the right; a throw to the left is its
+				// mirror, so the top always goes over forward. The side is the
+				// throw's, fixed at the hand — a wall bounce does not reverse a
+				// flip.
+				if (g.vx < 0) sprite.scale.x = -1;
 				this.effectsLayer.addChild(sprite);
 				flight = {
 					state: {
@@ -345,6 +367,7 @@ export class ItemFx {
 					},
 					lastMs: nowMs,
 					sprite,
+					flip: 0,
 				};
 				this.smokeFlights.set(g.id, flight);
 				// A little hiss at the hand, quieter than the HE's puff — the
@@ -365,7 +388,12 @@ export class ItemFx {
 			flight.lastMs = nowMs;
 			if (dtSec > 0) tickSmokeGrenade(flight.state, dtSec, this.world);
 			flight.sprite.position.set(flight.state.x, flight.state.y);
-			flight.sprite.rotation += dtSec * 6;
+			const speed = Math.hypot(flight.state.vx, flight.state.vy);
+			flight.flip +=
+				dtSec * SMOKE_FLIPS_PER_S * Math.min(1, speed / SMOKE_GRENADE_SPEED);
+			const frames = smokeGrenadeFrames();
+			const frame = frames[Math.floor((flight.flip % 1) * frames.length)];
+			if (frame) flight.sprite.texture = frame;
 		}
 
 		for (const [id, flight] of this.smokeFlights) {

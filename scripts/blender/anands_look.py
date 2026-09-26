@@ -140,7 +140,7 @@ def classify(mesh):
 PROTECT = ("a_eye", "a_lens", "a_buckle")
 
 
-def despeckle(mesh, fam, names, passes=6, share=0.6):
+def despeckle(mesh, fam, names, passes=6, share=0.6, protect=PROTECT):
     """Big flat regions, like the toon heroes' parts: a face whose edge
     neighbours mostly (`share`) agree on another family joins it. The
     texture's lighting scatters small patches of the neighbouring browns and
@@ -157,7 +157,7 @@ def despeckle(mesh, fam, names, passes=6, share=0.6):
             for b in faces:
                 if a != b:
                     nbrs[a].append(b)
-    keep = {names.index(k) for k in PROTECT}
+    keep = {names.index(k) for k in protect}
     for _ in range(passes):
         new = fam.copy()
         for i, ns in enumerate(nbrs):
@@ -230,7 +230,7 @@ def eyes_below_goggles(mesh, names, fam):
 SMOOTH_REPEAT = 40
 
 
-def smooth_normals(mesh):
+def smooth_normals(mesh, repeat=SMOOTH_REPEAT):
     """Shade the generated surface as if it were smooth.
 
     The toon shader draws its shade band where the normal turns away from the
@@ -252,7 +252,7 @@ def smooth_normals(mesh):
     src.hide_viewport = True
     md = src.modifiers.new("Smooth", "SMOOTH")
     md.factor = 1.0
-    md.iterations = SMOOTH_REPEAT
+    md.iterations = repeat
     deps = bpy.context.evaluated_depsgraph_get()
     baked = bpy.data.meshes.new_from_object(src.evaluated_get(deps))
     src.modifiers.clear()

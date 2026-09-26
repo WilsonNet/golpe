@@ -115,7 +115,7 @@ Each hero's art has one source, and the game only ever loads what it made:
 |---|---|---|---|
 | Lia | `art/lia/lia.blend` — an SNES-shaded 3D model, rig and one Action per clip | `scripts/make-hero-art.py lia` (see `art/README.md`) | `lia.png` + `lia.json` (packed, trimmed, every clip incl. both facings), `lia-portrait.png` |
 | Anands | `art/anands/anands.blend` — her Tripo mesh (from her Gemini boards) on the same rig, her own clips | `scripts/make-hero-art.py anands` (with her boards' palette snapped back) | `anands.png` + `anands.json`, `anands-portrait.png`; the dragon ride `anands-dragon.png` is still cut from her boards |
-| Jeffs | `art/jeffs/jeffs.blend` — the same rig and clips, his own model | `scripts/make-hero-art.py jeffs` | `jeffs.png` + `jeffs.json`, `jeffs-portrait.png` |
+| Jeffs | `art/jeffs/jeffs.blend` — his Tripo mesh (from his Gemini turnaround) on the same rig, every sword clip plus the item throw | `scripts/make-hero-art.py jeffs` | `jeffs.png` + `jeffs.json`, `jeffs-portrait.png`; his smoke canister's tumble `smoke-grenade.png` (from its model, `scripts/make-smoke-grenade-art.py`) |
 
 - **The draw scale is the collider over the sheet's body height** (`bodyH`,
   default the cell height). Lia's cells are padded to whatever her raised

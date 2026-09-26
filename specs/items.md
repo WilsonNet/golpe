@@ -143,6 +143,12 @@ full kit; the rules here are the wire and the general item rules.
 - **Thrown, then planted.** The canister arcs (700 px/s, gravity 900, 0.4
   restitution bounces) and blooms into a 200px cloud where its 900ms fuse runs
   out. The cloud is anchored there for **6.5s** and then dissipates.
+- **The canister tumbles end over end, through depth.** It is drawn from a
+  strip of one full flip rendered from its 3D model (the cap swings toward
+  the viewer, the spoon and ring come round), mirrored for a throw to the
+  left so the top always goes over forward; the flip slows with the canister
+  and stops when it lies still. Presentation only: the flight is the
+  simulation's, the frame is the renderer's.
 - **Travels like a trap:** full state in the snapshot, both the canisters in
   flight (dead-reckoned like bullets) and the clouds themselves. There is
   nothing for the client to predict into `tickPlayer` — the cloud changes no

@@ -316,6 +316,8 @@ python3 scripts/make-audio.py                        # re-render the music loops
 python3 scripts/make-potg-art.py                       # regenerate the ceremony's sunburst and medal
 python3 scripts/make-anands-art.py                       # cut Anands' dragon ride from her boards (--legacy: the old board-cut strips, for comparison)
 python3 scripts/make-hero-art.py lia                   # render a hero from art/<hero>/<hero>.blend → <hero>.png/.json + portrait (lia|jeffs|anands, needs blender)
+python3 scripts/make-smoke-grenade-art.py              # render Jeffs' smoke canister model → its tumble strip smoke-grenade.png
+python3 scripts/cut-turnaround.py <board> <out-dir>    # split a Gemini T-pose turnaround into Tripo multi-view inputs
 tsx scripts/art-probe.ts --hero=jeffs                 # a rendered hero's clips are what gets drawn: zero placeholder fallbacks, the gun tracks the aim
 ```
 

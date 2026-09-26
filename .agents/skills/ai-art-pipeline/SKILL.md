@@ -23,7 +23,8 @@ flat:
 | A hero (walk, attacks, hits, aim bands) | **3D**: this whole pipeline |
 | A new clip for a hero who is already rigged | pose it in Blender (`anands_clips.py`-style) — no new generation |
 | An ultimate's screen-filling effect (the dragon ride) | a **board**, cut flat (`make-anands-art.py`) |
-| Props, pickups, effects, UI, portraits-as-art | a board or code-drawn (`render/`), never 3D |
+| Props, pickups, effects, UI, portraits-as-art | a board or code-drawn (`render/`) |
+| A thrown prop that tumbles (Jeffs' smoke canister) | a **small procedural model** rendered as a flip strip (`smoke_grenade.py`) — every frame of its flight is a new angle; no generator needed |
 | A one-off illustration (menu, ceremony) | a board or `make-potg-art.py`-style generation |
 
 When in doubt, ask whether the thing will ever be drawn from a second angle or
@@ -65,8 +66,30 @@ gates: scale contract · heroAtlas.test.ts · art-probe --hero=<hero> · diagnos
   there: scroll to it and use the response's **"Download full size image"**
   button (find it by `aria-label` from `javascript_tool`).
 - Reaction/pose boards are useful as *pose references* even when off-model.
+- **A failed generation is an empty box that never loads** (the image URL
+  404s; "Copy image" copies nothing). Reloading does not help — press the
+  response's **Redo** (`aria-label="Redo"`) and wait another 2–3 minutes.
+- Check every view of a turnaround before spending Tripo credits, **and show
+  it to the user first**. Jeffs' first turnaround went straight to Tripo and
+  came back a realistic, skinny adult — "it looks horrible"; 60 credits gone.
+- **Ask for the board's proportions in words**: "the same chunky proportions
+  as those sprites — a big head (about a quarter of his height), broad
+  shoulders, thick arms and legs, big hands and boots. Not realistic, not
+  slender." Left unsaid, a turnaround drifts realistic.
+- **Prefer an A-pose to a T-pose.** In a true side view a T-pose arm points
+  at the camera and vanishes; Gemini "fixes" that by drawing the arms
+  sticking forward and back in profile, which no 3D body can do. An A-pose
+  (arms 45° down) is visible from the side and consistent in 3D.
+- Gemini often draws **both side views facing the same way**:
+  `cut-turnaround.py --mirror-side` mirrors one instead of spending prompts.
 
 ## 2. Cut the boards cleanly
+
+A T-pose turnaround on white needs no flood fill: `python3
+scripts/cut-turnaround.py <board> art/<hero>/reference` splits the four
+views, squares them at one scale and writes the de-pixelated
+`tpose-*-smooth.png` generator inputs.
+
 
 `scripts/make-anands-art.py` is the reference: **flood the board away from the
 crop's edge** under a tight tolerance so her outline stops the fill (keying the
@@ -83,6 +106,11 @@ plan — the UI may be in Portuguese).
   Direita / Verso*. Left = the view facing screen-left, Right = facing
   screen-right. **The third icon is batch** ("Imagens em lote"): one *paid*
   generation per image — never use it for a turnaround.
+- **Esquerda gets the view facing screen-LEFT, Direita the one facing
+  screen-right.** Jeffs' first run had them the other way and came back
+  Janus-faced (the texture's face on the geometry's back of the head); his
+  second, with this mapping, came back clean. After import, render the head
+  from +X and −X: two faces means the slots were swapped.
 - Settings that matter: H3.1 max quality, **Quad topology, ~30k faces** (the
   default 2,000,000 triangles is useless for a sprite), 4K texture, "remove
   lighting" on. That run costs **60 credits**; confirm before spending.
@@ -107,7 +135,9 @@ Claude Code must restart to see the tools). `execute_blender_code` runs in the
 live GUI — **save the .blend before every render**: `make-hero-art.py` renders
 the file on disk, and forgetting cost two renders of stale work.
 
-The modules, all `scripts/blender/anands_*.py`, are templates for the next hero:
+The modules, `scripts/blender/anands_*.py` and `jeffs_*.py`, are templates
+for the next hero (`anands_rig.rig` takes the mesh, bones and landmarks as
+arguments; Jeffs' modules call it and `anands_look`'s helpers):
 
 - **Import** (see `anands_rig.py` notes): bake the GLB's transforms, scale to
   3 m, turn to face +X, and **merge by distance (0.0005)** — the importer
@@ -135,6 +165,27 @@ The modules, all `scripts/blender/anands_*.py`, are templates for the next hero:
   moves posed from the boards' key frames. A presentation-only clip (the item
   `throw`) needs a `ClipName`, a `POSE_BY_CLIP` entry and a trigger in the
   animation system — gate it on `ownClip` so other heroes are unaffected.
+
+### When the texture cannot tell the parts apart (Jeffs)
+
+A hero dressed in one dark colour gets a texture where coat, shirt, trousers
+and boots are the same grey (Jeffs: 12 of 14 k-means clusters between
+luminance 20 and 65). Let the texture decide only what differs in *colour*
+(skin, grey vs black hair) and **classify the clothes by geometry and bone
+weights** (`jeffs_look.classify`).
+
+- **Bone-capsule normals** beat smoothed normals on deep generated folds:
+  each vertex's normal points away from its weighted bones' axis lines, so the
+  shade band runs down the far side of each limb like a primitive's. Smoothing
+  a copy 40 or 160 times changed nothing — a smoothed fold is still a fold.
+- Rescaling a wrong-proportioned mesh in the rest pose (head ×1.25, body
+  ×1.1) was tried on Jeffs' first mesh and did not save it — fix the
+  proportions in the board instead.
+- **Cap the reach factor** when carrying Lia's grips to a long-armed hero
+  (`jeffs_clips.rebase`, ≤1.3): at the full arm ratio his fist covered his
+  face in the portrait. A hero whose shoulder sits higher than Lia's needs
+  his own grips for her raised-sword poses (block, portrait) — the scale
+  contract catches the block.
 
 ## 5. Render, pack, gate
 

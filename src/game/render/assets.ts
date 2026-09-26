@@ -86,7 +86,11 @@ export const TEX = {
 	trap: "fx_trap",
 	/** Lia's HE grenade — see `createItemTextures`. */
 	heGrenade: "fx_he_grenade",
-	/** Jeffs' smoke canister — see `createItemTextures`. */
+	/**
+	 * Jeffs' smoke canister: a strip of one end-over-end flip, rendered from
+	 * its 3D model (`scripts/make-smoke-grenade-art.py`). See
+	 * `smokeGrenadeFrames`.
+	 */
 	smokeGrenade: "fx_smoke_grenade",
 	/**
 	 * The smoke cloud's puff: a soft radial haze, baked white so a tint
@@ -120,6 +124,10 @@ export type HeroPose =
 /** Every hero's nine-frame strip, keyed by the hero's sheet name. */
 const FRAME_SETS: Record<string, Texture[]> = {};
 
+/** The smoke canister's strip: `make-smoke-grenade-art.py`'s FRAMES x CELL. */
+const SMOKE_GRENADE_FRAMES = 16;
+const SMOKE_GRENADE_CELL = 32;
+
 /** Every hero's roll strip. */
 const ROLL_SETS: Record<string, Texture[]> = {};
 
@@ -133,6 +141,7 @@ const ROLL_SETS: Record<string, Texture[]> = {};
  */
 const SHEET_CELLS: Record<string, SheetCell> = {
 	[TEX["anands-dragon"]]: { w: 352, h: 176 },
+	[TEX.smokeGrenade]: { w: SMOKE_GRENADE_CELL, h: SMOKE_GRENADE_CELL },
 };
 
 /**
@@ -246,6 +255,15 @@ export function heroFrames(sheet: string): Texture[] {
 	return FRAME_SETS[sheet] ?? FRAME_SETS[TEX.lia] ?? [];
 }
 
+/**
+ * The smoke canister's tumble: `SMOKE_GRENADE_FRAMES` cells of one flip,
+ * thrown to the right (the top goes forward). Mirror it for a throw to the
+ * left.
+ */
+export function smokeGrenadeFrames(): Texture[] {
+	return FRAME_SETS[TEX.smokeGrenade] ?? [];
+}
+
 /** A hero's roll strip. */
 export function heroRollFrames(sheet: string): Texture[] {
 	return ROLL_SETS[sheet] ?? [];
@@ -325,6 +343,7 @@ let manifestRegistered = false;
 export async function loadAssets(): Promise<void> {
 	const sources: Record<string, string> = {
 		[TEX["anands-dragon"]]: "assets/anands-dragon.png",
+		[TEX.smokeGrenade]: "assets/smoke-grenade.png",
 		[TEX.fireball]: "assets/fireball.png",
 		[TEX.platform]: "assets/platform.png",
 		[TEX.sky]: "assets/sky.png",
@@ -349,6 +368,11 @@ export async function loadAssets(): Promise<void> {
 	// The dragon-thrust ride: six big cells of the ultimate's own art. Not a
 	// hero strip — the ride clip indexes it directly (see `HERO_CLIPS`).
 	FRAME_SETS[TEX["anands-dragon"]] = sliceStrip(TEX["anands-dragon"], 6);
+	// The smoke canister's flip: one full end-over-end turn through depth.
+	FRAME_SETS[TEX.smokeGrenade] = sliceStrip(
+		TEX.smokeGrenade,
+		SMOKE_GRENADE_FRAMES,
+	);
 
 	// Sheets shipped from the sprite workshop: one strip, sliced by its own
 	// JSON instead of by a hand-kept table. The strips are uniform grids, so
@@ -839,21 +863,6 @@ function createItemTextures(renderer: Renderer): void {
 	he.circle(16, 18, 11).stroke({ width: 1.5, color: 0x2a2f1a, alpha: 0.9 });
 	he.rect(14, 2, 4, 5).fill(0xd9b86a);
 	bake(renderer, TEX.heGrenade, he);
-
-	// ---- the smoke canister ----
-	//
-	// A stubby steel cylinder with a crimped top — a *canister*, not a ball:
-	// the smoke is thrown to land, and the shape says so. White steel so the
-	// body can be team-tinted in flight like the HE.
-	const smokeCan = new Graphics();
-	smokeCan.rect(7, 9, 18, 16).fill({ color: 0xffffff, alpha: 0.25 });
-	smokeCan.rect(8, 10, 16, 14).fill({ color: 0xb8bec6, alpha: 0.95 });
-	smokeCan
-		.rect(8, 10, 16, 14)
-		.stroke({ width: 1.5, color: 0x2a2f33, alpha: 0.9 });
-	smokeCan.rect(10, 5, 12, 5).fill(0x8d959c);
-	smokeCan.rect(10, 5, 12, 2).fill(0x5d646b);
-	bake(renderer, TEX.smokeGrenade, smokeCan);
 
 	// ---- the smoke puff ----
 	//

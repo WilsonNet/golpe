@@ -6,10 +6,15 @@ is the closest weapon in the game — lethal at touch, useless at range — and 
 smoke grenade is what lets him decide the distance. He is the sword's oldest
 trick — the blade — in the coat of a hired gun.
 
-The visual reference is a middle-aged man with a fancy trench coat: greying
-slicked-back hair, a weathered face, a dark charcoal coat with gold buttons, a
-white shirt and a red tie, the collar up. He is drawn from a Blender model
-(`art/jeffs/jeffs.blend`) on the same rig and clips as Lia — see
+The visual reference is his Gemini board (`unprocessed-sprites/jeffs-actions.jpeg`,
+and the A-pose turnaround `jeffs-apose-v3.jpeg`): a chunky middle-aged man in a long
+dark charcoal trench coat to the knee, the collar up, a black shirt, dark
+trousers and black boots, short salt-and-pepper hair (black, grey at the
+temples and in streaks), stubble — and a **katana**. The katana is the look
+of *the sword*, not a new weapon: its reach and frame data are the sword's.
+His shotgun is drawn **big** — the thickest arms in the game carry the biggest
+gun. He is drawn from a Blender model (`art/jeffs/jeffs.blend` — a Tripo mesh
+of that turnaround on the same rig and clips as Lia) — see
 [heroes.md](heroes.md#the-art) and `art/README.md`.
 
 ## The sword (melee stance)
