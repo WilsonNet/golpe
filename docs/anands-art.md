@@ -1,6 +1,8 @@
 # Anands' art — the plan (start here)
 
-**Status (2026-09-24): not started. This is the brief for the next session.**
+**Status (2026-09-26): steps 1-2 done for her body — measured, and the keying
+bug fixed (holes 21.4% → 1.0%). Native grid recovery and new boards are open;
+see "Progress" at the end.**
 Lia and Jeffs moved to Blender renders (`art/README.md`). Anands goes to
 Blender too, but **not as-is**: her hand-drawn boards are the look the whole
 project is chasing, and Lia's and Jeffs' procedural models are basic next to
@@ -146,6 +148,50 @@ cut cleanly from the boards, and the portrait stays board-based.
 4. In parallel, build the template `art/anands/anands.blend` for the user's
    handmade model.
 
+## Board prompts (write here before generating)
+
+The originals came from one Gemini conversation (image model "Nano Banana"),
+in this order — the wording that got the look, paraphrased from the user's turns:
+
+1. "a pixel art sprite sheet from a character inspired by Lucca from Chrono Trigger"
+2. she uses a machine gun and a dagger; a dagger shoryuken; a thrust she
+   anticipates by holding the dagger the opposite way; an ultimate where she
+   becomes a dragon like Hanzo's (Overwatch) and thrusts with the dagger while
+   flying over the map
+3. the dragon is Chinese and made of energy, like Dragon Ball Z ki; her body
+   stays fully horizontal, the blade pointing forward; no parry; she has a
+   jungle animal trap she throws in front of her
+4. one sheet per action: the ultimate, from neutral or running into the
+   flying spectral dragon (→ `anands-ultimate.jpeg`)
+5. walking, running, idle (→ `anands-running.jpeg`)
+6. 360° aiming → it came back top-down, then as a dark-background 16-direction
+   sheet with tiny figures. **Off-style — do not use.** Lesson: the board must
+   be *given* the layout (beige panels, gold grid, left-hand row labels) and
+   the side view every time, or the model drifts.
+
+Every new board is asked for in the **same conversation** (character memory),
+with `anands-running.jpeg` attached as the style reference, and this template:
+
+> Using the exact same character, pixel art style, palette and board layout as
+> the attached sprite sheet — beige panels, pale-gold grid lines, row labels in
+> the left column, SNES Chrono Trigger style, flat colours with a dark outline,
+> side view like a 2D platformer, her face turned toward the viewer — make a new
+> sprite sheet of her facing right with these rows: {ROWS}. Every frame is her
+> full body at the same size as in the reference, with clear empty space between
+> frames and nothing overlapping. {WEAPON}
+
+`{WEAPON}` for melee rows: "She holds her dagger visibly in her hand in every
+frame." For gun rows: "She holds her machine gun in both hands."
+
+Planned boards, in priority order:
+
+| Board | {ROWS} |
+|---|---|
+| `anands-reactions` | 1) hit from the front: flinch, stagger back (2 frames each). 2) launched: knocked up into the air, body tilted back, falling (4 frames). 3) knocked down: lying flat on her back on the floor, getting up (3 frames). 4) helpless: dizzy, swaying on her feet (2 frames) |
+| `anands-air` | 1) jump: crouch, take-off, rising, apex, falling, landing (6 frames). 2) double jump: a flip in the air (4 frames). 3) dodge roll: a forward somersault along the ground (6 frames) |
+| `anands-gun` | aiming the machine gun, side view, standing: straight up, 60° up, 30° up, level, 30° down, 60° down, straight down (7 frames), then the same while firing with a muzzle flash |
+| `anands-trap` | 1) throwing the jungle animal trap forward underhand (4 frames). 2) the trap alone: closed, open on the floor, snapped shut (3 frames) |
+
 ## Constraints
 
 - **Her drawn frames stay authoritative until the gate says otherwise.**
@@ -234,3 +280,64 @@ cut cleanly from the boards, and the portrait stays board-based.
   (`sheetDrawsBlade`). Every stab, thrust and shoryuken frame then needs the
   dagger drawn at the right angle, so board prompts for her moves should ask
   for the dagger visible in hand.
+
+## Progress
+
+### 2026-09-26 — measure, and the flood-fill extraction
+
+`python3 scripts/make-anands-art.py --measure` measures the shipped
+`anands.png` per cell (holes, debris, top/feet, colours). Before → after the
+new `extract`:
+
+| | holes | debris | colours/cell | feet off ground |
+|---|---|---|---|---|
+| colour keying | 21.4% | 172 px | 2713 | 0 |
+| flood fill + palette | **1.0%** | **40 px** | **≤56** | 0 |
+
+The 1% left is the real gap under an arm or between the legs (shoryuken
+cells); the debris left is legitimate separate pieces (casings, the slash arc)
+plus a floor-line crumb under a few misc-board feet (to do).
+
+What the extraction does, and what each step was fixing:
+
+- **Flood from the crop's edge under a tight tolerance (18)**, over the ring's
+  tones *and* every tone covering 2%+ of the board — a panel that happens not
+  to touch the crop ring is still board. Her outline stops the fill.
+- **`MAP_TONES` are not used on her body**: tolerance 42 around three browns
+  deleted her skin, scarf and shirt everywhere.
+- **Grid lines are stripped only as runs walking in from the crop edge**: a
+  line row matched by colour alone cut through her face (skin sits within the
+  line gold's tolerance).
+- **Enclosed pockets are board only if light** (the gap between her legs); a
+  dark pocket is a trouser leg or the gun, never a charcoal cell.
+- **The JPEG halo** is eaten by growing the board only into pixels nearer a
+  board tone than to her palette; a 2x2 opening drops 1px line crumbs; a
+  separate piece outside the measured rect is the neighbour's (muzzle flash).
+- **Palette snap**: k-means (48) with saturated pixels oversampled, plus 8
+  accent clusters of the worst-fitted pixels — without them the teal lenses had
+  no colour and snapped to grey.
+- **One scale per board** (`BOARD_REFERENCE` stands `CHAR_H` tall): the old
+  normaliser stretched every crouch and lunge to standing height.
+
+The dragon ride still uses the keyed extractor (`extract_keyed`): its energy is
+translucent over the panel, with no outline for a flood to stop at.
+
+**Native grid recovery: not done, measured.** The boards' "pixel" is ~2.3-2.5
+board px and irregular (AI art). Mode-sampling on a fixed pitch to ~46 native
+px broke her outline and lost her face — worse than board resolution. The
+`proper-pixel-art` tool's auto mesh found the board's grid lines, not her
+pixels (a 3x5 output); with `-w 3` it gave a clean ~76px-tall figure with face
+and colours intact. That is the lead for the crisp step, not yet wired in.
+
+### 2026-09-26 — first new board attempt (Gemini)
+
+The account's Gemini is **3.5 Flash-Lite** (free tier, "Upgrade" shown), with
+Create image. The `anands-reactions` prompt above gave a board in the right
+layout (beige, gold grid, left labels, named frames) but **off-model**: olive
+goggles instead of teal, a muddier palette, smaller figures, and reactions
+that barely react (the hit frames just stand; "prone" is face-down). A retry
+with the palette spelled out and High thinking came back as an empty image
+(Gemini image generation was unstable that day, per the user — not a quota).
+The first board is saved as `unprocessed-sprites/anands-reactions-draft1.jpeg`:
+a draft, not cut into the game. The originals were likely made with a stronger image model —
+worth checking which one before spending more prompts.

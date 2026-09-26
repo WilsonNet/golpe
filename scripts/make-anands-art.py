@@ -5,12 +5,11 @@ Compose Anands' shipped sprite sheets from the hand-drawn reference boards.
 The artist's boards (`unprocessed-sprites/anands-running.jpeg`,
 `anands-ultimate.jpeg`, `anands-misc.jpeg`) are *paintings*, not production
 atlases: characters spill over their panels, text labels sit on the canvas,
-and the beige background is a baked-in colour. This script removes the board
-by colour (three tone families, each with its own tolerance: the beige
-panels, the charcoal cell frames, the pale-gold grid lines), keeps only the
-connected components that belong to the character, and normalises every frame
-to a uniform standing height so the fighter reads the same size in every
-stance.
+and the beige background is a baked-in colour. This script floods the board
+away from outside each figure (so her own pixels survive whatever their
+colour — see `extract`), keeps only the components that belong to the
+character, snaps the JPEG noise to her palette, and scales each board once so
+she stands the same height on every board.
 
 The game's layout rules are per-hero — Anands is the hero whose sheets were
 replaced by this art, and she gets her own cell geometry and her own clip
@@ -33,11 +32,16 @@ hand-picked by cell rect measured against the board; the frames that are not
 used (victory, sleep, the map illustration, the contextual idles) are left in
 `unprocessed-sprites/` for the artist.
 
-Usage: python3 scripts/make-anands-art.py
+Usage: python3 scripts/make-anands-art.py            # cut the boards
+       python3 scripts/make-anands-art.py --measure  # measure the shipped strip
 """
 
 from PIL import Image
+from scipy import ndimage
+from scipy.cluster.vq import kmeans2
+import numpy as np
 import os
+import sys
 
 SRC = "unprocessed-sprites"
 OUT = "public/assets"
@@ -217,9 +221,12 @@ def keep_character_components(rgba, comps):
     return rgba
 
 
-def extract(sheet, rect):
-    """Cut one frame out of a board: crop, key the board's tones, drop the
-    labels and specks, return the content-cropped transparent frame."""
+def extract_keyed(sheet, rect):
+    """Cut one frame out of a board by keying the board's tones anywhere in
+    the crop. Only the dragon ride still uses it: its energy is translucent
+    over the panel, so there is no outline for a flood fill to stop at. On
+    her body it deleted 21% of the silhouette (skin, shirt and lenses sit
+    close to the board's beige) — see `extract`."""
     src = Image.open(f"{SRC}/anands-{sheet}.jpeg").convert("RGB")
     m = MARGIN[sheet]
     x0, y0, x1, y1 = rect
@@ -249,6 +256,227 @@ def extract(sheet, rect):
     return rgba.crop(bbox)
 
 
+# ---------------------------------------------------------------------------
+# Board removal for her body: a flood fill from outside the figure.
+#
+# Keying the board's colour anywhere in the crop deleted everything of hers
+# that shares a tone with it — skin, shirt, goggle lenses — 21% of her
+# silhouette on average. The board is instead removed only where it is
+# *connected to the crop's edge*, under a tight tolerance, so her dark outline
+# stops the fill and every interior pixel survives whatever its colour.
+# ---------------------------------------------------------------------------
+
+EIGHT = np.ones((3, 3), bool)
+FLOOD_TOL = 18          # max channel distance from a board tone
+LINE_TOL = 44           # the pale-gold grid lines, blurred by the JPEG
+POCKET_MIN = 30         # an enclosed pocket of panel this big is board
+_BOARD_TONES: dict[str, list[tuple[int, int, int]]] = {}
+
+
+def board_tones(sheet):
+    """Every colour bin covering 2%+ of the whole board: its panels, its
+    charcoal cells and their JPEG shades. None of her colours covers that much
+    of a board, and a panel that happens not to touch a crop's edge ring is
+    still known."""
+    if sheet not in _BOARD_TONES:
+        a = np.asarray(Image.open(f"{SRC}/anands-{sheet}.jpeg").convert("RGB"), int)
+        q = (a // 12) * 12 + 6
+        keys, cnt = np.unique(q.reshape(-1, 3), axis=0, return_counts=True)
+        total = q.shape[0] * q.shape[1]
+        _BOARD_TONES[sheet] = [
+            tuple(int(v) for v in keys[i]) for i in np.argsort(-cnt) if cnt[i] / total > 0.02
+        ]
+    return _BOARD_TONES[sheet]
+
+
+def near(rgb, colours, tol):
+    out = np.zeros(rgb.shape[:2], bool)
+    for c in colours:
+        out |= np.abs(rgb - np.array(c)).max(-1) < tol
+    return out
+
+
+def strip_grid_lines(rgb, like):
+    """The board's grid lines run behind her and join her to the crop's edge.
+    A row or column that is line-coloured across a third of the crop is a
+    line; its pixels are board only along the runs walking in from each edge,
+    which stop at her outline — a line behind her face never cuts through
+    skin that shares its tone."""
+    walk = near(rgb, PALE_LINE + [(150, 130, 100)], LINE_TOL) | like
+    strict = near(rgb, PALE_LINE, 30)
+    h, w = like.shape
+
+    def runs(n, ok, put):
+        for i in range(n):
+            if not ok(i):
+                break
+            put(i)
+        for i in range(n - 1, -1, -1):
+            if not ok(i):
+                break
+            put(i)
+
+    for r in np.where(strict.mean(1) > 0.35)[0]:
+        for rr in range(max(0, r - 1), min(h, r + 2)):
+            runs(w, lambda i: walk[rr, i], lambda i: like.__setitem__((rr, i), True))
+    for c in np.where(strict.mean(0) > 0.35)[0]:
+        for cc in range(max(0, c - 1), min(w, c + 2)):
+            runs(h, lambda i: walk[i, cc], lambda i: like.__setitem__((i, cc), True))
+
+
+def board_outside(rgb, tones):
+    """The board: tone-matched pixels connected to the crop's edge, plus big
+    enclosed pockets of *light* panel (the gap between her legs). A dark
+    pocket inside her is a trouser leg or the gun, never a charcoal cell."""
+    like = near(rgb, tones, FLOOD_TOL)
+    strip_grid_lines(rgb, like)
+    lab, n = ndimage.label(like)
+    edge = np.unique(np.concatenate([lab[0], lab[-1], lab[:, 0], lab[:, -1]]))
+    bg = np.isin(lab, edge[edge > 0])
+    for i in range(1, n + 1):
+        pocket = lab == i
+        if not bg[pocket].any() and pocket.sum() >= POCKET_MIN and rgb[pocket].mean() > 110:
+            bg |= pocket
+    return bg
+
+
+def eat_halo(rgb, bg, tones, palette, steps=3):
+    """The JPEG blends her outline into the panel over a pixel or two. Grow
+    the board into that ring, but only into pixels nearer a board tone than
+    any colour of hers."""
+    d_board = np.min([((rgb - np.array(t)) ** 2).sum(-1) for t in tones], axis=0)
+    d_her = np.min([((rgb - p) ** 2).sum(-1) for p in palette.astype(int)], axis=0)
+    eatable = d_board < d_her
+    for _ in range(steps):
+        grown = (ndimage.binary_dilation(bg, EIGHT) & eatable) | bg
+        if (grown == bg).all():
+            break
+        bg = grown
+    return bg
+
+
+def keep_figure(fig, inner):
+    """Her largest component, plus separate pieces (casings, a slash arc)
+    that sit near her, inside the measured rect and off the crop's edge. A
+    piece outside the rect is the neighbouring cell's muzzle flash or barrel,
+    reaching in through the margin. An opening first drops the one-pixel
+    crumbs of grid line that cling to her outline."""
+    fig = ndimage.binary_opening(fig, np.ones((2, 2), bool))
+    lab, n = ndimage.label(fig, EIGHT)
+    if n == 0:
+        return fig
+    sizes = ndimage.sum(fig, lab, range(1, n + 1))
+    main = int(np.argmax(sizes)) + 1
+    ys, xs = np.where(lab == main)
+    mx0, my0, mx1, my1 = xs.min() - 12, ys.min() - 12, xs.max() + 12, ys.max() + 12
+    ix0, iy0, ix1, iy1 = inner
+    keep = lab == main
+    h, w = fig.shape
+    for i, sl in enumerate(ndimage.find_objects(lab), 1):
+        if i == main or sizes[i - 1] < 20:
+            continue
+        y0, y1, x0, x1 = sl[0].start, sl[0].stop, sl[1].start, sl[1].stop
+        if y0 <= 1 or x0 <= 1 or y1 >= h - 1 or x1 >= w - 1:
+            continue
+        if x1 < mx0 or x0 > mx1 or y1 < my0 or y0 > my1:
+            continue
+        if x1 <= ix0 or x0 >= ix1 or y1 <= iy0 or y0 >= iy1:
+            continue
+        keep |= lab == i
+    return keep
+
+
+def crop_board(sheet, rect):
+    src = Image.open(f"{SRC}/anands-{sheet}.jpeg").convert("RGB")
+    m = MARGIN[sheet]
+    x0, y0, x1, y1 = rect
+    cx, cy = max(0, x0 - m), max(0, y0 - m)
+    crop = src.crop((cx, cy, min(src.width, x1 + m), min(src.height, y1 + m)))
+    return crop, (x0 - cx, y0 - cy, x1 - cx, y1 - cy)
+
+
+def figure_mask(sheet, rect, palette=None):
+    crop, inner = crop_board(sheet, rect)
+    rgb = np.asarray(crop, int)
+    tones = [c for c, _ in bg_candidates(crop)] + board_tones(sheet)
+    bg = board_outside(rgb, tones)
+    if palette is not None:
+        bg = eat_halo(rgb, bg, tones, palette)
+    return rgb, keep_figure(~bg, inner)
+
+
+# Her palette: the board's JPEG turns every flat fill into a few hundred
+# near-identical colours. K-means over the inside of every cut frame, with
+# saturated pixels oversampled so the small bright accents (the teal lenses,
+# the scarf) get colours of their own, then every pixel snaps to it.
+PALETTE_SIZE = 48
+ACCENTS = 8
+ACCENT_DIST = 40      # RGB distance past which a pixel is badly fitted
+_PALETTE = None
+
+
+def palette():
+    global _PALETTE
+    if _PALETTE is None:
+        px = []
+        for sheet in ("running", "misc"):
+            for rect in CELLS[sheet].values():
+                rgb, mask = figure_mask(sheet, rect)
+                px.append(rgb[ndimage.binary_erosion(mask)])
+        px = np.concatenate(px).astype(float)
+        sat = px.max(1) - px.min(1)
+        weight = np.where(sat > 60, 4.0, 1.0)
+        rng = np.random.default_rng(0)
+        pick = rng.choice(len(px), 80000, p=weight / weight.sum())
+        centres, _ = kmeans2(px[pick], PALETTE_SIZE, seed=1, minit="++")
+        # Accents: the teal lenses are a few dozen pixels a frame, too rare
+        # for any cluster of their own, and snapped to grey. Cluster the
+        # pixels the palette fits worst and add those colours too.
+        d = np.min([((px - c) ** 2).sum(-1) for c in centres], axis=0)
+        worst = px[d > ACCENT_DIST**2]
+        if len(worst) > ACCENTS * 20:
+            accents, _ = kmeans2(worst, ACCENTS, seed=1, minit="++")
+            centres = np.concatenate([centres, accents])
+        _PALETTE = np.clip(centres.round(), 0, 255).astype(np.uint8)
+    return _PALETTE
+
+
+def extract(sheet, rect):
+    """Cut one frame of her body out of a board: flood the board away from
+    outside, eat the JPEG halo, snap to her palette, and return the
+    content-cropped transparent frame at board resolution."""
+    pal = palette()
+    rgb, mask = figure_mask(sheet, rect, pal)
+    ys, xs = np.where(mask)
+    if len(ys) == 0:
+        raise SystemExit(f"empty frame: {sheet} {rect}")
+    rgb = rgb[ys.min() : ys.max() + 1, xs.min() : xs.max() + 1]
+    mask = mask[ys.min() : ys.max() + 1, xs.min() : xs.max() + 1]
+    d = ((rgb[..., None, :] - pal[None, None].astype(int)) ** 2).sum(-1)
+    out = np.zeros(rgb.shape[:2] + (4,), np.uint8)
+    out[..., :3] = pal[d.argmin(-1)]
+    out[..., 3] = np.where(mask, 255, 0)
+    frame = Image.fromarray(out)
+    k = board_scale(sheet)
+    return frame.resize((max(1, round(frame.width * k)), max(1, round(frame.height * k))), Image.NEAREST)
+
+
+# One scale per board, so she is the same size in every frame of it: the
+# board's standing reference frame stands CHAR_H tall and every other frame
+# keeps its drawn height relative to it. Scaling each frame to CHAR_H
+# stretched every crouch, lunge and stagger up to standing height.
+BOARD_REFERENCE = {"running": "idle_front", "misc": "gun3"}
+_BOARD_SCALE: dict[str, float] = {}
+
+
+def board_scale(sheet):
+    if sheet not in _BOARD_SCALE:
+        _, mask = figure_mask(sheet, CELLS[sheet][BOARD_REFERENCE[sheet]], palette())
+        ys = np.where(mask.any(1))[0]
+        _BOARD_SCALE[sheet] = CHAR_H / (ys[-1] - ys[0] + 1)
+    return _BOARD_SCALE[sheet]
+
+
 def mirrored(frame):
     return frame.transpose(Image.FLIP_LEFT_RIGHT)
 
@@ -267,14 +495,14 @@ PORTRAIT_W, PORTRAIT_H = 128, 192
 
 
 def normalise(frame):
-    """Scale a frame to the standard standing height, preserving aspect, and
-    place it bottom-aligned and centre-horizontally in the standard cell."""
-    scale = CHAR_H / frame.height
-    scaled = frame.resize(
-        (max(1, round(frame.width * scale)), CHAR_H), Image.NEAREST
-    )
+    """Place a frame (already at its board's scale — see `board_scale`)
+    bottom-aligned and centre-horizontally in the standard cell. A frame
+    wider or taller than the cell is shrunk to fit, never cropped."""
+    fit = min(1.0, CELL_W / frame.width, GROUND_LINE / frame.height)
+    if fit < 1.0:
+        frame = frame.resize((round(frame.width * fit), round(frame.height * fit)), Image.NEAREST)
     cell = Image.new("RGBA", (CELL_W, CELL_H), (0, 0, 0, 0))
-    cell.alpha_composite(scaled, ((CELL_W - scaled.width) // 2, GROUND_LINE - CHAR_H))
+    cell.alpha_composite(frame, ((CELL_W - frame.width) // 2, GROUND_LINE - frame.height))
     return cell
 
 
@@ -371,7 +599,7 @@ def build_dragon_strip():
     """The ride: the ultimate's own art, lunge into the dragon then the
     flight. Six frames, drawn big — the dragon is a screen-filling event."""
     order = ["attack4", "attack6", "fly2", "fly3", "fly4", "fly5"]
-    frames = [extract("ultimate", CELLS["ultimate"][n]) for n in order]
+    frames = [extract_keyed("ultimate", CELLS["ultimate"][n]) for n in order]
     img = Image.new("RGBA", (DRAGON_CELL_W * len(frames), DRAGON_CELL_H), (0, 0, 0, 0))
     for i, f in enumerate(frames):
         cell = Image.new("RGBA", (DRAGON_CELL_W, DRAGON_CELL_H), (0, 0, 0, 0))
@@ -396,7 +624,41 @@ def build_portrait():
     print(f"wrote {OUT}/anands-portrait.png ({img.width}x{img.height})")
 
 
+def measure(path=f"{OUT}/anands.png", cell_w=CELL_W):
+    """The extraction, measured on the shipped strip, per cell:
+
+    - holes: transparent area fully enclosed by her silhouette, as a share of
+      it. Keying the board by colour left 21% (the skin-looks-wrong bug); a
+      clean cut leaves only the real gaps between an arm and her body.
+    - debris: opaque pixels outside her main component (casings, a slash arc
+      and a muzzle flash are legitimately separate; board crumbs are not).
+    - top / feet: the figure's extent; the feet must sit on GROUND_LINE.
+    - colours: distinct colours — the JPEG left thousands, the palette snap
+      leaves at most PALETTE_SIZE + ACCENTS.
+    """
+    im = np.asarray(Image.open(path).convert("RGBA"))
+    rows = []
+    for i in range(im.shape[1] // cell_w):
+        c = im[:, i * cell_w : (i + 1) * cell_w]
+        m = c[..., 3] > 40
+        filled = ndimage.binary_fill_holes(m)
+        holes = (filled & ~m).sum() / filled.sum()
+        lab, n = ndimage.label(m, EIGHT)
+        debris = int(m.sum() - ndimage.sum(m, lab, range(1, n + 1)).max())
+        ys = np.where(m.any(1))[0]
+        colours = len(np.unique(c[..., :3][m].reshape(-1, 3), axis=0))
+        rows.append((holes, debris, ys[0], ys[-1], colours))
+        print(f"  cell {i:2d} holes {holes * 100:5.1f}%  debris {debris:4d}px  top {ys[0]:3d}  feet {ys[-1]:3d}  colours {colours}")
+    print(
+        f"  MEAN holes {np.mean([r[0] for r in rows]) * 100:.1f}%  debris {np.mean([r[1] for r in rows]):.0f}px"
+        f"  colours {np.mean([r[4] for r in rows]):.0f}  feet off the ground line: {sum(r[3] != GROUND_LINE - 1 for r in rows)}"
+    )
+
+
 if __name__ == "__main__":
+    if "--measure" in sys.argv:
+        measure()
+        sys.exit(0)
     build_character_strip()
     build_roll_strip()
     build_dragon_strip()
