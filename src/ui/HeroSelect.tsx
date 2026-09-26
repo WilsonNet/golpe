@@ -18,7 +18,7 @@ import { HUD_CSS } from "./hudStyles";
  * card: the hero's own portrait, rendered from the same source as their
  * sprites — `lia-portrait.png` and `jeffs-portrait.png` by
  * `scripts/make-hero-art.py` (their Blender models at 4x the sprite
- * density), `anands-portrait.png` cut from her hand-drawn boards.
+ * density) — Anands' too, with her boards' palette snapped back on.
  */
 export const HERO_SPRITE_CSS = `
 .hp-sprite {
@@ -29,10 +29,7 @@ export const HERO_SPRITE_CSS = `
 	background-repeat: no-repeat;
 }
 .hp-sprite-lia { background-image: url("assets/lia-portrait.png"); }
-.hp-sprite-anands {
-	background-image: url("assets/anands-portrait.png");
-	image-rendering: pixelated;
-}
+.hp-sprite-anands { background-image: url("assets/anands-portrait.png"); }
 .hp-sprite-jeffs { background-image: url("assets/jeffs-portrait.png"); }
 `;
 

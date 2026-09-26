@@ -40,7 +40,7 @@ interface Meta {
 }
 
 /** The heroes whose art is a packed sheet rendered from Blender. */
-const RENDERED_HEROES = ["lia", "jeffs"];
+const RENDERED_HEROES = ["lia", "jeffs", "anands"];
 
 function load(hero: string) {
 	const meta = JSON.parse(
@@ -51,8 +51,8 @@ function load(hero: string) {
 	return { meta, atlasW: png.readUInt32BE(16), atlasH: png.readUInt32BE(20) };
 }
 
-/** Every clip `animationSystem` can pick for a sword-and-gun hero. */
-const REQUIRED = [
+/** Every clip `animationSystem` can pick for any hero. */
+const REQUIRED_ALL = [
 	"right",
 	"left",
 	"right-idle",
@@ -62,26 +62,6 @@ const REQUIRED = [
 	"jump-left",
 	"fall",
 	"fall-left",
-	"block",
-	"block-left",
-	"charge",
-	"charge-left",
-	"charge-walk",
-	"charge-walk-left",
-	"slash",
-	"slash-left",
-	"slash2",
-	"slash2-left",
-	"slash3",
-	"slash3-left",
-	"uppercut",
-	"uppercut-left",
-	"slam",
-	"slam-left",
-	"plunge",
-	"plunge-left",
-	"stuck",
-	"stuck-left",
 	"gun-hold",
 	"gun-hold-left",
 	"gun-fire",
@@ -100,6 +80,33 @@ const REQUIRED = [
 	"launched-left",
 ];
 
+/** The melee weapon's own clips: the sword's cuts and states, the dagger's moves. */
+const REQUIRED_MELEE: Record<string, string[]> = {
+	sword: [
+		"block",
+		"charge",
+		"charge-walk",
+		"slash",
+		"slash2",
+		"slash3",
+		"uppercut",
+		"slam",
+		"plunge",
+		"stuck",
+	].flatMap((n) => [n, `${n}-left`]),
+	dagger: ["stab", "shoryuken", "thrust-windup", "thrust-dash"].flatMap((n) => [
+		n,
+		`${n}-left`,
+	]),
+};
+
+/** Which melee weapon each rendered hero's art draws. */
+const MELEE: Record<string, string> = {
+	lia: "sword",
+	jeffs: "sword",
+	anands: "dagger",
+};
+
 describe.each(RENDERED_HEROES)("%s's atlas", (hero) => {
 	const { meta, atlasW, atlasH } = load(hero);
 
@@ -116,7 +123,10 @@ describe.each(RENDERED_HEROES)("%s's atlas", (hero) => {
 		for (const name of Object.keys(meta.clips)) {
 			expect(isClipName(name), `unknown clip "${name}"`).toBe(true);
 		}
-		for (const name of REQUIRED) {
+		for (const name of [
+			...REQUIRED_ALL,
+			...(REQUIRED_MELEE[MELEE[hero] ?? ""] ?? []),
+		]) {
 			expect(
 				meta.clips[name]?.frames.length,
 				`missing clip "${name}"`,
@@ -124,12 +134,15 @@ describe.each(RENDERED_HEROES)("%s's atlas", (hero) => {
 		}
 	});
 
-	it("drives the sword's moves by their progress, not a clock", () => {
-		for (const name of ["slash", "slash2", "slash3", "uppercut", "slam"]) {
-			expect(meta.clips[name]?.drive).toBe("move");
-			expect(meta.clips[`${name}-left`]?.drive).toBe("move");
-		}
-	});
+	it.runIf(MELEE[hero] === "sword")(
+		"drives the sword's moves by their progress, not a clock",
+		() => {
+			for (const name of ["slash", "slash2", "slash3", "uppercut", "slam"]) {
+				expect(meta.clips[name]?.drive).toBe("move");
+				expect(meta.clips[`${name}-left`]?.drive).toBe("move");
+			}
+		},
+	);
 
 	it("splits the rifle clips into aim bands the frames divide evenly", () => {
 		// The rifle follows the aim: each gun clip is `bands` equal runs, one

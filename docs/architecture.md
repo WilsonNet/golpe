@@ -120,8 +120,7 @@ scripts/          diagnose.ts (Playwright harness), deathmatch-probe.ts (sixteen
                   aim and the phone deck), training-probe.ts (one interaction at
                   a time), potg-probe.ts (the end-of-match ceremony — the only
                   thing that reads past the final whistle), make-anands-art.py
-                  (composes the second hero's hand-drawn art into the shipped
-                  sheets), make-potg-art.py
+                  (cuts Anands' dragon ride from her boards), make-potg-art.py
                   (generates the ceremony's sunburst and medal),
                   dev-herdr.ts, probe-online.ts, verify-modes.ts
 specs/            the source of truth for intended behaviour

@@ -173,10 +173,9 @@ export const ULTIMATE_CSS = `
 		hue-rotate(var(--vu-hue, 0deg));
 	animation: vu-sprite-in 380ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
-/* Anands' own portrait, cut from her hand-drawn art by
-   scripts/make-anands-art.py: her face-on frame at the card's native size,
-   so the cell-index maths of the generated strips does not apply to her. The
-   hue rotation still applies for a *second* Anands. */
+/* Anands' portrait, rendered from art/anands/anands.blend at 4x the sprite
+   density by scripts/make-hero-art.py like the others — the same whole-card
+   crop. The hue rotation still applies for a *second* Anands. */
 .vu-sprite-anands {
 	background-image: url("assets/anands-portrait.png");
 	background-size: 128px 192px;

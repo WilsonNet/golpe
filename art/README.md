@@ -14,7 +14,7 @@ python3 scripts/make-hero-art.py lia    # render + pack → public/assets/lia.{p
 |---|---|---|---|
 | Lia | `art/lia/lia.blend` | `scripts/blender/lia_build.py` | Toriyama chibi swordswoman: teal ponytail, circlet, crimson tunic, sword and rifle |
 | Jeffs | `art/jeffs/jeffs.blend` | `scripts/blender/jeffs_build.py` | the executioner: grey-templed slick hair, stubble, trench coat with tails, sword and pump shotgun |
-| Anands | hand-drawn boards (`unprocessed-sprites/`) | `scripts/make-anands-art.py` | **not rendered yet** — her boards are the reference this whole look chases. She moves to Blender through a better model (image-to-3D from her boards, or handmade), gated against the boards: [`docs/anands-art.md`](../docs/anands-art.md) |
+| Anands | `art/anands/anands.blend` | `scripts/blender/anands_rig.py` (rig) · `scripts/blender/anands_clips.py` (weapons, clips) | **the flagship** — her Tripo mesh from her Gemini boards, rendered unlit and snapped back to her boards' palette (`art/anands/palette.json`). See *Anands* below and [`docs/anands-art.md`](../docs/anands-art.md). |
 
 Every hero shares one skeleton, shader, camera and set of clip poses
 (`scripts/blender/sprite_rig.py`); a hero's build module is only their
@@ -120,3 +120,46 @@ truth once anyone has touched it.
 longer exists — keys live in `action.layers[].strips[].channelbags[].fcurves` —
 and switching the rig's action also needs `animation_data.action_slot =
 action.slots[0]`, or it plays nothing. Both scripts already do this.
+
+## Anands — the flagship
+
+Anands is built to a higher bar than Lia and Jeffs: her Gemini boards are the
+target. The work log is [`docs/anands-art.md`](../docs/anands-art.md).
+
+`art/anands/anands.blend`:
+
+| Collection | What it is |
+|---|---|
+| **Tripo** | **What ships.** `Anands.tripo` — her Tripo multi-view mesh (27.5k verts, textured from her boards, rendered as unlit emission), skinned to `Rig`: the shared bone names and IK at *her* joints. `Dagger` and `Gun` ride the `weapon` bone. Every `clip.*` action is hers. |
+| **Reference** | Her turnaround from the board's "Idle Stance (Full 360)" row (`art/anands/reference/`), as blueprints behind the model in orthographic views (face-on in Numpad 3, profile in Numpad 1). `BodyBox` is the collider; `Anands.hunyuan` (hidden) an early image-to-3D guide. Never renders. |
+| **Anands**, **Anands.parts** | The hand blockout from before the Tripo mesh (`scripts/blender/anands_model.py`) — kept as a fallback. Never renders. |
+
+Render and pack exactly like the others:
+
+```bash
+python3 scripts/make-hero-art.py anands      # → public/assets/anands.{png,json}, anands-portrait.png
+tsx scripts/art-probe.ts --hero=anands       # every clip drawn in a live match, zero fallbacks
+```
+
+What `make-hero-art.py` does for her and not for Lia and Jeffs: when
+`art/<hero>/palette.json` exists, each frame gets a saturation/contrast lift,
+is snapped to that palette, and gets an ink line on the darker side of every
+strong colour edge (`board_look`). A shrunken texture averages neighbouring
+colours into mud; the snap puts her board's flat fills back.
+
+The scripts that built the file (all run in the live Blender through the
+Blender MCP; the .blend is the source once edited):
+
+- `anands_rig.py` — `rig()`: her `Rig` and skin weights (merge the GLB's
+  UV-seam splits first — heat weighting fails on 1000+ islands — and
+  `heal_weightless` gives the ~300 weightless pack vertices their neighbour's
+  weights, or a knocked-down Anands grows a strand back to where she stood).
+- `anands_clips.py` — `build()`: the render scene, the unlit material, the
+  dagger and machine gun, and every clip: the shared ones plus her stab,
+  shoryuken, thrust wind-up and thrust dash.
+- `anands_model.py` — the blockout, and `compare()`: render front/side/back
+  for `scripts/anands-compare.py` (board | model, silhouette IoU).
+
+`unprocessed-sprites/anands-tpose.jpeg` is a T-pose turnaround from the same
+Gemini conversation, for a cleaner re-generation (a T-pose skins better under
+the arms).

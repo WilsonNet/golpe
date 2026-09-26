@@ -10,11 +10,10 @@ thrust being unblockable; and the ultimate is the thrust's full expression — a
 **dragon thrust** in any direction that nothing stops but an obstacle or a
 black hole.
 
-Luca from Chrono Trigger was the original visual reference; the sheet is now
-the artist's own hand-drawn art, composed into the game's sheets by
-`scripts/make-anands-art.py` from the reference boards in
-`unprocessed-sprites/`. Anands is the first hero whose sprites are not
-generated pixel art: purple hair and cap, teal goggles, olive green shirt,
+Luca from Chrono Trigger was the original visual reference; her look is the
+artist's Gemini-painted reference boards in `unprocessed-sprites/`, and her
+sprites are rendered from a Blender model of those boards
+(`art/anands/anands.blend`) — see *The art budget* below: purple hair and cap, teal goggles, olive green shirt,
 brown backpack, dark trousers and purple boots. Her sheets have their own
 cell geometry and her clip table is her own — see [the art budget](#the-art-budget).
 
@@ -220,31 +219,30 @@ never changes.
 
 ## The art budget
 
-Anands is the one hero whose art is hand-drawn. The artist paints reference
-boards (in `unprocessed-sprites/`); `scripts/make-anands-art.py` cuts the
-frames out of them — keying the boards' beige/charcoal/pale-gold tones,
-dropping the text labels, normalising every frame to one standing height —
-and composes the sheets the game ships:
+Anands is the flagship of the game's art: her boards (in
+`unprocessed-sprites/`, painted with Gemini) are the look every hero chases,
+and she gets a higher budget than the other heroes to keep it.
 
-| Sheet | Cells | Content |
-|---|---|---|
-| `anands.png` | 35 x 168x152 | 0-3 run right, 4 face-on, 5-8 run left (mirrors), 9-10 idle profiles, 11-12 gun hold, 13-14 gun fire (muzzle flash), 15-18 gun run, 19-22 dagger stab, 23-28 shoryuken, 29-32 thrust windup/dash, 33-34 damage |
-| `anands-roll.png` | 16 x 168x152 | 0-7 roll right, 8-15 roll left (mirrors), derived from the face-on frame like the generated heroes' |
-| `anands-dragon.png` | 6 x 352x176 | the dragon-thrust ride: the lunge into the dragon, then the flight |
-| `anands-portrait.png` | 128x192 | the face-on frame for the hero select and the ultimate cinematic's card |
+- **Her model** is a Tripo multi-view generation from her board turnaround
+  (`art/anands/generated/anands-tripo-h31.glb`), in `art/anands/anands.blend`,
+  rigged on the shared sprite skeleton with her own joint positions
+  (`scripts/blender/anands_rig.py`). Her dagger and machine gun, and every clip
+  she plays — the shared ones plus her **stab, shoryuken, thrust wind-up and
+  thrust dash** — are `scripts/blender/anands_clips.py`.
+- **Her pixels are her boards'.** The mesh is textured from the boards and
+  rendered unlit, then `scripts/make-hero-art.py anands` snaps every frame to
+  the boards' own palette (`art/anands/palette.json`, 56 colours measured off
+  the boards by `make-anands-art.py`) after a saturation and contrast lift, and
+  inks the darker side of every strong colour edge — so the render reads as
+  flat board fills with drawn shapes, not as a shrunken texture.
+- **She ships like the other rendered heroes:** `anands.png` + `anands.json`
+  (packed, trimmed, both facings, the machine gun aim-banded, her dagger drawn
+  in her frames so `MeleeFx` draws only the trail) and `anands-portrait.png`.
+- **The dragon ride is still board art:** `anands-dragon.png` (6 x 352x176),
+  cut from the ultimate board by `scripts/make-anands-art.py` and played by
+  `HERO_CLIPS` in `ecs/systems.ts`, rotated down the dragon's line and mirrored
+  for leftward travel. The ride is the ultimate's screen-filling art, not a
+  pose of her model.
 
-**The game's layout rules are per-hero now.** A strip is sliced by its own
-cell geometry (`SHEET_CELLS` in `render/assets.ts`), a clip names the strip
-and the frames it indexes (`HERO_CLIPS` in `ecs/systems.ts`), and a fighter
-is drawn at `sheetScale` — the collider height over the cell height — so her
-~140px art reads at the same 44px the generated heroes' 48px does. The
-dagger's moves, the gun stance's walk and the damage poses are real frames,
-not generated poses; the sword-only states (helpless, slam, plunge, stuck)
-and the knockdown stay generated from her own face-on frame, because a
-dagger cannot reach them. The dragon ride is her own art too — the generated
-gold serpent is gone, and the ride is the six-cell strip rotated down the
-dragon's line, mirrored for leftward travel.
-
-A future hand-drawn hero is a new script (or new cells in this one), new
-`SHEET_CELLS` entries and a new `HERO_CLIPS` table — the animation machinery
-does not care how many cells a sheet has.
+The work log, the measurements and the routes that were tried are in
+[`docs/anands-art.md`](../docs/anands-art.md).

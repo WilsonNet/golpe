@@ -154,38 +154,14 @@ export function isClipName(name: string): name is ClipName {
 }
 
 /**
- * Anands' own clip table — the hand-drawn sheets are her format, not the
- * generated heroes'. Her character strip (see `scripts/make-anands-art.py`)
- * is 35 cells of 168x152; every directional move is stored facing both ways,
- * exactly like the walk cycle halves always have been.
- *
- * The dagger's moves and the gun stance's walk each get left/right variants;
- * the damage poses are rear-facing, so they serve both directions. The
- * dragon clip reads her own ride strip, `anands-dragon`.
+ * Clips a hero's packed sheet does not carry. Anands' character art is a
+ * packed sheet rendered from Blender like Lia's and Jeffs' (her clips live in
+ * `anands.json`); the dragon ride is still her own strip, cut from her boards
+ * by `scripts/make-anands-art.py`, because the ride is the ultimate's
+ * screen-filling art and not a pose of her model.
  */
 const HERO_CLIPS: Partial<Record<HeroId, Partial<Record<ClipName, Clip>>>> = {
 	anands: {
-		left: { frames: [5, 6, 7, 8], fps: 10, sheet: TEX.anands },
-		right: { frames: [0, 1, 2, 3], fps: 10, sheet: TEX.anands },
-		turn: { frames: [4], fps: 1, sheet: TEX.anands },
-		"left-idle": { frames: [10], fps: 1, sheet: TEX.anands },
-		"right-idle": { frames: [9], fps: 1, sheet: TEX.anands },
-		disabled: { frames: [33, 34], fps: 8, sheet: TEX.anands },
-		downed: { frames: [34], fps: 1, sheet: TEX.anands },
-		"thrust-windup": { frames: [29], fps: 1, sheet: TEX.anands },
-		"thrust-windup-left": { frames: [31], fps: 1, sheet: TEX.anands },
-		"thrust-dash": { frames: [30], fps: 1, sheet: TEX.anands },
-		"thrust-dash-left": { frames: [32], fps: 1, sheet: TEX.anands },
-		shoryuken: { frames: [23, 24, 25], fps: 14, sheet: TEX.anands },
-		"shoryuken-left": { frames: [26, 27, 28], fps: 14, sheet: TEX.anands },
-		stab: { frames: [19, 20], fps: 20, sheet: TEX.anands },
-		"stab-left": { frames: [21, 22], fps: 20, sheet: TEX.anands },
-		"gun-hold": { frames: [11], fps: 1, sheet: TEX.anands },
-		"gun-hold-left": { frames: [12], fps: 1, sheet: TEX.anands },
-		"gun-fire": { frames: [11, 13], fps: 12, sheet: TEX.anands },
-		"gun-fire-left": { frames: [12, 14], fps: 12, sheet: TEX.anands },
-		"gun-run": { frames: [15, 16], fps: 10, sheet: TEX.anands },
-		"gun-run-left": { frames: [17, 18], fps: 10, sheet: TEX.anands },
 		dragon: {
 			frames: [0, 1, 2, 3, 4, 5],
 			fps: 10,

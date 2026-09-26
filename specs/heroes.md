@@ -114,20 +114,19 @@ Each hero's art has one source, and the game only ever loads what it made:
 | Hero | Source | Made by | Ships |
 |---|---|---|---|
 | Lia | `art/lia/lia.blend` — an SNES-shaded 3D model, rig and one Action per clip | `scripts/make-hero-art.py lia` (see `art/README.md`) | `lia.png` + `lia.json` (packed, trimmed, every clip incl. both facings), `lia-portrait.png` |
-| Anands | hand-drawn boards in `unprocessed-sprites/` | `scripts/make-anands-art.py` | `anands*.png` strips |
+| Anands | `art/anands/anands.blend` — her Tripo mesh (from her Gemini boards) on the same rig, her own clips | `scripts/make-hero-art.py anands` (with her boards' palette snapped back) | `anands.png` + `anands.json`, `anands-portrait.png`; the dragon ride `anands-dragon.png` is still cut from her boards |
 | Jeffs | `art/jeffs/jeffs.blend` — the same rig and clips, his own model | `scripts/make-hero-art.py jeffs` | `jeffs.png` + `jeffs.json`, `jeffs-portrait.png` |
 
 - **The draw scale is the collider over the sheet's body height** (`bodyH`,
   default the cell height). Lia's cells are padded to whatever her raised
   sword needs, and that never changes her on-screen size.
-- **Anands' art is still her hand-drawn boards.** They *are* the look the
-  rendered heroes are chasing (flat front elevation, a flat fill with a shade
-  band on the far edge, a face turned to the viewer, chunky proportions).
-  She moves to Blender only through a model that keeps that style, and a
-  rendered frame replaces a drawn one only after a side-by-side against the
-  boards. The plan is [`docs/anands-art.md`](../docs/anands-art.md).
-- **Lia's and Jeffs' art draws the sword, so they get the trail and no
-  stand-in blade.** Their cuts, the uppercut and the massive are *move-driven* clips: the frame is
+- **Anands' boards are still the look every hero chases** (flat front
+  elevation, a flat fill with a shade band on the far edge, a face turned to
+  the viewer, chunky proportions). Her own sprites are rendered from a Blender
+  model of them, and pass back through her boards' palette on the way out.
+  The work log is [`docs/anands-art.md`](../docs/anands-art.md).
+- **Every rendered hero's art draws its melee weapon — Lia's and Jeffs'
+  sword, Anands' dagger — so they get the trail and no stand-in blade.** Their cuts, the uppercut and the massive are *move-driven* clips: the frame is
   her progress through the move, so the steel is where the hitbox is. The
   other heroes keep the walk cycle under `MeleeFx`'s drawn blade.
 - **The gun follows the aim** (Lia's rifle, Jeffs' shotgun). The gun clips

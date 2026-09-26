@@ -26,10 +26,12 @@ export const TEX = {
 	 * lives in this one sheet. See `PACKED_SHEETS`.
 	 */
 	lia: "lia",
-	/** Anands' character strip — see `anandsFrames`. */
+	/**
+	 * Anands' packed atlas, rendered from `art/anands/anands.blend` (her
+	 * Tripo mesh, textured from her boards, on the shared rig) by
+	 * `scripts/make-hero-art.py anands`, like Lia's and Jeffs'.
+	 */
 	anands: "anands",
-	/** Anands' roll strip, derived from her own sheet. */
-	"anands-roll": "anands-roll",
 	/** Anands' dragon-thrust ride: the ultimate's own art, cut from the
 	 * reference boards by `scripts/make-anands-art.py`. */
 	"anands-dragon": "anands-dragon",
@@ -113,10 +115,6 @@ export type HeroPose =
 	| "shoryukenRise"
 	| "dragonRide";
 
-/** Anands' strip: 35 hand-drawn cells, see `HERO_CLIPS` in `ecs/systems.ts`. */
-let anandsFrames: Texture[] = [];
-/** Anands' roll strip: 0-7 right, 8-15 left. */
-let anandsRollFrames: Texture[] = [];
 /** Jeffs' strip and roll, sliced exactly like the other two heroes'. */
 
 /** Every hero's nine-frame strip, keyed by the hero's sheet name. */
@@ -128,16 +126,12 @@ const ROLL_SETS: Record<string, Texture[]> = {};
 /**
  * The cell geometry of every strip, keyed by the sheet's TEX alias.
  *
- * Sheets stopped being one-size-fits-all the day the hand-drawn Anands art
- * landed: her cells are 168x152 (a ~140px fighter standing in a padded box)
- * and her dragon's are 352x176. Lia and Jeffs are packed sheets rendered from
- * Blender (see `PACKED_SHEETS`), which register their own cells at load. A
- * clip indexes a strip; a strip's cells are whatever this table says they
- * are.
+ * Every hero is a packed sheet rendered from Blender (see `PACKED_SHEETS`),
+ * which registers its own cells at load; the one hand-cut strip left is
+ * Anands' dragon ride (352x176 cells), still cut from her boards. A clip
+ * indexes a strip; a strip's cells are whatever this table says they are.
  */
 const SHEET_CELLS: Record<string, SheetCell> = {
-	[TEX.anands]: { w: 168, h: 152 },
-	[TEX["anands-roll"]]: { w: 168, h: 152 },
 	[TEX["anands-dragon"]]: { w: 352, h: 176 },
 };
 
@@ -199,6 +193,7 @@ interface PackedMeta {
 const PACKED_SHEETS: Record<string, { png: string; json: string }> = {
 	[TEX.lia]: { png: "assets/lia.png", json: "assets/lia.json" },
 	[TEX.jeffs]: { png: "assets/jeffs.png", json: "assets/jeffs.json" },
+	[TEX.anands]: { png: "assets/anands.png", json: "assets/anands.json" },
 };
 
 /** Each packed sheet's clips, from its JSON. */
@@ -262,9 +257,8 @@ export function heroPose(sheet: string, pose: HeroPose): Texture {
 /**
  * The draw scale of a hero's sheet, so a fighter always reads the same size
  * against the 32x48 collider whatever its cells are: the collider height
- * over the sheet's cell height. Lia and Jeffs ship 2x art, so their sprites
- * are drawn at 48/96; Anands' hand-drawn art is ~2.7x the collider, so hers
- * are drawn at 48/152.
+ * over the sheet's body height. Every rendered hero ships 2x art, so their
+ * sprites are drawn at 48/96.
  */
 export function sheetScale(sheet: string): number {
 	const cell = SHEET_CELLS[sheet];
@@ -286,11 +280,15 @@ export function sheetClips(
 /**
  * Does this hero's art draw its own melee weapon? A sheet rendered with the
  * sword in hand (Lia's) must not also get `MeleeFx`'s placeholder blade laid
- * over it — that second, bigger sword was the art's first bug. The trail
+ * over it — that second, bigger sword was the art's first bug — and neither
+ * must a sheet rendered with the dagger in hand (Anands'). The trail
  * (the hitbox's read) stays; only the stand-in steel goes.
  */
 export function sheetDrawsBlade(sheet: string): boolean {
-	return PACKED_CLIPS[sheet]?.["slash"] !== undefined;
+	const clips = PACKED_CLIPS[sheet];
+	// The sword's first cut, or the dagger's stab: either means the rendered
+	// frames hold the weapon.
+	return clips?.["slash"] !== undefined || clips?.["stab"] !== undefined;
 }
 
 /**
@@ -324,8 +322,6 @@ let manifestRegistered = false;
 
 export async function loadAssets(): Promise<void> {
 	const sources: Record<string, string> = {
-		[TEX.anands]: "assets/anands.png",
-		[TEX["anands-roll"]]: "assets/anands-roll.png",
 		[TEX["anands-dragon"]]: "assets/anands-dragon.png",
 		[TEX.fireball]: "assets/fireball.png",
 		[TEX.platform]: "assets/platform.png",
@@ -348,16 +344,9 @@ export async function loadAssets(): Promise<void> {
 	// hand-drawn art (see `scripts/make-anands-art.py`) is a plain horizontal
 	// strip; Lia's and Jeffs' Blender-rendered atlases are packed sheets with
 	// their own JSON, loaded below.
-	anandsFrames = sliceStrip(TEX.anands, 35);
-	FRAME_SETS[TEX.anands] = anandsFrames;
-
-	anandsRollFrames = sliceStrip(TEX["anands-roll"], 16);
-	ROLL_SETS[TEX["anands-roll"]] = anandsRollFrames;
-
 	// The dragon-thrust ride: six big cells of the ultimate's own art. Not a
 	// hero strip — the ride clip indexes it directly (see `HERO_CLIPS`).
 	FRAME_SETS[TEX["anands-dragon"]] = sliceStrip(TEX["anands-dragon"], 6);
-
 
 	// Sheets shipped from the sprite workshop: one strip, sliced by its own
 	// JSON instead of by a hand-kept table. The strips are uniform grids, so
@@ -661,7 +650,6 @@ export function createFxTextures(renderer: Renderer): void {
 			turn === undefined ? frames : [frames[turn] ?? Texture.EMPTY],
 		);
 	}
-	createHeroPoses(renderer, "anands", anandsFrames);
 	createUltimateTextures(renderer);
 }
 
@@ -920,12 +908,9 @@ function createHeroPoses(
 
 	// The pose canvas follows the sheet's own cells, not the collider: a pose
 	// is a texture drawn at the same scale as the walk frames, so it must
-	// cover the same box the walk frames do. Lia and Jeffs ship 2x art
-	// (64x96 cells);
-	// Anands' hand-drawn art is 168x152, and her real frames take over the
-	// poses the art actually covers (disabled, the thrust, the shoryuken, the
-	// ride) — the poses left over (downed, the sword states) are still cut
-	// from her own face-on frame, so they line up with the new art too.
+	// cover the same box the walk frames do. The rendered heroes ship 2x art
+	// and cover every pose they can be in; this set is only the fallback for
+	// a clip a re-render leaves out.
 	const cell = SHEET_CELLS[sheet] ?? { w: PLAYER_WIDTH, h: PLAYER_HEIGHT };
 	const CW = cell.w;
 	const CH = cell.h;

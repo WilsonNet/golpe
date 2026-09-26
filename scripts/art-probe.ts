@@ -1,7 +1,7 @@
 /**
  * The art probe: does a rendered hero's sheet actually get drawn?
  *
- *     tsx scripts/art-probe.ts [--hero=lia|jeffs] [--seconds=30]
+ *     tsx scripts/art-probe.ts [--hero=lia|jeffs|anands] [--seconds=30]
  *
  * Two online AI clients play the hero against itself (plus two bots for
  * traffic) and the first one reports `window.__animStats()` — every clip the
@@ -23,12 +23,33 @@ const hero =
 const BASE = "http://localhost:8084";
 const room = `art-${Date.now().toString(36)}`;
 
-/** Clips an AI sword-and-gun hero reliably reaches in half a minute of fighting. */
+/** The melee weapon's clips an AI reaches: the sword's cuts, the dagger's moves. */
+const MELEE_CLIPS: Record<string, string[]> = {
+	sword: [
+		"slash",
+		"slash-left",
+		"slash2",
+		"slash2-left",
+		"slash3",
+		"slash3-left",
+	],
+	dagger: [
+		"stab",
+		"stab-left",
+		"shoryuken",
+		"shoryuken-left",
+		"thrust-dash",
+		"thrust-dash-left",
+	],
+};
+const melee = hero === "anands" ? "dagger" : "sword";
+
+/** Clips an AI hero reliably reaches in half a minute of fighting. */
 const MUST_DRAW: string[][] = [
 	["right", "left"],
 	["right-idle", "left-idle"],
 	["jump", "jump-left", "fall", "fall-left"],
-	["slash", "slash-left", "slash2", "slash2-left", "slash3", "slash3-left"],
+	MELEE_CLIPS[melee] ?? [],
 	[
 		"gun-hold",
 		"gun-hold-left",

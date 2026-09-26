@@ -35,4 +35,5 @@ audio/soundfonts/
 __pycache__/
 .venv-audio/
 art/*/.render/
+art/anands/.boards/
 *.blend1

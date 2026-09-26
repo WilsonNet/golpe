@@ -32,10 +32,10 @@ import subprocess
 import sys
 
 import numpy as np
-from PIL import Image, ImageOps
+from PIL import Image, ImageEnhance, ImageOps
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-HEROES = ("lia", "jeffs")
+HEROES = ("lia", "jeffs", "anands")
 HERO = next((a for a in sys.argv[1:] if not a.startswith("--")), "")
 if HERO not in HEROES:
     sys.exit(f"usage: make-hero-art.py <{'|'.join(HEROES)}> [--pack-only]")
@@ -130,11 +130,54 @@ def pack(images):
     return placed, (width, y + shelf_h)
 
 
+# A hero whose look is a hand-painted board, not a toon shader, gets the
+# board's own colours back after the render: `art/<hero>/palette.json` (for
+# Anands, measured off her boards by make-anands-art.py). A texture shrunk to
+# sprite size averages its neighbouring colours into mud; lifting saturation
+# and contrast and snapping every pixel to the board's palette puts back the
+# flat, distinct fills the board is drawn in, and an ink line on the darker
+# side of every strong colour edge draws the shapes inside the silhouette the
+# way the board does.
+PALETTE_FILE = os.path.join(ROOT, "art", HERO, "palette.json")
+BOARD_LOOK = os.path.exists(PALETTE_FILE)
+SAT, CON = 1.35, 1.15
+INNER_INK_EDGE = 60  # luminance step (0-255) that earns an inner line
+INNER_INK_K = 0.55
+
+
+def board_look(im):
+    pal = np.array(json.load(open(PALETTE_FILE))["colours"], float)
+    a = np.array(im)
+    rgb = ImageEnhance.Contrast(ImageEnhance.Color(Image.fromarray(a[..., :3])).enhance(SAT)).enhance(CON)
+    x = np.array(rgb, float)
+    # "Redmean" colour distance: cheap, and far closer to perception than RGB.
+    rm = (x[..., None, 0] + pal[None, None, :, 0]) / 2
+    d = (
+        (2 + rm / 256) * (x[..., None, 0] - pal[:, 0]) ** 2
+        + 4 * (x[..., None, 1] - pal[:, 1]) ** 2
+        + (2 + (255 - rm) / 256) * (x[..., None, 2] - pal[:, 2]) ** 2
+    )
+    idx = d.argmin(-1)
+    out = a.copy()
+    out[..., :3] = pal[idx].astype(np.uint8)
+    lum = (pal[:, 0] * 0.3 + pal[:, 1] * 0.59 + pal[:, 2] * 0.11)[idx]
+    op = a[..., 3] > 0
+    ink = np.zeros(op.shape, bool)
+    for dx, dy in ((1, 0), (0, 1), (-1, 0), (0, -1)):
+        n = np.roll(np.roll(lum, dy, 0), dx, 1)
+        no = np.roll(np.roll(op, dy, 0), dx, 1)
+        ink |= op & no & (n - lum > INNER_INK_EDGE)
+    out[ink, :3] = (out[ink, :3] * INNER_INK_K).astype(np.uint8)
+    return Image.fromarray(out)
+
+
 def portrait(manifest):
     clip = next((c for c in manifest["clips"] if c["right"] == "portrait"), None)
     if not clip:
         return
     im = harden(Image.open(os.path.join(RAW, clip["files"][0])).convert("RGBA"))
+    if BOARD_LOOK:
+        im = board_look(im)
     im = ink_outline(im, 2)
     x0, y0, x1, y1 = im.getbbox()
     h = (y1 - y0) + 16
@@ -200,6 +243,8 @@ def main():
     for c in clips:
         for f in c["files"]:
             im = harden(Image.open(os.path.join(RAW, f)).convert("RGBA"))
+            if BOARD_LOOK:
+                im = board_look(im)
             frames[f] = ink_outline(clean_orphans(im), 1)
 
     # 2. The cell: every frame's content, symmetric about the body centre.

@@ -310,8 +310,8 @@ tsx scripts/potg-probe.ts                            # play of the game: the ree
 tsx scripts/audio-probe.ts                           # the sound loop: music latches, combat sfx fire, the mixer persists
 python3 scripts/make-audio.py                        # re-render the music loops from their MIDI sources (→ public/audio/)
 python3 scripts/make-potg-art.py                       # regenerate the ceremony's sunburst and medal
-python3 scripts/make-anands-art.py                       # compose the second hero's hand-drawn art into the shipped sheets
-python3 scripts/make-hero-art.py lia                   # render a hero from art/<hero>/<hero>.blend → <hero>.png/.json + portrait (lia|jeffs, needs blender)
+python3 scripts/make-anands-art.py                       # cut Anands' dragon ride from her boards (--legacy: the old board-cut strips, for comparison)
+python3 scripts/make-hero-art.py lia                   # render a hero from art/<hero>/<hero>.blend → <hero>.png/.json + portrait (lia|jeffs|anands, needs blender)
 tsx scripts/art-probe.ts --hero=jeffs                 # a rendered hero's clips are what gets drawn: zero placeholder fallbacks, the gun tracks the aim
 ```
 

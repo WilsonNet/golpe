@@ -20,7 +20,7 @@ game's contract, not the character's:
   ("sword" | "rifle" | "none": which weapon objects are shown). Every keyed
   frame of the action is one rendered sprite frame.
 
-Weapon objects are found by name: `Sword`, `SwordBack`, and the gun —
+Weapon objects are found by name: `Sword`, `SwordBack`, `Dagger`, and the gun —
 `Rifle`, `Shotgun` or `Gun`.
 """
 
@@ -547,7 +547,7 @@ def apply_pose(arm, p):
     arm.pose.bones["forearm.L"].constraints["IK"].influence = p["ikL"]
 
 
-WEAPONS = {"Sword", "SwordBack", "Rifle", "Shotgun", "Gun"}
+WEAPONS = {"Sword", "SwordBack", "Dagger", "Rifle", "Shotgun", "Gun"}
 
 
 def lowest_point(arm):
@@ -556,7 +556,9 @@ def lowest_point(arm):
     low = math.inf
     inv = arm.matrix_world.inverted()
     for ob in bpy.data.objects:
-        if ob.type != "MESH" or ob.name in WEAPONS:
+        # Only the fighter: a file may also hold reference meshes (Anands'
+        # blockout and generated guides), which are not on the floor line.
+        if ob.type != "MESH" or ob.name in WEAPONS or ob.parent != arm:
             continue
         m = inv @ ob.matrix_world
         for v in ob.data.vertices:

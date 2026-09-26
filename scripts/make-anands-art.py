@@ -32,8 +32,8 @@ hand-picked by cell rect measured against the board; the frames that are not
 used (victory, sleep, the map illustration, the contextual idles) are left in
 `unprocessed-sprites/` for the artist.
 
-Usage: python3 scripts/make-anands-art.py            # cut the boards
-       python3 scripts/make-anands-art.py --measure  # measure the shipped strip
+Usage: python3 scripts/make-anands-art.py           # cut the dragon ride (the only board art that ships)
+       python3 scripts/make-anands-art.py --legacy  # rebuild + measure the old board-cut strips in art/anands/.boards/
 """
 
 from PIL import Image
@@ -624,7 +624,7 @@ def build_portrait():
     print(f"wrote {OUT}/anands-portrait.png ({img.width}x{img.height})")
 
 
-def measure(path=f"{OUT}/anands.png", cell_w=CELL_W):
+def measure(path, cell_w=CELL_W):
     """The extraction, measured on the shipped strip, per cell:
 
     - holes: transparent area fully enclosed by her silhouette, as a share of
@@ -656,10 +656,16 @@ def measure(path=f"{OUT}/anands.png", cell_w=CELL_W):
 
 
 if __name__ == "__main__":
-    if "--measure" in sys.argv:
-        measure()
+    # Her character art is rendered from Blender now (`art/anands/anands.blend`,
+    # `scripts/make-hero-art.py anands`); only the dragon ride still ships from
+    # the boards. `--legacy` rebuilds the old board-cut strips for comparison,
+    # into art/anands/.boards/ — never over the shipped atlas.
+    if "--legacy" in sys.argv:
+        OUT = "art/anands/.boards"
+        os.makedirs(OUT, exist_ok=True)
+        build_character_strip()
+        build_roll_strip()
+        build_portrait()
+        measure(f"{OUT}/anands.png")
         sys.exit(0)
-    build_character_strip()
-    build_roll_strip()
     build_dragon_strip()
-    build_portrait()

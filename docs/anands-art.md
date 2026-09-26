@@ -1,16 +1,10 @@
 # Anands' art — the plan (start here)
 
-**Status (2026-09-26): steps 1-2 done for her body — measured, and the keying
-bug fixed (holes 21.4% → 1.0%). Native grid recovery and new boards are open;
-see "Progress" at the end.**
-Lia and Jeffs moved to Blender renders (`art/README.md`). Anands goes to
-Blender too, but **not as-is**: her hand-drawn boards are the look the whole
-project is chasing, and Lia's and Jeffs' procedural models are basic next to
-them. The route in is a better model (generated from her boards, or
-handmade), and it has to pass a side-by-side against the boards. The
-goal of this work is to make the *game* show her boards faithfully and give
-her the clips she lacks, **without losing the boards' style**. Treat it as a
-long job; do it in measured steps.
+**Status (2026-09-26): shipped in the game from Blender.** Her sprites are
+rendered from `art/anands/anands.blend` (a Tripo multi-view mesh of her boards,
+rigged on the shared skeleton, her own dagger clips) and snapped back to her
+boards' palette; only the dragon ride is still cut from the boards. See the
+log at the end ("shipped") and `art/README.md`.
 
 ## The objective: HD-2D characters
 
@@ -341,3 +335,106 @@ with the palette spelled out and High thinking came back as an empty image
 The first board is saved as `unprocessed-sprites/anands-reactions-draft1.jpeg`:
 a draft, not cut into the game. The originals were likely made with a stronger image model —
 worth checking which one before spending more prompts.
+
+### 2026-09-26 — the flagship decision: Anands in Blender, above Lia and Jeffs
+
+The user's call: Anands is the soul of the game's art and gets a
+**higher-budget pipeline than Lia and Jeffs** (whose procedural primitive
+models are the floor, not the bar). The target stays her Gemini boards. The
+route, done through the **Blender MCP** (`claude mcp add blender`; the addon is
+`mcp-for-blender`, enabled in Blender's prefs; the live file is
+`art/anands/anands.blend`):
+
+1. **Reference.** `art/anands/reference/{front,side-a,back,side-b}.png` is her
+   board's "Idle Stance (Full 360)" row, cut clean by `make-anands-art.py`'s
+   flood fill and blown up 8x nearest. In the .blend they are orthographic
+   blueprint empties around the 2x3 m body box, placed for a model that faces
+   +X (the rig's convention): face-on in the Right view (Numpad 3), the
+   profile in the Front view (Numpad 1).
+2. **Base mesh from image-to-3D** (Hunyuan3D or Hyper3D Rodin through the MCP;
+   the user's key), then cleaned, refitted to the four silhouettes, and rigged
+   to `sprite_rig.py`'s skeleton so every shared clip and the game contract
+   hold.
+3. **Her pixels, not a shader's.** The mesh is textured by projecting the
+   board views onto it and rendered **unlit**, so the shading bands on screen
+   are the ones drawn on her boards, then snapped to her board palette
+   (`make-anands-art.py`'s `palette()`). This is what separates her from the
+   LiaToon heroes.
+4. **More clips than anyone**, each gated side by side against the board
+   frame it replaces (stab, shoryuken, thrust, gun at every aim band, trap
+   throw, jump/fall, the reactions, the dragon cast).
+5. **Artist-editable**: the .blend is the source of truth; the reference
+   blueprints, the texture images and the rig stay in it, documented in
+   `art/README.md`, so a human can repaint a texture in any pixel editor or
+   re-sculpt a part and re-render with one command.
+
+### 2026-09-26 — the base mesh: Tripo multi-view (the user's Starter plan)
+
+Tried, in order: 3DAI Studio (Prism 3.1 single-image looked right, but every
+export format is paywalled — not used); Hunyuan3D-2.1's free Hugging Face
+Space (the pixel-art input came back as voxel staircase geometry, and the
+transparent input as an empty pole — a de-pixelated input is required); a
+hand blockout (`scripts/blender/anands_model.py`, IoU 0.82/0.79/0.82, kept in
+the `Anands` collection as a fallback); then **Tripo Studio, multi-view**
+(Frente / Esquerda / Direita / Verso = `front`, `side-b`, `side-a`, `back`,
+the `*-smooth.png` de-pixelated inputs), H3.1, Quad topology, 30k faces, 4K
+texture with lighting removed — **60 credits**. Result:
+`art/anands/generated/anands-tripo-h31.glb`, in the .blend as `Anands.tripo`
+(collection `Tripo`), scaled to 3 m and turned to face +X. Silhouette IoU
+against the boards: front 0.81, side 0.82, back 0.79 — reading slightly
+narrower than the board's chibi hair and gloves; flat-lit colours match the
+board. This is the base mesh going forward.
+
+Watch-outs in Tripo's UI: the third input icon is **batch** ("Imagens em
+lote"), one paid generation per image, not multi-view; multi-view is the
+second (cube) icon. The Tripo **API is billed separately** from the Studio
+subscription (pay-as-you-go API credits, 100 credits = $1), so the pipeline
+stays on the web app unless the user decides otherwise.
+
+### 2026-09-26 — rigged by hand on the shared skeleton
+
+`scripts/blender/anands_rig.py` (`rig()`, run in the live Blender) builds her
+`Rig` with **`sprite_rig.py`'s bone names, parents and IK** but her own joint
+positions (chin-level neck at z 1.9, arms resting against the body to gloves at
+hip height, knees just above the boot cuffs), and skins `Anands.tripo` with
+automatic weights plus two fixes: everything above the neck is the head's, and
+the torso core never follows an arm. **The GLB import splits vertices on every
+UV seam (1035 islands) and heat weighting then fails** — merge by distance
+first (0.0005 m: 40,489 → 27,543 verts, one manifold island). The shared poses
+(idle, run, jump, gun aim, roll, launched) deform cleanly. The user skipped
+Tripo's 20-credit auto-rig (Mixamo skeleton, wants a T/A pose); a T-pose board
+from Gemini is the plan for a cleaner re-generation later.
+
+### 2026-09-26 — shipped: her rendered sheet replaces the board strips
+
+- `scripts/blender/anands_clips.py` builds the render scene, an unlit
+  (emission) material on the Tripo texture, the `Dagger` and `Gun`, and 18
+  clips: the shared idle/run/turn/jump/fall/gun (9 aim bands)/roll/hit states
+  plus her **stab, shoryuken, thrust wind-up, thrust dash** and the portrait.
+  Lia's sword-only clips are not hers and are not made.
+- `make-hero-art.py anands`: 197 frames, 33 clips, the scale contract holds
+  (feet on the floor line, a 100 px figure against the 96 px body box).
+- **The board look** (`board_look` in `make-hero-art.py`, on for any hero with
+  an `art/<hero>/palette.json`): the raw render read muddy brown — a 4K
+  texture shrunk to ~100 px averages orange, green and brown together. A
+  saturation ×1.35 / contrast ×1.15 lift, a snap to her boards' 56-colour
+  palette, and an ink line on the darker side of every ≥60 luminance step put
+  the board's flat fills and drawn shapes back.
+- **A strand of stretched faces** grew from her knocked-down poses: 290 pack
+  vertices had weights summing to ~0, so the armature left them at rest.
+  `anands_rig.heal_weightless` copies the nearest good vertex's weights.
+- The game: `anands` is a `PACKED_SHEETS` entry; `HERO_CLIPS.anands` keeps only
+  the dragon ride; `anands-roll.png` is gone; `sheetDrawsBlade` is true for a
+  sheet with a `stab` clip, so `MeleeFx` draws only the dagger's trail;
+  `heroAtlas.test.ts` checks her dagger clips (the required melee clips are
+  per weapon now); `art-probe.ts --hero=anands` checks the dagger's moves.
+- Measured: `pnpm run verify` green (690 tests), `art-probe --hero=anands`
+  PASS (zero fallbacks, the machine gun tracks the aim on the local and the
+  remote client), `art-probe --hero=lia` PASS, `movelist-probe` 0 failures.
+- `make-anands-art.py` now writes only the dragon strip; `--legacy` rebuilds
+  the old board-cut strips into `art/anands/.boards/` for comparison.
+- Next: re-generate from the T-pose turnaround
+  (`unprocessed-sprites/anands-tpose.jpeg`, 60 Tripo credits) for cleaner
+  shoulder weights; pose her dagger clips closer to the boards' key frames;
+  the trap throw and the reactions (`anands-reactions-draft2.jpeg` as the pose
+  reference).
