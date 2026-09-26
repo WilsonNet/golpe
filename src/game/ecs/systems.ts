@@ -127,6 +127,11 @@ const CLIPS = {
 	"downed-left": { frames: [], fps: 1, sheet: "own" },
 	"launched-left": { frames: [], fps: 1, sheet: "own" },
 	"helpless-left": { frames: [], fps: 1, sheet: "own" },
+	// The item throw (a grenade, a trap, a smoke): presentation-only, played
+	// for `THROW_CLIP_MS` from the moment the thrown item first shows up — and
+	// only by a hero whose art has it; the rest keep their current clip.
+	throw: { frames: [], fps: 1, sheet: "own" },
+	"throw-left": { frames: [], fps: 1, sheet: "own" },
 	"roll-right": { frames: [0, 1, 2, 3, 4, 5, 6, 7], fps: 25, sheet: "roll" },
 	"roll-left": {
 		frames: [8, 9, 10, 11, 12, 13, 14, 15],
@@ -308,6 +313,8 @@ const POSE_BY_CLIP: Record<ClipName, PoseKey> = {
 	"downed-left": "downed",
 	"launched-left": "launched",
 	"helpless-left": "helpless",
+	throw: "disabled",
+	"throw-left": "disabled",
 };
 
 /**
@@ -679,6 +686,14 @@ export function animationSystem(
 				body.vx < 0 ? "roll-left" : "roll-right",
 				dtMs,
 			);
+			continue;
+		}
+
+		// An item throw, for a hero whose art draws one: the arm sweeping the
+		// grenade or the trap out, for the moment after it leaves the hand
+		// (`fighter.throwMs`, set by the match when the item appears).
+		if ((e.fighter.throwMs ?? 0) > 0 && ownClip(hero, "throw")) {
+			driveClip(e.anim, e.sprite, hero, sided(hero, "throw", facingLeft), dtMs);
 			continue;
 		}
 

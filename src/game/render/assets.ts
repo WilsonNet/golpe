@@ -166,6 +166,8 @@ export interface PackedClip {
 /** The packed atlas JSON the Blender pipeline writes. */
 interface PackedMeta {
 	name: string;
+	/** Content hash of the atlas PNG, for cache-busting its URL. */
+	version?: string;
 	cellW: number;
 	cellH: number;
 	bodyH: number;
@@ -372,14 +374,22 @@ async function loadPackedSheet(
 	png: string,
 	json: string,
 ): Promise<void> {
-	const res = await fetch(json);
+	// The JSON is always revalidated, and it names the exact atlas it
+	// describes: a cached PNG from an earlier render paired with a new JSON
+	// crops every frame at the wrong rect (the whole sheet reads as garbage).
+	const res = await fetch(json, { cache: "no-cache" });
 	if (!res.ok) {
 		throw new Error(
 			`packed sheet "${name}": missing ${json} — run scripts/make-${name}-art.py`,
 		);
 	}
 	const meta = (await res.json()) as PackedMeta;
-	const texture = await Assets.load<Texture>({ alias: name, src: png });
+	const src = meta.version ? `${png}?v=${meta.version}` : png;
+	const texture = await Assets.load<Texture>({
+		alias: name,
+		src,
+		parser: "texture",
+	});
 	FRAME_SETS[name] = meta.frames.map(
 		(f) =>
 			new Texture({

@@ -61,9 +61,40 @@ BONES = [
 
 NECK_Z = 1.9          # above this, a vertex is the head's (hair, goggles, face)
 CORE_HALF_W = 0.3     # |y| inside this, between hips and shoulders: torso only
+HEAD_HALF_W = 10.0    # |y| inside this may be head (the T-pose rig narrows it: the arms sit at head height)
+
+# The T-pose mesh (anands-tripo-tpose.glb): skinned in its T-pose — a T-pose
+# is what heat weighting separates cleanly, arms away from the body — then the
+# arms are posed down and that pose becomes the rest pose, so the shared clip
+# poses (which assume arms hanging at the sides) apply to her unchanged.
+BONES_TPOSE = [
+    ("root", (0, 0, 0), (0, 0, 0.3), None),
+    ("hips", (0, 0, 0.85), (0, 0, 1.15), "root"),
+    ("chest", (0, 0, 1.15), (0, 0, 1.9), "hips"),
+    ("head", (0, 0, 1.96), (0, 0, 2.95), "chest"),
+    ("upperarm.R", (0, -0.42, 1.88), (0, -0.8, 1.9), "chest"),
+    ("forearm.R", (0, -0.8, 1.9), (0.02, -1.14, 1.9), "upperarm.R"),
+    ("upperarm.L", (0, 0.42, 1.88), (0, 0.8, 1.9), "chest"),
+    ("forearm.L", (0, 0.8, 1.9), (0.02, 1.14, 1.9), "upperarm.L"),
+    ("thigh.R", (0.0, -0.2, 0.85), (0.02, -0.22, 0.48), "hips"),
+    ("shin.R", (0.02, -0.22, 0.48), (0.0, -0.24, 0.18), "thigh.R"),
+    ("foot.R", (0.0, -0.24, 0.18), (0.22, -0.25, 0.05), "shin.R"),
+    ("thigh.L", (0.0, 0.2, 0.85), (0.02, 0.22, 0.48), "hips"),
+    ("shin.L", (0.02, 0.22, 0.48), (0.0, 0.24, 0.18), "thigh.L"),
+    ("foot.L", (0.0, 0.24, 0.18), (0.22, 0.25, 0.05), "shin.L"),
+    ("cape", (-0.3, 0, 1.56), (-0.4, 0, 0.92), "chest"),
+    ("pony", (-0.28, 0, 2.42), (-0.8, 0, 2.22), "head"),
+    ("weapon", (0, 0, 1.0), (0.4, 0, 1.0), None),
+    ("hand_ik.R", (0, 0, 1.0), (0.2, 0, 1.0), "weapon"),
+    ("hand_ik.L", (0, 0, 1.0), (0.2, 0, 1.0), "weapon"),
+]
+ARM_DROP_DEG = 72     # how far below horizontal the arms hang at rest
 
 
-def rig():
+def rig(bones=None, tpose=False):
+    global HEAD_HALF_W
+    HEAD_HALF_W = 0.4 if tpose else 10.0
+    bones = bones or (BONES_TPOSE if tpose else BONES)
     col = bpy.data.collections[COLLECTION]
     old = bpy.data.objects.get(sprite_rig.RIG_NAME)
     if old:
@@ -75,7 +106,7 @@ def rig():
     mesh.vertex_groups.clear()
 
     saved = sprite_rig.BONES
-    sprite_rig.BONES = BONES
+    sprite_rig.BONES = bones
     try:
         arm = sprite_rig.build_armature(col)
     finally:
@@ -92,9 +123,53 @@ def rig():
     bpy.context.view_layer.objects.active = arm
     bpy.ops.object.parent_set(type="ARMATURE_AUTO")
     fix_weights(mesh)
+    if tpose:
+        drop_arms(arm, mesh)
     arm.rotation_euler = (0, 0, math.radians(sprite_rig.VIEW_YAW_DEG))
     arm.animation_data_create()
     return arm
+
+
+def drop_arms(arm, mesh):
+    """Pose the T-pose arms down to hang at her sides, bake that into the
+    mesh, and make it the rest pose — the shared poses rotate arms that hang."""
+    import math
+
+    from mathutils import Matrix
+
+    bpy.context.view_layer.objects.active = arm
+    bpy.ops.object.mode_set(mode="POSE")
+    # The sword hand's IK is live at rest; it would drag the arm to the
+    # weapon bone while the pose is baked.
+    iks = {side: arm.pose.bones[f"forearm.{side}"].constraints["IK"] for side in ("R", "L")}
+    saved = {k: c.influence for k, c in iks.items()}
+    for c in iks.values():
+        c.influence = 0.0
+    for side, s in (("L", 1), ("R", -1)):
+        pb = arm.pose.bones[f"upperarm.{side}"]
+        pb.rotation_mode = "QUATERNION"
+        # About the armature's X axis, expressed in the bone's rest frame.
+        R = Matrix.Rotation(math.radians(-s * ARM_DROP_DEG), 4, "X")
+        L = arm.data.bones[pb.name].matrix_local
+        pb.rotation_quaternion = (L.inverted() @ R @ L).to_quaternion()
+    bpy.context.view_layer.update()
+    bpy.ops.object.mode_set(mode="OBJECT")
+    # Bake the pose into the mesh, keeping the vertex groups.
+    bpy.context.view_layer.objects.active = mesh
+    md = next(m for m in mesh.modifiers if m.type == "ARMATURE")
+    bpy.ops.object.modifier_apply(modifier=md.name)
+    bpy.context.view_layer.objects.active = arm
+    bpy.ops.object.mode_set(mode="POSE")
+    bpy.ops.pose.armature_apply(selected=False)
+    for k, c in iks.items():
+        c.influence = saved[k]
+    bpy.ops.object.mode_set(mode="OBJECT")
+    md = mesh.modifiers.new("Armature", "ARMATURE")
+    md.object = arm
+    # The deform comes first: the ink hull must follow the posed body.
+    bpy.context.view_layer.objects.active = mesh
+    while mesh.modifiers.find("Armature") > 0:
+        bpy.ops.object.modifier_move_up(modifier="Armature")
 
 
 def fix_weights(mesh):
@@ -110,7 +185,7 @@ def fix_weights(mesh):
     arms = [groups[n] for n in ("upperarm.R", "forearm.R", "upperarm.L", "forearm.L")]
     for v in mesh.data.vertices:
         co = v.co
-        if co.z > NECK_Z:
+        if co.z > NECK_Z and abs(co.y) < HEAD_HALF_W:
             for g in groups.values():
                 g.remove([v.index])
             groups["head"].add([v.index], 1.0, "REPLACE")

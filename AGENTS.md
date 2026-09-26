@@ -163,6 +163,10 @@ One line each; the war story behind every one is in
 - **`specs/` is the source of truth.** Update it in the same commit.
 - **Draw from the collider data**, and position sprites via `syncSpriteToBody` —
   bodies are top-left, sprites are centre-origin.
+- **A packed sheet's PNG is loaded by the content hash its JSON names**
+  (`<hero>.png?v=<version>`, JSON fetched uncached). A browser that paired a
+  cached atlas with a re-render's JSON cropped every frame at the wrong rect,
+  and the new art looked like the old broken strips.
 - **A sprite's draw scale comes from its body box, never its cell.** A sheet
   whose cells are padded to fit a raised sword names its `bodyH`; scaling by
   the cell made every longer blade shrink the fighter. Lia's cell centre *is*
@@ -737,6 +741,9 @@ skill verifies it.
 - **`property-testing`** — fast-check in the unit suite: when a property beats an
   example, the `.prop` syntax, and the traps (NaN floats, `fc.option` nulls, the
   sanitise fallback, order-independent grouping).
+- **`ai-art-pipeline`** — Making hero art with AI tools: when an asset needs 3D
+  at all (most of a 2D game does not), Gemini boards, Tripo multi-view, the
+  Blender MCP rig / toon look / clips, and the gates. How Anands was built.
 - **`game-audio`** — The soundtrack: editing the MIDI source, the per-stem
   render/mix/master pipeline (LUFS targets, seam rules), retuning the SFX bank
   and the client engine, verified with the audio probe.

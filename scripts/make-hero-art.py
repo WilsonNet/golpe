@@ -140,15 +140,22 @@ def pack(images):
 # way the board does.
 PALETTE_FILE = os.path.join(ROOT, "art", HERO, "palette.json")
 BOARD_LOOK = os.path.exists(PALETTE_FILE)
+LOOK = json.load(open(PALETTE_FILE)) if BOARD_LOOK else {}
+# A textured (unlit) render needs the lift and the inner ink to get its fills
+# and shapes back; a toon-shaded one already has both, and only snaps.
+LIFT = LOOK.get("lift", True)
+INNER_INK = LOOK.get("inner_ink", True)
 SAT, CON = 1.35, 1.15
 INNER_INK_EDGE = 60  # luminance step (0-255) that earns an inner line
 INNER_INK_K = 0.55
 
 
 def board_look(im):
-    pal = np.array(json.load(open(PALETTE_FILE))["colours"], float)
+    pal = np.array(LOOK["colours"], float)
     a = np.array(im)
-    rgb = ImageEnhance.Contrast(ImageEnhance.Color(Image.fromarray(a[..., :3])).enhance(SAT)).enhance(CON)
+    rgb = Image.fromarray(a[..., :3])
+    if LIFT:
+        rgb = ImageEnhance.Contrast(ImageEnhance.Color(rgb).enhance(SAT)).enhance(CON)
     x = np.array(rgb, float)
     # "Redmean" colour distance: cheap, and far closer to perception than RGB.
     rm = (x[..., None, 0] + pal[None, None, :, 0]) / 2
@@ -160,6 +167,8 @@ def board_look(im):
     idx = d.argmin(-1)
     out = a.copy()
     out[..., :3] = pal[idx].astype(np.uint8)
+    if not INNER_INK:
+        return Image.fromarray(out)
     lum = (pal[:, 0] * 0.3 + pal[:, 1] * 0.59 + pal[:, 2] * 0.11)[idx]
     op = a[..., 3] > 0
     ink = np.zeros(op.shape, bool)
@@ -302,6 +311,10 @@ def main():
     out = {
         "name": HERO,
         "source": f"art/{HERO}/{HERO}.blend — regenerate with scripts/make-hero-art.py {HERO}",
+        # The atlas this JSON describes, by content: the game loads the PNG as
+        # `<hero>.png?v=<version>`, so a browser holding an older atlas can
+        # never crop a re-render's frames with the new rects (or vice versa).
+        "version": hashlib.sha1(open(OUT_PNG, "rb").read()).hexdigest()[:12],
         "cellW": cell_w,
         "cellH": cell_h,
         "bodyH": manifest["bodyH"],

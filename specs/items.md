@@ -208,3 +208,12 @@ in one exchange.
   boundary the black hole's replay used to have.
 - Items in the `?offline=true` escape hatch. There is no server to own the
   charges, so there are no items.
+
+## The throw, drawn
+
+A hero whose art has a `throw` clip (Anands, so far) is drawn throwing: the
+clip plays for `THROW_CLIP_MS` (320 ms, `Match.ts`) from the moment an item the
+fighter owns — a grenade, a trap canister, a smoke — first appears in the
+snapshot. Presentation only, and the follow-through rather than a wind-up: the
+server decides every item use, so the client learns of the throw when the item
+does. Heroes without the clip keep whatever clip they were in.

@@ -92,6 +92,13 @@ interface Entity {
 		 * `SMOKE_REVEAL_MS`. Meaningless while `smokeHidden` is unset.
 		 */
 		smokeRevealed?: boolean;
+		/**
+		 * Milliseconds left of this fighter's item-throw clip, as this viewer
+		 * sees it. Presentation-only: the match sets it when an item this
+		 * fighter owns first appears (the server decides every item use; the
+		 * client only sees it land), and counts it down each frame.
+		 */
+		throwMs?: number;
 	};
 
 	/** A server-owned projectile, keyed by the id the server assigned. */

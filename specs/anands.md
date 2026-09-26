@@ -223,21 +223,24 @@ Anands is the flagship of the game's art: her boards (in
 `unprocessed-sprites/`, painted with Gemini) are the look every hero chases,
 and she gets a higher budget than the other heroes to keep it.
 
-- **Her model** is a Tripo multi-view generation from her board turnaround
-  (`art/anands/generated/anands-tripo-h31.glb`), in `art/anands/anands.blend`,
-  rigged on the shared sprite skeleton with her own joint positions
-  (`scripts/blender/anands_rig.py`). Her dagger and machine gun, and every clip
-  she plays — the shared ones plus her **stab, shoryuken, thrust wind-up and
-  thrust dash** — are `scripts/blender/anands_clips.py`.
-- **Her pixels are her boards'.** The mesh is textured from the boards and
-  rendered unlit, then `scripts/make-hero-art.py anands` snaps every frame to
-  the boards' own palette (`art/anands/palette.json`, 56 colours measured off
-  the boards by `make-anands-art.py`) after a saturation and contrast lift, and
-  inks the darker side of every strong colour edge — so the render reads as
-  flat board fills with drawn shapes, not as a shrunken texture.
+- **Her model** is a Tripo multi-view generation from her Gemini T-pose
+  turnaround (`art/anands/generated/anands-tripo-tpose.glb`), in
+  `art/anands/anands.blend`, rigged on the shared sprite skeleton with her own
+  joint positions (`scripts/blender/anands_rig.py`). Her two daggers (the
+  second reverse-grip in her off hand, as her boards draw it) and machine gun,
+  and every clip she plays — the shared ones carried into her reach plus her
+  **stab, shoryuken, thrust wind-up, thrust dash and trap throw**, posed from
+  her boards' key frames — are `scripts/blender/anands_clips.py`.
+- **Lia's shading, her boards' colours.** `anands_look.py` turns the mesh's
+  texture into colour families (skin, hair, lens, scarf, shirt, trousers,
+  leather, boots...) on the shared LiaToon shader with the ink hull, lit /
+  shade / highlight taken from her boards; `make-hero-art.py anands` then snaps
+  every frame to the boards' palette (`art/anands/palette.json`).
 - **She ships like the other rendered heroes:** `anands.png` + `anands.json`
-  (packed, trimmed, both facings, the machine gun aim-banded, her dagger drawn
+  (packed, trimmed, both facings, the machine gun aim-banded, her daggers drawn
   in her frames so `MeleeFx` draws only the trail) and `anands-portrait.png`.
+- **Her trap throw is drawn**: the `throw` clip plays for 320 ms from the moment
+  her thrown trap first appears (see specs/items.md).
 - **The dragon ride is still board art:** `anands-dragon.png` (6 x 352x176),
   cut from the ultimate board by `scripts/make-anands-art.py` and played by
   `HERO_CLIPS` in `ecs/systems.ts`, rotated down the dragon's line and mirrored

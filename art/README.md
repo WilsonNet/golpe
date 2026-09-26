@@ -130,7 +130,8 @@ target. The work log is [`docs/anands-art.md`](../docs/anands-art.md).
 
 | Collection | What it is |
 |---|---|
-| **Tripo** | **What ships.** `Anands.tripo` — her Tripo multi-view mesh (27.5k verts, textured from her boards, rendered as unlit emission), skinned to `Rig`: the shared bone names and IK at *her* joints. `Dagger` and `Gun` ride the `weapon` bone. Every `clip.*` action is hers. |
+| **Tripo** | **What ships.** `Anands.tripo` — her Tripo multi-view mesh from the T-pose turnaround (27.4k verts), skinned to `Rig` (the shared bone names and IK at *her* joints, arms dropped to rest after weighting), shaded with LiaToon colour families by `anands_look.py` (`Anands.tripo.normals`, hidden, lends it smoothed normals). `Dagger` and `Gun` ride the `weapon` bone, `DaggerL` her left forearm. Every `clip.*` action is hers. |
+| **Tripo.armsdown** (hidden) | The first, arms-down Tripo mesh — kept as a fallback. Never renders. |
 | **Reference** | Her turnaround from the board's "Idle Stance (Full 360)" row (`art/anands/reference/`), as blueprints behind the model in orthographic views (face-on in Numpad 3, profile in Numpad 1). `BodyBox` is the collider; `Anands.hunyuan` (hidden) an early image-to-3D guide. Never renders. |
 | **Anands**, **Anands.parts** | The hand blockout from before the Tripo mesh (`scripts/blender/anands_model.py`) — kept as a fallback. Never renders. |
 
@@ -142,24 +143,26 @@ tsx scripts/art-probe.ts --hero=anands       # every clip drawn in a live match,
 ```
 
 What `make-hero-art.py` does for her and not for Lia and Jeffs: when
-`art/<hero>/palette.json` exists, each frame gets a saturation/contrast lift,
-is snapped to that palette, and gets an ink line on the darker side of every
-strong colour edge (`board_look`). A shrunken texture averages neighbouring
-colours into mud; the snap puts her board's flat fills back.
+`art/<hero>/palette.json` exists, each frame is snapped to that palette
+(`board_look`); its `lift` / `inner_ink` flags add a saturation lift and inner
+ink lines for an *unlit textured* render — off for her now that she is
+toon-shaded.
 
 The scripts that built the file (all run in the live Blender through the
 Blender MCP; the .blend is the source once edited):
 
-- `anands_rig.py` — `rig()`: her `Rig` and skin weights (merge the GLB's
+- `anands_rig.py` — `rig(tpose=True)`: her `Rig` and skin weights (weighted in T-pose, then `drop_arms` makes arms-down the rest pose) (merge the GLB's
   UV-seam splits first — heat weighting fails on 1000+ islands — and
   `heal_weightless` gives the ~300 weightless pack vertices their neighbour's
   weights, or a knocked-down Anands grows a strand back to where she stood).
-- `anands_clips.py` — `build()`: the render scene, the unlit material, the
-  dagger and machine gun, and every clip: the shared ones plus her stab,
-  shoryuken, thrust wind-up and thrust dash.
+- `anands_look.py` — `apply()`: the texture turned into LiaToon colour
+  families in her boards' colours, the ink hull, smoothed shading normals.
+- `anands_clips.py` — `build()`: the render scene, both daggers and the
+  machine gun, the shared clips carried into her reach (`adapt`), and her
+  stab, shoryuken, thrust wind-up, thrust dash and trap throw.
 - `anands_model.py` — the blockout, and `compare()`: render front/side/back
   for `scripts/anands-compare.py` (board | model, silhouette IoU).
 
-`unprocessed-sprites/anands-tpose.jpeg` is a T-pose turnaround from the same
-Gemini conversation, for a cleaner re-generation (a T-pose skins better under
-the arms).
+`unprocessed-sprites/anands-tpose.jpeg` is the T-pose turnaround the shipped
+mesh was generated from. The whole pipeline, for the next hero, is the
+`ai-art-pipeline` skill.

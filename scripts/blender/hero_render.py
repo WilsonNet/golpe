@@ -37,9 +37,9 @@ GUNS = ("Rifle", "Shotgun", "Gun")
 # `Dagger` is Anands' melee weapon: in hand for her melee clips, put away
 # (hidden — she has no scabbard on her back) for the gun and the tumble.
 PROPS = {
-    "sword": {"Sword": True, "SwordBack": False, "Dagger": True, **dict.fromkeys(GUNS, False)},
-    "rifle": {"Sword": False, "SwordBack": True, "Dagger": False, **dict.fromkeys(GUNS, True)},
-    "none": {"Sword": False, "SwordBack": True, "Dagger": False, **dict.fromkeys(GUNS, False)},
+    "sword": {"Sword": True, "SwordBack": False, "Dagger": True, "DaggerL": True, **dict.fromkeys(GUNS, False)},
+    "rifle": {"Sword": False, "SwordBack": True, "Dagger": False, "DaggerL": False, **dict.fromkeys(GUNS, True)},
+    "none": {"Sword": False, "SwordBack": True, "Dagger": False, "DaggerL": False, **dict.fromkeys(GUNS, False)},
 }
 
 

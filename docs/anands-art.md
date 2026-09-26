@@ -1,10 +1,12 @@
 # Anands' art — the plan (start here)
 
-**Status (2026-09-26): shipped in the game from Blender.** Her sprites are
-rendered from `art/anands/anands.blend` (a Tripo multi-view mesh of her boards,
-rigged on the shared skeleton, her own dagger clips) and snapped back to her
-boards' palette; only the dragon ride is still cut from the boards. See the
-log at the end ("shipped") and `art/README.md`.
+**Status (2026-09-26): shipped in the game from Blender, toon-shaded like
+Lia.** Her sprites are rendered from `art/anands/anands.blend` — a Tripo
+multi-view mesh of her Gemini T-pose turnaround, rigged on the shared skeleton,
+turned into LiaToon colour families in her boards' colours, with two daggers,
+her own moves and the trap throw. Only the dragon ride is still cut from the
+boards. The reusable pipeline is the `ai-art-pipeline` skill; the log is at the
+end of this file.
 
 ## The objective: HD-2D characters
 
@@ -438,3 +440,37 @@ from Gemini is the plan for a cleaner re-generation later.
   shoulder weights; pose her dagger clips closer to the boards' key frames;
   the trap throw and the reactions (`anands-reactions-draft2.jpeg` as the pose
   reference).
+
+### 2026-09-26 — second pass: T-pose mesh, Lia's shading, the board's moves, the throw
+
+- **T-pose mesh**: Gemini made a clean T-pose turnaround
+  (`unprocessed-sprites/anands-tpose.jpeg`); Tripo multi-view from it (60
+  credits) → `art/anands/generated/anands-tripo-tpose.glb`. Rigged in T-pose
+  (clean heat weights), then `anands_rig.drop_arms` poses the arms down, bakes
+  it and applies it as rest, so the shared poses still apply. The arms-down mesh
+  is kept hidden in `Tripo.armsdown`.
+- **Lia's shading** (the user: "the shading and colors of lia is much better"):
+  `anands_look.apply` — texels classified into 12 colour families with the
+  boards' lit/shade/highlight, a majority vote in texture space (a blur made
+  green + orange into brown), bone rules for hair vs boot, trousers vs leather
+  and eyes vs lens, LiaToon per family, the ink hull, and smoothed normals from a
+  hidden smoothed copy (the generated surface's bumps flipped the shade band
+  into camouflage). `palette.json` now snaps only (`lift`/`inner_ink` false).
+- **Her reach**: her shoulders are at z 1.88 with 0.72 m of arm (Lia: 1.5,
+  0.58); `anands_clips.adapt` carries every shared pose's grip into her reach.
+  The rig object is scaled 0.97 (she stood 102-103 px against the 100 px limit),
+  and `sprite_rig.lowest_point` now measures the evaluated mesh (skinned bodies
+  were measured at rest).
+- **The board's moves**: two daggers (`DaggerL`, reverse grip in the off hand,
+  as her boards draw it); the stab's straight arm over a deep lunge; the
+  shoryuken's cocked fist then the arm straight up; the thrust wind-up's
+  reverse grip pointing down; the dash with the dagger back.
+- **The trap throw**: a new `throw` / `throw-left` clip, played for 320 ms from
+  the moment the fighter's thrown item first appears (the smoke-reveal's
+  fresh-item edge; presentation only), for heroes whose art has it.
+- **Cache-busting**: a stale browser cache paired the new atlas with the old
+  JSON and every frame was cropped wrong; packed sheets now load their PNG as
+  `?v=<content hash>` from an uncached JSON.
+- Measured: verify green, `art-probe --hero=anands` and `--hero=lia` PASS
+  (the throw drawn in a live match), atlas 203 frames / 35 clips, feet 1 px off,
+  figure 99 px.

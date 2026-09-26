@@ -19,6 +19,7 @@ const SPRITE_ANCHOR_CENTRE = 0.5;
 
 import { Container, Sprite } from "pixi.js";
 import { SMOKE_REVEAL_MS } from "../tweakables/items.js";
+
 import { pelletDamageAt } from "../tweakables/ranged.js";
 import { TutorialDirector, tutorialFor } from "./campaign";
 import { type AIConfig, randomBotConfig } from "./characters/AIConfig";
@@ -153,6 +154,13 @@ import {
 } from "./simulation/Teams";
 import { sound } from "./sound/facade";
 import { TrainingRoom } from "./training/TrainingRoom";
+
+/**
+ * How long a fighter's item-throw clip plays once the thrown item shows up —
+ * the follow-through, not the wind-up: the client learns of a throw only
+ * when the server's item appears. Presentation timing, not balance.
+ */
+const THROW_CLIP_MS = 320;
 
 /**
  * The charge floor a tutorial room runs with, unless the URL says otherwise.
@@ -1880,6 +1888,11 @@ export class Match {
 				this.smokeRevealMs.delete(id);
 			}
 			e.fighter.smokeRevealed = Boolean(e.fighter.smokeHidden) && revealed;
+			// The same edge draws the throw: the item appeared, so the arm
+			// that threw it is mid-follow-through.
+			e.fighter.throwMs = freshItems.has(id)
+				? THROW_CLIP_MS
+				: Math.max(0, (e.fighter.throwMs ?? 0) - dtMs);
 		}
 	}
 

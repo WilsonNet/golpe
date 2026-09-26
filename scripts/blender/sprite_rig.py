@@ -547,12 +547,16 @@ def apply_pose(arm, p):
     arm.pose.bones["forearm.L"].constraints["IK"].influence = p["ikL"]
 
 
-WEAPONS = {"Sword", "SwordBack", "Dagger", "Rifle", "Shotgun", "Gun"}
+WEAPONS = {"Sword", "SwordBack", "Dagger", "DaggerL", "Rifle", "Shotgun", "Gun"}
 
 
 def lowest_point(arm):
-    """The lowest vertex of the body (weapons excluded), in armature z."""
+    """The lowest point of the drawn body (weapons excluded), in armature z —
+    *as posed and as drawn*: the evaluated mesh, so a skinned body (Anands')
+    is measured deformed rather than at rest, and the ink hull is included,
+    because the hull is the sprite's bottom edge."""
     bpy.context.view_layer.update()
+    deps = bpy.context.evaluated_depsgraph_get()
     low = math.inf
     inv = arm.matrix_world.inverted()
     for ob in bpy.data.objects:
@@ -560,9 +564,12 @@ def lowest_point(arm):
         # blockout and generated guides), which are not on the floor line.
         if ob.type != "MESH" or ob.name in WEAPONS or ob.parent != arm:
             continue
-        m = inv @ ob.matrix_world
-        for v in ob.data.vertices:
+        ev = ob.evaluated_get(deps)
+        me = ev.to_mesh()
+        m = inv @ ev.matrix_world
+        for v in me.vertices:
             low = min(low, (m @ v.co).z)
+        ev.to_mesh_clear()
     return low
 
 
@@ -574,9 +581,9 @@ def key_pose(arm, p, frame, ground=False):
         # (Measured by make-hero-art.py: feet must land on the floor line.)
         p = dict(p)
         rx, ry, rz = p["root"]
-        # The ink hull hangs OUTLINE_M below the sole; it is the sprite's
-        # bottom edge, so it is what touches the floor.
-        p["root"] = (rx, ry, rz - lowest_point(arm) + OUTLINE_M)
+        # `lowest_point` includes the ink hull, which hangs below the sole:
+        # it is the sprite's bottom edge, so it is what touches the floor.
+        p["root"] = (rx, ry, rz - lowest_point(arm))
         apply_pose(arm, p)
     for pb in arm.pose.bones:
         pb.keyframe_insert("rotation_quaternion", frame=frame)
