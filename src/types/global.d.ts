@@ -306,6 +306,16 @@ export interface PotgSnapshot {
 	drawn: number;
 	/** Cast members conjured because they had left the room. */
 	ghosts: number;
+	/**
+	 * The animation clock of the protagonist, in footage ms.
+	 *
+	 * The footage runs at `rate`, and the drawn animation clock has to grow at
+	 * the same rate — or the pre-roll's crawl is a fighter whose legs run at full
+	 * speed under a slow world, which reads as "the movements look wrong" and is
+	 * invisible to every other check in the suite. The probe compares this
+	 * against the wall time times the footage rate.
+	 */
+	animActorMs: number;
 }
 
 declare global {

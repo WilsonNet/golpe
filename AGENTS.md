@@ -269,7 +269,10 @@ One line each; the war story behind every one is in
   recorded `PackedState`, re-pointing the live entities *after* the live update
   has pointed them at prediction — last writer wins, and the next live frame
   restores itself. Re-simulating from recorded input would diverge from the match
-  it is a replay of on the first floating-point difference.
+  it is a replay of on the first floating-point difference. Its **world** is
+  presented on the footage clock (the pre-roll crawl, the beat's slow motion);
+  only the camera edit runs on wall time. An animation fed the wall delta walks
+  at 1x under a slow world, and the probe measures exactly that.
 - **Only the server may decide what the play was.** A play is kills, denies and
   round wipes, and no client sees all of them; a client-side reel gives sixteen
   people sixteen different ceremonies.

@@ -103,6 +103,14 @@ async function poll<T>(
  * Sampled rather than read once at the end, because most of what is being
  * checked only exists *during* the replay: `phase`, `zoom`, `drawn` and the
  * live camera track are all gone the moment it hands the screen back.
+ *
+ * The animation-clock buckets test one thing: **the footage's world has to run
+ * on the footage clock.** The pre-roll crawls at 0.35x and a scoring beat drops
+ * to 0.32x, so a presentation system fed the wall delta draws legs at full
+ * speed under a slow world — which reads as "the movements look weird next to
+ * the match" and is invisible to every other check in the suite. `anim` is the
+ * clip-animation time the replay actually drew, `expect` the wall time times
+ * the footage rate it should have drawn; their ratio is 1 when coherent.
  */
 async function watchCeremony(page: Page) {
 	const deadline = Date.now() + CEREMONY_TIMEOUT_MS;
@@ -115,6 +123,16 @@ async function watchCeremony(page: Page) {
 	let minRate = Number.POSITIVE_INFINITY;
 	let maxCurtain = 0;
 	let curtainOpened = false;
+	/** Drawn protagonist animation ms, and the ms the footage rate says it should be. */
+	const preRoll = { peak: 0, anim: 0, expect: 0 };
+	const roll = { peak: 0, anim: 0, expect: 0 };
+	let last: {
+		wall: number;
+		clipMs: number;
+		animActorMs: number;
+		rate: number;
+		phase: string;
+	} | null = null;
 
 	while (Date.now() < deadline) {
 		const state = await page.evaluate(() => window.__potgState?.() ?? null);
@@ -134,6 +152,46 @@ async function watchCeremony(page: Page) {
 				if (state.phase && phases[phases.length - 1] !== state.phase) {
 					phases.push(state.phase);
 				}
+
+				// The footage has to have moved for an interval to mean anything:
+				// the intro holds the cursor still, and dividing by zero footage
+				// would report an infinite animation speed behind the card.
+				const now = Date.now();
+				if (
+					last &&
+					state.animActorMs >= last.animActorMs &&
+					state.clipMs > last.clipMs &&
+					now - last.wall < 500
+				) {
+					const bucket =
+						last.phase === "establish" ||
+						last.phase === "orbit" ||
+						last.phase === "push" ||
+						last.phase === "whip"
+							? preRoll
+							: last.phase === "roll"
+								? roll
+								: null;
+					// What the footage rate says the animation clock should have
+					// gained over this wall interval. Above 1 is the fighter moving
+					// faster than the world they are standing in — the funkyness.
+					const expect = (now - last.wall) * last.rate;
+					if (bucket && expect > 1) {
+						bucket.anim += state.animActorMs - last.animActorMs;
+						bucket.expect += expect;
+						bucket.peak = Math.max(
+							bucket.peak,
+							(state.animActorMs - last.animActorMs) / expect,
+						);
+					}
+				}
+				last = {
+					wall: now,
+					clipMs: state.clipMs,
+					animActorMs: state.animActorMs,
+					rate: state.rate,
+					phase: state.phase ?? "",
+				};
 			}
 			// The ceremony is over once it went active and stopped being so.
 			if (sawActive && !state.active) break;
@@ -153,6 +211,8 @@ async function watchCeremony(page: Page) {
 		minRate,
 		maxCurtain,
 		curtainOpened,
+		preRoll,
+		roll,
 	};
 }
 
@@ -167,6 +227,8 @@ interface CeremonySeen {
 	minRate: number;
 	maxCurtain: number;
 	curtainOpened: boolean;
+	preRoll: { peak: number; anim: number; expect: number };
+	roll: { peak: number; anim: number; expect: number };
 }
 
 /** What the DOM showed while the ceremony was up. */
@@ -233,6 +295,7 @@ function assess({
 		minRate,
 		maxCurtain,
 		curtainOpened,
+		preRoll: preRollClock,
 	} = ceremony;
 
 	if (!best?.announced) {
@@ -369,6 +432,27 @@ function assess({
 		failures.push(
 			`the title card overstayed its budget (${Math.round(intro.ms)}ms)`,
 		);
+	}
+
+	// **The footage's world has to run on the footage clock.** The pre-roll
+	// crawls at 0.35x and a beat drops to 0.32x; a fighter whose animation clock
+	// was fed the wall delta walks at 1x under all of it, which is the difference
+	// between a replay that reads as the match and one whose movements look
+	// weird. The pre-roll's accumulated ratio is the protagonist's drawn
+	// animation ms over the wall time times the footage rate: at most 1 (a
+	// fighter cannot animate through more than the footage it is in), and *above*
+	// 1 only when the clock ran faster than the world. The per-interval peak is
+	// reported but not asserted — a 60ms sample straddling a dropped frame
+	// reads high, and the accumulated ratio cannot.
+	const preRollRatio =
+		preRollClock.expect > 100 ? preRollClock.anim / preRollClock.expect : null;
+	if (preRollRatio !== null && preRollRatio > 1.2) {
+		failures.push(
+			`the replay's animation ran ${preRollRatio.toFixed(2)}x the footage clock in the pre-roll — legs at wall speed under a slow world`,
+		);
+	}
+	if (preRollClock.expect > 100 && preRollClock.anim === 0) {
+		notes.push("the protagonist never stood in a clock-driven clip to measure");
 	}
 
 	// The stat line: the play is scored on frags, but the card now says what
@@ -578,6 +662,20 @@ async function main() {
 					],
 					slowestFootage: Number(ceremony.minRate.toFixed(2)),
 					fightersDrawn: ceremony.maxDrawn,
+				},
+				animationClock: {
+					preRollPeak: Number(ceremony.preRoll.peak.toFixed(2)),
+					rollPeak: Number(ceremony.roll.peak.toFixed(2)),
+					preRollPerFootageMs:
+						ceremony.preRoll.expect > 0
+							? Number(
+									(ceremony.preRoll.anim / ceremony.preRoll.expect).toFixed(2),
+								)
+							: null,
+					rollPerFootageMs:
+						ceremony.roll.expect > 0
+							? Number((ceremony.roll.anim / ceremony.roll.expect).toFixed(2))
+							: null,
 				},
 				track: (ceremony.best?.track ?? []).map((t) => ({
 					phase: t.phase,

@@ -205,6 +205,17 @@ own, variable speed underneath them.
 - The footage **crawls at 0.35x through the rest of the pre-roll**, so the world
   is alive while the camera works and it only eats about 1.8s of the lead-in. The
   play still arrives with footage to spare.
+- **The world runs on the footage clock; the camera runs on the wall clock.**
+  The crawl and the slow motion are the footage's own time, so positions, fighter
+  animation and the combat effects drawn from the recording are all on it — only
+  the edit's own movements are paced by wall time. A fighter whose legs were
+  animated on wall time walked at full speed under a world in slow motion, which
+  reads as "the movements look wrong next to the match" and is invisible to every
+  other check in the suite. The probe measures it off the drawn animation clock.
+- **Projectiles are interpolated like the fighters.** A bullet matches the next
+  frame by its id; a grenade matches its slot only when the slot did not move
+  further than a throw can in one broadcast — an explosion shifts the array, and
+  a slot-keyed lerp with no guard would slide one grenade across the arena.
 - At a scoring beat the footage drops to **0.32x**, ramping in and out over
   420ms either side. A hard cut to 0.32x reads as a dropped frame; the ramp is
   what makes it read as emphasis.
@@ -296,6 +307,11 @@ and the way out.
   never predicts and never reconciles. Re-simulating from recorded inputs would
   need exact server tick alignment, and the first floating-point difference
   would have the replay diverge from the match it is a replay of.
+- **A body is interpolated; a timer is not.** Position and velocity blend
+  between the two bracketing frames, while every flag, enum and timer comes from
+  the earlier one — half a stun is not a state the game has. And the blended
+  world moves on the *footage* clock, not the wall clock: slow motion slows the
+  animation with the glide, or the replay walks at 1x under itself.
 - **The live match keeps running underneath.** The session keeps predicting,
   reconciling and sending input; the replay only re-points the entities at
   recorded state *after* the live update has re-pointed them at predicted state.
@@ -343,7 +359,9 @@ the **orbit swung around the fighter**, the push pushed and the whip actually
 swung; the curtain reached 1 and then opened, so the card was a card and not a
 caption; the intro held the footage still and stood for at least 3.5s; the
 footage slowed at a beat and shook once per beat rather than once per frame;
-the replay drew fighters rather than an empty arena; the HUD and the podium
+the replay drew fighters rather than an empty arena; **the world ran on the
+footage clock** — the protagonist's drawn animation clock, read off the sprite
+system, never outpaced the footage it was standing in; the HUD and the podium
 stayed down; and the podium then arrived.
 
 ## Not implemented

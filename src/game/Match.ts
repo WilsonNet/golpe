@@ -1530,7 +1530,14 @@ export class Match {
 				track: this.potgTrack.map((t) => ({ ...t })),
 				/** How many fighters the replay is drawing this frame. */
 				drawn: this.potgSample?.fighters.length ?? 0,
+				/** Cast members conjured because they had left the room. */
 				ghosts: this.potgGhosts.size,
+				/**
+				 * Clip-animation clock the replay has drawn for the protagonist so
+				 * far, in footage ms. Against `clipMs` it is the probe's coherence
+				 * metric — see `tallyReplayAnimation`.
+				 */
+				animActorMs: this.potgAnimActorMs,
 			};
 		};
 		window.__physicsDiagnostic = (durationMs = 5000) =>
@@ -1654,17 +1661,33 @@ export class Match {
 
 		// Presentation, in dependency order: animation picks the frame, sync moves
 		// the sprites, effects read the same state, then the camera settles.
-		animationSystem(this.queries, dtMs, (id, local) => this.aimOf(id, local));
+		//
+		// **The footage's world runs on the footage clock.** The reel crawls at
+		// 0.35x through the pre-roll and drops to 0.32x at a scoring beat, and
+		// the systems that draw the *fighters* were fed the wall delta — so a
+		// fighter's legs cycled at full speed under a world drifting in slow
+		// motion, which is the difference between a replay that reads as the
+		// match and one whose movement looks wrong. The camera edit stays on
+		// wall time on purpose (`applyReplayCamera`), because its movements are
+		// a function of wall clock; everything downstream of the footage cursor
+		// gets the cursor's delta instead.
+		const worldDt = shot ? dtMs * shot.shot.rate : dtMs;
+		animationSystem(this.queries, worldDt, (id, local) =>
+			this.aimOf(id, local),
+		);
+		if (shot) this.tallyReplayAnimation(shot);
 		spriteSyncSystem(this.queries);
 		nameplateSystem(this.queries, this.plates);
 		shadowSystem(this.queries, this.shadows);
 		this.syncAimLine(dtMs);
-		meleeFxSystem(this.queries, this.fx, dtMs, (id) => this.ultAuraVisible(id));
+		meleeFxSystem(this.queries, this.fx, worldDt, (id) =>
+			this.ultAuraVisible(id),
+		);
 		this.fx.update(dtMs);
 		this.denyFx.update(dtMs);
 		this.rootedFx.update(dtMs);
 		this.updateItems(dtMs);
-		this.updateUltimate(dtMs);
+		this.updateUltimate(worldDt);
 		this.stage.update(dtMs);
 		if (shot) this.applyReplayCamera(shot.shot, dtMs);
 		else this.updateCamera();
@@ -2410,6 +2433,21 @@ export class Match {
 	 * silently degraded into a static shot would still pass every other probe.
 	 */
 	private readonly potgTrack: PotgTrackEntry[] = [];
+	/**
+	 * Footage-clock ms of clip animation the replay has drawn for the
+	 * protagonist, and the last `anim.elapsedMs` seen per fighter.
+	 *
+	 * This exists because "the replay's movements look wrong next to the match"
+	 * has no metric anywhere else: the footage runs at `rate` (0.35 in the
+	 * pre-roll, down to 0.32 at a beat) while a presentation system fed the wall
+	 * delta draws legs at full speed under a crawling world. The tally is taken
+	 * from what the animation system actually advanced — `elapsedMs` moves only
+	 * for the clock-driven clips, and a clip switch resets it, so only positive
+	 * deltas count. `scripts/potg-probe.ts` divides its growth by the wall time
+	 * times the footage rate and asserts the world runs on the footage clock.
+	 */
+	private potgAnimActorMs = 0;
+	private readonly potgAnimSeen = new Map<string, number>();
 
 	/**
 	 * Open the victory window: breathing room first, then the card, then the
@@ -2504,6 +2542,8 @@ export class Match {
 		this.potgReplay = new PotgReplay(clip);
 		this.potgSample = null;
 		this.potgHidden.clear();
+		this.potgAnimActorMs = 0;
+		this.potgAnimSeen.clear();
 		this.ensurePotgLayers();
 		// The reel's own theme: the announcement already stung; now the reel
 		// really starts, and the music clears the floor for it.
@@ -2617,6 +2657,28 @@ export class Match {
 		sample.bullets.forEach((b, i) => {
 			sprites[i]?.position.set(b.x, b.y);
 		});
+	}
+
+	/**
+	 * Accumulate the clip-animation clock the replay is actually drawing.
+	 *
+	 * Read off the entity's own `anim.elapsedMs` after the animation system ran,
+	 * never off the delta the match passed in: instrumentation that measured its
+	 * own argument would report the fix instead of the drawing. A clip switch
+	 * resets the clock, so the negative delta is skipped and the new clip's
+	 * growth is picked up from zero on the next frame.
+	 */
+	private tallyReplayAnimation(sample: ReplaySample) {
+		const actorId = this.potgReplay?.clip.protagonist.id;
+		for (const fighter of sample.fighters) {
+			const entity = this.replayActor(fighter.member);
+			const prev = this.potgAnimSeen.get(fighter.member.id);
+			const now = entity.anim.elapsedMs;
+			if (prev !== undefined && now > prev && fighter.member.id === actorId) {
+				this.potgAnimActorMs += now - prev;
+			}
+			this.potgAnimSeen.set(fighter.member.id, now);
+		}
 	}
 
 	/**

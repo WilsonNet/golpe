@@ -32,6 +32,16 @@ import { PotgDirector, type PotgShot, type Subject } from "./Director";
 /** A bullet packs as an (id, x, y) triplet — the stride of `a.b`. */
 const BULLET_STRIDE = 3;
 
+/**
+ * How far a grenade may travel between two recorded frames and still be the
+ * same grenade, in world px.
+ *
+ * A slot that jumps further than this is a different grenade taking the exploded
+ * one's place — the slot has no id to match on, so distance is the only proof,
+ * and the fastest throw (780 px/s) moves under 40px per 50ms broadcast.
+ */
+const MAX_GRENADE_STEP_PX = 80;
+
 import type { PotgCastMember, PotgClip } from "./types";
 
 /** The replay's singularity is not the room's, so it gets an id nothing else uses. */
@@ -120,18 +130,53 @@ export class PotgReplay {
 		}
 
 		const bullets: { id: number; x: number; y: number }[] = [];
+		// Matched between frames **by id**, then interpolated with the fighters.
+		// The recording is 20Hz and the screen is not: a bullet drawn at the
+		// earlier frame's position alone steps forward in 40px jumps while every
+		// fighter glides, and the mismatch is exactly the "not like the match"
+		// the reel is not allowed to have. A bullet born or gone between the two
+		// frames has no partner and is drawn where the earlier frame had it.
+		const nextBullets = new Map<number, { x: number; y: number }>();
+		if (b) {
+			for (let i = 0; i + BULLET_STRIDE - 1 < b.b.length; i += BULLET_STRIDE) {
+				const id = b.b[i];
+				if (id === undefined) continue;
+				nextBullets.set(id, { x: b.b[i + 1] ?? 0, y: b.b[i + 2] ?? 0 });
+			}
+		}
 		for (let i = 0; i + BULLET_STRIDE - 1 < a.b.length; i += BULLET_STRIDE) {
-			bullets.push({
-				id: a.b[i] ?? 0,
-				x: a.b[i + 1] ?? 0,
-				y: a.b[i + 2] ?? 0,
-			});
+			const id = a.b[i] ?? 0;
+			let x = a.b[i + 1] ?? 0;
+			let y = a.b[i + 2] ?? 0;
+			const to = t > 0 ? nextBullets.get(id) : undefined;
+			if (to) {
+				x = lerp(x, to.x, t);
+				y = lerp(y, to.y, t);
+			}
+			bullets.push({ id, x, y });
 		}
 		const grenades: { id: number; x: number; y: number }[] = [];
 		for (let i = 0; i + 1 < a.g.length; i += 2) {
 			// Keyed by slot rather than by a recorded id: there is at most one
-			// grenade in the air per cast, so the slot *is* the identity.
-			grenades.push({ id: i, x: a.g[i] ?? 0, y: a.g[i + 1] ?? 0 });
+			// grenade in the air per cast, so the slot *is* the identity. But a
+			// grenade that explodes shifts its neighbours' slots, so a slot is
+			// only interpolated toward the next frame's when the two are close
+			// enough to be the same grenade — lerping across a shift would slide
+			// one across the arena.
+			let x = a.g[i] ?? 0;
+			let y = a.g[i + 1] ?? 0;
+			const nx = b?.g[i];
+			const ny = b?.g[i + 1];
+			if (
+				t > 0 &&
+				nx !== undefined &&
+				ny !== undefined &&
+				Math.hypot(nx - x, ny - y) <= MAX_GRENADE_STEP_PX
+			) {
+				x = lerp(x, nx, t);
+				y = lerp(y, ny, t);
+			}
+			grenades.push({ id: i, x, y });
 		}
 
 		const hole = a.h;
