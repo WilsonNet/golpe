@@ -18,13 +18,19 @@ const SPRITE_ANCHOR_CENTRE = 0.5;
  */
 
 import { Container, Sprite } from "pixi.js";
+import { CP_SCREENS } from "../tweakables/control";
 import { SMOKE_REVEAL_MS } from "../tweakables/items.js";
-
 import { pelletDamageAt } from "../tweakables/ranged.js";
 import { TutorialDirector, tutorialFor } from "./campaign";
 import { type AIConfig, randomBotConfig } from "./characters/AIConfig";
 import { EnemyBrain } from "./characters/EnemyBrain";
-import type { AIInput, AIOutput, AllyInfo, FoeInfo } from "./characters/types";
+import type {
+	AIInput,
+	AIOutput,
+	AllyInfo,
+	ControlInfo,
+	FoeInfo,
+} from "./characters/types";
 import { BulletSystem, type BulletTarget } from "./combat/BulletSystem";
 import {
 	CARRY_START_SUPPRESSION_FRAMES,
@@ -82,6 +88,7 @@ import { bodyCentre, drawArena } from "./render/ArenaRenderer";
 import { heroFrames, sheetScale, TEX, tex } from "./render/assets";
 import { BlackHoleFx } from "./render/BlackHoleFx";
 import { BlossomFx } from "./render/BlossomFx";
+import { ControlPointFx } from "./render/ControlPointFx";
 import { DenyFx } from "./render/DenyFx";
 import { DragonFx } from "./render/DragonFx";
 import { ItemFx } from "./render/ItemFx";
@@ -100,6 +107,11 @@ import {
 	PLAYER_WIDTH,
 	type World,
 } from "./simulation/Arena";
+import {
+	applyControlWorld,
+	buildControlWorld,
+	CONTROL_PADS,
+} from "./simulation/ControlMap";
 import {
 	timeLeftMs,
 	VICTORY_BREATHING_MS,
@@ -283,6 +295,7 @@ export class Match {
 	private readonly ultAim: UltAimLine;
 	private readonly denyFx: DenyFx;
 	private readonly rootedFx: RootedFx;
+	private readonly controlFx: ControlPointFx;
 	private readonly items: ItemFx;
 	private readonly input: Input;
 	private readonly diagnostics: PhysicsDiagnostics;
@@ -349,6 +362,8 @@ export class Match {
 	private mode: MatchMode = "ffa";
 	/** `?freezeTime=S`: how long a team round's countdown lasts. Creator-only. */
 	private freezeTime: number | undefined;
+	/** `?capTime=S`: the middle point's capture seconds. Creator-only. */
+	private capTime: number | undefined;
 	/**
 	 * `?password=`: this attempt's key to the room.
 	 *
@@ -424,14 +439,22 @@ export class Match {
 		// `?mode=tdm` only decides how wide to build the arena before connecting.
 		// A team room has a three-screen floor, and building one screen first
 		// would draw the whole level twice — once wrong.
+		//
+		// `?mode=5cp` is stronger than that: the control arena is not the classic
+		// one at some width, it is its own map — five screens with a point on each
+		// — so the client builds *that* before connecting and corrects on seating
+		// exactly like the width case.
+		const wantsControl = launch.mode === "5cp";
 		const wantsTeams = launch.mode === "tdm";
 		const askedScreens =
 			rawScreens === undefined
 				? 1
 				: Math.max(1, Math.min(rawScreens, MAX_SCREENS));
-		this.arena = buildWorld(
-			wantsTeams ? Math.max(askedScreens, TDM_MIN_SCREENS) : askedScreens,
-		);
+		this.arena = wantsControl
+			? buildControlWorld()
+			: buildWorld(
+					wantsTeams ? Math.max(askedScreens, TDM_MIN_SCREENS) : askedScreens,
+				);
 		this.view = screen;
 		// `?hero=` picks who this client plays before the room exists. Invalid
 		// values fall back to the default rather than failing to boot.
@@ -456,6 +479,9 @@ export class Match {
 		// reason the hole's core sits behind them) and the heaviest particle
 		// budget in the game in front of them.
 		this.blossomFx = new BlossomFx(stage.field, stage.effects, stage);
+		// The control pads: arena furniture under every field effect, so a
+		// fighter standing on an objective still reads over its colour.
+		this.controlFx = new ControlPointFx(stage.field);
 		this.plates = new Nameplates(stage.nameplates, this.arena);
 		// Between the arena and the fighters: a shadow falls on the ledge below and
 		// is never drawn over the feet that cast it. See `Stage.shadows`.
@@ -580,6 +606,7 @@ export class Match {
 		// Zero is a legitimate request — "no countdown, start fighting" — so this
 		// goes through the parser that accepts it.
 		this.freezeTime = launch.freezeTime;
+		this.capTime = launch.capTime;
 		// The room's door and its key: the creator's password becomes the room's
 		// lock, and everybody after carries theirs in the same parameter. By
 		// default the password never appears in the address bar — it is handed
@@ -1181,6 +1208,36 @@ export class Match {
 					sound.play("fight");
 					console.log(`[ROUND] ${msg.round} live`);
 				},
+				onControlCaptured: (msg) => {
+					// A point changed hands. The banner is the local player's answer
+					// to "what just happened to my line", and the sting says whose
+					// side it was before a word is read — the same judgment call the
+					// round sting makes.
+					const myTeam = this.online?.myTeam ?? null;
+					const mine = msg.team === myTeam;
+					const letter = "ABCDE"[msg.point] ?? "?";
+					const who = teamName(msg.team);
+					EventBus.emit(
+						HUD_EVENTS.status,
+						msg.last
+							? `${who} CAPTURE THE LAST POINT`
+							: mine
+								? `POINT ${letter} CAPTURED`
+								: `${who} TOOK POINT ${letter}`,
+					);
+					sound.play(mine ? "cap-taken" : "cap-lost");
+					console.log(
+						`[CP] point ${letter} -> ${who}${msg.last ? " (last)" : ""}`,
+					);
+				},
+				onControlOvertime: (msg) => {
+					EventBus.emit(
+						HUD_EVENTS.status,
+						"OVERTIME — FINISH THE CAPTURE OR LOSE IT",
+					);
+					sound.play("cap-overtime");
+					console.log(`[CP] overtime, round ${msg.round}`);
+				},
 				onMatchOver: (msg) => {
 					console.log(
 						`[MATCH] over by ${msg.reason}, winner ${msg.winnerId ?? "nobody"}`,
@@ -1220,7 +1277,18 @@ export class Match {
 					// geometry, not the one it asked for. Rebuilding the shared world
 					// in place keeps every holder (physics, AI, renderer, diagnostics)
 					// on the corrected geometry, then the arena is redrawn.
-					if (screens !== this.arena.screens) {
+					//
+					// **The mode can change the map, not just its width.** A control
+					// room plays the five-screen line whatever `?screen=` said, and a
+					// client that joined one by link must rebuild the whole map — the
+					// physics it predicts against has to be the room's, not the
+					// classic arena's at the same width.
+					const wantsControl = mode === "5cp";
+					if (wantsControl && this.arena.screens !== CP_SCREENS) {
+						applyControlWorld(this.arena);
+						drawArena(this.stage.background, this.stage.arena, this.arena);
+						console.log("[ONLINE] room arena rebuilt as the control map");
+					} else if (!wantsControl && screens !== this.arena.screens) {
 						applyWorld(this.arena, screens);
 						drawArena(this.stage.background, this.stage.arena, this.arena);
 						console.log(`[ONLINE] room arena resized to ${screens} screens`);
@@ -1285,6 +1353,7 @@ export class Match {
 			...(this.ultCharge === undefined ? {} : { ultCharge: this.ultCharge }),
 			mode: this.mode,
 			...(this.freezeTime === undefined ? {} : { freezeTime: this.freezeTime }),
+			...(this.capTime === undefined ? {} : { capTime: this.capTime }),
 			screens: this.arena.screens,
 			// The hero is a per-client choice: it rides the join like the name.
 			hero: this.hero,
@@ -1658,6 +1727,7 @@ export class Match {
 		// A swing, a shot, a step — the sounds ride the same edges the reveal
 		// reads, in the same frame, for the same state.
 		this.scrubAudioCues();
+		this.scrubControlAudio();
 
 		// Presentation, in dependency order: animation picks the frame, sync moves
 		// the sprites, effects read the same state, then the camera settles.
@@ -1684,6 +1754,14 @@ export class Match {
 			this.ultAuraVisible(id),
 		);
 		this.fx.update(dtMs);
+		// The pads read the snapshot's control state, never the simulation: the
+		// server is the only judge of who owns a point. Null outside 5CP, which
+		// hides the layer.
+		this.controlFx.update(
+			this.online?.matchStatus?.teams?.control ?? null,
+			this.online?.myTeam ?? null,
+			dtMs,
+		);
 		this.denyFx.update(dtMs);
 		this.rootedFx.update(dtMs);
 		this.updateItems(dtMs);
@@ -2069,6 +2147,52 @@ export class Match {
 			if (dead && !this.cueDead.get(id)) this.playAt("die", b.x, b.y);
 			else if (!dead && this.cueDead.get(id)) this.playAt("spawn", b.x, b.y);
 			this.cueDead.set(id, dead);
+		}
+	}
+
+	/** Which point the local side is taking, and the quarter last heard. */
+	private cueCapPoint = -1;
+	private cueCapQuarter = 0;
+	/** How many ticks the capture bar's quarters are: 25 / 50 / 75 / capture. */
+	private static readonly CAP_TICK_STEPS = 4;
+
+	/**
+	 * The capture bar's own edge: a soft tick as the local side's progress
+	 * crosses each quarter.
+	 *
+	 * Read from the snapshot, like every other audio edge — the server owns the
+	 * bar, and a client that counted its own would tick for a capture the
+	 * server had already refused. The capture itself is announced; this is the
+	 * sound between the announcements, the one that says the bar is moving.
+	 */
+	private scrubControlAudio() {
+		const control = this.online?.matchStatus?.teams?.control;
+		const myTeam = this.online?.myTeam ?? null;
+		if (!control || myTeam === null) {
+			this.cueCapPoint = -1;
+			this.cueCapQuarter = 0;
+			return;
+		}
+		let point = -1;
+		let progress = 0;
+		control.points.forEach((p, i) => {
+			if (p.attacker === myTeam) {
+				point = i;
+				progress = p.progress;
+			}
+		});
+		if (point !== this.cueCapPoint) {
+			this.cueCapPoint = point;
+			this.cueCapQuarter = 0;
+		}
+		if (point < 0) return;
+		const steps = Match.CAP_TICK_STEPS;
+		const quarter = Math.min(steps, Math.floor(progress * steps));
+		if (quarter > this.cueCapQuarter) {
+			this.cueCapQuarter = quarter;
+			// The last quarter is the capture itself — `control-captured`
+			// announces that one, and two sounds for one event is a rattle.
+			if (quarter > 0 && quarter < steps) sound.play("cap-tick");
 		}
 	}
 
@@ -3047,7 +3171,44 @@ export class Match {
 			// answers.
 			selfAmmo: self.ammo,
 			selfReserveRounds: self.reserveRounds,
+			// The line, in a control match — the snapshot's view turned into the
+			// module's, exactly as the server's bots get it.
+			control: this.controlInfo(selfTeam, session),
 		};
+	}
+
+	/**
+	 * The five-point line as this client's brain sees it, or `null` elsewhere.
+	 *
+	 * Read from the snapshot's `TeamStatus.control` — the same server-owned
+	 * state the HUD draws — so a client-side bot and a server-side bot walk to
+	 * the same point. `capturable` is the adjacency rule applied to the flags
+	 * the snapshot carries, never a re-derivation.
+	 */
+	private controlInfo(
+		selfTeam: TeamId | null,
+		session: OnlineSession | undefined,
+	): ControlInfo | null {
+		const status = session?.matchStatus?.teams?.control;
+		if (!status || selfTeam === null) return null;
+		let frontier = -1;
+		const points = status.points.map((point, i) => {
+			const pad = CONTROL_PADS[i];
+			const mine = point.owner === selfTeam;
+			if (mine) frontier = i;
+			return {
+				index: i,
+				x: pad ? pad.x + pad.w / 2 : 0,
+				y: pad ? pad.y + pad.h / 2 : 0,
+				owner: point.owner,
+				attacker: point.attacker,
+				progress: point.progress,
+				contested: point.contested,
+				capturable: !mine && (point.unlocked[selfTeam] ?? false),
+				mine,
+			};
+		});
+		return { points, frontier };
 	}
 
 	// =========================================================

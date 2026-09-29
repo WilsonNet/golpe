@@ -4,6 +4,8 @@ import type { HeroId } from "../simulation/Heroes";
 import type { MatchMode } from "../simulation/Teams";
 import type { TrainingConfigMsg, TrainingStateMsg } from "../training/types";
 import {
+	type ControlCapturedMsg,
+	type ControlOvertimeMsg,
 	type GameSnapshot,
 	type MatchMessage,
 	type MatchOverMsg,
@@ -46,6 +48,10 @@ export interface OnlineHandlers {
 	onRoundWon: (msg: RoundWonMsg) => void;
 	/** Freezetime is over: the round is live. */
 	onRoundLive: (msg: RoundLiveMsg) => void;
+	/** A control point changed hands. */
+	onControlCaptured: (msg: ControlCapturedMsg) => void;
+	/** The clock ran out with a capture in progress. */
+	onControlOvertime: (msg: ControlOvertimeMsg) => void;
 	/** Seated, in the room the server actually put us in. */
 	onSeated: (roomId: string, screens: number, mode: MatchMode) => void;
 	/** The room asked for is full of humans. Nothing more will arrive. */
@@ -116,6 +122,12 @@ export interface JoinOptions {
 	mode?: MatchMode;
 	/** Freezetime in seconds, for a team room. Creator-only, like the rest. */
 	freezeTime?: number;
+	/**
+	 * The middle point's capture time in seconds, in a control room.
+	 * Creator-only, like the rest — the practice-room flag a probe shortens a
+	 * round with.
+	 */
+	capTime?: number;
 	/**
 	 * Which hero this client's own fighter plays. **Per-client, not
 	 * creator-only** — it is the answer to "who do you want to be", and the
@@ -225,6 +237,7 @@ export class OnlineManager {
 					...(join.freezeTime === undefined
 						? {}
 						: { freezeTime: join.freezeTime }),
+					...(join.capTime === undefined ? {} : { capTime: join.capTime }),
 					...(join.hero === undefined ? {} : { hero: join.hero }),
 					...(join.botHero === undefined ? {} : { botHero: join.botHero }),
 					...(join.password === undefined ? {} : { password: join.password }),
@@ -307,6 +320,18 @@ export class OnlineManager {
 
 		channel.on("round-live", (data: unknown) => {
 			handlers.onRoundLive(data as RoundLiveMsg);
+		});
+
+		// A control point changed hands. The snapshot carries ownership 20 times
+		// a second; this is the announcement the sound and the caption ride, for
+		// the same reason `round-won` exists — a moment the room reacts to
+		// should not depend on a client noticing a change between snapshots.
+		channel.on("control-captured", (data: unknown) => {
+			handlers.onControlCaptured(data as ControlCapturedMsg);
+		});
+
+		channel.on("control-overtime", (data: unknown) => {
+			handlers.onControlOvertime(data as ControlOvertimeMsg);
 		});
 
 		// The training room echoes its resolved config back, so the UI and the

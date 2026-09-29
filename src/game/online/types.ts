@@ -1,3 +1,4 @@
+import type { ControlStatus } from "../simulation/ControlPoints.js";
 import type {
 	MatchEndReason,
 	MatchPhase,
@@ -310,6 +311,14 @@ export interface TeamStatus {
 	lastRoundWinner: TeamId | null;
 	/** The side that won the match, once `phase` is "over". */
 	winnerTeam: TeamId | null;
+	/**
+	 * The five-point line, in a control match. `null` in every other mode.
+	 *
+	 * Server-owned and sent in full every snapshot, like the round score: a
+	 * client that predicted ownership would show a point flipping before the
+	 * server agreed, and ownership decides where a whole side respawns.
+	 */
+	control: ControlStatus | null;
 }
 
 /** A black hole grenade in flight. Server-owned, like a bullet. */
@@ -630,6 +639,35 @@ export interface RoundWonMsg {
 	scores: number[];
 	/** ms until the arena resets and the next round starts. */
 	resetInMs: number;
+}
+
+/**
+ * A control point changed hands. Sent once, reliably.
+ *
+ * The snapshot carries ownership at 20Hz, so this is redundant by construction
+ * — deliberately, like `round-won`: a capture is a moment the room reacts to,
+ * and the sound and the caption should not depend on a client noticing the
+ * change between two snapshots.
+ */
+export interface ControlCapturedMsg {
+	/** Index on the line, 0 at AZURE's base end. */
+	point: number;
+	team: TeamId;
+	/** The point was neutral when this capture began. */
+	fromNeutral: boolean;
+	/** This was the enemy's last point — the capture that won the round. */
+	last: boolean;
+}
+
+/**
+ * The clock ran out with a capture in progress: overtime. Sent once, reliably.
+ *
+ * Same argument as `round-live` — the flag is in the snapshot, and this is what
+ * makes the alarm and the banner land at one moment instead of each client
+ * inferring it.
+ */
+export interface ControlOvertimeMsg {
+	round: number;
 }
 
 /**

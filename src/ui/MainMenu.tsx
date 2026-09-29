@@ -56,6 +56,7 @@ import { MAX_PASSWORD_LENGTH } from "../game/online/types";
 import { MAX_NAME, readStoredName, storeName } from "../game/playerName";
 import { HERO_IDS, HEROES, type HeroId } from "../game/simulation/Heroes";
 import type { MatchMode } from "../game/simulation/Teams";
+import { CP_SCREENS } from "../tweakables/control";
 import { ControlsDialog } from "./ControlsDialog";
 import { HUD_CSS } from "./hudStyles";
 import { MoveList } from "./MoveList";
@@ -66,6 +67,8 @@ import { SoundMixer } from "./SoundMixer";
 /** The requested room's defaults, as the server would create them. */
 const SCORE_LIMIT_FFA = 21;
 const SCORE_LIMIT_TDM = 15;
+/** Full-line captures to win a control match. */
+const SCORE_LIMIT_CP = 3;
 const TIME_LIMIT_SEC = 300;
 const FREEZE_TIME_SEC = 4;
 
@@ -140,6 +143,7 @@ const NOTHING: LaunchParams = {
 	ultCharge: undefined,
 	mode: null,
 	freezeTime: undefined,
+	capTime: undefined,
 	screens: undefined,
 	password: null,
 	isPrivate: false,
@@ -460,9 +464,13 @@ function HostForm({
 
 	// A team room has a three-screen floor — wipe-out rounds need ground to give
 	// and take. The constraint is enforced here so the form never commits a room
-	// that would silently come back wider than it was asked for.
+	// that would silently come back wider than it was asked for. A control room
+	// is not a width at all: five screens, one point per screen, is the map.
+	const isControl = settings.mode === "5cp";
 	const minScreens = settings.mode === "tdm" ? 3 : 1;
-	const screens = Math.max(minScreens, Math.min(settings.screens, 8));
+	const screens = isControl
+		? CP_SCREENS
+		: Math.max(minScreens, Math.min(settings.screens, 8));
 
 	const commit = () => {
 		const password = settings.password.trim().slice(0, MAX_PASSWORD_LENGTH);
@@ -481,7 +489,7 @@ function HostForm({
 			fill: settings.fill > 0 ? settings.fill : undefined,
 			scoreLimit: settings.scoreLimit,
 			timeLimitSec: settings.timeLimitSec,
-			freezeTime: settings.mode === "tdm" ? settings.freezeTime : undefined,
+			freezeTime: settings.mode === "ffa" ? undefined : settings.freezeTime,
 			ultCharge: settings.ultCharge > 0 ? settings.ultCharge : undefined,
 			password: shareInUrl ? password : null,
 			isPrivate,
@@ -490,8 +498,9 @@ function HostForm({
 
 	const isPrivate = settings.isPrivate || settings.password.trim() !== "";
 
-	const summary =
-		settings.mode === "tdm"
+	const summary = isControl
+		? `5 control points · first side to ${settings.scoreLimit} captures · ${formatMinutes(settings.timeLimitSec)}${settings.bots > 0 ? ` · ${settings.bots} bots` : ""}${isPrivate ? " · private" : ""}${settings.password.trim() !== "" ? " · passworded" : ""}`
+		: settings.mode === "tdm"
 			? `Team deathmatch · ${screens} screens · first side to ${settings.scoreLimit} rounds · ${settings.timeLimitSec}s of play per round fight, ${settings.freezeTime}s freezetime${settings.bots > 0 ? ` · ${settings.bots} bots` : ""}${isPrivate ? " · private" : ""}${settings.password.trim() !== "" ? " · passworded" : ""}`
 			: `Deathmatch · ${screens} ${screens === 1 ? "screen" : "screens"} · first to ${settings.scoreLimit} frags, or best score in ${formatMinutes(settings.timeLimitSec)}${settings.bots > 0 ? ` · ${settings.bots} bots` : ""}${isPrivate ? " · private" : ""}${settings.password.trim() !== "" ? " · passworded" : ""}`;
 
@@ -524,29 +533,47 @@ function HostForm({
 					>
 						Team deathmatch
 					</button>
+					<button
+						type="button"
+						className={`gd-chip${isControl ? " gd-chip-on" : ""}`}
+						onClick={() => {
+							set({ mode: "5cp", scoreLimit: SCORE_LIMIT_CP });
+						}}
+					>
+						5 Control Points
+					</button>
 				</div>
 			</div>
 			<p className="gd-field-note">
-				{settings.mode === "tdm"
-					? "Two sides, no friendly fire, wipe-out rounds. A team room always plays on at least three screens."
-					: "Everyone for themselves. First to 21 frags or the best score in five minutes."}
+				{isControl
+					? `Five points in a line between two bases. Stand on a pad to take it; a round is won at the enemy's last point. First side to ${settings.scoreLimit} captures.`
+					: settings.mode === "tdm"
+						? "Two sides, no friendly fire, wipe-out rounds. A team room always plays on at least three screens."
+						: "Everyone for themselves. First to 21 frags or the best score in five minutes."}
 			</p>
 
-			<div className="gd-field">
-				<span className="gd-field-label">
-					Arena width {settings.mode === "tdm" ? "(min 3 for teams)" : ""}
-				</span>
-				<input
-					type="number"
-					min={minScreens}
-					max={8}
-					value={screens}
-					onChange={(e) => {
-						const n = Number.parseInt(e.target.value, 10);
-						set({ screens: Number.isFinite(n) ? n : minScreens });
-					}}
-				/>
-			</div>
+			{isControl ? (
+				<p className="gd-field-note">
+					The control arena is five screens — one point per screen — so the
+					width is the map, not a setting.
+				</p>
+			) : (
+				<div className="gd-field">
+					<span className="gd-field-label">
+						Arena width {settings.mode === "tdm" ? "(min 3 for teams)" : ""}
+					</span>
+					<input
+						type="number"
+						min={minScreens}
+						max={8}
+						value={screens}
+						onChange={(e) => {
+							const n = Number.parseInt(e.target.value, 10);
+							set({ screens: Number.isFinite(n) ? n : minScreens });
+						}}
+					/>
+				</div>
+			)}
 			<div className="gd-field">
 				<span className="gd-field-label">Bots to fight</span>
 				<input
@@ -562,7 +589,11 @@ function HostForm({
 			</div>
 			<div className="gd-field">
 				<span className="gd-field-label">
-					{settings.mode === "tdm" ? "Rounds to win" : "Frags to win"}
+					{isControl
+						? "Captures to win"
+						: settings.mode === "tdm"
+							? "Rounds to win"
+							: "Frags to win"}
 				</span>
 				<input
 					type="number"
@@ -706,7 +737,7 @@ function HostForm({
 								}}
 							/>
 						</div>
-						{settings.mode === "tdm" ? (
+						{settings.mode !== "ffa" ? (
 							<div className="gd-field">
 								<span className="gd-field-label">Freezetime (seconds)</span>
 								<input

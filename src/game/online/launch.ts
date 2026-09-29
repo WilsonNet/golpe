@@ -82,12 +82,18 @@ export interface LaunchParams {
 	/** `?ultCharge=N` — the charge every fighter starts with, 0..100. */
 	ultCharge: number | undefined;
 	/**
-	 * `?mode=tdm` (or `?mode=team`) — the ruleset. Null means the free-for-all
-	 * was not asked for, which is different from asking for it by name.
+	 * `?mode=tdm` (or `?mode=team`) / `?mode=5cp` — the ruleset. Null means the
+	 * free-for-all was not asked for, which is different from asking for it by
+	 * name.
 	 */
 	mode: MatchMode | null;
 	/** `?freezeTime=S` — a team round's countdown, in seconds. */
 	freezeTime: number | undefined;
+	/**
+	 * `?capTime=S` — the middle point's capture time in a control match, in
+	 * seconds. The practice-room flag the probe shortens a round with.
+	 */
+	capTime: number | undefined;
 	/** `?screen=N` — how many 800px screens wide the arena is, 1..8. */
 	screens: number | undefined;
 	/**
@@ -143,6 +149,7 @@ const LAUNCH_KEYS = [
 	"ultCharge",
 	"mode",
 	"freezeTime",
+	"capTime",
 	"screen",
 	"password",
 	"private",
@@ -213,6 +220,7 @@ export function parseLaunchParams(search: string): LaunchParams {
 		ultCharge: countParam(params, "ultCharge"),
 		mode: parseMode(params.get("mode")),
 		freezeTime: countParam(params, "freezeTime"),
+		capTime: numberParam(params, "capTime"),
 		screens: numberParam(params, "screen"),
 		password: parsePassword(params.get("password")),
 		isPrivate: params.get("private") === "true",
@@ -258,6 +266,7 @@ function parsePassword(raw: string | null): string | null {
  */
 function parseMode(raw: string | null): MatchMode | null {
 	if (raw === "tdm" || raw === "team") return "tdm";
+	if (raw === "5cp" || raw === "cp" || raw === "control") return "5cp";
 	if (raw === "ffa") return "ffa";
 	return null;
 }
@@ -291,6 +300,7 @@ export function serializeLaunchParams(params: LaunchParams): string {
 	if (params.mode !== null) url.set("mode", params.mode);
 	if (params.freezeTime !== undefined)
 		url.set("freezeTime", String(params.freezeTime));
+	if (params.capTime !== undefined) url.set("capTime", String(params.capTime));
 	if (params.screens !== undefined) url.set("screen", String(params.screens));
 	if (params.password !== null) url.set("password", params.password);
 	if (params.isPrivate) url.set("private", "true");

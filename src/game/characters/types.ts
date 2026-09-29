@@ -77,6 +77,36 @@ interface FieldInfo {
  */
 export type TeamRole = "vanguard" | "support";
 
+/**
+ * One control point, as the objective module sees it.
+ *
+ * Control state is server-owned and arrives in the snapshot, so a bot's
+ * perception carries what the room said rather than anything the brain derives
+ * — a brain that guessed at ownership would walk to a point it cannot take.
+ */
+export interface ControlPointInfo {
+	/** Index on the line, 0 at AZURE's base end. */
+	index: number;
+	/** The pad centre, in world px. */
+	x: number;
+	y: number;
+	owner: TeamId | null;
+	attacker: TeamId | null;
+	progress: number;
+	contested: boolean;
+	/** Can my side capture it right now? (Adjacency, and not already mine.) */
+	capturable: boolean;
+	/** My side owns it. The point to hold or defend. */
+	mine: boolean;
+}
+
+/** The control line, for the objective module. `null` in every other mode. */
+export interface ControlInfo {
+	points: ControlPointInfo[];
+	/** My side's furthest-forward owned index, or -1. */
+	frontier: number;
+}
+
 export interface AIInput {
 	playerX: number;
 	playerY: number;
@@ -177,6 +207,15 @@ export interface AIInput {
 	fields: FieldInfo[];
 	/** Hostile floor traps. Pre-filtered by the friendly-fire predicate. */
 	traps: { x: number; y: number }[];
+	/**
+	 * The five-point line, in a control match. `null` in every other mode.
+	 *
+	 * Kept out of the brain's mode logic by construction: `GameRoom.perceive`
+	 * and `Match.perceive` populate it only when the room plays 5CP, so the
+	 * objective module simply asks "is there a line" — no `mode ===` check in
+	 * `characters/`.
+	 */
+	control: ControlInfo | null;
 	/** Item charges left this life, so the brain knows when it has one to spend. */
 	selfItemCharges: number;
 	/**

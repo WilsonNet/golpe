@@ -68,6 +68,7 @@ commit** — and tuning a constant counts as changing behaviour. Read the releva
 spec before implementing: [movement](specs/movement.md) ·
 [combat](specs/combat.md) · [melee](specs/melee.md) · [arena](specs/arena.md) ·
 [deathmatch](specs/deathmatch.md) · [team deathmatch](specs/team-deathmatch.md) ·
+[control points](specs/control-points.md) ·
 [netcode](specs/netcode.md) ·
 [controls](specs/controls.md) · [training room](specs/training-room.md) ·
 [tutorial](specs/tutorial.md) ·
@@ -245,6 +246,10 @@ One line each; the war story behind every one is in
   accounting — `knockdowns` alone cannot tell the arc from a spike out of the air.
 - **Changing gravity or jump velocity changes level reachability** — and retunes
   combat, because the uppercut's launch is derived from the jump.
+- **A mode can change the map, not just its width.** `?mode=5cp` plays its own
+  five-screen line; a client seated by link rebuilds *that*
+  (`applyControlWorld`), not the classic arena resized. The mode is the map's
+  shape.
 - **Anything that moves a fighter travels in the intent.** A dash applied
   straight to predicted state was erased by the next reconciliation.
 - **AI vs AI cannot test aim.** The brains hand the simulation an angle and never
@@ -301,6 +306,7 @@ tsx scripts/diagnose.ts --mode=online --ultCharge=100 # ...and the bots cast the
 tsx scripts/deathmatch-probe.ts                      # sixteen AI fighters, to a winner
 tsx scripts/tdm-probe.ts                             # two sides, wipe-out rounds, no friendly fire
 tsx scripts/tdm-probe.ts --ultCharge=100             # ...and the teams throw black holes
+tsx scripts/cp-probe.ts                              # five control points: captures, forward spawns, overtime
 tsx scripts/verify-modes.ts                          # smoke-check every mode
 tsx scripts/aim-probe.ts                             # cursor, facing and shot direction
 tsx scripts/pad-probe.ts                             # controller aim, gamepad and the phone deck
@@ -523,6 +529,29 @@ living enemy, so a teammate is not a target the AI declines, it is a fighter the
 AI is never told about. **Teams travel in the snapshot, not the roster** — they
 are an argument to `tickPlayer`. See
 [specs/team-deathmatch.md](specs/team-deathmatch.md).
+
+**`?mode=5cp` is five control points — TF2's symmetric 5CP, the first mode with
+its own map.** Five pads in a line between two bases; stand on one to take it,
+and a round is won by capturing the enemy's last point. **Ownership is spatial**:
+each side spawns on the screen of its furthest-forward point, so taking ground
+shortens your walk and pushes theirs back. **The lock rule is one predicate**
+(`unlockedFor`): a point is open to a side when the point between it and that
+side's base is already theirs — the middle starts neutral to both, at most two
+points are ever open, and a back-cap past the front line is impossible by
+construction. Capture speed grows as a **harmonic number** (1×, 1.5×, 1.833×…)
+and the line's times are the last points fastest (2s), yards 5s, middle 8s at
+1×; contested pads freeze; abandoned progress decays (6× faster in overtime).
+**A capture takes a crowd standing on the pad — the server is the only judge**,
+and the whole line arrives in the snapshot inside `TeamStatus.control`. Dead
+fighters respawn individually, **faster for the side with fewer points** (4s
+even, −0.7s per point behind, floor 1.5s) — TF2's comeback rule. Time out with
+a capture in flight is **overtime**: the clock holds, a completed capture pays
+60s back, and only an empty bar lets time end the round. The map is
+`buildControlWorld()` — five screens, one point per screen, mirrored modules —
+and a client seated by link rebuilds *that*, not the classic arena resized.
+`?capTime=S` is the practice-room flag that shortens the ladder for probes;
+bots have a `ControlBrain` objective module. See
+[specs/control-points.md](specs/control-points.md).
 
 **Team colour is a feature, and it is a blend, never a replacement.** Every
 combat colour already means something (white = first slash, amber = finisher,

@@ -46,8 +46,8 @@ export interface World {
 	spawnPoints: readonly SpawnPoint[];
 }
 
-const WORLD_LEFT = 0;
-const WORLD_TOP = 0;
+export const WORLD_LEFT = 0;
+export const WORLD_TOP = 0;
 export const WORLD_BOTTOM = SCREEN_H;
 
 export const PLAYER_WIDTH = 32;
@@ -267,11 +267,11 @@ export function pickSpawn(
 	occupied: readonly { x: number; y: number }[],
 	world: World = DEFAULT_WORLD,
 ): SpawnPoint {
-	return pickFrom(world.spawnPoints, occupied);
+	return pickSpawnFrom(world.spawnPoints, occupied);
 }
 
 /** `pickSpawn`, over an arbitrary candidate list. Ties go to the earlier point. */
-function pickFrom(
+export function pickSpawnFrom(
 	points: readonly SpawnPoint[],
 	occupied: readonly { x: number; y: number }[],
 ): SpawnPoint {
@@ -338,7 +338,7 @@ export function pickTeamSpawn(
 	world: World,
 	team: number,
 ): SpawnPoint {
-	const point = pickFrom(teamSpawnPoints(world, team), occupied);
+	const point = pickSpawnFrom(teamSpawnPoints(world, team), occupied);
 	return { ...point, facing: team === 0 ? 1 : -1 };
 }
 

@@ -13,6 +13,7 @@ import { smokeLobAngle } from "../simulation/Items.js";
 import { BULLET_SPEED, JUMP_HEIGHT_PX } from "../simulation/Physics.js";
 import type { AIConfig } from "./AIConfig.js";
 import { BlossomBrain } from "./BlossomBrain.js";
+import { ControlBrain } from "./ControlBrain.js";
 import { DaggerBrain } from "./DaggerBrain.js";
 import { DragonBrain } from "./DragonBrain.js";
 import { JumpBrain } from "./JumpBrain.js";
@@ -369,6 +370,8 @@ export class EnemyBrain {
 	private readonly ultimate: UltModule;
 	/** Team roles, spacing and the cover guard. */
 	private readonly team: TeamBrain;
+	/** The objective: which control point to hold, in a control match. */
+	private readonly control = new ControlBrain();
 
 	/**
 	 * The geometry this brain reasons about — ledges to perch on, cover to use.
@@ -428,6 +431,7 @@ export class EnemyBrain {
 		this.jump.reset();
 		this.ultimate.reset();
 		this.team.reset();
+		this.control.reset();
 	}
 
 	getCurrentState(): AIState {
@@ -460,6 +464,11 @@ export class EnemyBrain {
 			selfUlt: i?.selfUltCharge ?? 0,
 			openFields: i?.fields.length ?? 0,
 			stunned: i?.selfStunned ?? false,
+			// The objective module's answer: which point it is walking to, and
+			// whether that is a defence. A probe asserts bots actually play the
+			// line rather than brawling at spawn.
+			controlTarget: this.control.insight.target,
+			controlDefending: this.control.insight.defending,
 		};
 	}
 
@@ -554,6 +563,10 @@ export class EnemyBrain {
 			dry: !this.gunLive(perception),
 		});
 		this.team.decide(perception, output, this.melee, role, hunting, delta);
+		// The objective, when the room has one: after the team's line and kite,
+		// so holding ground outranks the shape — and before the ultimate, which
+		// may still cast from the pad.
+		this.control.decide(perception, output, hunting, delta);
 		this.ultimate.decide(perception, delta, role);
 		output.ultimate = this.ultimate.hold;
 		if (this.ultimate.aimOverride !== null) {

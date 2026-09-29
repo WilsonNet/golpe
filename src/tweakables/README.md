@@ -14,6 +14,7 @@ here; the folder is pure data, so changing a number can never desync a match.
 | `ultimate.ts` | The charge economy, the cinematic freeze, the black hole, the dragon, the Death Blossom |
 | `items.ts` | The HE grenade, the trap, the smoke grenade, and the charges each kit grants |
 | `match.ts` | Frag limits, timers, the end-of-match ceremony, MVP weights, team deathmatch's rounds |
+| `control.ts` | Control points: the per-point capture ladder, decay and overtime, respawn advantage, the cap limit, the pad's size |
 
 ## How to tune
 

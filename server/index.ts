@@ -10,6 +10,12 @@ import {
 } from "../src/game/simulation/Teams.js";
 import { ULT_MAX_CHARGE } from "../src/game/simulation/Ultimate.js";
 import { MS_PER_SECOND } from "../src/game/simulation/units.js";
+import {
+	CP_CAP_TIME_DEFAULT_S,
+	CP_CAP_TIME_MAX_S,
+	CP_CAP_TIME_MIN_S,
+	CP_SCREENS,
+} from "../src/tweakables/control.js";
 import { GameRoom } from "./GameRoom.js";
 import { cleanPassword } from "./RoomPassword.js";
 
@@ -127,14 +133,23 @@ interface JoinMsg {
 	 */
 	ultCharge?: number;
 	/**
-	 * Which ruleset the room plays: `"tdm"` for team deathmatch, anything else
-	 * for the free-for-all.
+	 * Which ruleset the room plays: `"tdm"` for team deathmatch, `"5cp"` for
+	 * five control points, anything else for the free-for-all.
 	 *
 	 * **Creator-only**, like the rest of this block, and more so: the mode decides
 	 * how big the arena is, how many people are on your side, and what a point
 	 * even means. A latecomer switching it would be reshaping a match in progress.
 	 */
 	mode?: string;
+	/**
+	 * The middle point's capture time in **seconds**, creator-only.
+	 *
+	 * The same argument as `?freezeTime`: five seconds a point is the right pace
+	 * to play and the wrong pace to measure — a probe that wants to see a whole
+	 * round captured can shorten the ladder here, exactly like a practice room
+	 * shortens the ultimate's meter with `?ultCharge`.
+	 */
+	capTime?: number;
 	/**
 	 * Freezetime in **seconds**, for a team room. Creator-only like the rest.
 	 *
@@ -227,7 +242,9 @@ function botFill(msg: JoinMsg): number {
 
 /** Which ruleset the room asked for. Anything unrecognised is a deathmatch. */
 function matchMode(raw: unknown): MatchMode {
-	return raw === "tdm" || raw === "team" ? "tdm" : "ffa";
+	if (raw === "tdm" || raw === "team") return "tdm";
+	if (raw === "5cp" || raw === "cp" || raw === "control") return "5cp";
+	return "ffa";
 }
 
 /**
@@ -237,8 +254,12 @@ function matchMode(raw: unknown): MatchMode {
  * ground to give and take, and on one screen the two sides start inside each
  * other's reach. See `TDM_MIN_SCREENS`. A bigger `?screen=` is still honoured;
  * only the floor is imposed.
+ *
+ * Control points is its own map at its own size: five screens, one per point.
+ * The width is not a preference there — it is where the points are.
  */
 function roomScreens(msg: JoinMsg, mode: MatchMode): number {
+	if (mode === "5cp") return CP_SCREENS;
 	const asked =
 		msg.screens === undefined ? 1 : clamp(msg.screens, 1, MAX_SCREENS, 1);
 	return mode === "tdm" ? Math.max(asked, TDM_MIN_SCREENS) : asked;
@@ -255,6 +276,7 @@ function createRoom(
 		startUltCharge?: number;
 		mode?: MatchMode;
 		freezeTimeMs?: number;
+		capTimeMs?: number;
 		botHero?: unknown;
 		probe?: boolean;
 		password?: string | null;
@@ -370,6 +392,17 @@ io.onConnection((channel) => {
 								SCORE_LIMIT_MAX,
 								SCORE_LIMIT_DEFAULT,
 							),
+						}),
+				...(msg.capTime === undefined
+					? {}
+					: {
+							capTimeMs:
+								clamp(
+									msg.capTime,
+									CP_CAP_TIME_MIN_S,
+									CP_CAP_TIME_MAX_S,
+									CP_CAP_TIME_DEFAULT_S,
+								) * MS_PER_SECOND,
 						}),
 				...(msg.timeLimitMs === undefined
 					? {}

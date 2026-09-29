@@ -24,8 +24,9 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { EventBus } from "../game/EventBus";
 import { HUD_EVENTS, type HudState } from "../game/hud";
 import { bindings, codeLabel } from "../game/input/Bindings";
+import type { ControlStatus } from "../game/simulation/ControlPoints";
 import { ULT_MAX_CHARGE } from "../game/simulation/Physics";
-import { TEAM_COUNT, TEAM_NAMES } from "../game/simulation/Teams";
+import { TEAM_COUNT, TEAM_NAMES, type TeamId } from "../game/simulation/Teams";
 import { teamCss } from "../game/teamPalette";
 import { FIGHT_HUD_CSS } from "./fightHudStyles";
 import { KillFeed } from "./KillFeed";
@@ -282,6 +283,73 @@ function TeamScores({
 	);
 }
 
+/**
+ * The five-point line, read at a glance (5CP only).
+ *
+ * One pip per point, left to right, its colour the side that owns it and its
+ * fill the side taking it. The local player's next objective pulses; a point
+ * they can neither take nor hold is dimmed behind a lock, because the front
+ * line is the whole game and a player should not have to read a map to find
+ * it. Everything here is the snapshot's: `Match` draws what the server says,
+ * exactly as the round score does.
+ */
+function ControlBar({
+	control,
+	myTeam,
+}: {
+	control: ControlStatus;
+	myTeam: TeamId | null;
+}) {
+	return (
+		<div className="vdh-cap-bar">
+			{control.points.map((point, i) => {
+				// The line is fixed left to right, so the letter is the identity:
+				// a capture flipping ownership must not remount the pip.
+				const label = String.fromCharCode(65 + i);
+				const mine = myTeam !== null && point.owner === myTeam;
+				const open =
+					myTeam !== null && !mine && (point.unlocked[myTeam] ?? false);
+				const locked = myTeam !== null && !mine && !open;
+				const capturing =
+					!point.contested && point.attacker !== null && point.progress > 0;
+				return (
+					<span
+						key={label}
+						className={`vdh-cap-pip${open ? " vdh-cap-open" : ""}${
+							locked ? " vdh-cap-locked" : ""
+						}${point.contested ? " vdh-cap-contested" : ""}`}
+						style={
+							point.owner === null
+								? undefined
+								: { backgroundColor: teamCss(point.owner) }
+						}
+					>
+						{capturing ? (
+							<span
+								className="vdh-cap-fill"
+								style={{
+									width: `${Math.min(1, Math.max(0, point.progress)) * 100}%`,
+									backgroundColor: teamCss(point.attacker),
+								}}
+							/>
+						) : null}
+						<span className="vdh-cap-letter">{label}</span>
+						{locked ? (
+							<span className="vdh-cap-lock" aria-hidden="true">
+								<span className="vdh-cap-lock-shackle" />
+								<span className="vdh-cap-lock-body" />
+							</span>
+						) : null}
+					</span>
+				);
+			})}
+			{control.overtime ? (
+				<span className="vdh-cap-overtime">OVERTIME</span>
+			) : null}
+		</div>
+	);
+}
+
 /** The battle message window: CT's narration, told once and then gone. */
 function useBattleMessage(): [
 	message: string,
@@ -320,6 +388,13 @@ export function FightHud({ training = false }: { training?: boolean }) {
 			}
 		: null;
 
+	// The control line, in a 5CP room. The local side comes off the standings
+	// the match-status event already carries — the same rows the scoreboard
+	// draws — so the bar cannot disagree with the board about who "we" are.
+	const myId = match?.myId;
+	const myTeam = match?.standings.find((s) => s.id === myId)?.team ?? null;
+	const control = teams?.control ?? null;
+
 	// The duel's foe panel is only true in a two-fighter room. In a deathmatch
 	// there is no "the opponent" — the scoreboard owns the field.
 	const duel = match
@@ -335,7 +410,9 @@ export function FightHud({ training = false }: { training?: boolean }) {
 			announce(
 				match.status.mode === "tdm"
 					? `TEAM DEATHMATCH — FIRST TO ${match.status.scoreLimit} ROUNDS`
-					: `FIGHT — FIRST TO ${match.status.scoreLimit}`,
+					: match.status.mode === "5cp"
+						? `FIVE CONTROL POINTS — FIRST TO ${match.status.scoreLimit} CAPTURES`
+						: `FIGHT — FIRST TO ${match.status.scoreLimit}`,
 			);
 		}
 		lastPhase.current = phase;
@@ -379,7 +456,12 @@ export function FightHud({ training = false }: { training?: boolean }) {
 				>
 					<div className="vdh-clock-time">{clock.time}</div>
 					{teams ? (
-						<TeamScores teams={teams} limit={match?.status.scoreLimit ?? 0} />
+						<>
+							<TeamScores teams={teams} limit={match?.status.scoreLimit ?? 0} />
+							{match?.status.mode === "5cp" && control ? (
+								<ControlBar control={control} myTeam={myTeam} />
+							) : null}
+						</>
 					) : (
 						<div className="vdh-clock-sub">{clock.sub}</div>
 					)}

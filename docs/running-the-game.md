@@ -384,9 +384,11 @@ Defaults and the reasoning behind them are in
 | `?fill=N` | Keep the room at N fighters, bots as ballast |
 | `?ai=true` | Make **your** fighter AI-driven (and skip the name prompt) |
 | `?mode=tdm` | **Team deathmatch**: two sides, no friendly fire, wipe-out rounds, first to 15. Forces the arena to at least 3 screens |
+| `?mode=5cp` | **Five control points**: TF2's symmetric 5CP on its own five-screen map. First to 3 full captures |
 | `?freezeTime=S` | Seconds of freezetime before each team round (default 4, `0` for none) |
-| `?screen=N` | Widen the arena to N 800px screens (1-8) |
-| `?scoreLimit=N` | Frags to win — **rounds** to win in `tdm` |
+| `?capTime=S` | The middle point's capture seconds in `5cp` (default 8, 1–30) — a practice-room flag |
+| `?screen=N` | Widen the arena to N 800px screens (1-8). Ignored in `5cp`: the map is five screens |
+| `?scoreLimit=N` | Frags to win — **rounds** in `tdm`, **full captures** in `5cp` |
 | `?timeLimit=S` | Match length in seconds |
 | `?training=true` | A scriptable practice dummy and its menu |
 | `?offline=true` | Escape hatch: no server, no netcode (unsupported) |
@@ -397,7 +399,7 @@ and automated probes working with no clicks in between. The menu is the
 discoverable face of the same parameters, and commits them to the address bar
 exactly as they appear here. See [specs/menu.md](../specs/menu.md).
 
-`mode`, `screen`, `freezeTime`, `fill`, `scoreLimit` and `timeLimit` are honoured **only for
+`mode`, `screen`, `freezeTime`, `capTime`, `fill`, `scoreLimit` and `timeLimit` are honoured **only for
 the client that creates the room** — everyone arriving later gets the room as it already is. One
 player must not be able to resize or end a match everybody else is playing.
 
@@ -429,6 +431,7 @@ prints a digest:
 node scripts/diagnose.ts --mode=online --runs=3  # the canonical duel
 node scripts/deathmatch-probe.ts                 # 16 AI fighters, played to a winner
 node scripts/tdm-probe.ts                       # two sides, wipe-out rounds, no friendly fire
+node scripts/cp-probe.ts                        # five control points: captures, forward spawns, overtime
 node scripts/menu-probe.ts                       # the root menu: every click a URL, boots a match
 node scripts/potg-probe.ts                      # play of the game — the only probe that reads past the final whistle
 pnpm run diagnose                                  # offline + online, 8s each

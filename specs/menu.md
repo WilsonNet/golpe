@@ -130,15 +130,15 @@ rules are pinned by the URL and cannot drift with a future default change.
 
 | Field | Default | Range |
 |---|---|---|
-| Mode | Deathmatch | Deathmatch / Team deathmatch |
-| Arena width | 1 screen | 1–8; **3 is the floor in a team match**, enforced by the form (the server enforces the same floor) |
+| Mode | Deathmatch | Deathmatch / Team deathmatch / 5 Control Points |
+| Arena width | 1 screen | 1–8; **3 is the floor in a team match**, enforced by the form (the server enforces the same floor). A control room has no width to choose — five screens, one point per screen, is the map |
 | Bots to fight | 0 | 0–15 |
-| Frags / rounds to win | 21 / 15 | 1–999 |
+| Frags / rounds / captures to win | 21 / 15 / 3 | 1–999 |
 | Match length | 5 minutes | 1–60 |
 | Private room | Off | Off / On — hidden from quick match and any listing. A password implies private. |
 | Password | (none) | Up to 64 characters. Disabled until Private room is on — only a private room takes a password, and a passworded room is always private. Hidden from the URL by default; check "Include password in invite link" to make the link carry `?password=`. |
 | Advanced: keep room filled | 0 (off) | 0–16 |
-| Advanced: freezetime | 4s (team matches only) | 0–60 |
+| Advanced: freezetime | 4s (team modes only) | 0–60 |
 | Advanced: ult charge floor | 0 | 0–100 |
 
 The summary line under the fields states the match the button will create — the

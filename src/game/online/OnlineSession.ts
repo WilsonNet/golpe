@@ -49,6 +49,8 @@ import {
 } from "./Rollback";
 import type {
 	BlockedBulletMsg,
+	ControlCapturedMsg,
+	ControlOvertimeMsg,
 	DenyEventMsg,
 	ExplosionMsg,
 	GameSnapshot,
@@ -214,6 +216,15 @@ export interface OnlineCallbacks {
 	 * to land together on every screen.
 	 */
 	onRoundLive: (msg: RoundLiveMsg) => void;
+	/**
+	 * A control point changed hands.
+	 *
+	 * The snapshot carries ownership; this is the announcement a sound and a
+	 * caption ride, exactly like `round-won`.
+	 */
+	onControlCaptured: (msg: ControlCapturedMsg) => void;
+	/** The clock ran out with a capture in progress: overtime began. */
+	onControlOvertime: (msg: ControlOvertimeMsg) => void;
 	/**
 	 * Seated, in the room the server chose.
 	 *
@@ -717,6 +728,8 @@ export class OnlineSession {
 				onPotg: (msg) => this.callbacks.onPotg(msg),
 				onRoundWon: (msg) => this.callbacks.onRoundWon(msg),
 				onRoundLive: (msg) => this.callbacks.onRoundLive(msg),
+				onControlCaptured: (msg) => this.callbacks.onControlCaptured(msg),
+				onControlOvertime: (msg) => this.callbacks.onControlOvertime(msg),
 				onSeated: (roomId, screens, mode) =>
 					this.callbacks.onSeated(roomId, screens, mode),
 				onRoomFull: (roomId) => this.callbacks.onRoomFull(roomId),

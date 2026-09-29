@@ -19,6 +19,10 @@ src/game/
     Ultimate.ts     the black hole and the dragon thrust: constants, sweeps, charge
     Deathmatch.ts   scoring limits, the win condition, and the one ranking both sides use
     Teams.ts        sides, the friendly-fire predicate, and the wipe-out round rules
+    ControlPoints.ts the 5CP line: the lock predicate, the capture tick, overtime,
+                    forward-spawn arithmetic — pure, shared with the server
+    ControlMap.ts   buildControlWorld(): the five-screen line, one capture pad per
+                    screen, mirrored modules, per-screen spawn tables
   ecs/            miniplex world, entity components, and the per-frame systems
     world.ts        Entity shape, archetype queries, FighterEntity
     systems.ts      per-hero animation (strips and poses), sprite sync, melee effects
@@ -31,6 +35,7 @@ src/game/
     UltimateBrain.ts the black hole: when to hold the button, where to throw
     DragonBrain.ts  the dragon thrust: when a line is worth a cast
     TeamBrain.ts    team roles (vanguard/support), the cover line, bounded kiting
+    ControlBrain.ts the objective: defend a pad being taken, else push the next
     types.ts        AIInput/AIOutput — the input-source contract, shared with the dummy
   combat/         BulletSystem.ts — the only simulated source of bullets offline
   input/          Input.ts — the one place four devices meet: raw held codes, dash
@@ -114,7 +119,9 @@ deploy/         the distributable game part: `Dockerfile.game-server` (one
 
 scripts/          diagnose.ts (Playwright harness), deathmatch-probe.ts (sixteen
                   AI fighters played to a winner), tdm-probe.ts (two sides,
-                  wipe-out rounds, and friendly fire caught from the scoreboard), aim-probe.ts (drives a real
+                  wipe-out rounds, and friendly fire caught from the scoreboard),
+                  cp-probe.ts (the five-point line: locks, forward spawns, and an
+                  arranged overtime), aim-probe.ts (drives a real
                   cursor — the only thing that can test mouse aim), pad-probe.ts
                   (stubs the Gamepad API — the only thing that can test controller
                   aim and the phone deck), training-probe.ts (one interaction at

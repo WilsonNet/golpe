@@ -659,6 +659,70 @@ const patches: Record<string, Patch> = {
 			osc(k, { type: "sawtooth", f0: note, durMs: 300, peak: 0.3, whenMs: ms });
 		}
 	},
+
+	// ------------------------------------------------ control points
+	"cap-taken": (k) => {
+		for (const [note, ms] of [
+			[523, 0],
+			[659, 110],
+			[784, 220],
+			[1046, 340],
+		] as const) {
+			osc(k, { type: "triangle", f0: note, durMs: 180, peak: 0.3, whenMs: ms });
+		}
+	},
+	"cap-lost": (k) => {
+		for (const [note, ms] of [
+			[494, 0],
+			[415, 130],
+			[349, 260],
+			[294, 390],
+		] as const) {
+			osc(k, {
+				type: "triangle",
+				f0: note,
+				durMs: 200,
+				peak: 0.26,
+				whenMs: ms,
+			});
+		}
+	},
+	"cap-tick": (k) => {
+		// Quiet and short on purpose: it fires on every quarter crossed, and a
+		// tick with a tail is a tick that smears into the next one.
+		noise(k, { filter: "bandpass", f0: 2200, q: 2.4, durMs: 32, peak: 0.14 });
+		osc(k, { type: "sine", f0: 1320, f1: 1180, durMs: 42, peak: 0.1 });
+	},
+	"cap-overtime": (k) => {
+		// A three-beat klaxon: high, low, high. The low note detunes the other
+		// way, so the pair beats against itself and reads as an alarm, not a tune.
+		osc(k, {
+			type: "sawtooth",
+			f0: 740,
+			f1: 700,
+			durMs: 260,
+			peak: 0.32,
+			detune: 8,
+		});
+		osc(k, {
+			type: "sawtooth",
+			f0: 554,
+			f1: 520,
+			durMs: 260,
+			peak: 0.32,
+			detune: -8,
+			whenMs: 300,
+		});
+		osc(k, {
+			type: "sawtooth",
+			f0: 740,
+			f1: 680,
+			durMs: 320,
+			peak: 0.28,
+			detune: 8,
+			whenMs: 600,
+		});
+	},
 };
 
 const lastBy = new Map<string, number>();

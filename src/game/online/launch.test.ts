@@ -40,6 +40,7 @@ const NOTHING: LaunchParams = {
 	ultCharge: undefined,
 	mode: null,
 	freezeTime: undefined,
+	capTime: undefined,
 	screens: undefined,
 	password: null,
 	isPrivate: false,
@@ -75,7 +76,7 @@ const regionArb = fc.oneof(
 /** `?mode=` — `null` (deathmatch by default) or an explicit name. */
 const modeArb = fc.oneof(
 	fc.constant(null),
-	fc.constantFrom("ffa" as const, "tdm" as const),
+	fc.constantFrom("ffa" as const, "tdm" as const, "5cp" as const),
 );
 
 /**
@@ -126,6 +127,7 @@ const validParams: fc.Arbitrary<LaunchParams> = fc.record({
 	ultCharge: optNum(fc.nat({ max: 100 })),
 	mode: modeArb,
 	freezeTime: optNum(fc.nat({ max: 60 })),
+	capTime: optNum(fc.integer({ min: 1, max: 30 })),
 	screens: optNum(fc.integer({ min: 1, max: 8 })),
 	password: passwordArb,
 	isPrivate: fc.boolean(),
@@ -138,7 +140,7 @@ describe("parseLaunchParams", () => {
 
 	it("reads every field from a full link", () => {
 		const parsed = parseLaunchParams(
-			"?room=abc-123&server=sa.golpe.gg&region=sa&ai=true&online=true&offline=true&training=true&tutorial=true&hero=anands&botHero=lia&bots=3&fill=8&scoreLimit=9&timeLimit=120&ultCharge=50&mode=tdm&freezeTime=2&screen=4&password=hunter2&private=true",
+			"?room=abc-123&server=sa.golpe.gg&region=sa&ai=true&online=true&offline=true&training=true&tutorial=true&hero=anands&botHero=lia&bots=3&fill=8&scoreLimit=9&timeLimit=120&ultCharge=50&mode=tdm&freezeTime=2&capTime=5&screen=4&password=hunter2&private=true",
 		);
 		expect(parsed).toEqual({
 			room: "abc-123",
@@ -158,6 +160,7 @@ describe("parseLaunchParams", () => {
 			ultCharge: 50,
 			mode: "tdm",
 			freezeTime: 2,
+			capTime: 5,
 			screens: 4,
 			password: "hunter2",
 			isPrivate: true,
@@ -180,6 +183,12 @@ describe("parseLaunchParams", () => {
 
 	it("accepts `team` as the team mode, like Match always did", () => {
 		expect(parseLaunchParams("?mode=team").mode).toBe("tdm");
+	});
+
+	it("accepts the control-point spellings", () => {
+		expect(parseLaunchParams("?mode=5cp").mode).toBe("5cp");
+		expect(parseLaunchParams("?mode=cp").mode).toBe("5cp");
+		expect(parseLaunchParams("?mode=control").mode).toBe("5cp");
 	});
 
 	it("treats a false flag as absent", () => {

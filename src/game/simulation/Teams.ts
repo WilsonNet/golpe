@@ -29,7 +29,7 @@ export {
  */
 
 /** Which ruleset a room plays. */
-export type MatchMode = "ffa" | "tdm";
+export type MatchMode = "ffa" | "tdm" | "5cp";
 
 /**
  * A side. `null` is "no team", which is what every fighter in a free-for-all is

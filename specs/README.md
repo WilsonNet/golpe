@@ -30,6 +30,7 @@ it.
 | [deathmatch.md](deathmatch.md) | 16 fighters, frags, respawns, the win condition, names, the podium |
 | [play-of-the-game.md](play-of-the-game.md) | The end-of-match highlight: how a play is scored, how it is recorded, and the camera edit |
 | [team-deathmatch.md](team-deathmatch.md) | Two sides, no friendly fire, wipe-out rounds, and the team colour scheme |
+| [control-points.md](control-points.md) | TF2's symmetric 5CP: five points, adjacency locks, captures, forward spawns, overtime, and the mode's own map |
 | [netcode.md](netcode.md) | Online-first model, rollback, reconciliation, the wire format, projectiles, bots |
 | [menu.md](menu.md) | The root menu: when it shows, how choices become URLs, hosting and joining |
 | [audio.md](audio.md) | The soundtrack and sound FX: the loops, the bank, the mixer, and what plays when |

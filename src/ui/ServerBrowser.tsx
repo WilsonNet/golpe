@@ -127,7 +127,9 @@ async function fetchOne(
 }
 
 function formatMode(mode: MatchMode): string {
-	return mode === "tdm" ? "Team DM" : "Deathmatch";
+	if (mode === "tdm") return "Team DM";
+	if (mode === "5cp") return "5 CP";
+	return "Deathmatch";
 }
 
 export function ServerBrowser({
@@ -282,6 +284,13 @@ export function ServerBrowser({
 					>
 						Team DM
 					</button>
+					<button
+						type="button"
+						className={`gd-chip${modeFilter === "5cp" ? " gd-chip-on" : ""}`}
+						onClick={() => setModeFilter("5cp")}
+					>
+						5 CP
+					</button>
 				</div>
 				<div className="gd-choice">
 					{regions.map((reg) => (
@@ -380,6 +389,7 @@ export function ServerBrowser({
 											ultCharge: undefined,
 											mode: null,
 											freezeTime: undefined,
+											capTime: undefined,
 											screens: undefined,
 											password: null,
 											isPrivate: false,

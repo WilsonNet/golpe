@@ -27,6 +27,7 @@ node scripts/diagnose.ts --mode=online --ultCharge=100  # bots cast their ultima
 node scripts/deathmatch-probe.ts               # sixteen AI fighters, played to a winner
 node scripts/tdm-probe.ts                      # two sides, wipe-out rounds, no friendly fire
 node scripts/tdm-probe.ts --ultCharge=100      # ... and the teams throw black holes
+node scripts/cp-probe.ts                       # five control points: captures, forward spawns, overtime
 node scripts/probe-online.ts                   # dump one online client's console
 node scripts/verify-modes.ts                   # smoke-check every launch mode
 node scripts/aim-probe.ts                      # cursor, facing and shot direction, at dpr 1 and 2
@@ -46,6 +47,7 @@ answers at scale:
 | Is prediction, reconciliation, projectile flight clean? | `diagnose.ts --mode=online` |
 | Does a sixteen-fighter room stay consistent, score honestly, and end? | `deathmatch-probe.ts` |
 | Do sides hold: even split, no friendly fire, rounds that end by wipe-out? | `tdm-probe.ts` |
+| Does the line move: locks, captures, forward spawns, overtime? | `cp-probe.ts` |
 
 It shortens the rules so a win condition is observable in seconds rather than five
 minutes — `--scoreLimit`, `--timeLimit` — and everything else is the real path:
@@ -112,6 +114,40 @@ wipe, no reset and no frag, because a room of sixteen fighters standing still
 passes every correctness check there is.
 That last one is the important one: every other check passes in a room where
 sixteen fighters stood still.
+
+## The control points probe
+
+`cp-probe.ts` is the TDM probe's shape against `?mode=5cp`, and it asks the
+questions only a map-shaped objective can raise.
+
+```bash
+node scripts/cp-probe.ts                                  # 7 bots — a 4v3 — to a capture limit
+node scripts/cp-probe.ts --fighters=8 --timeLimit=420      # an even fight, which can draw
+node scripts/cp-probe.ts --ultCharge=100                   # and the black holes come too
+```
+
+**The line starts as TF2's does**, and that is asserted from the snapshot into
+the first samples: each side owns the two points by its base, the middle is
+neutral, and the per-team unlock flags are the adjacency rule exactly. A client
+drawing a point open that the server would refuse is a failure before anything
+moves.
+
+**Forward spawns are measured from the bodies.** Every observed respawn — a
+full-health sample after a death with a jump the size of a screen — is compared
+against the spawn screen its side's front line implies, and a fighter that
+lands anywhere else fails the run. The come-back geometry is not trusted to the
+unit test alone.
+
+**Overtime is arranged, not hoped for.** It only exists at the instant the
+clock runs out with a capture in flight, so the probe runs a *second room*:
+fifteen seconds of clock and no freezetime, which lands the whistle mid-cap
+every run. It watches the clock hold, the capture complete, and the clock go
+**backwards** by the minute the mode pays back — the one thing in the game that
+makes time run in reverse.
+
+**A clean run is not a good run.** Zero captures, zero flips and zero round
+wins are failures even though every correctness check above passes in a room
+where nobody pushed.
 
 ## Rollback and bandwidth: `netSummary`
 

@@ -48,6 +48,7 @@ function input(over: Partial<AIInput> = {}): AIInput {
 		selfItemCharges: 2,
 		selfAmmo: 12,
 		selfReserveRounds: 36,
+		control: null,
 		...over,
 	};
 }

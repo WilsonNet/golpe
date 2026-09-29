@@ -406,6 +406,159 @@ export const FIGHT_HUD_CSS = `
 	text-shadow: 0 0.2cqh 0 rgba(0, 0, 0, 0.8);
 }
 
+/* ---- the control line, under the team score (5CP only) ----
+   Gameplay tier: the war in five pips. A pip wears the colour of whoever owns
+   it, a capture climbs through it in the attacker's colour, and a point this
+   side can neither take nor hold sits dimmed behind a lock — the front line
+   should cost one glance, not a map. Overtime rides beside the line in the
+   clock's own gold. The bar is the only part of the clock that widens; the
+   numerals above it never move. */
+.vdh-cap-bar {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.4cqw;
+	margin-top: 0.5cqh;
+}
+.vdh-cap-pip {
+	position: relative;
+	width: 3.4cqw;
+	height: 2cqh;
+	border-radius: 1px;
+	overflow: hidden;
+	/* Neutral is the default; an owner's colour arrives as an inline
+	   background, so the pip itself is the ownership readout. */
+	background: rgba(160, 176, 192, 0.3);
+	box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.55);
+}
+/* The pad under attack: the attacker's colour climbing from the left, with a
+   dark edge so a fill over the owner's colour still reads as progress. */
+.vdh-cap-fill {
+	position: absolute;
+	left: 0;
+	top: 0;
+	bottom: 0;
+	z-index: 1;
+	box-shadow: inset -1px 0 0 rgba(0, 0, 0, 0.7);
+	transition: width 200ms linear;
+}
+.vdh-cap-letter {
+	position: absolute;
+	inset: 0;
+	z-index: 2;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 1.25cqw;
+	font-weight: bold;
+	color: #08121f;
+	text-shadow: 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+/* The local side's next step: a slow cyan breath on the point it may take.
+   The accent is the aim beam's, so "this one is yours to move" reads in the
+   HUD's own voice rather than as one more team colour. */
+.vdh-cap-pip.vdh-cap-open {
+	animation: vdh-cap-open 1100ms ease-in-out infinite;
+}
+@keyframes vdh-cap-open {
+	0%, 100% {
+		box-shadow:
+			inset 0 0 0 1px rgba(0, 0, 0, 0.55),
+			0 0 0.2cqw rgba(127, 240, 244, 0);
+	}
+	50% {
+		box-shadow:
+			inset 0 0 0 1px rgba(0, 0, 0, 0.55),
+			0 0 1cqw rgba(127, 240, 244, 0.9);
+	}
+}
+/* Locked: a dark hatch over the owner's colour, the letter shifted aside for
+   a small CSS padlock — two spans, because a glyph is a different picture on
+   every platform's font stack and this one has to fit a pip. The bar must say
+   "not through here" without words. */
+.vdh-cap-pip.vdh-cap-locked::before {
+	content: "";
+	position: absolute;
+	inset: 0;
+	z-index: 1;
+	background-color: rgba(6, 14, 24, 0.62);
+	background-image: repeating-linear-gradient(
+		-45deg,
+		rgba(255, 255, 255, 0.07) 0 1px,
+		transparent 1px 0.55cqw
+	);
+}
+.vdh-cap-pip.vdh-cap-locked .vdh-cap-letter {
+	padding-right: 1.5cqw;
+	color: rgba(217, 244, 246, 0.85);
+	text-shadow: 0 1px 0 rgba(0, 0, 0, 0.7);
+}
+.vdh-cap-lock {
+	position: absolute;
+	right: 0.3cqw;
+	top: 50%;
+	z-index: 3;
+	width: 1cqw;
+	height: 1.3cqh;
+	transform: translateY(-50%);
+}
+.vdh-cap-lock-shackle {
+	position: absolute;
+	left: 50%;
+	top: 0;
+	width: 0.65cqw;
+	height: 0.6cqh;
+	transform: translateX(-50%);
+	border: 1px solid rgba(217, 244, 246, 0.95);
+	border-bottom: none;
+	border-radius: 0.35cqw 0.35cqw 0 0;
+}
+.vdh-cap-lock-body {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	height: 0.6cqh;
+	background: rgba(217, 244, 246, 0.95);
+	border-radius: 1px;
+}
+/* Contested: both sides stand on the pad and progress is frozen, so it is
+   drawn as a barber's stripe that flashes — not a fill, because the point is
+   that nothing is being filled. */
+.vdh-cap-pip.vdh-cap-contested::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	z-index: 1;
+	background: repeating-linear-gradient(
+		45deg,
+		rgba(255, 255, 255, 0.6) 0 0.35cqw,
+		rgba(10, 18, 30, 0.35) 0.35cqw 0.7cqw
+	);
+	animation: vdh-cap-contested 620ms steps(2, end) infinite;
+}
+@keyframes vdh-cap-contested {
+	0%, 100% { opacity: 0.5; }
+	50% { opacity: 1; }
+}
+/* The clock is held for a capture in progress: overtime speaks in the one
+   voice the clock already has. */
+.vdh-cap-overtime {
+	margin-left: 0.5cqw;
+	font-size: 1.25cqw;
+	font-weight: bold;
+	letter-spacing: 0.18em;
+	color: #ffd166;
+	text-shadow:
+		0 0.2cqh 0 rgba(0, 0, 0, 0.8),
+		0 0 0.9cqw rgba(255, 209, 102, 0.55);
+	animation: vdh-cap-overtime 1s ease-in-out infinite;
+}
+@keyframes vdh-cap-overtime {
+	0%, 100% { opacity: 0.7; }
+	50% { opacity: 1; }
+}
+
 .vdh-clock.vdh-clock-danger .vdh-clock-time {
 	color: #ff5d5d;
 	animation: vdh-clock-danger 1s ease-in-out infinite;

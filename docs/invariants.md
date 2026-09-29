@@ -793,6 +793,47 @@ the ways a *side* breaks things a free-for-all could not.
   exactly on the line puts half of itself in the air off the front of a ledge and
   reads as a floating disc.
 
+## Control points
+
+Full detail in [specs/control-points.md](../specs/control-points.md). This is the
+first mode whose *map* is part of its rules, and the first with a score that is
+not made of kills.
+
+- **A mode can change the map, not just its width.** `?mode=5cp` plays
+  `buildControlWorld()` — five screens, a capture pad on each — and a client
+  seated by link rebuilds *that*, not the classic arena resized. The seated
+  message once carried only `screens`; a control client rebuilt the classic
+  tiles at five screens and predicted collisions against geometry the server
+  did not have. `applyControlWorld` is the fix, and the rule is general: the
+  mode is the map's shape, the width is only one of its parameters.
+- **The lock rule is one predicate, `unlockedFor`.** A point is open to a team
+  when the point between it and that team's base is already theirs. Every 5CP
+  lock behaviour falls out of that one sentence — the middle open to both at
+  the start, the next enemy point opening after a capture, at most two points
+  open at once, and no back-cap past the front line. A second lock written
+  anywhere else is a second answer to "can they take that", and the first
+  disagreement is a point captured through a closed pad.
+- **Ownership is snapshot state, never roster state**, for the same reason team
+  is: the roster has a 2s heartbeat, and a lost one must not move the front
+  line — or the spawn screen a whole side respawns on.
+- **The capture tick reads the simulation and writes only control state.**
+  Presence is `onPad` against a living body; nothing about a pad pushes,
+  blocks or heals anybody. A capture resolved inside a `tickPlayer`-adjacent
+  path would be authoritative state changed outside `tickPlayer`.
+- **A pad's drawing and its capture zone are one rectangle.** Both come from
+  `CONTROL_PADS`, built from the same map constants the collider uses, so the
+  pad a player sees is the pad the server counts. The `ArenaRenderer` rule
+  ("draw from the collider data") extended to the objective.
+- **The loser's respawn advantage is arithmetic on points owned**, asked at
+  the moment of death. It is the comeback mechanic (TF2's rule), and deriving
+  it from live ownership rather than a stored flag is what keeps it from
+  drifting out of step with the line.
+- **Overtime is one pure question** (`controlClockOutcome`): the clock with a
+  capture in progress stops instead of ending, a completed capture pays a
+  minute of it back, and only an empty bar lets time run out. The server owns
+  the flag; the function has no state, so the whole rule is answerable in a
+  unit test and observable in `cp-probe.ts` as the clock going *backwards*.
+
 ## Input and the UI
 
 - **A programmatic entry point must drive the same *state* the UI does, not just

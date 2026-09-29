@@ -63,6 +63,18 @@ const MODES: Mode[] = [
 		fighters: 2,
 	},
 	/**
+	 * Control points: the five-point line. Shortened rules so the smoke check
+	 * runs a real capture instead of five minutes of midfight, and a bot on both
+	 * sides so the objective module — not just the mode plumbing — is exercised.
+	 */
+	{
+		label: "5 control points (AI vs AI)",
+		url: "/?ai=true&bots=3&mode=5cp&capTime=1&freezeTime=1&scoreLimit=1&timeLimit=120",
+		tabs: 1,
+		needsFight: true,
+		fighters: 4,
+	},
+	/**
 	 * Two humans and **no `fill`**: with bots opt-in, a room of two clients is a
 	 * room of two fighters, so there is nothing to evict and nothing to ask for.
 	 */

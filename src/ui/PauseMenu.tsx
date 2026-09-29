@@ -212,7 +212,7 @@ function MainMenuView({
 	setConfirmExit: (v: boolean) => void;
 }) {
 	const match = useMatch();
-	const isTdm = match?.status.mode === "tdm";
+	const isTdm = match !== null && match.status.mode !== "ffa";
 	return (
 		<>
 			<h2 className="gd-title">Menu</h2>
@@ -279,7 +279,7 @@ function RoomView({ onBack }: { onBack: () => void }) {
 	const roster = useRoster();
 	const myId = match?.myId ?? "";
 	const me = roster.find((r) => r.id === myId) ?? null;
-	const isTdm = match?.status.mode === "tdm";
+	const isTdm = match !== null && match.status.mode !== "ffa";
 	const myTeam: TeamId | null = (me?.team as TeamId | null) ?? null;
 	const isAdmin = me?.admin ?? false;
 	const isCreator = me?.creator ?? false;

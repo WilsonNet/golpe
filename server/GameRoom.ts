@@ -8,6 +8,7 @@ import type {
 	AIInput,
 	AIOutput,
 	AllyInfo,
+	ControlInfo,
 	FoeInfo,
 } from "../src/game/characters/types.js";
 import {
@@ -40,6 +41,25 @@ import {
 	type SpawnPoint,
 	type World,
 } from "../src/game/simulation/Arena.js";
+import {
+	buildControlWorld,
+	CONTROL_PADS,
+	pickControlSpawn,
+} from "../src/game/simulation/ControlMap.js";
+import {
+	type CaptureEvent,
+	type ControlPointStates,
+	capturableBy,
+	controlClockOutcome,
+	controlRespawnDelayMs,
+	controlRoundWinner,
+	controlSpawnScreen,
+	controlStatus,
+	controlTiebreak,
+	initialControlPoints,
+	onPad,
+	stepControlPoints,
+} from "../src/game/simulation/ControlPoints.js";
 import {
 	MATCH_OVER_LINGER_MS,
 	type MatchEndReason,
@@ -75,6 +95,12 @@ import type {
 	TrainingFighterStats,
 	TrainingStateMsg,
 } from "../src/game/training/types.js";
+import {
+	CP_CAPTURE_MS,
+	CP_OVERTIME_BONUS_MS,
+	CP_SCORE_LIMIT,
+	CP_TIME_LIMIT_MS,
+} from "../src/tweakables/control.js";
 import {
 	DEGREES_PER_PI_RADIANS,
 	pelletDamageAt,
@@ -712,6 +738,29 @@ export class GameRoom {
 	 */
 	private readonly freezeTimeMs: number;
 
+	// =========================================================
+	//  CONTROL POINTS (5CP)
+	// =========================================================
+	//
+	// The five-point line: TF2's symmetric 5CP. Ownership is server state like
+	// the round score, and the rules that move it are pure functions in
+	// `simulation/ControlPoints.ts`. `"ffa"` and `"tdm"` leave every field
+	// below inert.
+
+	/** The line, left to right. Reset at every round boundary. */
+	private controlPoints: ControlPointStates = initialControlPoints();
+	/** The clock ran out with a capture in progress. */
+	private controlOvertime = false;
+	/** Captures this match, for the HUD and the probe. */
+	private controlCaptures = 0;
+	/**
+	 * Per-point capture times for this room, indexed like `controlPoints`.
+	 *
+	 * `CP_CAPTURE_MS` unless the creator shortened the ladder with `?capTime=S`
+	 * — a practice-room flag with the same shape as `?ultCharge`.
+	 */
+	private readonly captureMs: readonly number[];
+
 	/**
 	 * How many fighters this room keeps topped up with bots.
 	 *
@@ -794,6 +843,7 @@ export class GameRoom {
 			startUltCharge?: number;
 			mode?: MatchMode;
 			freezeTimeMs?: number;
+			capTimeMs?: number;
 			botHero?: unknown;
 			probe?: boolean;
 			password?: string | null;
@@ -810,24 +860,49 @@ export class GameRoom {
 		// A passworded room is unlisted whether its creator said so or not.
 		this.unlisted = Boolean(rules.unlisted) || this.passwordHash !== null;
 		this.freezeTimeMs =
-			this.mode === "tdm"
-				? Math.max(0, rules.freezeTimeMs ?? ROUND_FREEZE_MS)
-				: 0;
+			this.mode === "ffa"
+				? 0
+				: Math.max(0, rules.freezeTimeMs ?? ROUND_FREEZE_MS);
 		// The first round gets its countdown like every other one. Fighters seated
 		// while it runs inherit whatever is left of it, so a bot arriving three
 		// seconds in is planted for the remaining seven rather than walking around
 		// a room that has not started.
 		this.roundFreezeMs = this.freezeTimeMs;
-		// A frag limit and a round limit are different numbers for different
-		// things: 21 frags is a deathmatch, 15 wipe-outs is a team match. Asking
-		// for one and getting the other's default is how a TDM room silently
-		// became a twenty-one-round marathon.
+		// A frag limit, a round limit and a capture limit are different numbers for
+		// different things: 21 frags is a deathmatch, 15 wipe-outs is a team match,
+		// 3 full line captures is a control match. Asking for one and getting the
+		// other's default is how a TDM room silently became a twenty-one-round
+		// marathon.
 		this.scoreLimit =
-			rules.scoreLimit ?? (this.mode === "tdm" ? TDM_SCORE_LIMIT : SCORE_LIMIT);
-		this.timeLimitMs = rules.timeLimitMs ?? TIME_LIMIT_MS;
+			rules.scoreLimit ??
+			(this.mode === "tdm"
+				? TDM_SCORE_LIMIT
+				: this.mode === "5cp"
+					? CP_SCORE_LIMIT
+					: SCORE_LIMIT);
+		this.timeLimitMs =
+			rules.timeLimitMs ??
+			(this.mode === "5cp" ? CP_TIME_LIMIT_MS : TIME_LIMIT_MS);
 		this.fillTarget = Math.max(0, Math.min(rules.fillTarget ?? 0, MAX_PLAYERS));
 		this.botHero = isHeroId(rules.botHero) ? rules.botHero : null;
-		this.world = buildWorld(rules.screens ?? 1);
+		// The mode's map. Control points plays its own five-screen line; every
+		// other mode tiles the classic arena to the requested width.
+		this.world =
+			this.mode === "5cp"
+				? buildControlWorld()
+				: buildWorld(rules.screens ?? 1);
+		// `?capTime=S` shortens the ladder for practice and probes: the middle
+		// point's seconds are the room's, and the other four scale by their ratios
+		// so the shape of the ladder (last fastest, middle slowest) survives.
+		this.captureMs =
+			this.mode === "5cp" && rules.capTimeMs
+				? CP_CAPTURE_MS.map((ms) =>
+						Math.max(
+							1,
+							Math.round((ms * rules.capTimeMs!) / (CP_CAPTURE_MS[2] ?? ms)),
+						),
+					)
+				: [...CP_CAPTURE_MS];
 		this.startUltCharge = Math.max(
 			0,
 			Math.min(rules.startUltCharge ?? 0, ULT_MAX_CHARGE),
@@ -935,7 +1010,7 @@ export class GameRoom {
 	 * fighter's old position across, and does not heal or kill them either.
 	 */
 	private switchTeam(playerId: string, team: TeamId): boolean {
-		if (this.mode !== "tdm") return false;
+		if (this.mode === "ffa") return false;
 		const p = this.players.get(playerId);
 		if (!p || p.team === team) return false;
 		const old = p.team;
@@ -971,8 +1046,8 @@ export class GameRoom {
 	private addBotOnTeam(team: TeamId | null): boolean {
 		if (this.isFull) return false;
 		let spawnTeam = team;
-		if (spawnTeam === null && this.mode === "tdm") spawnTeam = this.nextTeam();
-		else if (this.mode !== "tdm") spawnTeam = null;
+		if (spawnTeam === null && this.mode !== "ffa") spawnTeam = this.nextTeam();
+		else if (this.mode === "ffa") spawnTeam = null;
 		const id = `bot-${this.id}-${this.channelIds.length}-${Date.now()}`;
 		this.channelIds.push(id);
 		const hero = this.botHeroFor();
@@ -997,10 +1072,10 @@ export class GameRoom {
 	private removeBotOnTeam(team: TeamId | null): boolean {
 		let bots = [...this.players.values()].filter((p) => p.brain !== null);
 		if (bots.length === 0) return false;
-		if (team !== null && this.mode === "tdm") {
+		if (team !== null && this.mode !== "ffa") {
 			const tBots = bots.filter((p) => p.team === team);
 			if (tBots.length > 0) bots = tBots;
-		} else if (this.mode === "tdm") {
+		} else if (this.mode !== "ffa") {
 			// Prefer the larger side, so removal balances rather than empties one side.
 			const counts = teamCounts(this.members());
 			const larger =
@@ -1113,22 +1188,44 @@ export class GameRoom {
 	 * see `hostile`.
 	 */
 	private nextTeam(): TeamId | null {
-		if (this.mode !== "tdm") return null;
+		if (this.mode === "ffa") return null;
 		return balanceTeam(teamCounts(this.members()));
+	}
+
+	/**
+	 * Where a team fighter enters, in whichever team mode this room is.
+	 *
+	 * Team deathmatch spawns at its own end of the arena; control points spawns
+	 * on the side's front-line screen — one step behind its furthest-forward
+	 * point — which is the whole of "forward spawns".
+	 */
+	private teamSpawn(
+		team: TeamId,
+		occupied: readonly { x: number; y: number }[],
+	): SpawnPoint {
+		if (this.mode === "5cp") {
+			const screen = controlSpawnScreen(
+				this.controlPoints,
+				this.world.screens,
+				team,
+			);
+			return pickControlSpawn(occupied, team, screen);
+		}
+		return pickTeamSpawn(occupied, this.world, team);
 	}
 
 	/**
 	 * Where a fighter enters, in whichever mode this room is.
 	 *
-	 * A free-for-all spawns furthest from everybody; a team match spawns in its
-	 * own third of the arena, furthest from everybody *there*. Both are the same
-	 * pure choice — see `pickTeamSpawn`.
+	 * A free-for-all spawns furthest from everybody; a team match spawns on its
+	 * own side, furthest from everybody *there*. Both are the same pure choice —
+	 * see `pickTeamSpawn` and `pickControlSpawn`.
 	 */
 	private spawnFor(team: TeamId | null): SpawnPoint {
 		const occupied = this.occupiedPoints();
 		return team === null
 			? pickSpawn(occupied, this.world)
-			: pickTeamSpawn(occupied, this.world, team);
+			: this.teamSpawn(team, occupied);
 	}
 
 	addPlayer(
@@ -1224,12 +1321,12 @@ export class GameRoom {
 			this.applyTrainingConfig(data as TrainingConfigMsg | null);
 		});
 
-		// Team switching: any player in a TDM room may move themselves. The
+		// Team switching: any player in a team room may move themselves. The
 		// simulation carries `team` per fighter, so this is load-bearing for
 		// friendly fire — the snapshot will carry the new side on its next tick.
 		channel.on("team", (data: unknown) => {
 			const p = this.players.get(id);
-			if (!p || this.mode !== "tdm") return;
+			if (!p || this.mode === "ffa") return;
 			const raw = (data as { team?: unknown } | null)?.team;
 			if (raw !== 0 && raw !== 1) return;
 			this.switchTeam(id, raw as TeamId);
@@ -1301,7 +1398,7 @@ export class GameRoom {
 		const bots = [...this.players.values()].filter((p) => p.brain !== null);
 		const counts = teamCounts(this.members());
 		const bot =
-			this.mode === "tdm"
+			this.mode !== "ffa"
 				? [...bots].sort(
 						(a, b) => (counts[b.team ?? 0] ?? 0) - (counts[a.team ?? 0] ?? 0),
 					)[0]
@@ -1706,7 +1803,40 @@ export class GameRoom {
 						},
 					]
 				: [],
+			// The line, in a control match. Populated here and nowhere downstream,
+			// so `characters/` never has to ask what mode it is in.
+			control: this.controlInfoFor(bot),
 		};
+	}
+
+	/**
+	 * The five-point line as this bot sees it, or `null` in any other mode.
+	 *
+	 * Server-owned state, so the objective module is told where the line is
+	 * rather than deriving it — and `capturable` is the same predicate the
+	 * capture tick uses, so a bot walks to a point the server would actually
+	 * accept.
+	 */
+	private controlInfoFor(bot: ConnectedPlayer): ControlInfo | null {
+		if (this.mode !== "5cp" || bot.team === null) return null;
+		const team = bot.team;
+		let frontier = -1;
+		const points = this.controlPoints.map((point, i) => {
+			const pad = CONTROL_PADS[i];
+			if (point.owner === team) frontier = i;
+			return {
+				index: i,
+				x: pad ? pad.x + pad.w / 2 : 0,
+				y: pad ? pad.y + pad.h / 2 : 0,
+				owner: point.owner,
+				attacker: point.attacker,
+				progress: point.progress,
+				contested: point.contested,
+				capturable: capturableBy(this.controlPoints, i, team),
+				mine: point.owner === team,
+			};
+		});
+		return { points, frontier };
 	}
 
 	/**
@@ -1807,7 +1937,7 @@ export class GameRoom {
 
 	/** The round scoreboard, or null in a free-for-all. */
 	private teamStatus(): TeamStatus | null {
-		if (this.mode !== "tdm") return null;
+		if (this.mode === "ffa") return null;
 		const members = this.members();
 		return {
 			scores: [...this.teamScores],
@@ -1819,6 +1949,14 @@ export class GameRoom {
 			freezeMs: this.roundFreezeMs > 0 ? Math.round(this.roundFreezeMs) : 0,
 			lastRoundWinner: this.lastRoundWinner,
 			winnerTeam: this.winnerTeam,
+			control:
+				this.mode === "5cp"
+					? controlStatus(
+							this.controlPoints,
+							this.controlOvertime,
+							this.controlCaptures,
+						)
+					: null,
 		};
 	}
 
@@ -1835,12 +1973,20 @@ export class GameRoom {
 	private killPlayer(victim: ConnectedPlayer) {
 		victim.alive = false;
 		victim.deaths++;
-		// Meaningless in a team match — nothing counts it down, because a fighter
-		// stays down until their whole side does. Still set, so a mode that ever
-		// mixed the two would not read an uninitialised timer.
-		victim.respawnTimer = RESPAWN_DELAY_MS;
+		// Meaningless in a wipe-out round — nothing counts it down, because a
+		// fighter stays down until their whole side does. Control points *does*
+		// respawn individuals, and its delay is the comeback mechanic: the side
+		// with fewer points gets bodies back sooner (TF2's respawn advantage),
+		// asked here, at the moment of death, so it is a fact about the line the
+		// fighter fell on. Still set in every mode, so a mode that ever mixed the
+		// lifecycles would not read an uninitialised timer.
+		const respawnDelay =
+			this.mode === "5cp" && victim.team !== null
+				? controlRespawnDelayMs(this.controlPoints, victim.team)
+				: RESPAWN_DELAY_MS;
+		victim.respawnTimer = respawnDelay;
 		victim.hp = 0;
-		victim.state.stunTimer = RESPAWN_DELAY_MS;
+		victim.state.stunTimer = respawnDelay;
 		victim.state.blocking = false;
 		victim.state.meleeAction = "none";
 		victim.state.meleeTimer = 0;
@@ -2101,7 +2247,7 @@ export class GameRoom {
 		const spawn =
 			player.team === null
 				? pickSpawn(occupied, this.world)
-				: pickTeamSpawn(occupied, this.world, player.team);
+				: this.teamSpawn(player.team, occupied);
 		player.state = createPlayerState(spawn.x, spawn.y, spawn.facing);
 		player.hp = MAX_HP;
 		player.alive = true;
@@ -2199,20 +2345,61 @@ export class GameRoom {
 		// score went unchecked for five seconds, and by the time it was read the
 		// arena had already reset and started a round nobody was playing.
 		const paused =
-			this.mode === "tdm" &&
+			this.mode !== "ffa" &&
 			(this.roundFreezeMs > 0 || this.roundResetTimer > 0);
 		if (!paused) this.matchElapsedMs += dt * MS_PER_SECOND;
 
 		const reason =
 			this.mode === "tdm"
 				? this.teamMatchEnd()
-				: matchEndReason(
-						this.scoreEntries(),
-						this.matchElapsedMs,
-						this.scoreLimit,
-						this.timeLimitMs,
-					);
+				: this.mode === "5cp"
+					? this.controlMatchEnd()
+					: matchEndReason(
+							this.scoreEntries(),
+							this.matchElapsedMs,
+							this.scoreLimit,
+							this.timeLimitMs,
+						);
 		if (reason) this.endMatch(reason);
+	}
+
+	/**
+	 * Has a control match ended?
+	 *
+	 * Rounds first, the clock second — and the clock is the interesting one. A
+	 * clock that runs out while a capture is in progress does **not** end
+	 * anything: it stops and declares overtime, and the push that was underway
+	 * gets to finish. Only when the last bar has reverted to empty does time run
+	 * out for real; nothing in progress at all means the round is decided on
+	 * points held, and then the match on rounds won.
+	 */
+	private controlMatchEnd(): MatchEndReason {
+		if (teamMatchWinner(this.teamScores, this.scoreLimit) !== null) {
+			return "score";
+		}
+		const outcome = controlClockOutcome(
+			this.controlPoints,
+			this.matchElapsedMs,
+			this.timeLimitMs,
+			this.controlOvertime,
+		);
+		if (outcome === "none") return null;
+		if (outcome === "overtime") {
+			this.controlOvertime = true;
+			console.log(
+				`[CP] ${this.id}: overtime — round ${this.roundNumber} still being taken`,
+			);
+			this.broadcastReliable("control-overtime", { round: this.roundNumber });
+			return null;
+		}
+		// The whistle with nothing in progress: the round is decided on points
+		// held, and the match on the round it just decided. A capture that
+		// completed in overtime paid its time back already — see `creditCapture`
+		// — so reaching here in overtime means every bar has fully reverted.
+		if (!this.controlOvertime) {
+			this.awardControlRound(controlTiebreak(this.controlPoints), "time");
+		}
+		return "time";
 	}
 
 	/**
@@ -2240,12 +2427,12 @@ export class GameRoom {
 		// clock runs out. `null` is a genuine draw, which only a timed match can
 		// produce and which the podium says out loud rather than inventing a winner.
 		this.winnerTeam =
-			this.mode === "tdm"
-				? (teamMatchWinner(this.teamScores, this.scoreLimit) ??
-					teamAhead(this.teamScores))
-				: null;
+			this.mode === "ffa"
+				? null
+				: (teamMatchWinner(this.teamScores, this.scoreLimit) ??
+					teamAhead(this.teamScores));
 
-		if (this.mode === "tdm") {
+		if (this.mode !== "ffa") {
 			// The MVP is the side's most valuable fighter by weighted whole-match
 			// stats, not necessarily the frags leader — the same `mvpOf` the client
 			// uses, so the log and the ceremony cannot disagree.
@@ -2280,7 +2467,7 @@ export class GameRoom {
 			winnerId: this.winnerId,
 			standings,
 			winnerTeam: this.winnerTeam,
-			...(this.mode === "tdm" ? { teamScores: [...this.teamScores] } : {}),
+			...(this.mode === "ffa" ? {} : { teamScores: [...this.teamScores] }),
 		});
 	}
 
@@ -2353,6 +2540,153 @@ export class GameRoom {
 		});
 	}
 
+	/**
+	 * The control round: the same freeze → fight → cooldown shape as TDM, but a
+	 * different ending and a different life.
+	 *
+	 * - **Individuals respawn.** Control points has no wipe-out: a wipe is a push
+	 *   the enemy paid for with bodies, not a round. The delay is the coming-back
+	 *   side's advantage, decided at the moment of death.
+	 * - **The round ends when a side holds the enemy's last point**, and the whole
+	 *   line resets for the next one.
+	 * - The clock is not checked here; `tickMatchClock` owns it, so the overtime
+	 *   rules live in one place.
+	 */
+	private tickControlRound(dt: number) {
+		// The ceremony owns the arena from the moment the match is decided. Without
+		// this a five-point line keeps being captured under the replay.
+		if (this.phase === "over") return;
+
+		if (this.roundFreezeMs > 0) {
+			this.roundFreezeMs = Math.max(0, this.roundFreezeMs - dt * MS_PER_SECOND);
+			if (this.roundFreezeMs === 0) {
+				console.log(`[ROUND] ${this.id}: round ${this.roundNumber} live`);
+				this.broadcastReliable("round-live", { round: this.roundNumber });
+			}
+			return;
+		}
+
+		if (this.roundResetTimer > 0) {
+			this.roundResetTimer -= dt * MS_PER_SECOND;
+			if (this.roundResetTimer <= 0) {
+				this.roundResetTimer = -1;
+				if (this.phase === "live") {
+					this.roundNumber++;
+					this.resetPlayers();
+				}
+			}
+			return;
+		}
+
+		this.tickRespawns(dt);
+		this.tickControlCaptures(dt);
+
+		const winner = controlRoundWinner(this.controlPoints);
+		if (winner !== null) this.awardControlRound(winner, "capture");
+	}
+
+	/**
+	 * Who is standing on what, and what that does to the line.
+	 *
+	 * Presence is read from the simulation — a living fighter's body centre
+	 * inside a pad's rectangle — and the pads come from the map, so the drawn pad
+	 * and the capture zone cannot disagree. Nothing here writes to a fighter:
+	 * the capture tick reads the simulation and writes only control state.
+	 */
+	private tickControlCaptures(dt: number) {
+		const present: number[][] = [
+			new Array<number>(this.controlPoints.length).fill(0),
+			new Array<number>(this.controlPoints.length).fill(0),
+		];
+		for (const player of this.players.values()) {
+			if (!player.alive || player.team === null) continue;
+			const row = present[player.team];
+			if (!row) continue;
+			this.controlPoints.forEach((_, i) => {
+				const pad = CONTROL_PADS[i];
+				if (
+					pad &&
+					onPad(
+						pad,
+						player.state.x,
+						player.state.y,
+						PLAYER_WIDTH,
+						PLAYER_HEIGHT,
+					)
+				) {
+					row[i] = (row[i] ?? 0) + 1;
+				}
+			});
+		}
+		const events = stepControlPoints(
+			this.controlPoints,
+			present,
+			dt * MS_PER_SECOND,
+			this.controlOvertime,
+			this.captureMs,
+		);
+		for (const event of events) this.creditCapture(event);
+	}
+
+	/**
+	 * A point changed hands.
+	 *
+	 * **A capture during overtime is what overtime exists for**: it pays the
+	 * round's time back and the match resumes. That is why the check is here and
+	 * not at the round end — every completed capture during the held clock buys
+	 * the round another minute, whether or not it was the last point.
+	 */
+	private creditCapture(event: CaptureEvent) {
+		this.controlCaptures++;
+		if (this.controlOvertime) {
+			this.matchElapsedMs = Math.max(
+				0,
+				this.matchElapsedMs - CP_OVERTIME_BONUS_MS,
+			);
+			this.controlOvertime = false;
+			console.log(
+				`[CP] ${this.id}: point ${event.point} taken in overtime — clock paid back`,
+			);
+		}
+		console.log(
+			`[CP] ${this.id}: ${teamName(event.team)} takes point ${event.point}${event.last ? " (LAST — round)" : ""}`,
+		);
+		this.broadcastReliable("control-captured", {
+			point: event.point,
+			team: event.team,
+			fromNeutral: event.fromNeutral,
+			last: event.last,
+		});
+	}
+
+	/**
+	 * Score a round and start the cooldown.
+	 *
+	 * `via` is a capture or the whistle. A capture is announced — the room reacts
+	 * to it; a whistle-awarded round ends the match on the same tick, and the
+	 * victory card is its announcement.
+	 */
+	private awardControlRound(team: TeamId | null, via: "capture" | "time") {
+		this.lastRoundWinner = team;
+		if (team === null) {
+			console.log(`[CP] ${this.id}: round ${this.roundNumber} drawn on points`);
+		} else {
+			this.teamScores[team] = (this.teamScores[team] ?? 0) + 1;
+			console.log(
+				`[CP] ${this.id}: ${teamName(team)} takes round ${this.roundNumber} by ${via} (${this.teamScores.join("-")})`,
+			);
+		}
+		this.roundResetTimer = ROUND_RESET_DELAY_MS;
+		if (via === "capture") {
+			this.broadcastReliable("round-won", {
+				team,
+				round: this.roundNumber,
+				scores: [...this.teamScores],
+				resetInMs: ROUND_RESET_DELAY_MS,
+			});
+		}
+	}
+
 	private restartMatch() {
 		for (const player of this.players.values()) {
 			player.kills = 0;
@@ -2386,6 +2720,13 @@ export class GameRoom {
 		this.roundFreezeMs = this.freezeTimeMs;
 		this.lastRoundWinner = null;
 		this.winnerTeam = null;
+		// A new match starts on a fresh line, and the captures counter is a
+		// match's, not a room's.
+		if (this.mode === "5cp") {
+			this.controlCaptures = 0;
+			this.controlOvertime = false;
+			this.controlPoints = initialControlPoints();
+		}
 		// The reel belongs to the match that produced it. A new one starts with an
 		// empty buffer, or the first thirty seconds of it would be footage of a
 		// fight that is already on the scoreboard of nobody.
@@ -2777,11 +3118,13 @@ export class GameRoom {
 			return;
 		}
 
-		// Two lifecycles, one per mode, and never both: a deathmatch respawns
-		// individuals on a timer, a team match respawns nobody until a side is
-		// wiped. Running the FFA respawn in a team room would refill the team that
-		// was two seconds from losing the round.
+		// Three lifecycles, one per family, and never two at once: a deathmatch
+		// respawns individuals on a timer; a control match does the same but its
+		// rounds end on captures; a wipe-out team match respawns nobody until a
+		// side is gone. Running the FFA respawn in a TDM room would refill the
+		// team that was two seconds from losing the round.
 		if (this.mode === "tdm") this.tickTeamRound(dt);
+		else if (this.mode === "5cp") this.tickControlRound(dt);
 		else this.tickRespawns(dt);
 		this.tickMatchClock(dt);
 	}
@@ -4096,6 +4439,13 @@ export class GameRoom {
 	 */
 	private resetPlayers(announce = true) {
 		const cfg = this.trainingConfig;
+		// A new round is a new line: half a capture from the last round is not a
+		// head start, and the spawn screens must be chosen from the reset
+		// ownership or a side would start next to the point it no longer owns.
+		if (this.mode === "5cp") {
+			this.controlPoints = initialControlPoints();
+			this.controlOvertime = false;
+		}
 		// Spawns are chosen one at a time against the points already handed out, so
 		// a match never starts with two fighters inside each other — which the
 		// depenetrator would resolve by shoving one of them sideways on tick one, on
@@ -4119,13 +4469,13 @@ export class GameRoom {
 						}
 				: p.team === null
 					? pickSpawn(taken, this.world)
-					: // A team starts a round together, at its own end of the arena and
-						// facing the other one. Sides swapping ends between rounds was
-						// considered and rejected: the arena is mirrored per screen, so
-						// the two ends are already the same fight from either side, and
-						// swapping would only cost every player their sense of which way
-						// the enemy is.
-						pickTeamSpawn(taken, this.world, p.team);
+					: // A team starts a round together, on its own side and facing the
+						// other one. Sides swapping ends between rounds was considered
+						// and rejected: the arena is mirrored per screen, so the two
+						// ends are already the same fight from either side, and swapping
+						// would only cost every player their sense of which way the
+						// enemy is.
+						this.teamSpawn(p.team, taken);
 			taken.push({ x: spawn.x, y: spawn.y });
 
 			p.state = createPlayerState(spawn.x, spawn.y, spawn.facing);

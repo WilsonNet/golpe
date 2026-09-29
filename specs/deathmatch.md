@@ -4,9 +4,10 @@
 twenty-one frags. This is the default mode; `?mode=tdm` plays the same arena in
 two sides with wipe-out rounds instead — see
 [team-deathmatch.md](team-deathmatch.md), which states only what *differs* from
-this document. The mode exists to be played with real people, so every part of
-it is answerable to one question: can a player tell what is happening to them
-without looking away from the fight?
+this document — and `?mode=5cp` plays a five-point line on its own map, see
+[control-points.md](control-points.md). The mode exists to be played with real
+people, so every part of it is answerable to one question: can a player tell
+what is happening to them without looking away from the fight?
 
 That is why the scoreboard is held rather than toggled, why bots have names, and
 why the match ends with a podium instead of a number.
@@ -230,8 +231,10 @@ pass.
 
 ## Not implemented
 
-- Objectives of any kind: no flags, no control points, no bomb.
+- Objectives other than control points: no flags, no bomb (see
+  [control-points.md](control-points.md)).
 - Kill feed, assists, streaks, or damage attribution shown to players.
 - Persistence: scores, names and rankings live only as long as the room.
 - Reconnection to a match in progress, and spectators.
-- Map rotation. Every match is the one arena.
+- Map rotation. A mode's map is the mode's — the classic arena, or the control
+  line — not a rotation.
