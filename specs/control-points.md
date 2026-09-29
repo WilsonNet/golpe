@@ -41,11 +41,16 @@ A fighter captures by standing inside the point's pad. The rules are TF2's:
   settled with weapons.
 - **Leaving decays.** Progress toward a capture is lost gradually when the
   capturing team leaves, not instantly: 30s from full to zero, **six times
-  faster in overtime** (TF2's rule, scaled from its 90s/15s).
-- **A neutral point is reverted at capture speed.** If one team built progress
-  on the middle point and was driven off, the other team must unwind that
-  progress at its own capture rate before its own capture begins. (Owned
-  points decay; only neutral points revert at cap speed — also TF2's rule.)
+  faster in overtime** (TF2's rule, scaled from its 90s/15s). **A defender
+  standing on their own point does not freeze the bar** — TF2 loses progress
+  when the offensive team is removed, and one body able to hold a claim open
+  forever would let a defender park an attack out of existence (and hold
+  overtime open with it). Only a contested pad is frozen.
+- **A neutral point is reverted at capture speed** — six times that in
+  overtime. If one team built progress on the middle point and was driven off,
+  the other team must unwind that progress at its own capture rate before its
+  own capture begins. (Owned points decay at the slow rate above; only neutral
+  points revert at cap speed — also TF2's rule.)
 
 ### Locks: you cannot back-cap
 
@@ -63,18 +68,22 @@ already owned by the capturer. Everything else falls out of that one sentence:
 ### Overtime
 
 When the match clock runs out, the round does not end while a capture is in
-progress. The clock holds at zero and **overtime** begins:
+progress. **The clock holds** — it does not keep counting while overtime runs —
+and **overtime** begins:
 
 - Decay and reversion run six times faster — a stalled push reverts in seconds.
-- Completing *any* capture during overtime awards **60s** back on the clock and
-  the round continues. The push that was in progress when time expired is
-  allowed to finish what it started; anything less is not.
+- Completing *any* capture during overtime awards **60s** back on the clock,
+  measured from the limit, and the round continues. The push that was in
+  progress when time expired is allowed to finish what it started; anything
+  less is not.
 - If every capture in progress reverts to zero with nothing in progress,
-  overtime ends, the round ends, and the match ends on rounds won.
+  overtime ends, the round ends **and is awarded on points held** (a tie is a
+  draw), and the match is decided on rounds won.
 
-With no capture in progress at the whistle, the round ends immediately: the
-team holding more points wins it, a tie is a draw, and the match is decided on
-round wins.
+With no capture in progress at the whistle, the round ends immediately the same
+way — the team holding more points wins it, and the match on rounds. A pad that
+stays *contested* keeps overtime open for as long as the fight does; that is
+TF2's own rule, and a standoff is a thing players do deliberately.
 
 ### Rounds and the match
 
@@ -198,9 +207,10 @@ advantage, the round score limit and match time, and the map's screen count.
 
 ## Creator-only practice flags
 
-- `?capTime=S` sets the middle point's capture time in seconds (clamped 1–30;
-  the other four points scale by their ratios). A practice-room flag like
-  `?ultCharge`, and the probe's lever for playing a whole round in seconds.
+- `?capTime=S` sets the middle point's capture time in seconds (1–30; a
+  non-positive or malformed value means the default 8, and the other four
+  points scale by their ratios). A practice-room flag like `?ultCharge`, and
+  the probe's lever for playing a whole round in seconds.
 
 ## Measuring it
 
@@ -212,23 +222,27 @@ tsx scripts/cp-probe.ts --ultCharge=100     # and the black hole comes too
 
 The probe runs **two rooms**. The first plays the line out: it asserts the mode
 and the map (five screens, one pad each), the opening ownership and locks
-exactly as the table above, that progress appears, points flip and are
-contested, and that the local fighter's **opening spawn** — the one spawn that
-always happens — lands on the screen its side's front line implies. Every
-respawn it additionally observes is checked the same way; a run where this
-particular bot never dies proves the arithmetic at round start and says so in
-its notes rather than pretending. It ends on a real round win, and reconstructs
-friendly fire from the scoreboard.
+exactly as the table above, that progress appears and points flip, and reports
+whether any pad was contested. It checks the local fighter's **opening spawn** — the one spawn that
+always happens — against the exact table entry the spawn picker chooses while
+the countdown still holds it there. Every respawn it additionally observes is
+checked against the front line on either side of the jump (the line can move
+between the respawn tick and the sample, at these capture times); a run where
+this particular bot never dies proves the arithmetic at round start and says so
+in its notes rather than pretending. It fails if no last-point capture was ever
+announced, so the whole ladder is proven even on a run whose match ended on the
+clock, and reconstructs friendly fire from the scoreboard.
 
 The second room is arranged for **overtime**, because overtime cannot be
 requested, only caught: fifteen seconds of clock with no freezetime, so the
-whistle lands mid-cap. The probe watches the clock hold, the capture complete,
-and the clock go *backwards* by the minute it pays back — the one thing in the
-mode that makes time run in reverse. Overtime's ending is a fight and not a
-script (a wipe reverts the bar, correctly, and time decides the round instead),
-so the phase plays **up to two rooms** before calling it a failure: a phase
-that demanded the first coin land heads would be flaky, and a flaky probe is a
-probe nobody trusts.
+whistle lands mid-cap. Its deterministic assertion is the **held clock** — the
+clock must not creep past the limit while overtime runs, because a clock that
+keeps counting makes the 60s bonus a subtraction from an overshot number, and a
+completed capture can then leave time still expired and award the round twice.
+Whether the capture completes at all is a fight: a wipe reverts the bar
+(correctly) and time decides the round instead, so up to three rooms are played
+and a run that never catches the payback says so in its notes; the bonus
+arithmetic is pinned by a unit test (`overtimeBonusElapsed`).
 
 A clean run is not a good run: a room where nobody pushed satisfies every
 correctness check above, so the probe fails on zero captures, zero flips and
@@ -254,7 +268,10 @@ zero round wins, not only on illegal states.
 
 ## Not implemented
 
-- Sudden death after a stalemate (the round simply ends on points).
+- **Sudden death after an endless overtime.** A contested pad keeps overtime
+  alive for as long as the fight does — TF2's own rule, and a deliberate
+  standoff is a decision the players make. The clock running out with nothing
+  in progress ends the round on points.
 - Back-capture prevention beyond the adjacency rule (there is nothing behind
   the line worth capping).
 - Engineer buildings, teleporters and spawn-room doors.

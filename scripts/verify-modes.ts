@@ -24,6 +24,11 @@ interface Mode {
 	solo?: boolean;
 	/** The room is a training room; assert the agent API is seated. */
 	training?: boolean;
+	/**
+	 * The ruleset `__matchState` must report. Without it, a URL that asked for
+	 * 5CP but booted a deathmatch would pass this smoke test.
+	 */
+	mode?: "ffa" | "tdm" | "5cp";
 }
 
 /**
@@ -73,6 +78,7 @@ const MODES: Mode[] = [
 		tabs: 1,
 		needsFight: true,
 		fighters: 4,
+		mode: "5cp",
 	},
 	/**
 	 * Two humans and **no `fill`**: with bots opt-in, a room of two clients is a
@@ -183,6 +189,12 @@ for (const [modeIndex, mode] of MODES.entries()) {
 	}
 
 	const s = await first.evaluate(() => window.__gameState!());
+	// The ruleset the room actually plays, not the one the URL asked for. A mode
+	// smoke test that cannot tell 5CP from a deathmatch is not testing the mode.
+	const match = await first.evaluate(() => window.__matchState?.() ?? null);
+	const modeOk = mode.mode ? match?.mode === mode.mode : true;
+	const controlOk =
+		mode.mode === "5cp" ? Boolean(match?.teams?.control?.points.length) : true;
 	// A training room is only seated when the agent API exists *and* the server
 	// has described the room back to it. Either alone passes with an empty room.
 	const training = mode.training
@@ -205,18 +217,17 @@ for (const [modeIndex, mode] of MODES.entries()) {
 	// An empty room legitimately has nobody in it, so "no opponent" is the pass
 	// condition rather than the failure — and the exact fighter count above is what
 	// proves the room really is empty rather than merely quiet.
-	const ok = mode.alone
-		? roomFull && !opponentPresent
-		: roomFull &&
-			(mode.training
-				? training && opponentPresent
-				: mode.needsFight
-					? fighting
-					: mode.solo
-						? opponentMoved
-						: opponentPresent);
+	const fought = mode.training
+		? training && opponentPresent
+		: mode.needsFight
+			? fighting
+			: mode.solo
+				? opponentMoved
+				: opponentPresent;
+	const ok =
+		modeOk && controlOk && roomFull && (mode.alone ? !opponentPresent : fought);
 	console.log(
-		`${ok ? "OK  " : "FAIL"} ${mode.label.padEnd(28)} online=${s.onlineMode} solo=${s.soloMatch} ai=${s.onlineAIMode} training=${s.trainingMode}${mode.training ? `/${training ? "seated" : "EMPTY"}` : ""} fighters=${s.fighterCount} opponent=${opponentMoved ? "moving" : opponentPresent ? "present" : "MISSING"} bullets=${sawBullet} hp=${[...hps].join(" -> ")}`,
+		`${ok ? "OK  " : "FAIL"} ${mode.label.padEnd(28)} online=${s.onlineMode} solo=${s.soloMatch} ai=${s.onlineAIMode} training=${s.trainingMode}${mode.training ? `/${training ? "seated" : "EMPTY"}` : ""} fighters=${s.fighterCount} opponent=${opponentMoved ? "moving" : opponentPresent ? "present" : "MISSING"} bullets=${sawBullet} hp=${[...hps].join(" -> ")}${mode.mode ? ` mode=${match?.mode ?? "?"}${mode.mode === "5cp" ? ` control=${controlOk ? "yes" : "NO"}` : ""}` : ""}`,
 	);
 	await ctx.close();
 	// Let the server notice the disconnects before the next mode connects.

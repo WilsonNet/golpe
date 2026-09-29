@@ -1,3 +1,5 @@
+import { CP_ZONE_W } from "../../tweakables/control.js";
+import { PLAYER_HEIGHT } from "../simulation/Arena.js";
 import type { TeamId } from "../simulation/Teams.js";
 import type { AIOutput, ControlInfo, ControlPointInfo } from "./types.js";
 
@@ -16,25 +18,43 @@ import type { AIOutput, ControlInfo, ControlPointInfo } from "./types.js";
  * everywhere else). **There is no `mode ===` check in this file** — the mode is
  * a property of the perception, not of the brain.
  *
- * **It cedes to the fight.** Inside weapon range the state machine and the
- * melee module own movement; standing still on a pad while somebody cuts you
- * down is not holding the point, it is feeding. Beyond that range, the
- * objective outranks the line and the kite: a side's structure exists to win
- * the point, not the other way round.
+ * **It cedes to the fight — off the point.** Away from the pad, inside weapon
+ * range, the state machine and the melee module own movement; a fighter who
+ * stops advancing to duel across the room never takes the point. **On the
+ * point, the bar is the fight**: a healthy bot plants and trades while the
+ * capture fills, because orbiting the pad was how two sides kept resetting the
+ * same capture to zero, and a hurt bot hands movement back so a retreat is
+ * still possible.
  */
 
 /**
- * A foe inside this range owns the movement decision. Melee range, essentially
- * — the distance at which shuffling for the swing is the only correct
- * footwork. Beyond it the pad pulls: a fighter who stops advancing every time
- * somebody appears across the point is a fighter who never takes one, and in
- * this game a point fight is fought *on* the point, trading shots from the pad
- * rather than orbiting it.
+ * A foe inside this range owns the movement decision — **off the pad**. On the
+ * objective, the bar is the fight: see `HOLD_MIN_HP`.
  */
 const CEDE_RANGE_PX = 90;
 
+/**
+ * A hurt fighter stops holding the pad.
+ *
+ * Holding the objective means trading blows while the bar fills — correct
+ * until the fighter is one exchange from dying. Below this the fight brain
+ * gets the movement back, and a bot that wants to retreat can.
+ */
+const HOLD_MIN_HP = 35;
+
 /** Close enough to the pad centre: stand on it, do not pace around it. */
 const HOLD_RADIUS_PX = 36;
+
+/**
+ * A fighter's body centre this far from the pad's centre is not on the pad.
+ *
+ * The pads sit on the floor, so a bot on a perch (or on a forward spawn that
+ * happens to sit directly above a pad) can be x-aligned with the objective and
+ * still 250px above it — planting there forever, out of the fight and off the
+ * bar. The vertical band is what tells "standing on it" from "hovering over
+ * it".
+ */
+const PAD_CENTRE_TOLERANCE_PX = 64;
 
 /** How long a chosen point is kept before the situation may re-aim it. */
 const RETARGET_MS = 1200;
@@ -59,6 +79,8 @@ const DEFEND_PROGRESS = 0.12;
 /** What the objective module needs from perception. `AIInput` satisfies it. */
 export interface ControlView {
 	selfX: number;
+	selfY: number;
+	selfHP: number;
 	selfTeam: TeamId | null;
 	distanceToPlayer: number;
 	control: ControlInfo | null;
@@ -115,17 +137,42 @@ export class ControlBrain {
 		}
 		this.target = target.index;
 
-		// A foe in range: the fight brain steers, this module only remembers the
-		// point for when the exchange is over.
+		const dx = target.x - input.selfX;
+		const bodyCentreY = input.selfY + PLAYER_HEIGHT / 2;
+		// On the pad in both axes: inside its width and standing on the floor it
+		// sits on. Aligned in x but up a perch is not on it.
+		const onPad =
+			Math.abs(dx) <= CP_ZONE_W / 2 &&
+			Math.abs(bodyCentreY - target.y) <= PAD_CENTRE_TOLERANCE_PX;
+
+		// **On the objective, hold it and trade.** Ceding movement to the fight
+		// brain the moment a foe came within 90px was the metronome: both sides
+		// orbited the pad, the bar touched a hair and decayed, and captures only
+		// happened when somebody died. The bar is the fight here — plant, swing,
+		// and let the survival reflexes (which run after this module) take over
+		// for a bomb, a hole or a trap.
+		if (onPad && input.selfHP > HOLD_MIN_HP) {
+			if (Math.abs(dx) > HOLD_RADIUS_PX) {
+				output.moveLeft = dx < 0;
+				output.moveRight = dx > 0;
+			} else {
+				output.moveLeft = false;
+				output.moveRight = false;
+			}
+			return;
+		}
+
+		// Off the pad — or hurt enough that the point is not worth dying on —
+		// a foe inside weapon range owns the footwork.
 		if (input.distanceToPlayer < CEDE_RANGE_PX) return;
 
-		const dx = target.x - input.selfX;
-		if (Math.abs(dx) > HOLD_RADIUS_PX) {
+		// Otherwise walk the objective. Aligned but not on it means standing on
+		// a perch above the pad: either edge falls to the floor, so step off
+		// and close the gap on the next decision.
+		if (!onPad || Math.abs(dx) > HOLD_RADIUS_PX) {
 			output.moveLeft = dx < 0;
-			output.moveRight = dx > 0;
+			output.moveRight = dx >= 0;
 		} else {
-			// On the pad: plant. A fighter pacing past the edge in a fight's
-			// direction is a capture that keeps resetting itself to zero.
 			output.moveLeft = false;
 			output.moveRight = false;
 		}

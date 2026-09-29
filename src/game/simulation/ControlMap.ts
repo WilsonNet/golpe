@@ -271,7 +271,7 @@ export function applyControlWorld(target: World): World {
  * Where a 5CP fighter enters: its side's front-line screen, at the point
  * furthest from everyone already placed, facing the enemy.
  *
- * `screen` comes from `controlSpawnScreen` — one step behind the team's
+ * `screen` comes from `controlSpawnScreen` — the screen of the team's
  * furthest-forward point — which is the whole of "forward spawns".
  */
 export function pickControlSpawn(

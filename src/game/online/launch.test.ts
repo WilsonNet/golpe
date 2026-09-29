@@ -264,6 +264,8 @@ describe("isMenuShape", () => {
 	});
 
 	it("boots when any launch key is present, whatever its value", () => {
+		// Mirrors `LAUNCH_KEYS`; `botHero` is deliberately absent there (it only
+		// means anything beside a match request).
 		for (const key of [
 			"room",
 			"server",
@@ -271,6 +273,8 @@ describe("isMenuShape", () => {
 			"offline",
 			"training",
 			"training-room",
+			"tutorial",
+			"hero",
 			"bots",
 			"fill",
 			"scoreLimit",
@@ -278,6 +282,7 @@ describe("isMenuShape", () => {
 			"ultCharge",
 			"mode",
 			"freezeTime",
+			"capTime",
 			"screen",
 			"password",
 			"private",

@@ -71,6 +71,12 @@ const CINEMATIC_OVERHEAD_S = ULT_CHARGE > 0 ? 60 : 0;
 const WALL_CLOCK_MS = (TIME_LIMIT_SEC + 60 + CINEMATIC_OVERHEAD_S) * 1000;
 /** What the server imposes on a team room. Asserted, not requested. */
 const MIN_SCREENS = 3;
+/**
+ * Past this, a position step is the netcode's own discontinuity line (100px in
+ * `netSummary`) — a teleport, not a walk — and the freezetime drift metric must
+ * not read it as movement.
+ */
+const TELEPORT_THRESHOLD_PX = 100;
 
 function sinkConsole(page: Page, lines: string[] = []): string[] {
 	page.on("console", (msg) => lines.push(msg.text()));
@@ -478,10 +484,16 @@ async function main() {
 					t.freezeMs < frozenAt.freezeMs;
 				if (typeof x === "number") {
 					if (same) {
-						rounds.freezeDriftPx = Math.max(
-							rounds.freezeDriftPx,
-							Math.abs(x - frozenAt!.x),
-						);
+						const step = Math.abs(x - frozenAt!.x);
+						// A step past the netcode's own discontinuity line (100px,
+						// see `netSummary`) is a reconciliation teleport — a spent
+						// input the server refused, a respawn correction — not a
+						// fighter walking. Counting it as drift reported a working
+						// freezetime as broken; walking moves ~100px per sample at
+						// most, so only real steps count.
+						if (step <= TELEPORT_THRESHOLD_PX) {
+							rounds.freezeDriftPx = Math.max(rounds.freezeDriftPx, step);
+						}
 					}
 					frozenAt = { round: t.round, freezeMs: t.freezeMs, x };
 				}

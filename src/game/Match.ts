@@ -18,7 +18,6 @@ const SPRITE_ANCHOR_CENTRE = 0.5;
  */
 
 import { Container, Sprite } from "pixi.js";
-import { CP_SCREENS } from "../tweakables/control";
 import { SMOKE_REVEAL_MS } from "../tweakables/items.js";
 import { pelletDamageAt } from "../tweakables/ranged.js";
 import { TutorialDirector, tutorialFor } from "./campaign";
@@ -285,6 +284,12 @@ export class Match {
 	 * server is the authority on a room's size, not the URL.
 	 */
 	private readonly arena: World = buildWorld(1);
+	/**
+	 * Whether `arena` currently holds the control map rather than the classic
+	 * one. Width cannot answer this — `screens === 5` is true of both — so the
+	 * seat correction keys on this flag.
+	 */
+	private arenaIsControl = false;
 	/** Logical view size (`app.screen`), for camera clamping. */
 	private readonly view: { readonly width: number; readonly height: number };
 	private readonly fx: MeleeFx;
@@ -455,6 +460,10 @@ export class Match {
 			: buildWorld(
 					wantsTeams ? Math.max(askedScreens, TDM_MIN_SCREENS) : askedScreens,
 				);
+		// Which map this is, remembered. Width is not identity: a classic arena
+		// five screens wide and the control map share `screens === 5` and differ
+		// everywhere else, so the seat correction below has to compare *this*.
+		this.arenaIsControl = wantsControl;
 		this.view = screen;
 		// `?hero=` picks who this client plays before the room exists. Invalid
 		// values fall back to the default rather than failing to boot.
@@ -1217,13 +1226,12 @@ export class Match {
 					const mine = msg.team === myTeam;
 					const letter = "ABCDE"[msg.point] ?? "?";
 					const who = teamName(msg.team);
+					// The last-point capture is not special-cased here: `round-won`
+					// lands in the same frame and owns the round's announcement, so
+					// a second one would be overwritten unread.
 					EventBus.emit(
 						HUD_EVENTS.status,
-						msg.last
-							? `${who} CAPTURE THE LAST POINT`
-							: mine
-								? `POINT ${letter} CAPTURED`
-								: `${who} TOOK POINT ${letter}`,
+						mine ? `POINT ${letter} CAPTURED` : `${who} TOOK POINT ${letter}`,
 					);
 					sound.play(mine ? "cap-taken" : "cap-lost");
 					console.log(
@@ -1283,11 +1291,22 @@ export class Match {
 					// client that joined one by link must rebuild the whole map — the
 					// physics it predicts against has to be the room's, not the
 					// classic arena's at the same width.
+					//
+					// The comparison is against the *map*, not `screens`: a classic
+					// arena at `?screen=5` and the control map are both five screens
+					// wide and share no geometry, so keying on the width left exactly
+					// that client predicting against the wrong colliders forever.
 					const wantsControl = mode === "5cp";
-					if (wantsControl && this.arena.screens !== CP_SCREENS) {
-						applyControlWorld(this.arena);
+					if (wantsControl !== this.arenaIsControl) {
+						if (wantsControl) applyControlWorld(this.arena);
+						else applyWorld(this.arena, screens);
+						this.arenaIsControl = wantsControl;
 						drawArena(this.stage.background, this.stage.arena, this.arena);
-						console.log("[ONLINE] room arena rebuilt as the control map");
+						console.log(
+							wantsControl
+								? "[ONLINE] room arena rebuilt as the control map"
+								: `[ONLINE] room arena resized to ${screens} screens`,
+						);
 					} else if (!wantsControl && screens !== this.arena.screens) {
 						applyWorld(this.arena, screens);
 						drawArena(this.stage.background, this.stage.arena, this.arena);
@@ -1757,8 +1776,15 @@ export class Match {
 		// The pads read the snapshot's control state, never the simulation: the
 		// server is the only judge of who owns a point. Null outside 5CP, which
 		// hides the layer.
+		//
+		// **Nothing during the replay.** The clip records fighters, bullets,
+		// grenades and the hole — not the line — so drawing the live line over
+		// recorded footage would show a point already flipped inside a replay of
+		// the fight that flipped it. Same rule the items follow one line down.
 		this.controlFx.update(
-			this.online?.matchStatus?.teams?.control ?? null,
+			this.potgSample
+				? null
+				: (this.online?.matchStatus?.teams?.control ?? null),
 			this.online?.myTeam ?? null,
 			dtMs,
 		);
@@ -2183,7 +2209,16 @@ export class Match {
 		});
 		if (point !== this.cueCapPoint) {
 			this.cueCapPoint = point;
-			this.cueCapQuarter = 0;
+			// Seed with the quarter already showing: a bar joined mid-capture (a
+			// team switch onto a 60% attempt) must not tick for quarters nobody
+			// heard.
+			this.cueCapQuarter =
+				point >= 0
+					? Math.min(
+							Match.CAP_TICK_STEPS,
+							Math.floor(progress * Match.CAP_TICK_STEPS),
+						)
+					: 0;
 		}
 		if (point < 0) return;
 		const steps = Match.CAP_TICK_STEPS;
@@ -3191,11 +3226,9 @@ export class Match {
 	): ControlInfo | null {
 		const status = session?.matchStatus?.teams?.control;
 		if (!status || selfTeam === null) return null;
-		let frontier = -1;
 		const points = status.points.map((point, i) => {
 			const pad = CONTROL_PADS[i];
 			const mine = point.owner === selfTeam;
-			if (mine) frontier = i;
 			return {
 				index: i,
 				x: pad ? pad.x + pad.w / 2 : 0,
@@ -3208,7 +3241,7 @@ export class Match {
 				mine,
 			};
 		});
-		return { points, frontier };
+		return { points };
 	}
 
 	// =========================================================

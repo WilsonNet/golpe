@@ -32,7 +32,11 @@ import type { Page } from "playwright";
  *   tsx scripts/cp-probe.ts --ultCharge=100     # and the black holes come too
  */
 import { chromium } from "playwright";
-import type { ControlStatus } from "../src/game/simulation/ControlPoints";
+import { CONTROL_SCREEN_SPAWNS } from "../src/game/simulation/ControlMap";
+import {
+	type ControlStatus,
+	controlSpawnScreen,
+} from "../src/game/simulation/ControlPoints";
 import type { TeamId } from "../src/game/simulation/Teams";
 import type { MatchStateSnapshot } from "../src/types/global";
 
@@ -101,52 +105,61 @@ interface Observation {
 	overtimeSeen: boolean;
 	maxRound: number;
 	scores: [number, number];
-	spawnChecks: { expected: number; landedX: number }[];
-	/** The local fighter's x at round start, and the screen the line implied. */
-	initialSpawn: { team: TeamId; x: number; expected: number } | null;
+	/** Respawns: the screen(s) the line implied around the jump, and where it landed. */
+	spawnChecks: { expected: number[]; landedX: number }[];
+	/**
+	 * The local fighter's x at round start, the screen the line implied, the
+	 * exact spawn x the table names, and whether the fighter was still frozen.
+	 */
+	initialSpawn: {
+		team: TeamId;
+		x: number;
+		expected: number;
+		expectedX: number;
+		frozen: boolean;
+	} | null;
 	hudBar: boolean;
 	hudPips: number;
 	hudOvertime: boolean;
 }
 
 /**
- * The dedicated overtime room.
+ * The dedicated overtime rooms.
  *
  * Overtime only exists at the instant the clock runs out *with a capture in
- * progress*, so it cannot be requested — it has to be arranged. A 4-fighter
- * room with no freezetime and a fifteen-second clock does it every run: the
- * bots reach the middle at about the twelve-second mark and the whistle lands
- * mid-cap. The phase then watches the push finish, the clock get its minute
- * back, and the round carry on.
+ * progress*, so it cannot be requested — it has to be arranged: fifteen seconds
+ * of clock with no freezetime, which lands the whistle mid-cap nearly every
+ * run. What happens next is a fight, so the phase asserts the deterministic
+ * half — **the clock is held while overtime runs** (it must not creep past the
+ * limit) — and up to three rooms are played to try to catch the bonus itself:
+ * a capture completing in overtime pays a minute back and the clock goes
+ * *backwards*. The pushing side being wiped reverts the bar instead, which is a
+ * legitimate ending, so a run that never sees a payback says so in its notes
+ * rather than failing; the bonus arithmetic is pinned by unit test.
  */
 interface OvertimeObservation {
 	seen: boolean;
 	paidBack: boolean;
 	captures: number;
-	ended: boolean;
+	/** The furthest the clock moved while overtime was declared, in ms. */
+	clockDriftMs: number;
+	attempts: number;
 }
 
-/** The spawn screen the line implies for a side: the frontier screen itself. */
+/**
+ * The spawn screen the line implies for a side, asked of the **real rule**.
+ *
+ * A local copy of the frontier arithmetic was wrong for team 1 (it took the
+ * base-most owned index instead of the forward-most) and only ever passed
+ * because the probe's creator is always seated on team 0. Importing the
+ * server's own function means the oracle cannot drift from it again.
+ */
 function expectedSpawnScreen(
 	control: ControlStatus | null | undefined,
 	myTeam: TeamId,
 ): number | null {
 	if (!control) return null;
-	const last = SCREENS - 1;
-	if (myTeam === 0) {
-		let frontier = -1;
-		control.points.forEach((p, i) => {
-			if (p.owner === 0) frontier = i;
-		});
-		if (frontier < 0) return 0;
-		return Math.min(last, Math.max(0, frontier));
-	}
-	let frontier = control.points.length;
-	control.points.forEach((p, i) => {
-		if (p.owner === 1) frontier = i;
-	});
-	if (frontier >= control.points.length) return last;
-	return Math.min(last, Math.max(0, frontier));
+	return controlSpawnScreen(control.points, SCREENS, myTeam);
 }
 
 /**
@@ -245,12 +258,25 @@ function assess(
 	if (!obs.initialSpawn) {
 		failures.push("the local fighter was never observed at its opening spawn");
 	} else {
-		const lo = obs.initialSpawn.expected * 800 - SPAWN_SLACK_PX;
-		const hi = obs.initialSpawn.expected * 800 + 800 + SPAWN_SLACK_PX;
-		if (obs.initialSpawn.x < lo || obs.initialSpawn.x > hi) {
-			failures.push(
-				`the opening spawn landed at x=${Math.round(obs.initialSpawn.x)} — screen ${obs.initialSpawn.expected} expected (${lo}..${hi})`,
-			);
+		const s = obs.initialSpawn;
+		if (s.frozen) {
+			// Still planted by the countdown: the body is on the exact table
+			// entry the picker returns for an empty arena, so the check is
+			// against that x, not a screen-wide band that would hide a wrong
+			// screen.
+			if (Math.abs(s.x - s.expectedX) > 32) {
+				failures.push(
+					`the opening spawn stood at x=${Math.round(s.x)} — screen ${s.expected}'s spawn is x=${Math.round(s.expectedX)}`,
+				);
+			}
+		} else {
+			const lo = s.expected * 800 - SPAWN_SLACK_PX;
+			const hi = s.expected * 800 + 800 + SPAWN_SLACK_PX;
+			if (s.x < lo || s.x > hi) {
+				failures.push(
+					`the opening spawn landed at x=${Math.round(s.x)} — screen ${s.expected} expected (${lo}..${hi})`,
+				);
+			}
 		}
 	}
 	if (obs.spawnChecks.length === 0) {
@@ -259,13 +285,30 @@ function assess(
 		);
 	}
 	for (const check of obs.spawnChecks) {
-		const lo = check.expected * 800 - SPAWN_SLACK_PX;
-		const hi = check.expected * 800 + 800 + SPAWN_SLACK_PX;
-		if (check.landedX < lo || check.landedX > hi) {
+		// Accepted against any screen the line implied around the jump: the
+		// respawn tick and the sample can straddle a capture at this pace.
+		const inBand = check.expected.some(
+			(screen) =>
+				check.landedX >= screen * 800 - SPAWN_SLACK_PX &&
+				check.landedX <= screen * 800 + 800 + SPAWN_SLACK_PX,
+		);
+		if (!inBand) {
 			failures.push(
-				`a respawn landed at x=${Math.round(check.landedX)} — screen ${check.expected} expected (${lo}..${hi})`,
+				`a respawn landed at x=${Math.round(check.landedX)} — screen ${check.expected.join(" or ")} expected`,
 			);
 		}
+	}
+
+	// ---- the ladder reached the last point ----
+	//
+	// The announcement is a reliable datagram and the client logs it, so this
+	// proves a last-point capture happened even on a run whose *match* ended on
+	// the clock rather than on the capture limit.
+	const lastCapture = lines.some((l) =>
+		/\[CP\] point [A-E] -> .+\(last\)/.test(l),
+	);
+	if (!lastCapture) {
+		failures.push("no last-point capture was ever announced");
 	}
 
 	// ---- rounds and the match ----
@@ -317,16 +360,30 @@ function assess(
 	}
 
 	// ---- overtime, arranged rather than hoped for ----
+	//
+	// The deterministic half is the clock: it must be **held** while overtime
+	// runs, not merely not-scored. A clock that kept counting made the 60s bonus
+	// a subtraction from an overshot number — a long push bought nothing, and a
+	// completed capture could leave time expired and award the round twice. The
+	// bonus itself only shows when the arranged fight lets the capture finish,
+	// so that is reported: a reversion is a legitimate ending, not a failure.
 	if (!overtime.seen) {
 		failures.push("the overtime room never reached overtime");
 	}
+	if (overtime.clockDriftMs > 1500) {
+		failures.push(
+			`the clock ran during overtime (drifted ${Math.round(overtime.clockDriftMs)}ms)`,
+		);
+	}
+	if (overtime.paidBack) {
+		notes.push("a capture in overtime paid the clock back");
+	} else if (overtime.seen) {
+		notes.push(
+			"overtime ended by reversion in every attempt — legitimate, and the bonus arithmetic is unit-tested",
+		);
+	}
 	if (overtime.captures === 0) {
 		failures.push("the overtime room never captured anything");
-	}
-	if (!overtime.paidBack) {
-		failures.push(
-			"no capture in overtime paid time back to the clock — the round could not continue",
-		);
 	}
 
 	// ---- the HUD showed the war ----
@@ -368,16 +425,10 @@ function assess(
 /**
  * Run the overtime rooms and report what happened.
  *
- * Fifteen seconds, no freezetime: the bots reach the middle right as the
- * whistle lands, so the capture is mid-flight and overtime begins. The clock
- * then goes *backwards* when the capture completes — the sixty-second bonus —
- * and that reversal is what the phase measures.
- *
- * **Up to two rooms**, because overtime's ending is a fight, not a script: if
- * the pushing side is wiped the bar reverts (correctly) and the round is
- * decided on points instead — a real outcome, but not the one this phase
- * exists to see. The second room is the retry; a phase that demanded the first
- * coin land heads would be flaky, and a flaky probe is a probe nobody trusts.
+ * **Up to three rooms**, because overtime's ending is a fight and not a
+ * script: if the pushing side is wiped the bar reverts (correctly) and the
+ * round is decided on points instead. The clock-hold check is taken from every
+ * attempt; the payback only needs to happen once.
  */
 async function runOvertimePhase(
 	browser: Awaited<ReturnType<typeof chromium.launch>>,
@@ -387,9 +438,10 @@ async function runOvertimePhase(
 		seen: false,
 		paidBack: false,
 		captures: 0,
-		ended: false,
+		clockDriftMs: 0,
+		attempts: 0,
 	};
-	for (let attempt = 0; attempt < 2; attempt++) {
+	for (let attempt = 0; attempt < 3; attempt++) {
 		const ctx = await browser.newContext();
 		const page = await ctx.newPage();
 		sinkConsole(page, lines);
@@ -401,7 +453,8 @@ async function runOvertimePhase(
 			seen: false,
 			paidBack: false,
 			captures: 0,
-			ended: false,
+			clockDriftMs: 0,
+			attempts: 1,
 		};
 		try {
 			await page.goto(url);
@@ -413,13 +466,24 @@ async function runOvertimePhase(
 			);
 			let lastElapsed = 0;
 			let lastCaptures = 0;
-			const deadline = Date.now() + 150_000;
+			let otMin = Number.POSITIVE_INFINITY;
+			let otMax = 0;
+			const deadline = Date.now() + 90_000;
 			while (Date.now() < deadline) {
 				const s = await page.evaluate(() => window.__matchState?.() ?? null);
 				const control = s?.teams?.control ?? null;
 				if (s && control) {
 					obs.seen ||= control.overtime;
 					obs.captures = Math.max(obs.captures, control.captures);
+					if (control.overtime) {
+						otMin = Math.min(otMin, s.elapsedMs);
+						otMax = Math.max(otMax, s.elapsedMs);
+					} else if (otMax > 0) {
+						// Overtime just ended: how far the clock moved while it ran.
+						obs.clockDriftMs = Math.max(obs.clockDriftMs, otMax - otMin);
+						otMin = Number.POSITIVE_INFINITY;
+						otMax = 0;
+					}
 					// The clock went backwards while a point fell: that is the
 					// overtime bonus, and nothing else in the mode does that.
 					if (
@@ -431,12 +495,13 @@ async function runOvertimePhase(
 					lastCaptures = control.captures;
 					lastElapsed = s.elapsedMs;
 				}
-				if (obs.seen && obs.paidBack && obs.captures > 0) break;
-				if (s?.phase === "over") {
-					obs.ended = true;
-					break;
-				}
+				if (obs.paidBack) break;
+				if (s?.phase === "over") break;
 				await page.waitForTimeout(150);
+			}
+			// A window that never closed before the match ended still counts.
+			if (otMax > 0 && Number.isFinite(otMin)) {
+				obs.clockDriftMs = Math.max(obs.clockDriftMs, otMax - otMin);
 			}
 		} finally {
 			await ctx.close();
@@ -445,7 +510,8 @@ async function runOvertimePhase(
 			seen: best.seen || obs.seen,
 			paidBack: best.paidBack || obs.paidBack,
 			captures: Math.max(best.captures, obs.captures),
-			ended: best.ended || obs.ended,
+			clockDriftMs: Math.max(best.clockDriftMs, obs.clockDriftMs),
+			attempts: attempt + 1,
 		};
 		if (obs.paidBack) break;
 	}
@@ -513,6 +579,8 @@ async function main() {
 
 	let lastOwners = "";
 	let lastX: number | null = null;
+	/** The previous sample's line, for accepting a respawn against either side of a capture. */
+	let lastControlPoints: ControlStatus["points"] | null = null;
 	let sawDead = false;
 	let diagnosticStarted = false;
 	let diagnostic: { verdict?: string } | null = null;
@@ -569,13 +637,16 @@ async function main() {
 
 			// Forward spawns: a full-health sample after a death, with a jump the
 			// size of a screen or more, is a respawn — and the line says where it
-			// was allowed to be.
+			// was allowed to be. The line can move between the respawn tick and
+			// the sample (at `capTime=1` captures take a tenth of a second), so
+			// the landing is accepted against the previous sample's line as well
+			// as the current one.
 			const myTeam = state.myTeam;
+			const prevControl = lastControlPoints;
 			// The initial spawn is the one spawn that always happens, and with the
 			// freeze still running the fighter has not walked yet: the first sample
-			// names the screen the server chose. It must be the frontier screen the
-			// opening line implies — the deterministic end-to-end of the forward
-			// spawn arithmetic, independent of whether this bot ever dies.
+			// names the screen the server chose — checked against the exact table
+			// entry the spawn picker would return on an empty arena.
 			if (
 				obs.initialSpawn === null &&
 				myTeam !== null &&
@@ -584,7 +655,14 @@ async function main() {
 			) {
 				const expected = expectedSpawnScreen(control, myTeam);
 				if (expected !== null) {
-					obs.initialSpawn = { team: myTeam, x: sample.x, expected };
+					const first = CONTROL_SCREEN_SPAWNS[expected]?.[0];
+					obs.initialSpawn = {
+						team: myTeam,
+						x: sample.x,
+						expected,
+						expectedX: first?.x ?? expected * 800,
+						frozen: (state.teams?.freezeMs ?? 0) > 0,
+					};
 				}
 			}
 			if (sample.hp !== null && sample.hp <= 0) sawDead = true;
@@ -594,13 +672,20 @@ async function main() {
 					myTeam !== null &&
 					myTeam !== undefined
 				) {
-					const expected = expectedSpawnScreen(control, myTeam);
-					if (expected !== null) {
-						obs.spawnChecks.push({ expected, landedX: sample.x });
+					const candidates: number[] = [];
+					const now = expectedSpawnScreen(control, myTeam);
+					if (now !== null) candidates.push(now);
+					if (prevControl) {
+						const before = controlSpawnScreen(prevControl, SCREENS, myTeam);
+						if (!candidates.includes(before)) candidates.push(before);
+					}
+					if (candidates.length > 0) {
+						obs.spawnChecks.push({ expected: candidates, landedX: sample.x });
 					}
 				}
 				sawDead = false;
 			}
+			lastControlPoints = control.points;
 			lastX = sample.x;
 
 			// Start a diagnostic once the fight is real (a capture has landed) or
@@ -664,6 +749,8 @@ async function main() {
 				overtime: {
 					seen: overtime.seen,
 					clockPaidBack: overtime.paidBack,
+					clockDriftMs: Math.round(overtime.clockDriftMs),
+					attempts: overtime.attempts,
 					captures: overtime.captures,
 				},
 				hud: {

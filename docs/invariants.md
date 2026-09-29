@@ -820,6 +820,16 @@ not made of kills.
   Presence is `onPad` against a living body; nothing about a pad pushes,
   blocks or heals anybody. A capture resolved inside a `tickPlayer`-adjacent
   path would be authoritative state changed outside `tickPlayer`.
+- **Only contested freezes a bar.** A defender alone on their own point does
+  not hold the attacker's progress still — TF2 loses progress when the
+  offensive team is removed, and a frozen bar is one body permanently denying a
+  point. The three states are contested (frozen), attacked (progress at the
+  holder's harmonic rate) and abandoned (decay, 6× in overtime; a neutral point
+  reverts at capture speed instead). **And a claim with an empty bar is no
+  claim**: the state machine clears `attacker` the tick progress reaches zero.
+  A stale `attacker` at `progress = 0` read as "in progress" forever — it
+  declared overtime with nothing happening and could never let it end, which is
+  exactly the kind of state no clean-run metric would have noticed.
 - **A pad's drawing and its capture zone are one rectangle.** Both come from
   `CONTROL_PADS`, built from the same map constants the collider uses, so the
   pad a player sees is the pad the server counts. The `ArenaRenderer` rule
@@ -833,6 +843,10 @@ not made of kills.
   minute of it back, and only an empty bar lets time run out. The server owns
   the flag; the function has no state, so the whole rule is answerable in a
   unit test and observable in `cp-probe.ts` as the clock going *backwards*.
+  **The stop is literal.** The clock kept ticking through the first version of
+  overtime, so the 60s bonus subtracted from an already-overshot number — a
+  long push bought nothing, and a completed capture could leave time still
+  expired and award the round twice on one tick.
 
 ## Input and the UI
 

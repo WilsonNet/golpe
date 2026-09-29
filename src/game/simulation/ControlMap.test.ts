@@ -7,8 +7,8 @@ import {
 	CP_ZONE_W,
 } from "../../tweakables/control.js";
 import {
+	buildWorld,
 	GROUND,
-	MAX_SCREENS,
 	narrowGaps,
 	PLAYER_HEIGHT,
 	PLAYER_WIDTH,
@@ -165,14 +165,19 @@ describe("forward spawns", () => {
 });
 
 describe("applyControlWorld", () => {
-	it("rewrites an existing instance in place", () => {
-		const world = buildControlWorld();
-		world.screens = 1;
-		world.right = SCREEN_W;
+	it("rewrites a classic arena in place, geometry and all", () => {
+		// Built from the *classic* arena on purpose: a control rewrite that only
+		// fixed `screens` left the colliders and spawn tables behind, and the
+		// whole point is that every holder sees the control map's own geometry.
+		const world = buildWorld(5);
+		const classicPlatforms = world.platforms;
+		expect(world.screens).toBe(5);
 		const same = applyControlWorld(world);
 		expect(same).toBe(world);
 		expect(world.screens).toBe(CP_SCREENS);
 		expect(world.right).toBe(SCREEN_W * CP_SCREENS);
-		expect(world.platforms.length).toBeGreaterThan(MAX_SCREENS);
+		expect(world.platforms).not.toBe(classicPlatforms);
+		expect(world.platforms).toEqual(buildControlWorld().platforms);
+		expect(world.spawnPoints).toEqual(buildControlWorld().spawnPoints);
 	});
 });

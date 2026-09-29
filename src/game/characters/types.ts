@@ -103,8 +103,6 @@ export interface ControlPointInfo {
 /** The control line, for the objective module. `null` in every other mode. */
 export interface ControlInfo {
 	points: ControlPointInfo[];
-	/** My side's furthest-forward owned index, or -1. */
-	frontier: number;
 }
 
 export interface AIInput {

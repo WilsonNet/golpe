@@ -58,6 +58,7 @@ import {
 	controlTiebreak,
 	initialControlPoints,
 	onPad,
+	overtimeBonusElapsed,
 	stepControlPoints,
 } from "../src/game/simulation/ControlPoints.js";
 import {
@@ -97,7 +98,6 @@ import type {
 } from "../src/game/training/types.js";
 import {
 	CP_CAPTURE_MS,
-	CP_OVERTIME_BONUS_MS,
 	CP_SCORE_LIMIT,
 	CP_TIME_LIMIT_MS,
 } from "../src/tweakables/control.js";
@@ -1008,11 +1008,28 @@ export class GameRoom {
 	 * fighter is teleported to its new side's spawn (kept alive, kept HP) so a
 	 * switch does not hand the old side's round to the new one by carrying the
 	 * fighter's old position across, and does not heal or kill them either.
+	 *
+	 * **A fighter being punished cannot switch out of it.** The teleport clears
+	 * the timers it has to clear to place a fighter at a spawn, which turned the
+	 * menu into an escape hatch from a trap's root, a stun, a plant or the
+	 * dragon ride — the exact counters the game gives those tools. The switch
+	 * itself stays allowed (the invariants bless the deliberate, visible
+	 * teleport); the state it would break is not.
 	 */
 	private switchTeam(playerId: string, team: TeamId): boolean {
 		if (this.mode === "ffa") return false;
 		const p = this.players.get(playerId);
 		if (!p || p.team === team) return false;
+		if (
+			p.state.stunTimer > 0 ||
+			p.state.rootTimer > 0 ||
+			p.state.plungeStuckTimer > 0 ||
+			p.state.dragonTimer > 0 ||
+			p.state.knockdownTimer > 0 ||
+			p.state.knockdownPendingTimer > 0
+		) {
+			return false;
+		}
 		const old = p.team;
 		p.team = team;
 		if (p.alive) {
@@ -1073,8 +1090,11 @@ export class GameRoom {
 		let bots = [...this.players.values()].filter((p) => p.brain !== null);
 		if (bots.length === 0) return false;
 		if (team !== null && this.mode !== "ffa") {
+			// A named side means exactly that side: removing the *other* team's
+			// bot because the asked side had none is not what the request said.
 			const tBots = bots.filter((p) => p.team === team);
-			if (tBots.length > 0) bots = tBots;
+			if (tBots.length === 0) return false;
+			bots = tBots;
 		} else if (this.mode !== "ffa") {
 			// Prefer the larger side, so removal balances rather than empties one side.
 			const counts = teamCounts(this.members());
@@ -1196,8 +1216,8 @@ export class GameRoom {
 	 * Where a team fighter enters, in whichever team mode this room is.
 	 *
 	 * Team deathmatch spawns at its own end of the arena; control points spawns
-	 * on the side's front-line screen — one step behind its furthest-forward
-	 * point — which is the whole of "forward spawns".
+	 * on the screen of the side's furthest-forward point — the whole of
+	 * "forward spawns".
 	 */
 	private teamSpawn(
 		team: TeamId,
@@ -1820,10 +1840,8 @@ export class GameRoom {
 	private controlInfoFor(bot: ConnectedPlayer): ControlInfo | null {
 		if (this.mode !== "5cp" || bot.team === null) return null;
 		const team = bot.team;
-		let frontier = -1;
 		const points = this.controlPoints.map((point, i) => {
 			const pad = CONTROL_PADS[i];
-			if (point.owner === team) frontier = i;
 			return {
 				index: i,
 				x: pad ? pad.x + pad.w / 2 : 0,
@@ -1836,7 +1854,7 @@ export class GameRoom {
 				mine: point.owner === team,
 			};
 		});
-		return { points, frontier };
+		return { points };
 	}
 
 	/**
@@ -2340,13 +2358,23 @@ export class GameRoom {
 		// every team match — and a countdown that ate your clock would punish the
 		// mode's own pacing.
 		//
+		// **Overtime holds the clock, and that is not a figure of speech.** A
+		// clock that kept running through overtime would make the 60s capture
+		// bonus a subtraction from an already-overshot number: a long push would
+		// buy nothing, and a completed capture could leave `elapsed` still past
+		// the limit — awarding the round a second time on the whistle. The clock
+		// stops while `controlOvertime`, and `creditCapture` restarts it a full
+		// minute below the limit.
+		//
 		// **The clock is paused, the win condition is not.** Returning early here
 		// instead cost a whole extra round: the deciding wipe set the cooldown, the
 		// score went unchecked for five seconds, and by the time it was read the
 		// arena had already reset and started a round nobody was playing.
 		const paused =
 			this.mode !== "ffa" &&
-			(this.roundFreezeMs > 0 || this.roundResetTimer > 0);
+			(this.roundFreezeMs > 0 ||
+				this.roundResetTimer > 0 ||
+				this.controlOvertime);
 		if (!paused) this.matchElapsedMs += dt * MS_PER_SECOND;
 
 		const reason =
@@ -2392,13 +2420,12 @@ export class GameRoom {
 			this.broadcastReliable("control-overtime", { round: this.roundNumber });
 			return null;
 		}
-		// The whistle with nothing in progress: the round is decided on points
-		// held, and the match on the round it just decided. A capture that
-		// completed in overtime paid its time back already — see `creditCapture`
-		// — so reaching here in overtime means every bar has fully reverted.
-		if (!this.controlOvertime) {
-			this.awardControlRound(controlTiebreak(this.controlPoints), "time");
-		}
+		// The whistle, at last: with nothing in progress — or after overtime's
+		// push fully reverted — the round is decided on points held, and the
+		// match on the round it just decided. A capture that completed in
+		// overtime paid its minute back already (`creditCapture`), so reaching
+		// here in overtime means every bar is empty and it is genuinely over.
+		this.awardControlRound(controlTiebreak(this.controlPoints), "time");
 		return "time";
 	}
 
@@ -2578,8 +2605,11 @@ export class GameRoom {
 			return;
 		}
 
-		this.tickRespawns(dt);
+		// Capture first, then respawn: a fighter coming back on the tick a point
+		// falls should arrive on the *new* front line, not the one that stood a
+		// tick ago.
 		this.tickControlCaptures(dt);
+		this.tickRespawns(dt);
 
 		const winner = controlRoundWinner(this.controlPoints);
 		if (winner !== null) this.awardControlRound(winner, "capture");
@@ -2639,10 +2669,12 @@ export class GameRoom {
 	private creditCapture(event: CaptureEvent) {
 		this.controlCaptures++;
 		if (this.controlOvertime) {
-			this.matchElapsedMs = Math.max(
-				0,
-				this.matchElapsedMs - CP_OVERTIME_BONUS_MS,
-			);
+			// The clock was held at the limit for the whole overtime; the bonus
+			// is a fresh minute measured *from the limit*, not a subtraction from
+			// an overshot clock. Relative subtraction let a long overtime eat its
+			// own payback and left `elapsed` still past the limit, which awarded
+			// the round again on the next tick.
+			this.matchElapsedMs = overtimeBonusElapsed(this.timeLimitMs);
 			this.controlOvertime = false;
 			console.log(
 				`[CP] ${this.id}: point ${event.point} taken in overtime — clock paid back`,

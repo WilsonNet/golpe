@@ -540,8 +540,10 @@ side's base is already theirs — the middle starts neutral to both, at most two
 points are ever open, and a back-cap past the front line is impossible by
 construction. Capture speed grows as a **harmonic number** (1×, 1.5×, 1.833×…)
 and the line's times are the last points fastest (2s), yards 5s, middle 8s at
-1×; contested pads freeze; abandoned progress decays (6× faster in overtime).
-**A capture takes a crowd standing on the pad — the server is the only judge**,
+1×; contested pads freeze; abandoned progress decays (6× faster in overtime),
+and **a defender standing alone on their own point does not hold the bar** —
+only a contested pad freezes it. **A capture takes a crowd standing on the pad —
+the server is the only judge**,
 and the whole line arrives in the snapshot inside `TeamStatus.control`. Dead
 fighters respawn individually, **faster for the side with fewer points** (4s
 even, −0.7s per point behind, floor 1.5s) — TF2's comeback rule. Time out with

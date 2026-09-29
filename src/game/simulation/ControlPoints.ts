@@ -1,6 +1,7 @@
 import {
 	CP_CAPTURE_MS,
 	CP_DECAY_MS,
+	CP_OVERTIME_BONUS_MS,
 	CP_OVERTIME_DECAY_MULTIPLIER,
 	CP_POINT_COUNT,
 	CP_RESPAWN_ADVANTAGE_MS,
@@ -159,10 +160,11 @@ const EMPTY_PROGRESS = 1e-6;
  *   weapons, not with the bar.
  * - **Attacked** — one side on it, and the point is not theirs. Progress runs
  *   at that side's harmonic rate, which grows with every extra body.
- * - **Abandoned** — nobody on it. Progress decays toward zero, six times as
- *   fast in overtime. A neutral point is the exception: the *other* team
- *   unwinds it at capture speed (TF2's reversion rule), because a neutral
- *   point has no owner's progress to be patient with.
+ * - **Abandoned** — the attacking side is not on it. Progress decays toward
+ *   zero, six times as fast in overtime — whether the pad is empty or the
+ *   owner is standing on it. A neutral point is special: the *other* team
+ *   unwinds it at capture speed (TF2's reversion rule), also six times as fast
+ *   in overtime.
  */
 export function stepControlPoints(
 	points: ControlPointStates,
@@ -189,36 +191,61 @@ export function stepControlPoints(
 
 		if (actor === null) {
 			// Nobody is arguing for the point. Progress bleeds away at the decay
-			// rate; the attacker keeps the claim until the bar is empty.
+			// rate, six times as fast in overtime; a claim with an empty bar is
+			// no claim at all.
 			if (point.progress > 0) {
 				point.progress = Math.max(0, point.progress - decayPerMs * dtMs);
-				if (point.progress <= EMPTY_PROGRESS) {
-					point.progress = 0;
-					point.attacker = null;
-				}
+				if (point.progress <= EMPTY_PROGRESS) point.progress = 0;
 			}
+			if (point.progress === 0) point.attacker = null;
 			continue;
 		}
 
 		if (point.attacker !== null && point.attacker !== actor) {
-			// The other team is unwinding this capture. A neutral point reverts at
-			// the reverter's own capture speed (TF2: a neutral point has no owner to
-			// be patient for); an owned point does not — a defender standing on
-			// their own point only blocks, and only while the attacker is there.
+			// The other team is on the point while a claim against them stands.
 			if (point.owner === null) {
+				// A neutral point is reverted at the reverter's capture speed —
+				// six times that in overtime (TF2 accelerates reversion and decay
+				// alike). The bar changing hands is not a claim until somebody
+				// actually pushes it, so an empty reversion clears the attacker;
+				// leaving it set would hold `controlInProgress` open forever.
 				const rate =
 					(1 / (captureMs[i] ?? CP_CAPTURE_MS[i] ?? 1)) *
-					harmonicMultiplier(count);
+					harmonicMultiplier(count) *
+					(overtime ? CP_OVERTIME_DECAY_MULTIPLIER : 1);
 				point.progress -= rate * dtMs;
 				if (point.progress <= EMPTY_PROGRESS) {
 					point.progress = 0;
-					point.attacker = actor;
+					point.attacker = null;
 				}
+			} else {
+				// An owned point with only its owner present: the attacking team
+				// has left, so the banked progress decays. **A defender standing
+				// on their own point does not freeze the bar** — TF2 loses
+				// progress when the offensive team is removed, and a frozen bar
+				// is a permanent claim that locks the line (and holds overtime
+				// open) for as long as one body stands there.
+				if (point.progress > 0) {
+					point.progress = Math.max(0, point.progress - decayPerMs * dtMs);
+					if (point.progress <= EMPTY_PROGRESS) point.progress = 0;
+				}
+				if (point.progress === 0) point.attacker = null;
 			}
 			continue;
 		}
 
-		if (!capturableBy(points, i, actor)) continue;
+		if (!capturableBy(points, i, actor)) {
+			// The point locked underneath the claim — the attackers lost the
+			// ground behind it. No progress is possible, and a stale claim must
+			// not sit there holding `controlInProgress` open: it decays like any
+			// other abandoned push.
+			if (point.attacker === actor && point.progress > 0) {
+				point.progress = Math.max(0, point.progress - decayPerMs * dtMs);
+				if (point.progress <= EMPTY_PROGRESS) point.progress = 0;
+			}
+			if (point.progress === 0) point.attacker = null;
+			continue;
+		}
 
 		if (point.attacker === null) point.attacker = actor;
 		const rate =
@@ -287,7 +314,10 @@ export function controlTiebreak(
 export function controlInProgress(
 	points: readonly ControlPointState[],
 ): boolean {
-	return points.some((p) => p.progress > 0 || p.attacker !== null);
+	// Progress, not the attacker field: the state machine clears the claim with
+	// the bar, so a zero bar is never "in progress" — the one reading that
+	// cannot leave overtime open forever.
+	return points.some((p) => p.progress > 0);
 }
 
 /**
@@ -312,6 +342,21 @@ export function controlClockOutcome(
 	if (elapsedMs < timeLimitMs) return "none";
 	if (overtime) return controlInProgress(points) ? "none" : "time";
 	return controlInProgress(points) ? "overtime" : "time";
+}
+
+/**
+ * The clock a completed overtime capture leaves behind: **a minute from the
+ * limit**, floored at zero.
+ *
+ * The held clock means `elapsed` sits at the limit through the whole overtime,
+ * so the bonus has to be measured from the limit rather than subtracted from
+ * the current reading — the difference only shows up after a long overtime, and
+ * then it is the whole rule: a subtraction from an overshot clock can leave
+ * `elapsed` still past the limit, which awards the round a second time on the
+ * whistle. Pure so a test can pin it.
+ */
+export function overtimeBonusElapsed(timeLimitMs: number): number {
+	return Math.max(0, timeLimitMs - CP_OVERTIME_BONUS_MS);
 }
 
 /**
@@ -381,7 +426,7 @@ interface ControlPointStatus {
 	attacker: TeamId | null;
 	progress: number;
 	contested: boolean;
-	/** Per team, the adjacency rule. A team's own point reads false; combine. */
+	/** Per team, the adjacency rule — a team's own point can still read true. */
 	unlocked: [boolean, boolean];
 }
 

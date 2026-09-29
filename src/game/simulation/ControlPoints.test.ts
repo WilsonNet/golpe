@@ -13,6 +13,7 @@ import {
 	harmonicMultiplier,
 	initialControlPoints,
 	onPad,
+	overtimeBonusElapsed,
 	pointsOwned,
 	stepControlPoints,
 	unlockedFor,
@@ -38,13 +39,16 @@ function stepFor(
 	ms: number,
 	overtime = false,
 	dtMs = 100,
+	captureMs?: readonly number[],
 ): CaptureEvent[] {
 	const events: CaptureEvent[] = [];
 	// One step past the request, so an exact-capture-time run lands on the far
 	// side of the boundary rather than on a float that is 0.9999999 of the bar.
 	const steps = Math.ceil(ms / dtMs) + 1;
 	for (let i = 0; i < steps; i++) {
-		events.push(...stepControlPoints(points, present, dtMs, overtime));
+		events.push(
+			...stepControlPoints(points, present, dtMs, overtime, captureMs),
+		);
 	}
 	return events;
 }
@@ -161,13 +165,16 @@ describe("contested and decay", () => {
 		stepFor(points, presenceAt(2, 2, 0), 3000);
 		const before = points[2]?.progress ?? 0;
 		expect(before).toBeGreaterThan(0);
+		expect(controlInProgress(points)).toBe(true);
 		stepFor(points, emptyPresence(), 5000);
 		const after = points[2]?.progress ?? 0;
 		expect(after).toBeLessThan(before);
-		// Long enough at the decay rate and the claim is gone entirely.
+		// Long enough at the decay rate and the claim is gone entirely — bar,
+		// attacker and the "in progress" reading that overtime hangs on.
 		stepFor(points, emptyPresence(), 40000);
 		expect(points[2]?.progress).toBe(0);
 		expect(points[2]?.attacker).toBe(null);
+		expect(controlInProgress(points)).toBe(false);
 	});
 
 	it("decays six times faster in overtime", () => {
@@ -184,30 +191,56 @@ describe("contested and decay", () => {
 describe("a neutral point is reverted at capture speed", () => {
 	it("makes the other team unwind the progress before building its own", () => {
 		const points = initialControlPoints();
-		stepFor(points, presenceAt(2, 1, 0), 4000); // AZURE 50% on the middle
+		stepFor(points, presenceAt(2, 1, 0), 4000); // AZURE ~50% on the middle
 		expect(points[2]?.attacker).toBe(0);
-		// EMBER arrives alone: the bar changes hands at EMBER's capture speed.
+		// EMBER arrives alone: the bar changes hands at EMBER's capture speed,
+		// and an empty bar is nobody's claim until EMBER actually pushes.
 		stepFor(points, presenceAt(2, 0, 1), 4000);
-		expect(points[2]?.attacker).toBe(1);
 		expect(points[2]?.progress ?? 0).toBe(0);
-		// And then starts building its own capture.
+		expect(points[2]?.attacker).toBe(null);
+		// The next steps build EMBER's own capture.
 		stepFor(points, presenceAt(2, 0, 1), 200);
+		expect(points[2]?.attacker).toBe(1);
 		expect(points[2]?.progress ?? 0).toBeGreaterThan(0);
 		stepFor(points, presenceAt(2, 0, 1), CP_CAPTURE_MS[2] ?? 1);
 		expect(points[2]?.owner).toBe(1);
 	});
 
-	it("an owned point does not revert just because a defender stands on it", () => {
+	it("loses an abandoned attack even while a defender stands on the point", () => {
 		const points = initialControlPoints();
 		stepFor(points, presenceAt(2, 1, 0), CP_CAPTURE_MS[2] ?? 1);
 		// AZURE now holds the middle and starts on EMBER's point.
 		stepFor(points, presenceAt(3, 1, 0), 2000);
-		const progress = points[3]?.progress ?? 0;
-		// EMBER alone on its own point: the defender blocks while the attacker is
-		// there, but does not fast-forward the decay.
-		stepFor(points, presenceAt(3, 0, 1), 1000);
-		expect(points[3]?.progress).toBe(progress);
+		const banked = points[3]?.progress ?? 0;
+		expect(banked).toBeGreaterThan(0.2);
+		// The attacker leaves; EMBER alone on its own point. TF2 loses progress
+		// when the offensive team is removed — a defender standing there does
+		// not *freeze* the bar, or one body is a permanent claim on the point.
+		stepFor(points, presenceAt(3, 0, 1), 3000);
+		const after = points[3]?.progress ?? 0;
+		expect(after).toBeLessThan(banked);
+		expect(after).toBeGreaterThan(0);
+		// Decay is the slow one (30s from full), not the fast reversion.
+		expect(banked - after).toBeGreaterThan(0.08);
+		expect(banked - after).toBeLessThan(0.13);
 		expect(points[3]?.owner).toBe(1);
+	});
+
+	it("lets a claim on a now-locked point decay instead of parking it", () => {
+		const points = initialControlPoints();
+		stepFor(points, presenceAt(2, 1, 0), CP_CAPTURE_MS[2] ?? 1); // AZURE takes mid
+		stepFor(points, presenceAt(2, 0, 1), 2000); // EMBER banks a claim on it
+		expect(points[2]?.attacker).toBe(1);
+		stepFor(points, presenceAt(3, 1, 0), CP_CAPTURE_MS[3] ?? 1); // AZURE takes the yard
+		expect(points[3]?.owner).toBe(0);
+		// Mid is now locked for EMBER (AZURE holds the ground behind it), and an
+		// EMBER body parks on the stale claim. It must decay, not sit there
+		// holding `controlInProgress` open forever.
+		expect(unlockedFor(points, 2, 1)).toBe(false);
+		stepFor(points, presenceAt(2, 0, 1), 15000);
+		expect(points[2]?.progress ?? 0).toBe(0);
+		expect(points[2]?.attacker).toBe(null);
+		expect(controlInProgress(points)).toBe(false);
 	});
 });
 
@@ -221,6 +254,25 @@ describe("the round", () => {
 		expect(events.some((e) => e.last && e.team === 0)).toBe(true);
 		expect(controlRoundWinner(points)).toBe(0);
 		expect(pointsOwned(points, 0)).toBe(5);
+	});
+
+	it("lets EMBER win by taking AZURE's last point too", () => {
+		const points = initialControlPoints();
+		stepFor(points, presenceAt(2, 0, 3), CP_CAPTURE_MS[2] ?? 1);
+		stepFor(points, presenceAt(1, 0, 3), CP_CAPTURE_MS[1] ?? 1);
+		const events = stepFor(points, presenceAt(0, 0, 3), CP_CAPTURE_MS[0] ?? 1);
+		expect(events.some((e) => e.last && e.team === 1)).toBe(true);
+		expect(controlRoundWinner(points)).toBe(1);
+		expect(pointsOwned(points, 1)).toBe(5);
+	});
+
+	it("honours a room's shortened capture ladder", () => {
+		const points = initialControlPoints();
+		// `?capTime=1`: the mid point's second, and the other four scaled by
+		// their ratios, exactly what `GameRoom` builds.
+		const fast = [250, 625, 1000, 625, 250];
+		stepFor(points, presenceAt(2, 1, 0), 1000, false, 100, fast);
+		expect(points[2]?.owner).toBe(0);
 	});
 
 	it("breaks a time-out on points held, a tie being nobody's", () => {
@@ -265,6 +317,16 @@ describe("the clock and overtime", () => {
 		expect(controlClockOutcome(points, LIMIT, LIMIT, true)).toBe("time");
 		// And with nothing in progress at the whistle, it never went to overtime.
 		expect(controlClockOutcome(points, LIMIT, LIMIT, false)).toBe("time");
+	});
+
+	it("pays the bonus back from the limit, never from the overshot clock", () => {
+		// A 20s limit gives the full minute; a 15s limit floors at zero. Both are
+		// "the clock is a minute below the limit", which is the whole rule: the
+		// first version subtracted 60s from wherever the clock had got to, so a
+		// long overtime was paid nothing.
+		expect(overtimeBonusElapsed(20_000)).toBe(0);
+		expect(overtimeBonusElapsed(120_000)).toBe(60_000);
+		expect(overtimeBonusElapsed(45_000)).toBe(0);
 	});
 });
 
@@ -352,34 +414,41 @@ describe("invariants under random play", () => {
 					maxLength: 5,
 				},
 			),
-			{ minLength: 1, maxLength: 120 },
+			// Long enough that captures actually happen: the middle takes at
+			// least 8s/1.833 ≈ 4.4s at full speed, so 900 ticks × 16ms ≈ 14.4s
+			// crosses it. At 120 ticks ownership never changed and the property
+			// proved nothing but the opening state.
+			{ minLength: 1, maxLength: 900 },
 		),
-	])(
-		"ownership stays a prefix and a suffix, progress stays in bounds",
-		(ticks) => {
-			const points = initialControlPoints();
-			for (const tick of ticks) {
-				const a = new Array<number>(CP_POINT_COUNT).fill(0);
-				const b = new Array<number>(CP_POINT_COUNT).fill(0);
-				tick.forEach(([countA, countB], i) => {
-					a[i] = countA;
-					b[i] = countB;
-				});
-				stepControlPoints(points, [a, b], 16, false);
-				for (const point of points) {
-					expect(point.progress).toBeGreaterThanOrEqual(0);
-					expect(point.progress).toBeLessThanOrEqual(1);
-				}
-				// No team ever owns a point past the other team's: each side's
-				// ownership is contiguous from its own base.
-				let seenB = false;
-				for (const point of points) {
-					if (point.owner === 1) seenB = true;
-					else if (seenB && point.owner === 0) {
-						throw new Error("AZURE owns a point behind EMBER's line");
-					}
+	])("ownership stays contiguous and no empty bar keeps a claim", (ticks) => {
+		const points = initialControlPoints();
+		for (const tick of ticks) {
+			const a = new Array<number>(CP_POINT_COUNT).fill(0);
+			const b = new Array<number>(CP_POINT_COUNT).fill(0);
+			tick.forEach(([countA, countB], i) => {
+				a[i] = countA;
+				b[i] = countB;
+			});
+			stepControlPoints(points, [a, b], 16, false);
+			for (const point of points) {
+				expect(point.progress).toBeGreaterThanOrEqual(0);
+				expect(point.progress).toBeLessThanOrEqual(1);
+				// A claim with an empty bar is the phantom that holds
+				// overtime open forever; the state machine must never leave
+				// one behind.
+				if (point.attacker !== null) {
+					expect(point.progress).toBeGreaterThan(0);
 				}
 			}
-		},
-	);
+			// No team ever owns a point past the other team's: each side's
+			// ownership is contiguous from its own base.
+			let seenB = false;
+			for (const point of points) {
+				if (point.owner === 1) seenB = true;
+				else if (seenB && point.owner === 0) {
+					throw new Error("AZURE owns a point behind EMBER's line");
+				}
+			}
+		}
+	});
 });

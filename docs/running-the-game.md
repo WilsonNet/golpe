@@ -386,7 +386,7 @@ Defaults and the reasoning behind them are in
 | `?mode=tdm` | **Team deathmatch**: two sides, no friendly fire, wipe-out rounds, first to 15. Forces the arena to at least 3 screens |
 | `?mode=5cp` | **Five control points**: TF2's symmetric 5CP on its own five-screen map. First to 3 full captures |
 | `?freezeTime=S` | Seconds of freezetime before each team round (default 4, `0` for none) |
-| `?capTime=S` | The middle point's capture seconds in `5cp` (default 8, 1–30) — a practice-room flag |
+| `?capTime=S` | The middle point's capture seconds in `5cp` (default 8, 1–30; a non-positive value means the default) — a practice-room flag |
 | `?screen=N` | Widen the arena to N 800px screens (1-8). Ignored in `5cp`: the map is five screens |
 | `?scoreLimit=N` | Frags to win — **rounds** in `tdm`, **full captures** in `5cp` |
 | `?timeLimit=S` | Match length in seconds |
