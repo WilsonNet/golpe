@@ -356,6 +356,11 @@ declare global {
 			sunderChargeFrames: number;
 			throwChargeFrames: number;
 			stompFrames: number;
+			berserkGunFrames: number;
+			berserkThrowChargeFrames: number;
+			frenzyHits: number;
+			frenzyChips: number;
+			frenzyGuardBreaks: number;
 		};
 		/** The end-of-match ceremony: the announcement, the clip, and the camera edit. */
 		__potgState?: () => PotgSnapshot;

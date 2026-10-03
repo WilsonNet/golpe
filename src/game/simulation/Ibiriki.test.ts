@@ -5,11 +5,14 @@
  */
 import { describe, expect, it } from "vitest";
 import {
+	GUARD_CHIP_DAMAGE_FRACTION,
+	GUARD_CHIP_PUSHBACK,
 	GUARD_CRUSH_DAMAGE_FRACTION,
 	GUARD_CRUSH_STUN_MS,
 	SUNDER_CHARGE_MS,
 } from "../../tweakables/melee.js";
 import {
+	BERSERK_EMPTY_HANDED_HASTE,
 	BERSERK_FRACTION,
 	BLOODLUST_ATTACK_SPEED_BONUS,
 	BLOODLUST_MOVE_SPEED_BONUS,
@@ -71,6 +74,7 @@ type Body = MeleeState & {
 	vy: number;
 	grounded: boolean;
 	bloodlust?: number;
+	ammo?: number;
 };
 
 function body(x: number, facing = 1, extra: Partial<Body> = {}): Body {
@@ -276,6 +280,119 @@ describe("bloodlust and berserk", () => {
 		for (const m of ["rend", "rend2"] as const) {
 			expect(moveDuration(m)).toBeLessThan(moveDuration("slash"));
 		}
+	});
+});
+
+describe("the berserk frenzy", () => {
+	it("forces the melee stance — the axes are out of his hands", () => {
+		const s = body(100, 1, { stance: "gun", bloodlust: 1 });
+		tickMelee(s, intent({ swordStance: false }), DT, VIKING);
+		expect(s.stance).toBe("sword");
+		// And it holds, whatever the stance key says, while the berserk lasts.
+		for (let i = 0; i < 10; i++) {
+			tickMelee(s, intent({ swordStance: false }), DT, VIKING);
+		}
+		expect(s.stance).toBe("sword");
+		// The berserk ends: the stance the player asked for comes back.
+		s.bloodlust = 0.5;
+		tickMelee(s, intent({ swordStance: false }), DT, VIKING);
+		expect(s.stance).toBe("gun");
+	});
+
+	it("drops a throw's charge on the tick the berserk begins", () => {
+		let s: PlayerPosition = {
+			...createPlayerState(100, 552),
+			stance: "gun",
+			ammo: 5,
+		};
+		const hold = intent({ swordStance: false, attack: true });
+		for (let i = 0; i < 20; i++)
+			s = tickPlayer(s, hold, DT, undefined, null, KIT);
+		expect(s.throwChargeTimer).toBeGreaterThan(0);
+		s = { ...s, bloodlust: 1 };
+		s = tickPlayer(s, hold, DT, undefined, null, KIT);
+		expect(s.stance).toBe("sword");
+		expect(s.throwChargeTimer).toBe(0);
+	});
+
+	it("keeps comboing on a held button: rend, rend2, rend3, and round again", () => {
+		const s = body(100, 1, { bloodlust: 1 });
+		const seen: string[] = [];
+		for (let i = 0; i < 200 && seen.length < 5; i++) {
+			tickMelee(s, intent({ attack: true }), DT, VIKING);
+			if (s.meleeAction !== "none" && seen.at(-1) !== s.meleeAction) {
+				seen.push(s.meleeAction);
+			}
+		}
+		expect(seen).toEqual(["rend", "rend2", "rend3", "rend", "rend2"]);
+	});
+
+	it("never charges the Sunder: the held button is the chain", () => {
+		const s = body(100, 1, { bloodlust: 1 });
+		for (let i = 0; i < 120; i++) {
+			tickMelee(s, intent({ attack: true }), DT, VIKING);
+			expect(s.chargeTimer).toBe(0);
+		}
+		expect(s.massiveReady).toBe(false);
+	});
+
+	it("grinds through a front guard: chip damage and a shove, no guard break", () => {
+		for (const move of ["rend", "rend2", "rend3"] as const) {
+			const attacker = body(100, 1, {
+				bloodlust: 1,
+				meleeAction: move,
+				meleeTimer: MOVES[move].startupMs + 1,
+			});
+			const defender = body(100 + PLAYER_WIDTH + 20, -1, { blocking: true });
+			const result = resolveMelee(attacker, defender);
+			expect(result?.outcome).toBe("chipped");
+			if (!result) return;
+			expect(result.damage).toBe(
+				Math.round(MOVES[move].damage * GUARD_CHIP_DAMAGE_FRACTION),
+			);
+			expect(result.damage).toBeGreaterThan(0);
+			const dealt = applyMeleeResult(attacker, defender, result);
+			expect(dealt).toBe(result.damage);
+			// The guard held: still up, no stun, no iframes, walked backwards.
+			expect(defender.blocking).toBe(true);
+			expect(defender.stunTimer).toBe(0);
+			expect(defender.iframeTimer).toBe(0);
+			expect(defender.vx).toBe(GUARD_CHIP_PUSHBACK);
+			// And the predator swung through it.
+			expect(attacker.stunTimer).toBe(0);
+			expect(attacker.guardBroken).toBe(false);
+			expect(defender.massiveReady).toBe(false);
+		}
+	});
+
+	it("swings at half speed with no axe left in the off hand", () => {
+		const armed = body(100, 1, { bloodlust: 1, ammo: 3 });
+		const bare = body(100, 1, { bloodlust: 1, ammo: 0 });
+		for (let i = 0; i < 6; i++) {
+			tickMelee(armed, intent({ attack: true }), DT, VIKING);
+			tickMelee(bare, intent({ attack: true }), DT, VIKING);
+		}
+		expect(armed.meleeAction).toBe("rend");
+		expect(bare.meleeAction).toBe("rend");
+		expect(bare.meleeTimer / armed.meleeTimer).toBeCloseTo(
+			BERSERK_EMPTY_HANDED_HASTE,
+			5,
+		);
+		// Still faster than a calm hew, even at half speed.
+		const bareMs =
+			moveDuration("rend") /
+			((1 + BLOODLUST_ATTACK_SPEED_BONUS) * BERSERK_EMPTY_HANDED_HASTE);
+		expect(bareMs).toBeLessThan(moveDuration("hew"));
+	});
+
+	it("is not a hero check: a calm Ibiriki's empty hands change nothing", () => {
+		const calm = body(100, 1, { ammo: 0 });
+		const full = body(100, 1, { ammo: 5 });
+		for (let i = 0; i < 6; i++) {
+			tickMelee(calm, intent({ attack: true }), DT, VIKING);
+			tickMelee(full, intent({ attack: true }), DT, VIKING);
+		}
+		expect(calm.meleeTimer).toBe(full.meleeTimer);
 	});
 });
 

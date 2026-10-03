@@ -113,6 +113,17 @@ export interface MoveDef {
 	 */
 	guardCrush?: boolean;
 	/**
+	 * Does this move **grind through** a front guard instead of being stopped
+	 * by it?
+	 *
+	 * Ibiriki's berserk frenzy. The guard holds — the defender stays blocking,
+	 * takes no stun — but it cannot turn the swing away: the defender takes
+	 * `GUARD_CHIP_DAMAGE_FRACTION` of the damage as chip and is shoved back
+	 * `GUARD_CHIP_PUSHBACK`, and the attacker is *not* guard broken. A held
+	 * guard against a frenzy is a slow bleed walking backwards, never a read.
+	 */
+	guardChip?: boolean;
+	/**
 	 * Vertical speed the *attacker* travels during the active frames — the
 	 * shoryuken's rise. Pinned for the whole active window, then gravity owns
 	 * the recovery.
@@ -182,7 +193,10 @@ export const COMBO_CHAIN = ["slash", "slash2", "slash3"] as const;
 /** Ibiriki's hew chain: the viking sword's three heavier links. */
 const HEW_CHAIN = ["hew", "hew2", "hew3"] as const;
 
-/** Ibiriki's berserk frenzy: sword, axe, both. */
+/**
+ * Ibiriki's berserk frenzy: sword, axe, both. A berserk chain **repeats
+ * while the attack button is held** — see `tickMelee`.
+ */
 const REND_CHAIN = ["rend", "rend2", "rend3"] as const;
 
 /** Every ground chain in the game. A move belongs to at most one. */
@@ -627,6 +641,7 @@ export const MOVES: Record<MeleeMove, MoveDef> = {
 		boxTopOffset: 6,
 		boxHeight: 36,
 		blockable: true,
+		guardChip: true,
 		cancellable: true,
 		piercesIframes: false,
 		hitstunMs: 240,
@@ -644,6 +659,7 @@ export const MOVES: Record<MeleeMove, MoveDef> = {
 		boxTopOffset: 4,
 		boxHeight: 38,
 		blockable: true,
+		guardChip: true,
 		cancellable: true,
 		piercesIframes: true,
 		hitstunMs: 240,
@@ -661,6 +677,7 @@ export const MOVES: Record<MeleeMove, MoveDef> = {
 		boxTopOffset: -2,
 		boxHeight: 48,
 		blockable: true,
+		guardChip: true,
 		cancellable: false,
 		piercesIframes: true,
 		hitstunMs: 380,
@@ -746,6 +763,20 @@ export const GUARD_CRUSH_DAMAGE_FRACTION = 0.4;
  * far shorter than a guard break's full second.
  */
 export const GUARD_CRUSH_STUN_MS = 450;
+
+/**
+ * What fraction of a guard-grinding hit (the berserk frenzy) a front guard
+ * still lets through as chip: 35% — 3 off a rend, 4 off the X-cut. Cheap,
+ * and it never stops coming.
+ */
+export const GUARD_CHIP_DAMAGE_FRACTION = 0.35;
+
+/**
+ * The shove a guard-grinding hit gives the blocker, px/s. A blocking fighter
+ * has full ground friction, so this is ~20px a hit — enough that a turtle
+ * under a frenzy is visibly walked backwards across the floor.
+ */
+export const GUARD_CHIP_PUSHBACK = 320;
 
 export const MELEE_WEAPONS: Record<MeleeWeaponId, MeleeWeaponDef> = {
 	sword: {

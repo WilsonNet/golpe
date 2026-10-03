@@ -275,6 +275,8 @@ interface BatteryRow {
 	lia?: boolean;
 	/** The row needs the dagger kit. */
 	dagger?: boolean;
+	/** The row needs Ibiriki's kit (the viking sword and its berserk). */
+	viking?: boolean;
 	/** Drive the scenario by hand, returning the report and any extra state. */
 	run?: (page: Page) => Promise<{ report: TrainingReport; extra: unknown }>;
 	/** A custom read after a `scenario` row settles. */
@@ -1344,6 +1346,196 @@ const BATTERY: BatteryRow[] = [
 	},
 
 	// ====================================================================
+	//  THE BERSERK (Ibiriki)
+	//
+	//  `--hero=ibiriki` runs these. A bleeding dummy (`dummyHp: 25`, held
+	//  there by invincibility) keeps the bloodlust full, so every press is
+	//  the frenzy. Numbers restated, not imported.
+	// ====================================================================
+
+	{
+		name: "a calm hew into a guard is still a guard break",
+		viking: true,
+		scenario: {
+			name: "calm hew vs guard",
+			config: {
+				behaviour: "blockAll",
+				facing: "foe",
+				dummyHp: 100,
+				dummyInvincible: true,
+			},
+			steps: [{ ...SLASH, restMs: 600 }],
+			settleMs: 1200,
+		},
+		verify(report) {
+			const c = checks(report);
+			c.outcome("parried", "hew");
+			c.damage(0);
+			return c.fails;
+		},
+	},
+
+	{
+		name: "the berserk frenzy keeps comboing on one held press",
+		viking: true,
+		scenario: {
+			name: "frenzy held",
+			config: { behaviour: "idle", dummyHp: 25, dummyInvincible: true },
+			steps: [
+				{
+					intent: { attack: true, right: true },
+					holdMs: 1600,
+					aimAngle: AIM_RIGHT,
+				},
+			],
+			settleMs: 800,
+		},
+		verify(report) {
+			const c = checks(report);
+			c.swung("rend");
+			c.swung("rend2");
+			c.swung("rend3");
+			// One press: a looped chain swings the opener more than once.
+			c.atLeast("rend openers", report.player.moves.rend ?? 0, 2);
+			c.atLeast(
+				"frenzy hits",
+				playerEvents(report).filter((e) => e.outcome === "hit").length,
+				5,
+			);
+			c.never("parried");
+			return c.fails;
+		},
+	},
+
+	{
+		name: "the berserk frenzy grinds through a held guard and walks it back",
+		viking: true,
+		scenario: {
+			name: "frenzy vs guard",
+			config: {
+				behaviour: "blockAll",
+				facing: "foe",
+				dummyHp: 25,
+				dummyInvincible: true,
+			},
+			steps: [
+				{
+					intent: { attack: true, right: true },
+					holdMs: 2000,
+					aimAngle: AIM_RIGHT,
+				},
+			],
+			settleMs: 800,
+		},
+		verify(report) {
+			const c = checks(report);
+			const chips = playerEvents(report).filter((e) => e.outcome === "chipped");
+			c.never("parried");
+			c.atLeast("chipped hits", chips.length, 6);
+			// Chip is 35% of 8 (rend) or 12 (X-cut): 3 or 4 a hit.
+			c.atLeast(
+				"chip damage dealt",
+				report.player.damageDealt,
+				chips.length * 3,
+			);
+			c.atMost(
+				"chip damage dealt",
+				report.player.damageDealt,
+				chips.length * 4,
+			);
+			// The guard gives ground: the impacts march toward the dummy's side.
+			const first = chips[0]?.x ?? 0;
+			const last = chips.at(-1)?.x ?? 0;
+			c.atLeast("guard walked back px", last - first, 60);
+			c.atLeast("dummy blocks raised", report.dummy.blocks, 1);
+			return c.fails;
+		},
+	},
+
+	{
+		/**
+		 * Berserk with axes in hand dual wields (the `berserk` idle and the
+		 * `rend*` cuts, axe in the off hand); with every axe thrown the sword
+		 * swings alone (the plain idle and the `hew*` cuts). Only the drawn
+		 * clips can tell the two apart.
+		 */
+		name: "berserk dual wields with axes, swings the sword alone without",
+		viking: true,
+		async run(page) {
+			const clips = () =>
+				page.evaluate(() => ({
+					...(window.__animStats?.().ibiriki?.clips ?? {}),
+				}));
+			const drawn = (a: Record<string, number>, b: Record<string, number>) =>
+				Object.keys(b).filter((k) => (b[k] ?? 0) > (a[k] ?? 0));
+			const frenzy = async () => {
+				const before = await clips();
+				await page.evaluate(() => window.__training!.input({}, 500, 0));
+				await page.evaluate(() =>
+					window.__training!.input({ attack: true }, 1200, 0),
+				);
+				return drawn(before, await clips());
+			};
+			await page.evaluate(() =>
+				window.__training!.set({
+					behaviour: "idle",
+					dummyHp: 25,
+					dummyInvincible: true,
+				}),
+			);
+			await page.evaluate(() => window.__training!.reset());
+			await page.waitForTimeout(800);
+			const armed = await frenzy();
+			// Calm down, and throw every axe high to the left — a full charge
+			// flies far enough that he is not standing on it.
+			await page.evaluate(() => window.__training!.set({ dummyHp: 100 }));
+			await page.waitForTimeout(400);
+			for (let i = 0; i < 5; i++) {
+				await page.evaluate(() =>
+					window.__training!.input(
+						{ swordStance: false, attack: true },
+						1300,
+						-Math.PI * 0.8,
+					),
+				);
+				await page.evaluate(() =>
+					window.__training!.input({ swordStance: false }, 450, Math.PI),
+				);
+			}
+			const ammo = await page.evaluate(() => window.__ibirikiState?.().myAmmo);
+			await page.evaluate(() => window.__training!.set({ dummyHp: 25 }));
+			await page.waitForTimeout(300);
+			const bare = await frenzy();
+			const report = await page.evaluate(() => window.__training!.report());
+			return { report, extra: { armed, bare, ammo } };
+		},
+		verify(_report, extra: { armed: string[]; bare: string[]; ammo: number }) {
+			const fails: string[] = [];
+			const has = (
+				set: string[],
+				clip: string,
+				want: boolean,
+				phase: string,
+			) => {
+				if (set.some((c) => c === clip || c === `${clip}-left`) !== want) {
+					fails.push(`${phase}: ${clip} ${want ? "never drawn" : "drawn"}`);
+				}
+			};
+			if (extra.ammo !== 0)
+				fails.push(`${extra.ammo} axes left after throwing`);
+			for (const c of ["berserk", "rend", "rend2", "rend3"]) {
+				has(extra.armed, c, true, "with axes");
+				has(extra.bare, c, false, "empty-handed");
+			}
+			for (const c of ["hew", "hew2", "hew3"]) {
+				has(extra.bare, c, true, "empty-handed");
+				has(extra.armed, c, false, "with axes");
+			}
+			return fails;
+		},
+	},
+
+	// ====================================================================
 	//  THE DAGGER (Anands)
 	//
 	//  `--hero=anands` runs the whole battery as the dagger, and these rows
@@ -1676,9 +1868,11 @@ async function main() {
 		(r) =>
 			HERO === "anands"
 				? r.dagger
-				: HERO === "jeffs"
-					? !r.dagger && !r.lia
-					: !r.dagger,
+				: HERO === "ibiriki"
+					? r.viking
+					: HERO === "jeffs"
+						? !r.dagger && !r.lia && !r.viking
+						: !r.dagger && !r.viking,
 	);
 	const results: {
 		name: string;

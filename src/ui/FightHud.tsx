@@ -29,6 +29,10 @@ import type { HeroId } from "../game/simulation/Heroes";
 import { ULT_MAX_CHARGE } from "../game/simulation/Physics";
 import { TEAM_COUNT, TEAM_NAMES, type TeamId } from "../game/simulation/Teams";
 import { teamCss } from "../game/teamPalette";
+import {
+	BLOODLUST_ATTACK_SPEED_BONUS,
+	BLOODLUST_MOVE_SPEED_BONUS,
+} from "../tweakables/passive";
 import { FIGHT_HUD_CSS } from "./fightHudStyles";
 import { KillFeed } from "./KillFeed";
 import { useEndgameCeremony } from "./PlayOfTheGame";
@@ -144,8 +148,36 @@ function FighterPanel({
 					{Math.max(0, Math.ceil(hp))}/{hud.maxHp}
 				</span>
 			</div>
+			{!foe && hud.bloodlust !== null ? (
+				<BloodlustMeter value={hud.bloodlust} />
+			) : null}
 			<FragsRow foe={foe} />
 		</section>
+	);
+}
+
+/**
+ * Ibiriki's bloodlust, read as the buff it is: how full it is, and what that
+ * buys right now in walk and swing speed. Full is berserk, and the meter
+ * burns. See specs/ibiriki.md.
+ */
+function BloodlustMeter({ value }: { value: number }) {
+	const v = Math.max(0, Math.min(1, value));
+	const berserk = v >= 1;
+	const move = Math.round(v * BLOODLUST_MOVE_SPEED_BONUS * 100);
+	const atk = Math.round(v * BLOODLUST_ATTACK_SPEED_BONUS * 100);
+	return (
+		<div className={`vdh-lust${berserk ? " vdh-lust-full" : ""}`}>
+			<span className="vdh-lust-label">
+				{berserk ? "BERSERK" : "BLOODLUST"} <b>{Math.round(v * 100)}%</b>
+			</span>
+			<div className="vdh-lust-bar">
+				<div className="vdh-lust-fill" style={{ width: `${v * 100}%` }} />
+			</div>
+			<span className="vdh-lust-buff">
+				+{move}% MOVE · +{atk}% ATK
+			</span>
+		</div>
 	);
 }
 

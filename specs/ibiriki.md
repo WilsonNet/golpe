@@ -34,11 +34,21 @@ the room. Let `f` be that fighter's HP fraction.
   **+35%**) and his **attack speed** (up to **+30%** — every melee move's clock
   runs faster).
 - **Berserk** is full bloodlust: some foe is **below 30% HP**. Berserk Ibiriki
+  goes dumb with bloodlust:
+  - **loses the ranged stance** — he is forced into melee the tick it begins
+    (a throw being charged is dropped), and the stance key does nothing
+    until it ends; the stance he asked for comes back with the calm;
   - **dual wields** — the sword in one hand, an axe in the other — and his
-    attack button runs the **frenzy chain** instead of the hew chain (below);
+    attack button runs the **frenzy chain** instead of the hew chain (below).
+    Out of axes, he swings the **sword alone** at **half the frenzy's
+    speed** — still faster than a hew;
+  - **keeps comboing on a held button** — no Sunder charge while berserk;
+  - **cannot be fully blocked** — the frenzy grinds through a guard (below);
+  - still **dashes** and still throws his **trap** (a hunter's instinct);
   - takes **25% less damage** from everything;
-  - is drawn with **glowing red eyes** and a **red aura**, so the whole room
-    can see the predator has scented blood.
+  - is drawn with **glowing red eyes**, a beating **blood-red glow** and a
+    column of red fire, so the whole room sees him and thinks *kill him or
+    run*.
 - The value is computed **by the server** every tick and travels in
   `PlayerPosition.bloodlust`, so both sides simulate the faster walk and the
   faster swings — a speed applied on top of predicted state would be erased by
@@ -48,6 +58,9 @@ the room. Let `f` be that fighter's HP fraction.
   non-zero value — the simulation reads the field, never the hero.
 - Global by design: in a sixteen-fighter brawl somebody is always bleeding,
   and that is exactly when Ibiriki is supposed to be a menace.
+- **The HUD shows it.** Ibiriki's own panel carries a bloodlust meter under
+  the HP bar: the percentage, the bar, and what it buys right now
+  (`+22% MOVE · +19% ATK`). At full it reads **BERSERK** and burns.
 
 ## The viking sword (melee stance)
 
@@ -93,7 +106,9 @@ motes stream into the blade while it fills. After **1000ms** it is armed, and
 
 ### Berserk: the frenzy chain
 
-While berserk, the attack button runs a different chain: **sword, axe, both**.
+While berserk, the attack button runs a different chain: **sword, axe, both**
+— Wolverine's Berserker Barrage from Marvel vs. Capcom, only not quite that
+fast.
 
 | Move | Startup | Active | Recovery | Damage | Hitstun |
 |---|---|---|---|---|---|
@@ -105,6 +120,22 @@ Fast, every hit a mini stun, and the third shoves the victim away. With the
 bloodlust attack speed on top, a berserk Ibiriki out-swings anyone in the
 game — the counterplay is to not be the low fighter, or to heal the one who is
 by killing Ibiriki first.
+
+- **Hold to keep swinging.** The frenzy has no press edge: a held attack
+  button links each swing out of the last one's recovery and goes back to
+  the opener after the X-cut, for as long as it is held.
+- **It grinds through guards** (`guardChip`). A front guard holds — no stun,
+  still blocking — but cannot turn a rend away: the blocker takes **35%** as
+  chip (3 a rend, 4 the X-cut) and is **shoved back** (320 px/s, ~20px a hit
+  against a guard's full friction), and Ibiriki is *never* guard broken. A
+  turtle under a frenzy bleeds walking backwards; the answers are to get out
+  (dash, jump, run), get behind him, or hit him first.
+- **Out of axes** the chain is the same three moves on the sword alone, at
+  **half speed** (`BERSERK_EMPTY_HANDED_HASTE`) — read off the axes in hand,
+  which the client predicts with the snapshot's last count like the
+  bloodlust. Walking back over an axe puts the off hand back in the fight.
+  The empty-handed cuts are drawn with the hew chain's art (no axe in the
+  off hand), and the berserk idle and walk give way to the plain ones.
 
 ## The throwing axes (gun stance)
 
@@ -170,7 +201,9 @@ is already in reach.
 Ibiriki's brain is a melee duelist (the sword module drives the hew chain and
 the Sunder), throws charged axes at range with a solved lob, walks back over
 its resting axes when it runs low, and casts Rupture when two or more foes
-are alive or one is low and fleeing.
+are alive or one is low and fleeing. Berserk, it stops thinking: it charges
+the nearest foe (dashing in from range), drops the guard and holds the
+attack button down.
 
 ## Not implemented
 

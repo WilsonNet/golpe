@@ -244,6 +244,11 @@ export interface AIInput {
 	ruptureActive?: boolean;
 	/** ms this fighter's axe throw has been charging (shared state). */
 	selfThrowCharge?: number;
+	/**
+	 * This fighter is in the berserk frenzy: forced to melee, and a held
+	 * attack keeps the chain coming. See specs/ibiriki.md.
+	 */
+	selfBerserk?: boolean;
 }
 
 export interface AIOutput {

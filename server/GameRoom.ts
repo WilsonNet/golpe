@@ -1937,6 +1937,7 @@ export class GameRoom {
 			selfRuptured: this.rupture?.victims.includes(bot.id) ?? false,
 			ruptureActive: this.rupture !== null || this.pendingRupture !== null,
 			selfThrowCharge: bot.state.throwChargeTimer,
+			selfBerserk: isBerserk(bot.state),
 		};
 	}
 
@@ -3231,6 +3232,9 @@ export class GameRoom {
 			// drew is exactly the charge the axe is thrown at.
 			if (
 				kit.ranged.thrown === true &&
+				// The frenzy takes the axes out of his hands: a release on the
+				// tick the berserk began is not a throw.
+				!isBerserk(player.state) &&
 				prevThrowCharge > 0 &&
 				player.state.throwChargeTimer === 0 &&
 				!input.attack
@@ -3561,6 +3565,14 @@ export class GameRoom {
 				// the hit would have been worth.
 				if (result.outcome === "parried") {
 					this.absorbPotg(defender, MOVES[result.move].damage, attacker);
+				} else if (result.outcome === "chipped") {
+					// A frenzy ground through the guard: what the guard held back
+					// is still blocked damage, the chip is not.
+					this.absorbPotg(
+						defender,
+						MOVES[result.move].damage - result.damage,
+						attacker,
+					);
 				}
 				// A thrust that lands through the normal melee path still cuts
 				// a blossom short the same way the sweep does — the sweep is

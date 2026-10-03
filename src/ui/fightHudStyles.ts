@@ -224,6 +224,55 @@ export const FIGHT_HUD_CSS = `
 	white-space: nowrap;
 }
 
+/* Ibiriki's bloodlust: the buff the room's weakest foe is feeding him. */
+.vdh-lust {
+	display: flex;
+	align-items: center;
+	gap: 0.8cqw;
+	margin-top: 0.6cqh;
+	font-size: 1.05cqw;
+	letter-spacing: 0.14em;
+	color: rgba(255, 140, 140, 0.75);
+	white-space: nowrap;
+}
+.vdh-lust-label b {
+	color: #ff6b6b;
+	font-variant-numeric: tabular-nums;
+}
+.vdh-lust-bar {
+	position: relative;
+	flex: 1;
+	min-width: 0;
+	height: 0.8cqh;
+	background: rgba(20, 4, 6, 0.75);
+	border: 1px solid rgba(0, 0, 0, 0.7);
+	overflow: hidden;
+}
+.vdh-lust-fill {
+	position: absolute;
+	inset: 0 auto 0 0;
+	background: linear-gradient(90deg, #6e0612, #ff1a2a);
+	transition: width 200ms ease-out;
+}
+.vdh-lust-buff {
+	font-size: 0.95cqw;
+	color: rgba(255, 180, 170, 0.6);
+	font-variant-numeric: tabular-nums;
+}
+.vdh-lust.vdh-lust-full .vdh-lust-label,
+.vdh-lust.vdh-lust-full .vdh-lust-label b {
+	color: #ff2a2a;
+	animation: vdh-lust-burn 520ms ease-in-out infinite;
+}
+.vdh-lust.vdh-lust-full .vdh-lust-fill {
+	background: #ff1a1a;
+	box-shadow: 0 0 1cqw rgba(255, 26, 26, 0.9);
+}
+@keyframes vdh-lust-burn {
+	0%, 100% { text-shadow: 0 0 0 rgba(255, 30, 30, 0); }
+	30% { text-shadow: 0 0 1.2cqw rgba(255, 30, 30, 0.95); }
+}
+
 .vdh-frags {
 	margin-top: 0.7cqh;
 	font-size: 1.15cqw;

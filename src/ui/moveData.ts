@@ -250,7 +250,7 @@ const MELEE_PROSE: Partial<Record<MeleeMove, string>> = {
 	hew2: "The backhand — the second link, the same rhythm as the opener. It pierces the opener's invulnerability, so a landed chain keeps landing.",
 	hew3: "The finisher — an overhead chop that knocks down. It cannot be cancelled; the whole hew chain is 10 + 10 + 15 = 35, heavier than the katana's 25, for three slower swings that each have to land on the ground.",
 	sunder: `Hold the attack button and the sword goes up over his head while blood-red motes stream into it; after ${SUNDER_CHARGE_MS / 1000}s it is armed, and the release brings it down top to bottom. **It goes through blocks**: a front guard is crushed — the blocker takes ${Math.round(GUARD_CRUSH_DAMAGE_FRACTION * 100)}% and a ${GUARD_CRUSH_STUN_MS}ms mini stun — instead of guard breaking you. A guard break you land also arms a free Sunder.`,
-	rend: "**Berserk only** — some foe is below the berserk line, Ibiriki dual wields, and the attack button runs the frenzy: sword, axe, both. Every link is fast and every hit is a mini stun, so the frenzy holds its victim.",
+	rend: "**Berserk only** — some foe is below the berserk line: Ibiriki drops the axes' throw, dual wields, and the attack button runs the frenzy: sword, axe, both. **Hold it down and it never stops.** Every hit is a mini stun, and a guard cannot stop it — the blocker takes chip and is walked backwards. Out of axes, the sword swings alone at half speed.",
 	rend2:
 		"**Berserk only** — the second link of the frenzy: the axe in the off hand.",
 	rend3:
@@ -335,6 +335,7 @@ function meleeTags(move: MeleeMove): string {
 	if (d.cancellable) parts.push("CANCELLABLE");
 	if (d.selfVx) parts.push("CARRIES BODY");
 	if (d.guardCrush) parts.push("CRUSHES GUARDS");
+	if (d.guardChip) parts.push("GRINDS GUARDS");
 	return parts.join(" · ");
 }
 
@@ -522,7 +523,7 @@ export const MOVE_LISTS: Record<HeroId, HeroMoveList> = {
 				category: "system",
 				name: "Bloodlust (passive)",
 				command: { label: "ALWAYS ON", actions: [] },
-				prose: `Ibiriki smells the weakest foe in the room. The lower their HP, the faster he walks (up to +${Math.round(BLOODLUST_MOVE_SPEED_BONUS * 100)}%) and swings (up to +${Math.round(BLOODLUST_ATTACK_SPEED_BONUS * 100)}%). Below ${Math.round(BERSERK_FRACTION * 100)}% he goes **berserk**: his eyes glow, a red aura rises, he dual wields the sword and an axe, the attack button runs the frenzy, and he takes ${Math.round((1 - BERSERK_DAMAGE_TAKEN) * 100)}% less damage.`,
+				prose: `Ibiriki smells the weakest foe in the room. The lower their HP, the faster he walks (up to +${Math.round(BLOODLUST_MOVE_SPEED_BONUS * 100)}%) and swings (up to +${Math.round(BLOODLUST_ATTACK_SPEED_BONUS * 100)}%). Below ${Math.round(BERSERK_FRACTION * 100)}% he goes **berserk**: dumb with bloodlust, he is forced into melee (no axe throws), his eyes glow, a blood-red aura rises, he dual wields the sword and an axe, a held attack button runs the frenzy without end, and he takes ${Math.round((1 - BERSERK_DAMAGE_TAKEN) * 100)}% less damage. He still dashes and still lays his trap. The HUD meter under his HP shows the bloodlust and what it buys.`,
 				tags: "GLOBAL · BERSERK BELOW 30%",
 			},
 			meleeEntry("hew"),

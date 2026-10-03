@@ -46,6 +46,11 @@ const COLOR = {
 	emberHot: 0xffd27a,
 	eye: 0xff2020,
 	aura: 0xff2a1a,
+	/** The berserk's body glow: a deep arterial red, never orange. */
+	rage: 0xff0a14,
+	rageDark: 0x8a0010,
+	/** The painted bloom round a berserk body: bright enough to stay red on sky. */
+	rageBloom: 0xe0101e,
 	shock: 0xff4d4d,
 	dust: 0xc8b89a,
 	steel: 0xe6ecf0,
@@ -80,8 +85,17 @@ const MOTE_RADIUS: [number, number] = [26, 48];
 const MOTE_LIFE_MS = 360;
 /** The swing's trail: an ember every this many ms through the active frames. */
 const TRAIL_INTERVAL_MS = 8;
-/** The berserk aura: a flame tongue every this many ms. */
-const AURA_INTERVAL_MS = 40;
+/**
+ * The berserk aura: a flame tongue every this many ms. Dense on purpose — a
+ * berserk Ibiriki is meant to read from across the arena as "kill him or
+ * run", so the fire is a column, not a flicker.
+ */
+const AURA_INTERVAL_MS = 12;
+/** A dark blood haze rolling off the berserk body, every this many ms. */
+const HAZE_INTERVAL_MS = 70;
+/** The berserk body glow's scale (on the 64px halo) and its heartbeat. */
+const RAGE_GLOW_SCALE = 1.5;
+const RAGE_BEAT_MS = 520;
 /** A ruptured fighter drips this often per px/s of speed. */
 const BLEED_PER_SPEED = 0.0016;
 /** The resting axe's "pick me up" glint, for its owner. */
@@ -99,10 +113,18 @@ export class IbirikiFx {
 	/** Per-fighter emission clocks, keyed by server id. */
 	private readonly clocks = new Map<
 		string,
-		{ mote: number; trail: number; aura: number; bleed: number }
+		{
+			mote: number;
+			trail: number;
+			aura: number;
+			haze: number;
+			bleed: number;
+		}
 	>();
 	/** Eye glows, per berserk fighter. */
 	private readonly eyes = new Map<string, Sprite[]>();
+	/** The red glow wrapped round each berserk fighter: core and wide bloom. */
+	private readonly rageGlows = new Map<string, Sprite[]>();
 	private glintMs = 0;
 
 	constructor(
@@ -370,6 +392,7 @@ export class IbirikiFx {
 				mote: 0,
 				trail: 0,
 				aura: 0,
+				haze: 0,
 				bleed: 0,
 			};
 			this.clocks.set(f.serverId, clock);
@@ -389,10 +412,12 @@ export class IbirikiFx {
 			if (ruptured.has(f.serverId)) this.bleed(f, clock, dtMs, cx);
 		}
 
-		for (const [id, sprites] of this.eyes) {
-			if (berserkNow.has(id)) continue;
-			for (const s of sprites) s.destroy();
-			this.eyes.delete(id);
+		for (const map of [this.eyes, this.rageGlows]) {
+			for (const [id, sprites] of map) {
+				if (berserkNow.has(id)) continue;
+				for (const s of sprites) s.destroy();
+				map.delete(id);
+			}
 		}
 		this.particles.update(dtMs);
 	}
@@ -525,28 +550,87 @@ export class IbirikiFx {
 		}
 	}
 
-	/** Berserk: flame tongues rise off the body, and the eyes burn. */
+	/**
+	 * Berserk: he is wrapped in a beating red glow, a column of blood-red fire
+	 * rises off him, a dark haze rolls off his feet, and the eyes burn. The
+	 * whole room must see it and think "kill him or run".
+	 */
 	private berserk(
 		f: IbirikiFighterView,
-		clock: { aura: number },
+		clock: { aura: number; haze: number },
 		dtMs: number,
 		cx: number,
 		facing: number,
 	) {
+		const cy = f.y + PLAYER_HEIGHT / 2;
+		// The heartbeat: a sharp double-thump, the glow swelling on each.
+		const t = (this.glintMs % RAGE_BEAT_MS) / RAGE_BEAT_MS;
+		const beat = Math.max(
+			Math.exp(-((t - 0.05) ** 2) / 0.004),
+			0.7 * Math.exp(-((t - 0.28) ** 2) / 0.004),
+		);
+		let glows = this.rageGlows.get(f.serverId);
+		if (!glows) {
+			glows = [0, 1].map((i) => {
+				const s = new Sprite(tex(TEX.halo));
+				s.anchor.set(0.5);
+				// The core is additive — it lights *him* red. The bloom is
+				// painted: additive red over a pale sky blows out to pink, and
+				// the room must read blood, not candyfloss.
+				s.blendMode = i === 0 ? "add" : "normal";
+				s.tint = i === 0 ? COLOR.rage : COLOR.rageBloom;
+				this.effectsLayer.addChildAt(s, 0);
+				return s;
+			});
+			this.rageGlows.set(f.serverId, glows);
+		}
+		const [core, bloom] = glows as [Sprite, Sprite];
+		core.position.set(cx, cy);
+		core.scale.set(RAGE_GLOW_SCALE * (1 + 0.12 * beat));
+		core.alpha = 0.55 + 0.3 * beat;
+		bloom.position.set(cx, cy);
+		bloom.scale.set(RAGE_GLOW_SCALE * 2 * (1 + 0.2 * beat));
+		bloom.alpha = 0.4 + 0.2 * beat;
+
 		clock.aura += dtMs;
 		while (clock.aura > AURA_INTERVAL_MS) {
 			clock.aura -= AURA_INTERVAL_MS;
+			// Mostly painted blood-red tongues (they stay red on any sky), a
+			// few additive hot ones so the column still burns.
+			const hot = Math.random() < 0.25;
 			this.particles.burst({
 				texture: TEX.flame,
 				count: 1,
-				x: cx + (Math.random() - 0.5) * PLAYER_WIDTH * 1.2,
-				y: f.y + PLAYER_HEIGHT * (0.5 + Math.random() * 0.45),
-				tint: Math.random() < 0.7 ? COLOR.aura : COLOR.ember,
-				speed: [40, 90],
-				angle: [-Math.PI / 2 - 0.25, -Math.PI / 2 + 0.25],
-				lifeMs: 520,
-				scale: [0.9, 0.2],
-				alpha: [0.75, 0],
+				x: cx + (Math.random() - 0.5) * PLAYER_WIDTH * 1.5,
+				y: f.y + PLAYER_HEIGHT * (0.3 + Math.random() * 0.7),
+				tint: hot
+					? COLOR.rage
+					: Math.random() < 0.6
+						? COLOR.blood
+						: COLOR.rageDark,
+				speed: [70, 150],
+				angle: [-Math.PI / 2 - 0.3, -Math.PI / 2 + 0.3],
+				lifeMs: 640,
+				scale: [1.4, 0.3],
+				alpha: [hot ? 0.8 : 0.7, 0],
+				blend: hot,
+			});
+		}
+		clock.haze += dtMs;
+		while (clock.haze > HAZE_INTERVAL_MS) {
+			clock.haze -= HAZE_INTERVAL_MS;
+			this.particles.burst({
+				texture: TEX.smoke,
+				count: 1,
+				x: cx + (Math.random() - 0.5) * PLAYER_WIDTH * 1.4,
+				y: f.y + PLAYER_HEIGHT * (0.7 + Math.random() * 0.3),
+				tint: COLOR.bloodDark,
+				speed: [10, 40],
+				angle: [-Math.PI / 2 - 0.9, -Math.PI / 2 + 0.9],
+				lifeMs: 900,
+				scale: [0.25, 0.55],
+				alpha: [0.55, 0],
+				blend: false,
 			});
 		}
 		let eyes = this.eyes.get(f.serverId);
@@ -608,9 +692,10 @@ export class IbirikiFx {
 			f.glow.destroy();
 		}
 		this.axes.clear();
-		for (const sprites of this.eyes.values())
-			for (const s of sprites) s.destroy();
-		this.eyes.clear();
+		for (const map of [this.eyes, this.rageGlows]) {
+			for (const sprites of map.values()) for (const s of sprites) s.destroy();
+			map.clear();
+		}
 		this.clocks.clear();
 	}
 }

@@ -36,3 +36,10 @@ export const BERSERK_DAMAGE_TAKEN = 0.75;
  * short number and the client's speed matches the server's exactly.
  */
 export const BLOODLUST_STEP = 0.01;
+
+/**
+ * The frenzy's clock with **no axe in hand**: half speed. Out of axes a
+ * berserk Ibiriki swings the sword alone — the same chain, half as fast,
+ * which with the bloodlust haste on top is still faster than a hew.
+ */
+export const BERSERK_EMPTY_HANDED_HASTE = 0.5;

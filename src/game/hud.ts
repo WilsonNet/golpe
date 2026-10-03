@@ -92,6 +92,11 @@ export interface HudState {
 	/** Ibiriki is berserk: the badge says so and the panel burns. */
 	berserk: boolean;
 	/**
+	 * The local fighter's bloodlust, 0..1 — the buff the room's weakest foe is
+	 * feeding him — or `null` for a kit without the passive (no meter drawn).
+	 */
+	bloodlust: number | null;
+	/**
 	 * The local fighter's side in a team deathmatch, or `null` in a free-for-all.
 	 *
 	 * The HUD's own panel wears it, because the one thing a player must never have

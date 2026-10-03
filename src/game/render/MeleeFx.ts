@@ -1174,6 +1174,13 @@ export class MeleeFx {
 				this.stage.startShake(180, 7);
 				break;
 
+			case "chipped":
+				// A frenzy grinding a guard: the guard's own sparks, but small
+				// and hot — the block held, and it is still losing.
+				sparks(10, COLOR.block, 260);
+				sparks(6, COLOR[move], 300);
+				break;
+
 			case "backstab":
 				sparks(20, COLOR.backstab);
 				shards(10, COLOR.backstab);

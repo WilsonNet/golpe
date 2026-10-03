@@ -284,6 +284,10 @@ export class LessonTracker {
 					this.counters.bombs++;
 					this.counters.movesLanded[event.move]++;
 					break;
+				case "chipped":
+					// Through the guard, a little: the frenzy's chip is a landed hit.
+					this.counters.movesLanded[event.move]++;
+					break;
 				case "crushed":
 					// Through the guard: a landed hit, and the crush the Sunder
 					// exists for.

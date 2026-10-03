@@ -477,8 +477,12 @@ room freezes for the card, then for 6s everyone hostile bleeds per pixel
 they move while he stomps. **Bloodlust** is the first passive: the server
 writes `PlayerPosition.bloodlust` from the room's HP and `tickPlayer` reads
 it for walk speed and the melee clock; under 30% on any foe he goes
-**berserk** (resistant, red aura and eyes, the dual-wield frenzy chain). A
-passive is state, never a hero check. See [specs/ibiriki.md](specs/ibiriki.md)
+**berserk**: forced into melee (no axes, no stance key), the dual-wield
+frenzy runs on a **held** button and **grinds through guards** (35% chip and
+a shove, never a guard break), half speed on the sword alone once every axe
+is thrown; resistant, blood-red glow and eyes; still dashes and traps. The
+HUD shows the bloodlust % and the buff it buys. A passive is state, never a
+hero check. See [specs/ibiriki.md](specs/ibiriki.md)
 and `scripts/ibiriki-probe.ts`.
 
 **The guard is strong, and the Massive is a 1.6-second commitment.** Every block

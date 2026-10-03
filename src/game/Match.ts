@@ -841,6 +841,10 @@ export class Match {
 			online: this.onlineMode,
 			massiveReady: this.local.body.massiveReady,
 			berserk: this.local.body.bloodlust >= 1,
+			bloodlust:
+				kitFor(this.hero).passive === "bloodlust"
+					? this.local.body.bloodlust
+					: null,
 			team: this.local.fighter.team,
 		};
 		const stanceChanged = state.stance !== this.lastHudStance;
@@ -1049,6 +1053,17 @@ export class Match {
 					// the local fighter's sprite.
 					this.fx.impact(event, event.victimId, event.attackerId);
 					this.diagnostics.recordMeleeEvent(event.move, event.outcome);
+					if (
+						event.attackerId === this.online?.manager.myId &&
+						(event.move === "rend" ||
+							event.move === "rend2" ||
+							event.move === "rend3")
+					) {
+						const t = this.ibirikiTally;
+						if (event.outcome === "chipped") t.frenzyChips++;
+						else if (event.outcome === "parried") t.frenzyGuardBreaks++;
+						else t.frenzyHits++;
+					}
 					this.training?.recordMeleeEvent(
 						event,
 						event.attackerId === this.online?.manager.myId,
@@ -1060,9 +1075,11 @@ export class Match {
 					this.playAt(
 						event.outcome === "parried"
 							? "guardbreak"
-							: event.outcome === "hit"
-								? "hit"
-								: "hit-heavy",
+							: event.outcome === "chipped"
+								? "guard"
+								: event.outcome === "hit"
+									? "hit"
+									: "hit-heavy",
 						event.x,
 						event.y,
 					);
@@ -1636,6 +1653,11 @@ export class Match {
 				sunderChargeFrames: this.ibirikiTally.sunderChargeFrames,
 				throwChargeFrames: this.ibirikiTally.throwChargeFrames,
 				stompFrames: this.ibirikiTally.stompFrames,
+				berserkGunFrames: this.ibirikiTally.berserkGunFrames,
+				berserkThrowChargeFrames: this.ibirikiTally.berserkThrowChargeFrames,
+				frenzyHits: this.ibirikiTally.frenzyHits,
+				frenzyChips: this.ibirikiTally.frenzyChips,
+				frenzyGuardBreaks: this.ibirikiTally.frenzyGuardBreaks,
 			};
 		};
 		window.__ultState = () => {
@@ -2065,6 +2087,11 @@ export class Match {
 		sunderChargeFrames: 0,
 		throwChargeFrames: 0,
 		stompFrames: 0,
+		berserkGunFrames: 0,
+		berserkThrowChargeFrames: 0,
+		frenzyHits: 0,
+		frenzyChips: 0,
+		frenzyGuardBreaks: 0,
 	};
 	private cueAmmo = new Map<string, number>();
 	private cueReloading = new Map<string, boolean>();
@@ -2673,7 +2700,12 @@ export class Match {
 		const me = this.local.body;
 		const t = this.ibirikiTally;
 		if (cursed) t.cursedFrames++;
-		if (me.bloodlust >= 1) t.berserkFrames++;
+		if (me.bloodlust >= 1) {
+			t.berserkFrames++;
+			// The frenzy's must-be-zeros: no ranged stance, no throw wind-up.
+			if (me.stance === "gun") t.berserkGunFrames++;
+			if (me.throwChargeTimer > 0) t.berserkThrowChargeFrames++;
+		}
 		t.maxBloodlust = Math.max(t.maxBloodlust, me.bloodlust);
 		if (me.chargeTimer > 0 && me.stance === "sword") t.sunderChargeFrames++;
 		if (me.throwChargeTimer > 0) t.throwChargeFrames++;
@@ -3410,6 +3442,7 @@ export class Match {
 				session?.rupture?.victims.includes(session.manager.myId) ?? false,
 			ruptureActive: session?.rupture != null,
 			selfThrowCharge: self.throwChargeTimer,
+			selfBerserk: self.bloodlust >= 1,
 		};
 	}
 

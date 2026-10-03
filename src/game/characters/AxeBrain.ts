@@ -34,6 +34,12 @@ const JUMP_FOR_AXE_PX = 40;
 const FLAT_BIAS = 0.3;
 /** Never chase the last few milliseconds of a charge: it has to land. */
 const CHARGE_SLACK_MS = 20;
+/** Berserk: inside this range the frenzy is held down and walked in. */
+const FRENZY_ENGAGE_PX = 90;
+/** Berserk: past this range the predator charges in with a dash. */
+const FRENZY_DASH_PX = 220;
+/** Berserk: stop steering once the foe is this close to dead centre. */
+const FRENZY_DEADZONE_PX = 4;
 
 export class AxeBrain {
 	/** The charge this throw is being held for, or null when not charging. */
@@ -51,6 +57,10 @@ export class AxeBrain {
 	decide(input: AIInput, output: AIOutput) {
 		const ammo = input.selfAmmo;
 		this.shop(input, output, ammo);
+		if (input.selfBerserk === true) {
+			this.frenzy(input, output);
+			return;
+		}
 
 		const gunOut = !output.swordStance;
 		if (!gunOut || ammo <= 0) {
@@ -78,6 +88,27 @@ export class AxeBrain {
 			return;
 		}
 		output.attack = true;
+	}
+
+	/**
+	 * Berserk: the axes are out of reach (the simulation forces the melee
+	 * stance anyway), so close the gap and hold the button down — the frenzy
+	 * repeats itself, grinds through a guard, and walks the victim back.
+	 */
+	private frenzy(input: AIInput, output: AIOutput) {
+		this.targetMs = null;
+		output.swordStance = true;
+		const d = input.distanceToPlayer;
+		if (!Number.isFinite(d)) return;
+		const cx = input.selfX + PLAYER_WIDTH / 2;
+		const fx = input.playerX + PLAYER_WIDTH / 2;
+		output.moveRight = fx > cx + FRENZY_DEADZONE_PX;
+		output.moveLeft = fx < cx - FRENZY_DEADZONE_PX;
+		output.block = false;
+		output.attack = d < FRENZY_ENGAGE_PX;
+		if (d > FRENZY_DASH_PX && input.touchingDown) {
+			output.dash = fx > cx ? 1 : -1;
+		}
 	}
 
 	/** The charge a throw at this target deserves. */

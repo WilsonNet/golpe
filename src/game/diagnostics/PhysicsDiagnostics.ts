@@ -41,6 +41,7 @@ function zeroOutcomesByMove(): Record<MeleeMove, Record<MeleeOutcome, number>> {
 			bomb: 0,
 			instaFall: 0,
 			crushed: 0,
+			chipped: 0,
 		};
 	}
 	return out;
@@ -427,6 +428,7 @@ export class PhysicsDiagnostics {
 		bomb: 0,
 		instaFall: 0,
 		crushed: 0,
+		chipped: 0,
 	};
 	private outcomeByMove: Record<MeleeMove, Record<MeleeOutcome, number>> =
 		zeroOutcomesByMove();
@@ -609,6 +611,7 @@ export class PhysicsDiagnostics {
 			bomb: 0,
 			instaFall: 0,
 			crushed: 0,
+			chipped: 0,
 		};
 		this.outcomeByMove = zeroOutcomesByMove();
 		this.meleeViolations = [];

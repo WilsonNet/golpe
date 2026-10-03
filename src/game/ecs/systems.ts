@@ -23,7 +23,12 @@ import type { MeleeFx } from "../render/MeleeFx";
 import type { Nameplates } from "../render/Nameplates";
 import type { Shadows } from "../render/Shadows";
 import { HEROES, type HeroId } from "../simulation/Heroes";
-import { type MeleeMove, meleePhase, moveDuration } from "../simulation/Melee";
+import {
+	frenzyEmptyHanded,
+	type MeleeMove,
+	meleePhase,
+	moveDuration,
+} from "../simulation/Melee";
 import { PLAYER_WIDTH } from "../simulation/Physics";
 import { BLOSSOM_SPIN_RAD_PER_MS } from "../simulation/Ultimate";
 import { TINT, teamTint } from "../teamPalette";
@@ -437,6 +442,16 @@ function isMoveDrivenClip(move: string): move is ClipName & MeleeMove {
 	return MOVE_DRIVEN.has(move);
 }
 
+/**
+ * The sword-only cut an empty-handed frenzy link is drawn with: no axe left
+ * to throw means no axe in the off hand, so the hew chain's art stands in.
+ */
+const SOLO_FRENZY_CLIP = {
+	rend: "hew",
+	rend2: "hew2",
+	rend3: "hew3",
+} as const satisfies Partial<Record<MeleeMove, ClipName & MeleeMove>>;
+
 /** `__animStats` buckets the drawn aim in eighths of a half turn: 0 up, 8 down. */
 const AIM_STAT_BUCKETS = 9;
 
@@ -670,11 +685,18 @@ export function animationSystem(
 		// `MeleeFx`'s drawn blade.
 		const cut = body.meleeAction;
 		if (isMoveDrivenClip(cut) && ownClip(hero, cut)) {
+			// Out of axes the frenzy is the sword alone, so the dual-wield cut
+			// is drawn with the sword's own: the frame still tracks the rend's
+			// clock, the off hand is simply empty.
+			const drawn =
+				frenzyEmptyHanded(body) && cut in SOLO_FRENZY_CLIP
+					? SOLO_FRENZY_CLIP[cut as keyof typeof SOLO_FRENZY_CLIP]
+					: cut;
 			driveClip(
 				e.anim,
 				e.sprite,
 				hero,
-				sided(hero, cut, facingLeft),
+				sided(hero, ownClip(hero, drawn) ? drawn : cut, facingLeft),
 				dtMs,
 				body.meleeTimer / moveDuration(cut),
 			);
@@ -838,6 +860,8 @@ export function animationSystem(
 		if (
 			body.stance === "sword" &&
 			body.bloodlust >= 1 &&
+			// Empty-handed, there is no axe to draw in the off hand.
+			!frenzyEmptyHanded(body) &&
 			body.chargeTimer <= 0 &&
 			!body.blocking &&
 			body.grounded &&

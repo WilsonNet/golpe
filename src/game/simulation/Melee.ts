@@ -30,6 +30,8 @@ import {
 	DASH_LOCKOUT_MS,
 	DASH_SPEED,
 	GUARD_BREAK_STUN_MS,
+	GUARD_CHIP_DAMAGE_FRACTION,
+	GUARD_CHIP_PUSHBACK,
 	GUARD_CRUSH_DAMAGE_FRACTION,
 	GUARD_CRUSH_STUN_MS,
 	KNOCKDOWN_MS,
@@ -63,7 +65,10 @@ import {
 	PLUNGE_STUN_MAX_MS,
 	PLUNGE_STUN_PER_PX_MS,
 } from "../../tweakables/melee.js";
-import { BLOODLUST_ATTACK_SPEED_BONUS } from "../../tweakables/passive.js";
+import {
+	BERSERK_EMPTY_HANDED_HASTE,
+	BLOODLUST_ATTACK_SPEED_BONUS,
+} from "../../tweakables/passive.js";
 import {
 	PLAYER_HEIGHT,
 	PLAYER_WIDTH,
@@ -161,6 +166,47 @@ export function meleeHaste(s: { bloodlust?: number }): number {
 	return (
 		1 +
 		Math.max(0, Math.min(1, s.bloodlust ?? 0)) * BLOODLUST_ATTACK_SPEED_BONUS
+	);
+}
+
+/**
+ * Is this fighter in the **frenzy** — berserk, carrying a weapon that has a
+ * berserk chain? The frenzy is a state, not a hero: the predator loses the
+ * ranged stance (forced to melee), the charge, and the press edge — a held
+ * attack button keeps the chain coming. See specs/ibiriki.md.
+ */
+function inFrenzy(s: { bloodlust?: number }, weapon: MeleeWeaponDef): boolean {
+	return isBerserk(s) && weapon.berserkChain !== undefined;
+}
+
+/**
+ * Is this frenzy **empty-handed** — every axe thrown, so the sword swings
+ * alone? `ammo` is the thrown weapon's count in hand; it is server-ticked
+ * and arrives in the snapshot, so the client predicts with the last value it
+ * was told, exactly as it does the bloodlust.
+ */
+export function frenzyEmptyHanded(s: {
+	bloodlust?: number;
+	ammo?: number;
+}): boolean {
+	return isBerserk(s) && (s.ammo ?? 1) <= 0;
+}
+
+/**
+ * The clock a running move advances at: the bloodlust haste, halved for a
+ * frenzy link swung with no axe in the off hand.
+ */
+function moveClockRate(
+	s: { bloodlust?: number; ammo?: number; meleeAction: MeleeAction },
+	weapon: MeleeWeaponDef,
+): number {
+	const frenzyLink =
+		weapon.berserkChain !== undefined &&
+		s.meleeAction !== "none" &&
+		weapon.berserkChain.includes(s.meleeAction);
+	return (
+		meleeHaste(s) *
+		(frenzyLink && frenzyEmptyHanded(s) ? BERSERK_EMPTY_HANDED_HASTE : 1)
 	);
 }
 
@@ -343,6 +389,12 @@ export interface MeleeTickState extends MeleeState {
 	 * `PlayerPosition` ever sets it.
 	 */
 	bloodlust?: number;
+	/**
+	 * The thrown weapon in hand (Ibiriki's axes). Only the frenzy reads it:
+	 * with none left the sword swings alone at half speed. Only
+	 * `PlayerPosition` ever sets it.
+	 */
+	ammo?: number;
 	/** ms left of a Rupture stomp: the caster is rooted and holds nothing. */
 	stompTimer?: number;
 }
@@ -807,7 +859,13 @@ export function tickMelee(
 	}
 
 	// ---- stance ----
-	const wantSword = input.swordStance;
+	//
+	// The frenzy takes the ranged stance away: a berserk predator does not
+	// stop to aim. Forced here, on both sides, from the bloodlust both sides
+	// already read — the switch to melee is the ordinary stance switch, so it
+	// drops a throw's charge the way pressing the key would.
+	const frenzy = inFrenzy(s, weapon);
+	const wantSword = input.swordStance || frenzy;
 	const hasSword = s.stance === "sword";
 	if (wantSword !== hasSword) {
 		// GunZ's slash-shot: switching weapons cancels a slash. It is not an escape
@@ -886,7 +944,12 @@ export function tickMelee(
 	}
 
 	// ---- charge ----
-	if (sword && weapon.hasCharge && input.attack) {
+	//
+	// No charge in the frenzy: the held button is the chain, not a wind-up. A
+	// charge armed before the berserk began is spent with it; a guard-break
+	// reward (`parryMassiveTimer`) is a gift and survives.
+	if (frenzy && s.parryMassiveTimer <= 0) s.massiveReady = false;
+	if (sword && weapon.hasCharge && input.attack && !frenzy) {
 		s.chargeTimer += dtMs;
 		if (s.chargeTimer >= weapon.chargeMs) s.massiveReady = true;
 	} else {
@@ -912,7 +975,10 @@ export function tickMelee(
 		const chain =
 			isBerserk(s) && weapon.berserkChain ? weapon.berserkChain : weapon.chain;
 		const chaining = chain !== null && canChain(s, chain);
-		const attackPress = input.attack && !s.attackHeld;
+		// The frenzy has no press edge: holding the button keeps the chain
+		// coming — link out of recovery, back to the opener after the X-cut —
+		// Wolverine's Berserker Barrage on a held button.
+		const attackPress = input.attack && (frenzy || !s.attackHeld);
 		const attackRelease = !input.attack && s.attackHeld;
 		const uppercutPress = input.uppercut && !s.uppercutHeld;
 
@@ -960,7 +1026,7 @@ export function tickMelee(
 	if (s.meleeAction !== "none") {
 		// Bloodlust runs the move's clock faster — the whole of "attack
 		// speed": every phase, the hitbox and the recovery shrink together.
-		s.meleeTimer += dtMs * meleeHaste(s);
+		s.meleeTimer += dtMs * moveClockRate(s, weapon);
 		if (s.meleeTimer >= moveDuration(s.meleeAction)) endMove(s);
 	}
 
@@ -1065,7 +1131,13 @@ export type MeleeOutcome =
 	 * guard: the guard is knocked down — a fraction of the damage and a mini
 	 * stun — and the attacker is *not* guard broken.
 	 */
-	| "crushed";
+	| "crushed"
+	/**
+	 * A guard-grinding move (Ibiriki's berserk frenzy) met a front guard: the
+	 * guard holds, but chip damage gets through and the blocker is shoved
+	 * back. The attacker is *not* guard broken.
+	 */
+	| "chipped";
 
 export interface MeleeResult {
 	move: MeleeMove;
@@ -1204,6 +1276,17 @@ export function resolveMelee(
 		};
 	}
 
+	if (defender.blocking && def.blockable && !behind && def.guardChip) {
+		return {
+			move,
+			outcome: "chipped",
+			damage: Math.max(1, Math.round(def.damage * GUARD_CHIP_DAMAGE_FRACTION)),
+			x,
+			y,
+			dir,
+		};
+	}
+
 	if (defender.blocking && def.blockable && !behind) {
 		// Every guard that stops a sword attack breaks it. There is no
 		// "absorbed without reward" tier any more — a turtle wins any exchange
@@ -1263,6 +1346,14 @@ export function applyMeleeResult(
 			defender.massiveReady = true;
 			defender.parryMassiveTimer = PARRY_MASSIVE_LIFETIME_MS;
 			return 0;
+		}
+
+		case "chipped": {
+			// The guard holds and is honoured — no stun, no iframes, still
+			// blocking — but it gives ground: the chip comes off the bar and
+			// the blocker is walked backwards. No guard break, no reward.
+			defender.vx += result.dir * GUARD_CHIP_PUSHBACK;
+			return result.damage;
 		}
 
 		case "crushed": {
