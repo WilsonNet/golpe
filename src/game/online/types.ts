@@ -414,6 +414,16 @@ export interface GameSnapshot {
 	smokeGrenades: SnapshotSmokeGrenade[];
 	/** Jeffs' smoke clouds, as they stand. Vision only; cleared on a round reset. */
 	smokeClouds: SnapshotSmokeCloud[];
+	/**
+	 * The ammo packs currently on the floor, in a control match.
+	 *
+	 * Only the **available** ones travel — a taken pack is absent until it
+	 * respawns, which is the whole of the client's state: place a sprite where
+	 * the snapshot says, remove it when the snapshot stops saying it.
+	 */
+	ammoPacks: SnapshotAmmoPack[];
+	/** Packs taken since the previous snapshot, for the pickup sound and pop. */
+	ammoPickups: AmmoPickupMsg[];
 	/** HE blasts since the previous snapshot. Effects only. */
 	explosions: ExplosionMsg[];
 	/** A trap just rooted somebody, for the caption. Effects only. */
@@ -523,6 +533,30 @@ export interface SnapshotSmokeCloud {
 	y: number;
 	/** ms of cloud left. Presentation only. */
 	remainingMs: number;
+}
+
+/**
+ * An ammo pack waiting on the floor, as both sides see it.
+ *
+ * Server-owned full state, like a trap: it is absent while taken and present
+ * again when it respawns, and the client simply draws what the newest snapshot
+ * lists. No `tickPlayer` reads it — picking one up is the server's decision,
+ * exactly like a hit.
+ */
+export interface SnapshotAmmoPack {
+	id: number;
+	/** Centre, in world coordinates. */
+	x: number;
+	y: number;
+}
+
+/** Somebody took an ammo pack. Effects only, exactly like `rooted`. */
+export interface AmmoPickupMsg {
+	/** Who took it, so the sound plays for the taker's own client. */
+	playerId: string;
+	/** Where the pack was, for the pop. */
+	x: number;
+	y: number;
 }
 
 /** An HE grenade just went off. Effects only, exactly like `melee` events. */

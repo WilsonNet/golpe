@@ -12,6 +12,7 @@ import type {
 	FoeInfo,
 } from "../src/game/characters/types.js";
 import {
+	type AmmoPickupMsg,
 	type BlockedBulletMsg,
 	type DenyEventMsg,
 	type ExplosionMsg,
@@ -42,7 +43,13 @@ import {
 	type World,
 } from "../src/game/simulation/Arena.js";
 import {
+	ammoPackReach,
+	ammoPackUseful,
+	takeAmmoPack,
+} from "../src/game/simulation/AmmoPacks.js";
+import {
 	buildControlWorld,
+	CONTROL_AMMO_PACKS,
 	CONTROL_PADS,
 	pickControlSpawn,
 } from "../src/game/simulation/ControlMap.js";
@@ -97,6 +104,7 @@ import type {
 	TrainingStateMsg,
 } from "../src/game/training/types.js";
 import {
+	CP_AMMO_PACK_RESPAWN_MS,
 	CP_CAPTURE_MS,
 	CP_SCORE_LIMIT,
 	CP_TIME_LIMIT_MS,
@@ -509,6 +517,16 @@ function idleInput(seq = 0): PlayerInput {
 	};
 }
 
+/** One ammo pack on the control line: where it floats, and whether it is there. */
+interface AmmoPack {
+	id: number;
+	x: number;
+	y: number;
+	available: boolean;
+	/** ms until it comes back, while taken. */
+	respawnTimer: number;
+}
+
 export class GameRoom {
 	readonly id: string;
 	private players = new Map<string, ConnectedPlayer>();
@@ -667,6 +685,16 @@ export class GameRoom {
 	private explosions: ExplosionMsg[] = [];
 	/** Traps that just rooted somebody, for the client's caption. */
 	private rootedEvents: RootedMsg[] = [];
+
+	// ---- ammo packs (5CP) ----
+	//
+	// The map's supply: the guns are a per-life economy, and a push that cannot
+	// reload is a push that cannot happen. Server-owned like a trap — the
+	// server is the only judge of who touched one — and absent from the
+	// snapshot while taken, so the client's whole state is the list.
+	private ammoPacks: AmmoPack[] = [];
+	/** Packs taken since the last broadcast, for the pickup sound and pop. */
+	private ammoPickups: AmmoPickupMsg[] = [];
 
 	// =========================================================
 	//  PLAY OF THE GAME
@@ -891,6 +919,19 @@ export class GameRoom {
 			this.mode === "5cp"
 				? buildControlWorld()
 				: buildWorld(rules.screens ?? 1);
+		// The line's supply. Only the control mode has packs, and the positions
+		// are the map's (`CONTROL_AMMO_PACKS`), so client and server cannot
+		// disagree about where one floats.
+		this.ammoPacks =
+			this.mode === "5cp"
+				? CONTROL_AMMO_PACKS.map((spot, i) => ({
+						id: i + 1,
+						x: spot.x,
+						y: spot.y,
+						available: true,
+						respawnTimer: 0,
+					}))
+				: [];
 		// `?capTime=S` shortens the ladder for practice and probes: the middle
 		// point's seconds are the room's, and the other four scale by their ratios
 		// so the shape of the ladder (last fastest, middle slowest) survives.
@@ -1814,6 +1855,10 @@ export class GameRoom {
 			traps: this.traps
 				.filter((t) => t.ownerId !== bot.id && hostile(t.ownerTeam, bot.team))
 				.map((t) => ({ x: t.x, y: t.y })),
+			// The map's supply, so a dry bot knows where to resupply.
+			packs: this.ammoPacks
+				.filter((p) => p.available)
+				.map((p) => ({ x: p.x, y: p.y })),
 			fields: this.singularity
 				? [
 						{
@@ -2873,7 +2918,14 @@ export class GameRoom {
 				vy: g.vy,
 			})),
 			smokeClouds: this.smokeClouds.map((c) => ({ ...c })),
+			// The map's supply: only the packs that are there, in full every
+			// snapshot — a client that loses one datagram still draws the same
+			// floor on the next.
+			ammoPacks: this.ammoPacks
+				.filter((p) => p.available)
+				.map((p) => ({ id: p.id, x: p.x, y: p.y })),
 			// One-shot effects, drained every snapshot like `melee` and `denies`.
+			ammoPickups: this.ammoPickups.slice(),
 			explosions: this.explosions.slice(),
 			rooted: this.rootedEvents.slice(),
 			blockedBullets: this.blockedBullets.slice(),
@@ -3140,6 +3192,7 @@ export class GameRoom {
 		this.tickUltimate(dt);
 		this.tickBlossom(dt);
 		this.tickItems(dt);
+		this.tickAmmoPacks(dt);
 		this.applyTrainingRules(dt);
 
 		// A training session is not a deathmatch. It keeps the old round lifecycle:
@@ -4050,6 +4103,59 @@ export class GameRoom {
 		player.state.reloadTimer = 0;
 	}
 
+	/**
+	 * The map's supply: respawn the taken packs, and let anybody standing on an
+	 * available one take it.
+	 *
+	 * The server is the only judge, exactly like a hit. A pack is consumed only
+	 * when it would *do* something — a full fighter leaves it for somebody who
+	 * needs it — and the loaded magazine is untouched: the reserve refills and
+	 * the auto-reload pulls from it, the same rule a death follows.
+	 */
+	private tickAmmoPacks(dt: number) {
+		if (this.ammoPacks.length === 0) return;
+		// A ceremony owns the arena; nobody is shopping through it.
+		if (this.phase !== "live") return;
+		const dtMs = dt * MS_PER_SECOND;
+		for (const pack of this.ammoPacks) {
+			if (!pack.available) {
+				pack.respawnTimer -= dtMs;
+				if (pack.respawnTimer <= 0) {
+					pack.available = true;
+					pack.respawnTimer = 0;
+				}
+				continue;
+			}
+			for (const player of this.players.values()) {
+				if (!player.alive || player.hp <= 0) continue;
+				if (!ammoPackReach(pack, player.state.x, player.state.y)) continue;
+				const kit = kitFor(player.hero);
+				// The loaded magazine is not part of the pack's business: it
+				// refills the reserve and the charges, and the auto-reload pulls
+				// from the reserve exactly as after a death.
+				const current = {
+					reserveRounds: player.state.reserveRounds,
+					itemCharges: player.itemCharges,
+				};
+				if (!ammoPackUseful(current, kit.ranged, kit.item)) continue;
+				const gain = takeAmmoPack(current, kit.ranged, kit.item);
+				player.state.reserveRounds = gain.reserveRounds;
+				player.itemCharges = gain.itemCharges;
+				pack.available = false;
+				pack.respawnTimer = CP_AMMO_PACK_RESPAWN_MS;
+				this.ammoPickups.push({
+					playerId: player.id,
+					x: pack.x,
+					y: pack.y,
+				});
+				console.log(
+					`[PACK] ${player.name} takes ammo (${player.state.reserveRounds} reserve, ${player.itemCharges} items)`,
+				);
+				break;
+			}
+		}
+	}
+
 	/** Advance HE grenades, smoke canisters, the clouds, the traps and the canisters in flight. */
 	private tickItems(dt: number) {
 		this.tickHeGrenades(dt);
@@ -4548,6 +4654,13 @@ export class GameRoom {
 		this.explosions.length = 0;
 		this.rootedEvents.length = 0;
 		this.blockedBullets.length = 0;
+		// A new round is a fresh map: every pack is back, including one somebody
+		// was standing on when the whistle went.
+		for (const pack of this.ammoPacks) {
+			pack.available = true;
+			pack.respawnTimer = 0;
+		}
+		this.ammoPickups.length = 0;
 		this.resetTimer = -1;
 		// The room's copy of the same countdown the fighters are carrying.
 		this.roundFreezeMs = this.freezeTimeMs;
@@ -4621,5 +4734,7 @@ export class GameRoom {
 		this.rootedEvents.length = 0;
 		// The guard's bullet blocks are the same shape again, cleared here too.
 		this.blockedBullets.length = 0;
+		// Ammo pickups are the same shape: the sound and the pop fire once.
+		this.ammoPickups.length = 0;
 	}
 }

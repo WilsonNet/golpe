@@ -1,4 +1,5 @@
 import {
+	CP_AMMO_PACK_HOVER_PX,
 	CP_POINT_COUNT,
 	CP_SCREENS,
 	CP_ZONE_H,
@@ -17,6 +18,7 @@ import {
 	WORLD_TOP,
 	type World,
 } from "./Arena.js";
+import type { AmmoPackSpot } from "./AmmoPacks.js";
 import type { ControlPad } from "./ControlPoints.js";
 
 /**
@@ -222,6 +224,46 @@ export const CONTROL_PADS: readonly ControlPad[] = Array.from(
 /** Every screen's spawn points, indexed by screen. Forward spawns pick here. */
 export const CONTROL_SCREEN_SPAWNS: readonly (readonly SpawnPoint[])[] =
 	Array.from({ length: CP_SCREENS }, (_, screen) => moduleSpawns(screen));
+
+/**
+ * The ammo packs each authored module floats, in module-local coordinates.
+ *
+ * Placement is the design: the base carries a ground pack a pushed-back side
+ * can reach without leaving its spawn screen; each yard puts one at its far
+ * edge, off the direct line to the point, so taking it is a detour made under
+ * pressure; the middle carries two, one at each edge, which gives both teams
+ * supply on their own side of the fight. **Every pack floats at walking
+ * height** — a pack a bot cannot reach is a pack that does nothing. Screens 3
+ * and 4 are mirrors of 1 and 0, like every other module.
+ */
+const PACK_HOVER_Y = GROUND.y - CP_AMMO_PACK_HOVER_PX;
+const BASE_PACKS: readonly AmmoPackSpot[] = [{ x: 340, y: PACK_HOVER_Y }];
+const YARD_PACKS: readonly AmmoPackSpot[] = [{ x: 740, y: PACK_HOVER_Y }];
+const MID_PACKS: readonly AmmoPackSpot[] = [
+	{ x: 60, y: PACK_HOVER_Y },
+	{ x: 740, y: PACK_HOVER_Y },
+];
+const MODULE_PACKS: readonly (readonly AmmoPackSpot[])[] = [
+	BASE_PACKS,
+	YARD_PACKS,
+	MID_PACKS,
+];
+
+function modulePacks(screen: number): AmmoPackSpot[] {
+	const module = MODULE_PACKS[moduleFor(screen)] ?? BASE_PACKS;
+	const mirrored = isMirrored(screen);
+	const ox = screen * SCREEN_W;
+	return module.map((p) => {
+		const local = mirrored ? { x: SCREEN_W - p.x, y: p.y } : p;
+		return { x: ox + local.x, y: local.y };
+	});
+}
+
+/** Every ammo pack on the line, in one table the server and client share. */
+export const CONTROL_AMMO_PACKS: readonly AmmoPackSpot[] = Array.from(
+	{ length: CP_SCREENS },
+	(_, screen) => modulePacks(screen),
+).flat();
 
 /**
  * Build the control arena's geometry.

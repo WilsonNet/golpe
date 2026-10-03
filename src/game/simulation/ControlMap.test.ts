@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+	CP_AMMO_PACK_HOVER_PX,
 	CP_POINT_COUNT,
 	CP_SCREENS,
 	CP_SPAWNS_PER_MODULE,
@@ -18,6 +19,7 @@ import {
 import {
 	applyControlWorld,
 	buildControlWorld,
+	CONTROL_AMMO_PACKS,
 	CONTROL_PADS,
 	CONTROL_SCREEN_SPAWNS,
 	pickControlSpawn,
@@ -161,6 +163,25 @@ describe("forward spawns", () => {
 		const first = pickControlSpawn([], 0, 1);
 		const second = pickControlSpawn([{ x: first.x, y: first.y }], 0, 1);
 		expect(second).not.toEqual(first);
+	});
+});
+
+describe("ammo packs", () => {
+	it("floats six packs, mirrored across the map", () => {
+		expect(CONTROL_AMMO_PACKS).toHaveLength(6);
+		const right = SCREEN_W * CP_SCREENS;
+		const keys = new Set(CONTROL_AMMO_PACKS.map((p) => `${p.x},${p.y}`));
+		for (const p of CONTROL_AMMO_PACKS) {
+			expect(keys.has(`${right - p.x},${p.y}`)).toBe(true);
+		}
+	});
+
+	it("hangs at walking height above the ground, inside the map", () => {
+		for (const pack of CONTROL_AMMO_PACKS) {
+			expect(pack.y).toBe(GROUND.y - CP_AMMO_PACK_HOVER_PX);
+			expect(pack.x).toBeGreaterThan(0);
+			expect(pack.x).toBeLessThan(SCREEN_W * CP_SCREENS);
+		}
 	});
 });
 

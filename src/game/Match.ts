@@ -87,6 +87,7 @@ import { bodyCentre, drawArena } from "./render/ArenaRenderer";
 import { heroFrames, sheetScale, TEX, tex } from "./render/assets";
 import { BlackHoleFx } from "./render/BlackHoleFx";
 import { BlossomFx } from "./render/BlossomFx";
+import { AmmoPackFx } from "./render/AmmoPackFx";
 import { ControlPointFx } from "./render/ControlPointFx";
 import { DenyFx } from "./render/DenyFx";
 import { DragonFx } from "./render/DragonFx";
@@ -301,6 +302,7 @@ export class Match {
 	private readonly denyFx: DenyFx;
 	private readonly rootedFx: RootedFx;
 	private readonly controlFx: ControlPointFx;
+	private readonly ammoPackFx: AmmoPackFx;
 	private readonly items: ItemFx;
 	private readonly input: Input;
 	private readonly diagnostics: PhysicsDiagnostics;
@@ -491,6 +493,10 @@ export class Match {
 		// The control pads: arena furniture under every field effect, so a
 		// fighter standing on an objective still reads over its colour.
 		this.controlFx = new ControlPointFx(stage.field);
+		// The map's supply, above the pads and under the fighters: a crate a
+		// fighter runs through should read as theirs for the taking, never as
+		// something standing in front of them.
+		this.ammoPackFx = new AmmoPackFx(stage.field);
 		this.plates = new Nameplates(stage.nameplates, this.arena);
 		// Between the arena and the fighters: a shadow falls on the ledge below and
 		// is never drawn over the feet that cast it. See `Stage.shadows`.
@@ -1124,6 +1130,14 @@ export class Match {
 					// dropped datagram costs the sparks, never the reward.
 					this.fx.blockBullet(event.x, event.y, event.victimId);
 				},
+				onAmmoPickup: (event) => {
+					// The pack is already gone in the snapshot and the rounds are
+					// already in the taker's reserve; this is the pop and the sound,
+					// nothing more. Positioned at the pack, so a teammate across the
+					// point hears it faintly and knows supply just moved.
+					this.ammoPackFx.burst(event.x, event.y);
+					this.playAt("pickup-ammo", event.x, event.y, { gain: 0.9 });
+				},
 				onFighterAdded: (id) => this.addRemoteFighter(id),
 				onFighterRemoved: (id) => this.despawnFighter(id),
 				onUltimateCast: (casterId) => {
@@ -1535,6 +1549,13 @@ export class Match {
 				net: this.online?.netSummary() ?? null,
 				worldScreens: this.arena.screens,
 				worldWidth: this.arena.right,
+				// The control map's supply, for `scripts/cp-probe.ts`: every pack
+				// the client can see, so a probe counts a floor rather than a story.
+				packs: (this.online?.ammoPacks ?? []).map((p) => ({
+					id: p.id,
+					x: p.x,
+					y: p.y,
+				})),
 			};
 		};
 		// The ultimate's own contract. Nothing else can see it: AI vs AI never
@@ -1786,6 +1807,12 @@ export class Match {
 				? null
 				: (this.online?.matchStatus?.teams?.control ?? null),
 			this.online?.myTeam ?? null,
+			dtMs,
+		);
+		// Packs are snapshot state, like the pads — and like the clip, they do
+		// not exist in the footage, so a replay takes them off the screen too.
+		this.ammoPackFx.update(
+			this.potgSample ? [] : (this.online?.ammoPacks ?? []),
 			dtMs,
 		);
 		this.denyFx.update(dtMs);
@@ -3199,6 +3226,8 @@ export class Match {
 			foes,
 			fields,
 			traps,
+			// The map's supply, from the same snapshot the renderer draws.
+			packs: (session?.ammoPacks ?? []).map((p) => ({ x: p.x, y: p.y })),
 			selfItemCharges,
 			// The magazine and the reserve, from the same body the HUD reads:
 			// wire-updated online, mirrored onto the body offline. A brain that

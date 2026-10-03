@@ -206,6 +206,11 @@ export interface AIInput {
 	/** Hostile floor traps. Pre-filtered by the friendly-fire predicate. */
 	traps: { x: number; y: number }[];
 	/**
+	 * Available ammo packs, for a bot that needs to resupply. Empty in every
+	 * mode without them, and neutral — both sides may take any pack.
+	 */
+	packs: { x: number; y: number }[];
+	/**
 	 * The five-point line, in a control match. `null` in every other mode.
 	 *
 	 * Kept out of the brain's mode logic by construction: `GameRoom.perceive`

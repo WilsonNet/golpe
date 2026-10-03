@@ -35,7 +35,7 @@ A fighter captures by standing inside the point's pad. The rules are TF2's:
   fifth is always worth less than the first — that is the whole curve.
 - **Points closer to a base fall faster.** The last points are 2s at 1×, the
   yard points 5s and the middle 8s, scaled down from TF2's 4/12–16/18–24s to
-  this game's pace (a 4000px map crossed in ~20s, respawns at 4s).
+  this game's pace (a 4000px map crossed in ~20s, respawns at 6s).
 - **Contested freezes.** If both sides stand on the pad, progress neither
   advances nor decays — the point is being argued over, and the argument is
   settled with weapons.
@@ -95,9 +95,16 @@ TF2's own rule, and a standoff is a thing players do deliberately.
   ones after it, and capping fast is how you afford a long war.
 - **Dead fighters respawn individually**, like deathmatch — a wipe is a push,
   not a round loss. The respawn delay is **shorter for the side that owns fewer
-  points**: 4s at even ground, 0.7s off per point of deficit, never under 1.5s.
+  points**: 6s at even ground, 1.1s off per point of deficit, never under 2s.
   This is TF2's respawn advantage, and it is the comeback mechanic: the losing
-  side gets bodies back faster to break the hold that is beating it.
+  side gets bodies back faster to break the hold that is beating it — the team
+  defending its last point returns in 2.7s against the attacker's 6s.
+  **The base is deliberately long for this game's mobility**, not TF2's: a
+  fighter crosses a whole screen in ~4s with dashes, double jumps and wall
+  play, so a kill that buys three or four seconds buys nothing and a respawn
+  that short makes the deathmatch, not the mode, the fight. Six is the wait
+  that lets a pick become a push; TF2's ten is measured against maps several
+  times this one's traverse.
 
 ### Forward spawns
 
@@ -186,10 +193,13 @@ interface ControlStatus {
   pad under attack filling with the attacker's colour, locked pips hatched,
   `OVERTIME` in gold when the clock is held. The pips are the local player's
   map of the war.
-- **Every pad is drawn in the world**: team-coloured, lettered (A–E), with a
-  progress ring while it is being taken. The world marker is the thing a
-  fighter actually plays around; the HUD bar is the thing that tells them where
-  the front line is.
+- **Every pad is drawn in the world as an objective**, not as a coloured slab:
+  a dark translucent plate rimmed and washed in the owner's colour, a floating
+  medallion (dark disc, team ring, lettered A–E) bobbing over its top edge, and
+  the attacker's progress as a bar along the plate's bottom edge. A contested
+  pad pulses the rim between both sides' colours; a locked pad dims. The world
+  marker is the thing a fighter actually plays around; the HUD bar is the thing
+  that tells them where the front line is.
 - **Sounds fire on server events**, exactly like hits and rounds: a tick when
   a pad's progress crosses a quarter, a chime for a capture, a descending tone
   when your point is taken, an alarm on overtime.

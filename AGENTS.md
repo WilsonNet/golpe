@@ -545,8 +545,10 @@ and **a defender standing alone on their own point does not hold the bar** —
 only a contested pad freezes it. **A capture takes a crowd standing on the pad —
 the server is the only judge**,
 and the whole line arrives in the snapshot inside `TeamStatus.control`. Dead
-fighters respawn individually, **faster for the side with fewer points** (4s
-even, −0.7s per point behind, floor 1.5s) — TF2's comeback rule. Time out with
+fighters respawn individually, **faster for the side with fewer points** (6s
+even, −1.1s per point behind, floor 2s) — TF2's comeback rule, with the base
+sized up for this game's mobility: a screen is four seconds of walking, so a
+short respawn makes the kill meaningless. Time out with
 a capture in flight is **overtime**: the clock holds, a completed capture pays
 60s back, and only an empty bar lets time end the round. The map is
 `buildControlWorld()` — five screens, one point per screen, mirrored modules —

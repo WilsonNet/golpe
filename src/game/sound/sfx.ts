@@ -693,6 +693,14 @@ const patches: Record<string, Patch> = {
 		noise(k, { filter: "bandpass", f0: 2200, q: 2.4, durMs: 32, peak: 0.14 });
 		osc(k, { type: "sine", f0: 1320, f1: 1180, durMs: 42, peak: 0.1 });
 	},
+	"pickup-ammo": (k) => {
+		// A short two-note confirm — the pack's rattle and a click, not a
+		// fanfare. Mags and brass, so the first note is a filtered noise tick
+		// and the second a plain rising blip; it can fire often and quietly.
+		noise(k, { filter: "bandpass", f0: 1700, q: 1.8, durMs: 40, peak: 0.16 });
+		osc(k, { type: "triangle", f0: 620, f1: 760, durMs: 90, peak: 0.24 });
+		osc(k, { type: "sine", f0: 1040, durMs: 120, peak: 0.18, whenMs: 70 });
+	},
 	"cap-overtime": (k) => {
 		// A three-beat klaxon: high, low, high. The low note detunes the other
 		// way, so the pair beats against itself and reads as an alarm, not a tune.

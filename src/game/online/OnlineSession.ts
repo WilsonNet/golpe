@@ -48,6 +48,7 @@ import {
 	RollbackStats,
 } from "./Rollback";
 import type {
+	AmmoPickupMsg,
 	BlockedBulletMsg,
 	ControlCapturedMsg,
 	ControlOvertimeMsg,
@@ -62,6 +63,7 @@ import type {
 	RosterEntry,
 	RoundLiveMsg,
 	RoundWonMsg,
+	SnapshotAmmoPack,
 	SnapshotBullet,
 	SnapshotCinematic,
 	SnapshotGrenade,
@@ -172,6 +174,8 @@ export interface OnlineCallbacks {
 	onRooted: (event: RootedMsg) => void;
 	/** A bullet the guard turned away, for the purple sparks. Effects only. */
 	onBlockedBullet: (event: BlockedBulletMsg) => void;
+	/** Somebody took an ammo pack, for the pickup sound and pop. Effects only. */
+	onAmmoPickup: (event: AmmoPickupMsg) => void;
 	/** A fighter appeared in the snapshot for the first time. */
 	onFighterAdded: (id: string) => void;
 	/** A fighter is no longer in the room. */
@@ -308,6 +312,8 @@ export class OnlineSession {
 	/** Jeffs' smoke canisters and clouds, as the newest snapshot reports them. */
 	private latestSmokeGrenades: SnapshotSmokeGrenade[] = [];
 	private latestSmokeClouds: SnapshotSmokeCloud[] = [];
+	/** The control map's ammo packs, as the newest snapshot reports them. */
+	private latestAmmoPacks: SnapshotAmmoPack[] = [];
 	/** The open Death Blossom, copied from the newest snapshot. */
 	private latestBlossom: Blossom | null = null;
 	private _matchStatus: MatchStatus | undefined;
@@ -557,6 +563,11 @@ export class OnlineSession {
 	/** Smoke clouds, straight off the newest snapshot. */
 	get smokeClouds(): readonly SnapshotSmokeCloud[] {
 		return this.latestSmokeClouds;
+	}
+
+	/** Ammo packs on the floor, straight off the newest snapshot. */
+	get ammoPacks(): readonly SnapshotAmmoPack[] {
+		return this.latestAmmoPacks;
 	}
 
 	/** The open Death Blossom, or null. Read by the renderer; owned by the server. */
@@ -1119,6 +1130,9 @@ export class OnlineSession {
 		for (const event of snap.blockedBullets ?? []) {
 			this.callbacks.onBlockedBullet(event);
 		}
+		for (const event of snap.ammoPickups ?? []) {
+			this.callbacks.onAmmoPickup(event);
+		}
 
 		this._matchStatus = snap.match;
 		this.callbacks.onMatch(snap.match, this.standings());
@@ -1246,6 +1260,7 @@ export class OnlineSession {
 			...g,
 		}));
 		this.latestSmokeClouds = (snap.smokeClouds ?? []).map((c) => ({ ...c }));
+		this.latestAmmoPacks = (snap.ammoPacks ?? []).map((p) => ({ ...p }));
 	}
 
 	/** Fold the authoritative local state in, and report how far ahead we are. */

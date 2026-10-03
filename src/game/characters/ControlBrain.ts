@@ -56,6 +56,17 @@ const HOLD_RADIUS_PX = 36;
  */
 const PAD_CENTRE_TOLERANCE_PX = 64;
 
+/**
+ * How far a dry — or out-of-items — bot will detour to an ammo pack.
+ *
+ * The map's supply only matters if the bots use it, and a dry gun is exactly
+ * when the walk is worth it: the sword still works, but a rifle with no rounds
+ * is a rifle that will not answer the next push. Half a screen is a detour;
+ * further than that and the objective still wins, because a bot that crosses
+ * the map for ammo is a bot that abandoned the point.
+ */
+const PACK_DETOUR_PX = 520;
+
 /** How long a chosen point is kept before the situation may re-aim it. */
 const RETARGET_MS = 1200;
 
@@ -81,9 +92,14 @@ export interface ControlView {
 	selfX: number;
 	selfY: number;
 	selfHP: number;
+	selfAmmo: number;
+	selfReserveRounds: number;
+	selfItemCharges: number;
 	selfTeam: TeamId | null;
 	distanceToPlayer: number;
 	control: ControlInfo | null;
+	/** Available ammo packs, for a resupply detour. */
+	packs: { x: number; y: number }[];
 }
 
 /** What the module decided, for the coordinator's diagnostic. */
@@ -137,13 +153,21 @@ export class ControlBrain {
 		}
 		this.target = target.index;
 
-		const dx = target.x - input.selfX;
+		// Resupply overrides an attack, never a defence: a point being taken is
+		// now, and the pack will still be there when the fight is won.
+		const pack = this.defending ? null : this.resupplyTarget(input);
+		const goX = pack ? pack.x : target.x;
+		const goY = pack ? pack.y : target.y;
+
+		const dx = goX - input.selfX;
 		const bodyCentreY = input.selfY + PLAYER_HEIGHT / 2;
 		// On the pad in both axes: inside its width and standing on the floor it
-		// sits on. Aligned in x but up a perch is not on it.
+		// sits on. Aligned in x but up a perch is not on it. A pack is never a
+		// pad — its own approach below has a tighter arrival.
 		const onPad =
+			!pack &&
 			Math.abs(dx) <= CP_ZONE_W / 2 &&
-			Math.abs(bodyCentreY - target.y) <= PAD_CENTRE_TOLERANCE_PX;
+			Math.abs(bodyCentreY - goY) <= PAD_CENTRE_TOLERANCE_PX;
 
 		// **On the objective, hold it and trade.** Ceding movement to the fight
 		// brain the moment a foe came within 90px was the metronome: both sides
@@ -166,6 +190,19 @@ export class ControlBrain {
 		// a foe inside weapon range owns the footwork.
 		if (input.distanceToPlayer < CEDE_RANGE_PX) return;
 
+		if (pack) {
+			// Walk onto it. The reach is generous, so close is enough — the
+			// point is to arrive, not to stand on the crate.
+			if (Math.abs(dx) > 4) {
+				output.moveLeft = dx < 0;
+				output.moveRight = dx > 0;
+			} else {
+				output.moveLeft = false;
+				output.moveRight = false;
+			}
+			return;
+		}
+
 		// Otherwise walk the objective. Aligned but not on it means standing on
 		// a perch above the pad: either edge falls to the floor, so step off
 		// and close the gap on the next decision.
@@ -176,6 +213,27 @@ export class ControlBrain {
 			output.moveLeft = false;
 			output.moveRight = false;
 		}
+	}
+
+	/**
+	 * A pack worth walking to: the nearest one, when the gun is dry or the kit
+	 * is empty, and only if it is close enough that the detour does not cost
+	 * the point. `null` means "keep playing the objective".
+	 */
+	private resupplyTarget(input: ControlView): { x: number; y: number } | null {
+		const dry = input.selfAmmo + input.selfReserveRounds === 0;
+		const empty = input.selfItemCharges === 0;
+		if (!dry && !empty) return null;
+		let best: { x: number; y: number } | null = null;
+		let bestDistance = PACK_DETOUR_PX;
+		for (const pack of input.packs) {
+			const distance = Math.hypot(pack.x - input.selfX, pack.y - input.selfY);
+			if (distance < bestDistance) {
+				bestDistance = distance;
+				best = pack;
+			}
+		}
+		return best;
 	}
 
 	/**

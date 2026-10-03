@@ -361,18 +361,19 @@ describe("forward spawns", () => {
 describe("the respawn advantage", () => {
 	it("gives the side with fewer points a shorter wait", () => {
 		const points = initialControlPoints();
-		expect(controlRespawnDelayMs(points, 0)).toBe(4000);
-		expect(controlRespawnDelayMs(points, 1)).toBe(4000);
+		expect(controlRespawnDelayMs(points, 0)).toBe(6000);
+		expect(controlRespawnDelayMs(points, 1)).toBe(6000);
 		stepFor(points, presenceAt(2, 1, 0), CP_CAPTURE_MS[2] ?? 1);
 		stepFor(points, presenceAt(3, 1, 0), CP_CAPTURE_MS[3] ?? 1);
-		// AZURE holds four points, EMBER one.
-		expect(controlRespawnDelayMs(points, 1)).toBe(4000 - 3 * 700);
-		// The floor clamps the arithmetic: a synthetic four-point deficit lands
-		// under it and is held there — the state a death in the winning cooldown
-		// reads, after the last point has fallen and before the reset.
+		// AZURE holds four points, EMBER one: the last-point defender returns in
+		// 2.7s against the attacker's 6s.
+		expect(controlRespawnDelayMs(points, 1)).toBe(6000 - 3 * 1100);
+		// The floor clamps the arithmetic: a synthetic four-point deficit would
+		// put the wait at 1.6s and is held at 2 — the state a death in the
+		// winning cooldown reads, after the last point has fallen.
 		const swept = initialControlPoints();
 		for (const point of swept) point.owner = 0;
-		expect(controlRespawnDelayMs(swept, 1)).toBe(1500);
+		expect(controlRespawnDelayMs(swept, 1)).toBe(2000);
 	});
 });
 

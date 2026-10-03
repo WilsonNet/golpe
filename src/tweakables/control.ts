@@ -90,24 +90,35 @@ const DEFAULT_CONTROL_MINUTES = 10;
 export const CP_TIME_LIMIT_MS =
 	DEFAULT_CONTROL_MINUTES * SECONDS_PER_MINUTE * MS_PER_SECOND;
 
-/** How long a dead fighter waits, at even points. */
-export const CP_RESPAWN_MS = 4000;
+/**
+ * How long a dead fighter waits, at even points.
+ *
+ * **Six seconds, and the reason is this game's mobility.** TF2's ten-second
+ * wave is measured against maps several times this one's traverse; here a
+ * fighter crosses a whole screen in about four seconds with dashes, double
+ * jumps and wall play, so a kill that buys three or four seconds buys nothing —
+ * the victim is back before the attacker has finished the walk. Six is the wait
+ * that lets a pick become a push, and the map's smallness is why it is still
+ * shorter than TF2's ten.
+ */
+export const CP_RESPAWN_MS = 6000;
 
 /**
  * How much of that wait each point of deficit takes away.
  *
  * TF2's respawn advantage: the side being pushed gets bodies back sooner, and
- * that is the whole comeback mechanic. Asked at the moment of death, so the
- * delay is a fact about the line when the fighter fell. Four points behind is
- * the most a side can be without the round already over, and it lands on the
- * floor — the clamp is what a death during the winning cooldown reads, and the
- * floor exists so no future tuning can make an advantage spawn a fighter
- * instantly.
+ * that is the whole comeback mechanic. Scaled with the base above so the shape
+ * of the curve does not change — the team defending its last point comes back
+ * in 2.7s against the attacker's 6s, roughly the ratio TF2's last-point
+ * defenders get. Asked at the moment of death, so the delay is a fact about
+ * the line when the fighter fell. Four points behind is the most a side can be
+ * without the round already over, and the arithmetic would put that at 1.6s —
+ * the floor holds it at 2, so no death ever respawns near-instantly.
  */
-export const CP_RESPAWN_ADVANTAGE_MS = 700;
+export const CP_RESPAWN_ADVANTAGE_MS = 1100;
 
 /** The floor the advantage can never cross. */
-export const CP_RESPAWN_MIN_MS = 1500;
+export const CP_RESPAWN_MIN_MS = 2000;
 
 /**
  * The capture pad's size, in world px.
@@ -119,6 +130,49 @@ export const CP_RESPAWN_MIN_MS = 1500;
  */
 export const CP_ZONE_W = 180;
 export const CP_ZONE_H = 64;
+
+/**
+ * How many magazines an ammo pack puts back into the reserve.
+ *
+ * TF2's ammo packs are the reason the mode breathes: without them a dry gun is
+ * dry until death, and every fight after the first magazine is a sword fight
+ * by attrition rather than by choice. Two magazines is a refill you have to
+ * *find* — one pile is rarely enough to undo a long fight, and the walk to the
+ * next one is a decision made under pressure.
+ */
+export const CP_AMMO_PACK_MAGAZINES = 2;
+
+/** ...and the item charge it adds, one per pack. */
+export const CP_AMMO_PACK_ITEM_CHARGES = 1;
+
+/**
+ * How long a taken pack stays gone.
+ *
+ * Long enough that packs are map resources rather than taps — a fighter cannot
+ * camp one through a siege — and short enough that the field does not empty.
+ * TF2's own pickups sit around ten seconds; at this game's pace twelve is the
+ * same sentence.
+ */
+export const CP_AMMO_PACK_RESPAWN_MS = 12000;
+
+/**
+ * The pack's pickup reach, as a radius around its centre, in world px.
+ *
+ * Generous on purpose: the pack floats where a fighter runs through it, and a
+ * pickup that demanded pixel accuracy would be a pickup the AI collects by
+ * accident and the player misses by a step.
+ */
+export const CP_AMMO_PACK_REACH_PX = 34;
+
+/**
+ * How high a pack floats above the floor, and how far it bobs.
+ *
+ * The hover is the read: a crate on the ground is scenery, a crate bobbing at
+ * chest height is a thing to take. Pickup uses the centre, so the bob is
+ * presentation only and a pack is collectable on the ground beneath it.
+ */
+export const CP_AMMO_PACK_HOVER_PX = 34;
+export const CP_AMMO_PACK_BOB_PX = 3;
 
 /** Spawn points a module must carry, so a full side can always spawn spread. */
 export const CP_SPAWNS_PER_MODULE = 8;

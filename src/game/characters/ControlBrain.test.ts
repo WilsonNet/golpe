@@ -34,6 +34,10 @@ function input(over: {
 	foes?: number;
 	control?: ControlPointInfo[] | null;
 	hunting?: boolean;
+	/** The gun's total rounds (magazine + reserve); 0 is dry. */
+	rounds?: number;
+	items?: number;
+	packs?: { x: number; y: number }[];
 }): ControlView {
 	const points =
 		over.control === undefined
@@ -45,13 +49,18 @@ function input(over: {
 					point(4, 3600, { owner: 1 }),
 				]
 			: over.control;
+	const rounds = over.rounds ?? 48;
 	return {
 		selfX: over.selfX ?? 1200,
 		selfY: over.selfY ?? 520,
 		selfHP: over.selfHP ?? 100,
+		selfAmmo: Math.min(12, rounds),
+		selfReserveRounds: Math.max(0, rounds - 12),
+		selfItemCharges: over.items ?? 2,
 		selfTeam: 0,
 		distanceToPlayer: over.foes ?? 900,
 		control: points === null ? null : { points },
+		packs: over.packs ?? [],
 	};
 }
 
@@ -164,6 +173,85 @@ describe("ControlBrain", () => {
 		const brain = new ControlBrain();
 		const output = freshOutput();
 		brain.decide(input({ selfX: 1500 }), output, true, 16);
+		expect(output.moveRight).toBe(false);
+	});
+
+	it("detours to a pack when the gun is dry, but not when supplied", () => {
+		// The capturable point is to the right (x=2000); the pack is behind, at
+		// x=900. A dry bot should turn around for it...
+		const dry = new ControlBrain();
+		const dryOut = freshOutput();
+		dry.decide(
+			input({ selfX: 1400, rounds: 0, packs: [{ x: 900, y: 534 }] }),
+			dryOut,
+			false,
+			16,
+		);
+		expect(dryOut.moveLeft).toBe(true);
+		expect(dryOut.moveRight).toBe(false);
+
+		// ...and a supplied bot should keep walking the objective.
+		const fed = new ControlBrain();
+		const fedOut = freshOutput();
+		fed.decide(
+			input({ selfX: 1400, rounds: 48, packs: [{ x: 900, y: 534 }] }),
+			fedOut,
+			false,
+			16,
+		);
+		expect(fedOut.moveRight).toBe(true);
+		expect(fedOut.moveLeft).toBe(false);
+	});
+
+	it("detours for an empty kit too, and only within reach", () => {
+		const emptyKit = new ControlBrain();
+		const kitOut = freshOutput();
+		emptyKit.decide(
+			input({
+				selfX: 1400,
+				rounds: 48,
+				items: 0,
+				packs: [{ x: 900, y: 534 }],
+			}),
+			kitOut,
+			false,
+			16,
+		);
+		expect(kitOut.moveLeft).toBe(true);
+
+		// A pack across the map is not a detour, it is an abandonment.
+		const far = new ControlBrain();
+		const farOut = freshOutput();
+		far.decide(
+			input({ selfX: 1400, rounds: 0, packs: [{ x: 340, y: 534 }] }),
+			farOut,
+			false,
+			16,
+		);
+		expect(farOut.moveRight).toBe(true);
+	});
+
+	it("never leaves a defence to go shopping", () => {
+		const brain = new ControlBrain();
+		const output = freshOutput();
+		const points = [
+			point(1, 1200, { owner: 0, mine: true, attacker: 1, progress: 0.4 }),
+			point(2, 2000, { capturable: true }),
+		];
+		brain.decide(
+			input({
+				selfX: 1200,
+				rounds: 0,
+				control: points,
+				packs: [{ x: 900, y: 534 }],
+			}),
+			output,
+			false,
+			16,
+		);
+		// Defending the point under attack wins over the pack: stand, don't shop.
+		expect(brain.insight.defending).toBe(true);
+		expect(output.moveLeft).toBe(false);
 		expect(output.moveRight).toBe(false);
 	});
 });

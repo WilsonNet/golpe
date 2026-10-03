@@ -364,7 +364,8 @@ export function overtimeBonusElapsed(timeLimitMs: number): number {
  *
  * The side with fewer points gets bodies back sooner — the respawn advantage,
  * and the whole comeback mechanic. TF2 asks the same question on a ten-second
- * wave; here it is a flat two-to-four seconds that the deficit shaves down.
+ * wave; here it is a flat two-to-six seconds that the deficit shaves down,
+ * sized to a game whose fighters cross a screen in four.
  */
 export function controlRespawnDelayMs(
 	points: readonly ControlPointState[],
