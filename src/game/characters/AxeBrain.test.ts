@@ -20,7 +20,7 @@ function input(dx: number, dy: number, charge: number): AIInput {
 		distanceToPlayer: Math.hypot(dx, dy),
 		enemyVX: 0,
 		enemyBlocking: false,
-		selfAmmo: 10,
+		selfAmmo: 5,
 		selfThrowCharge: charge,
 		touchingDown: true,
 		hasLineOfSight: true,

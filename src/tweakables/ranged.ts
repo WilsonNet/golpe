@@ -191,13 +191,13 @@ export const RANGED_WEAPONS: Record<RangedWeaponId, RangedWeaponDef> = {
 		label: "AXES",
 		// Ibiriki's throwing axes: hold to charge, release to throw. The
 		// stat card's `damage` and `speed` are the *full charge*'s; the tap's
-		// are `AXE_MIN_*` below, linear in between. Ten a life and no reload —
+		// are `AXE_MIN_*` below, linear in between. Five a life and no reload —
 		// the reserve is empty by construction (one magazine per life), and
 		// the only way back is to walk over a resting axe.
 		cooldownMs: AXE_COOLDOWN_MS,
 		damage: 85,
 		speed: 1180,
-		magazine: 10,
+		magazine: 5,
 		magazinesPerLife: 1,
 		thrown: true,
 		reloadStyle: "clip",

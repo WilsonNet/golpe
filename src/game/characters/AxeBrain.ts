@@ -23,7 +23,7 @@ import type { AIInput, AIOutput } from "./types.js";
 const TAP_RANGE_PX = 140;
 const FULL_RANGE_PX = 520;
 /** Few axes in hand: worth a walk to pick some back up. */
-const LOW_AXES = 4;
+const LOW_AXES = 2;
 /** A foe this close means fight, not shop. */
 const SHOPPING_SAFE_PX = 170;
 /** How far a bot will walk for an axe. */

@@ -295,8 +295,8 @@ describe("the throwing axe", () => {
 		expect(full.full).toBe(true);
 	});
 
-	it("is ten a life with no reserve", () => {
-		expect(RANGED_WEAPONS.axe.magazine).toBe(10);
+	it("is five a life with no reserve", () => {
+		expect(RANGED_WEAPONS.axe.magazine).toBe(5);
 		expect(RANGED_WEAPONS.axe.magazinesPerLife).toBe(1);
 	});
 
@@ -355,7 +355,7 @@ describe("the throwing axe", () => {
 		let s: PlayerPosition = {
 			...createPlayerState(200, 520),
 			stance: "gun",
-			ammo: 10,
+			ammo: 5,
 		};
 		const hold = intent({ attack: true, swordStance: false });
 		for (let i = 0; i < 30; i++)
@@ -381,7 +381,7 @@ describe("the throwing axe", () => {
 		let s: PlayerPosition = {
 			...createPlayerState(200, 520),
 			stance: "gun",
-			ammo: 10,
+			ammo: 5,
 		};
 		const hold = intent({ attack: true, swordStance: false });
 		for (let i = 0; i < 10; i++) {

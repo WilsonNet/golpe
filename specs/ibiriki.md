@@ -108,10 +108,10 @@ by killing Ibiriki first.
 
 ## The throwing axes (gun stance)
 
-**Ten axes a life, no reload.** An axe stays where it lands — stuck in the
+**Five axes a life, no reload.** An axe stays where it lands — stuck in the
 floor, a wall, a ledge — until Ibiriki **walks over it and picks it up** (one
 axe back per pickup) or **dies** (every axe of his vanishes, and he respawns
-with ten).
+with five).
 
 - **Hold to charge, release to throw.** The charge (`throwChargeTimer`,
   shared state both sides tick) fills over **1200ms**; the release throws at
@@ -135,10 +135,10 @@ with ten).
   takes the damage and the axe **drops** at their feet. Out of the world's
   sides it sticks at the edge.
 - **Pickup:** Ibiriki's body within 30px of one of *his own* resting axes
-  takes it back (ammo +1, capped at ten). Nobody else can take them.
+  takes it back (ammo +1, capped at five). Nobody else can take them.
 - The axes are server-owned world objects (like trap canisters), sent in
   full every snapshot while they exist.
-- The HUD reads **axes in hand** (`7 AXES`), and DRY when none are left.
+- The HUD reads **axes in hand** (`4 AXES`), and DRY when none are left.
 
 ## The ultimate: Rupture
 
