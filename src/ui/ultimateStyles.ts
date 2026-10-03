@@ -193,6 +193,10 @@ export const ULTIMATE_CSS = `
 	background-image: url("assets/jeffs-portrait.png");
 	image-rendering: auto;
 }
+.vu-sprite-ibiriki {
+	background-image: url("assets/ibiriki-portrait.png");
+	image-rendering: auto;
+}
 
 /* The floor the figure stands on: an ellipse of light under the feet. It costs
    one element and it is what stops the character reading as a sticker pasted

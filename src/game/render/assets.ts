@@ -40,6 +40,8 @@ export const TEX = {
 	"anands-portrait": "anands-portrait",
 	/** Jeffs' packed atlas, rendered from `art/jeffs/jeffs.blend` like Lia's. */
 	jeffs: "jeffs",
+	/** Ibiriki's packed atlas, rendered from `art/ibiriki/ibiriki.blend`. */
+	ibiriki: "ibiriki",
 	fireball: "fireball",
 	platform: "platform",
 	sky: "sky",
@@ -99,6 +101,14 @@ export const TEX = {
 	smoke: "fx_smoke",
 	/** The soft ellipse every fighter's team-tinted cast shadow is drawn with. */
 	shadow: "fx_shadow",
+	/**
+	 * Ibiriki's throwing axe: rendered from his model's axe, haft along +x
+	 * with the head at the right and the edge up, so a sprite rotated to the
+	 * flight heading leads with the head. `public/assets/ibiriki-axe.png`.
+	 */
+	axe: "ibiriki-axe",
+	/** A soft upward flame tongue, white so a tint sets it: the berserk aura. */
+	flame: "fx_flame",
 } as const;
 
 /**
@@ -205,6 +215,7 @@ const PACKED_SHEETS: Record<string, { png: string; json: string }> = {
 	[TEX.lia]: { png: "assets/lia.png", json: "assets/lia.json" },
 	[TEX.jeffs]: { png: "assets/jeffs.png", json: "assets/jeffs.json" },
 	[TEX.anands]: { png: "assets/anands.png", json: "assets/anands.json" },
+	[TEX.ibiriki]: { png: "assets/ibiriki.png", json: "assets/ibiriki.json" },
 };
 
 /** Each packed sheet's clips, from its JSON. */
@@ -308,7 +319,11 @@ export function sheetDrawsBlade(sheet: string): boolean {
 	const clips = PACKED_CLIPS[sheet];
 	// The sword's first cut, or the dagger's stab: either means the rendered
 	// frames hold the weapon.
-	return clips?.["slash"] !== undefined || clips?.["stab"] !== undefined;
+	return (
+		clips?.["slash"] !== undefined ||
+		clips?.["stab"] !== undefined ||
+		clips?.["hew"] !== undefined
+	);
 }
 
 /**
@@ -344,6 +359,9 @@ export async function loadAssets(): Promise<void> {
 	const sources: Record<string, string> = {
 		[TEX["anands-dragon"]]: "assets/anands-dragon.png",
 		[TEX.smokeGrenade]: "assets/smoke-grenade.png",
+		// Ibiriki's throwing axe, rendered from his Tripo model's own axe
+		// (`art/ibiriki/ibiriki.blend`, the `Gun` object) in his toon look.
+		[TEX.axe]: "assets/ibiriki-axe.png",
 		[TEX.fireball]: "assets/fireball.png",
 		[TEX.platform]: "assets/platform.png",
 		[TEX.sky]: "assets/sky.png",
@@ -863,6 +881,19 @@ function createItemTextures(renderer: Renderer): void {
 	he.circle(16, 18, 11).stroke({ width: 1.5, color: 0x2a2f1a, alpha: 0.9 });
 	he.rect(14, 2, 4, 5).fill(0xd9b86a);
 	bake(renderer, TEX.heGrenade, he);
+
+	// ---- the berserk flame ----
+	//
+	// A soft teardrop, wide at the base and pointed at the top, built from
+	// stacked fading ellipses. White, so the aura's red is a tint.
+	const flame = new Graphics();
+	for (let i = 0; i < 6; i++) {
+		const t = i / 5;
+		flame
+			.ellipse(12, 26 - t * 14, 10 - t * 7, 8 - t * 3)
+			.fill({ color: 0xffffff, alpha: 0.12 + t * 0.1 });
+	}
+	bake(renderer, TEX.flame, flame);
 
 	// ---- the smoke puff ----
 	//

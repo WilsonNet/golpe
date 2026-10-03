@@ -1,6 +1,6 @@
 # Hero art — edit in Blender, render to sprites
 
-`art/<hero>/<hero>.blend` **is that hero's art** — Lia's, Jeffs' and Anands'.
+`art/<hero>/<hero>.blend` **is that hero's art** — Lia's, Jeffs', Anands' and Ibiriki's.
 Every sprite they draw in-game, and their portraits on the menus and the
 ultimate card, are rendered from these files. Open one, change anything,
 save, run one command:
@@ -14,6 +14,7 @@ python3 scripts/make-hero-art.py lia    # render + pack → public/assets/lia.{p
 |---|---|---|---|
 | Lia | `art/lia/lia.blend` | `scripts/blender/lia_build.py` | Toriyama chibi swordswoman: teal ponytail, circlet, crimson tunic, sword and rifle |
 | Jeffs | `art/jeffs/jeffs.blend` | `scripts/blender/jeffs_rig.py` · `jeffs_look.py` · `jeffs_clips.py` | the executioner, from his Gemini boards: a Tripo mesh of his T-pose turnaround, salt-and-pepper hair, charcoal trench coat, katana and pump shotgun. See *Jeffs* below. |
+| Ibiriki | `art/ibiriki/ibiriki.blend` | `scripts/blender/ibiriki_rig.py` · `ibiriki_look.py` · `ibiriki_weapons.py` · `ibiriki_clips.py` | the bloodthirsty goblin-viking: a Tripo mesh of his T-pose turnaround, a rigid ball body with a painted face, the heavy cartoon outline, a viking sword and throwing axes cut from his first model. See *Ibiriki* below. |
 | Anands | `art/anands/anands.blend` | `scripts/blender/anands_rig.py` (rig) · `scripts/blender/anands_clips.py` (weapons, clips) | **the flagship** — her Tripo mesh from her Gemini boards, rendered unlit and snapped back to her boards' palette (`art/anands/palette.json`). See *Anands* below and [`docs/anands-art.md`](../docs/anands-art.md). |
 
 Every hero shares one skeleton, shader, camera and set of clip poses
@@ -155,6 +156,44 @@ rendered by `python3 scripts/make-smoke-grenade-art.py [--save]` to
 `public/assets/smoke-grenade.png` — 16 cells of one end-over-end flip about
 an axis leaning toward the camera, with a roll about its length, so the
 tumble goes through depth. `--save` writes `art/props/smoke-grenade.blend`.
+
+## Ibiriki — a ball with a painted face
+
+Built 2026-10-03 (the `ai-art-pipeline` skill). `art/ibiriki/ibiriki.blend`:
+`Ibiriki.tripo` skinned to `Rig` (scale 0.89 for the contract), `Sword` and
+`Gun` (the axe in hand) on the `weapon` bone, `AxeOff` (the second axe, for
+the berserk dual wield and the Rupture stomp) on `forearm.L`.
+
+- **Two models.** His first Tripo model held the sword and the axe in his
+  fists. Tripo's **segmentation** split it into 13 parts
+  (`generated/ibiriki-tripo-parts.glb`) and the weapons came off clean —
+  `ibiriki_weapons.build()` reorients them into the rig's weapon convention
+  and models a leather grip into the gap the fist left. The body was a poor
+  rig, though: arms baked around the weapons, a face painted on a ball that
+  had to be twisted to the camera — he stared at the player with both eyes
+  while running sideways. The body that ships is a second model, from a
+  **T-pose** board in his Gemini chat (`unprocessed-sprites/ibiriki-tpose-v1.jpeg`,
+  front and back views only — the side views pointed a fist at the camera)
+  through Tripo multi-view (`generated/ibiriki-tripo-tpose.glb`).
+- `ibiriki_rig.py` — `import_tpose()` then `rig()`: Anands' procedure, then
+  `rigidify_ball` — every vertex inside the ball (face included) rides the
+  chest alone and the helmet the head, because a painted face must never
+  stretch — and the arms dropped 58° to rest against the ball's flank.
+- `ibiriki_look.py` — `apply_tpose()`: his eyes are a handful of texels on a
+  sprite-sized mesh, so a per-face family vote erases them; the **texture
+  drives LiaToon per texel** (linear filtering), the shade threshold drops
+  to 0 (the ball otherwise sits half in shade), and the ink hull is
+  `OUTLINE_TPOSE_M` 0.06 m — the user's call, from Tripo's cartoon preview —
+  with `palette.json`'s `outline_px: 2` thickening the packed silhouette.
+- `ibiriki_clips.py` — `build()`: the shared clips rebased to his short
+  reach, the torso's twist damped (`TORSO_DAMP`, or the ball turns the face
+  away), the head's yaw cancelled and the chest set to `CHEST_TURN_DEG` −8:
+  **near profile, one eye leading**. The grips are pushed forward
+  (`GRIP_FORWARD_Y`) so the steel does not vanish into the ball. His own
+  clips: the hews, Sunder's raise and chop, the frenzy (dual wield), the axe
+  wind-up, the stomp, berserk idle and walk.
+- His flying axe is the model too: `ibiriki_weapons.render_axe_sprite()` →
+  `public/assets/ibiriki-axe.png`.
 
 ## Anands — the flagship
 

@@ -38,7 +38,13 @@ import {
 	TRAP_THROW_GRAVITY,
 	TRAP_THROW_SPEED,
 } from "../../tweakables/items";
-import { pelletDamageAt } from "../../tweakables/ranged";
+import {
+	AXE_FULL_HIT_STUN_MS,
+	AXE_FULL_KNOCKBACK_VX,
+	AXE_HIT_STUN_MS,
+	AXE_KNOCKBACK_VX,
+	pelletDamageAt,
+} from "../../tweakables/ranged";
 import {
 	BLOSSOM_TICK_DAMAGE,
 	BLOSSOM_TICK_MS,
@@ -46,6 +52,9 @@ import {
 	DRAGON_SPEED,
 	GRENADE_GRAVITY,
 	GRENADE_SPEED,
+	RUPTURE_CAST_DAMAGE,
+	RUPTURE_DURATION_MS,
+	RUPTURE_STOMP_MS,
 	SINGULARITY_DAMAGE_INTERVAL_MS,
 	SINGULARITY_DURATION_MS,
 	SINGULARITY_TICK_DAMAGE,
@@ -71,6 +80,7 @@ import {
 import { BlackHoleFx } from "../render/BlackHoleFx";
 import { BlossomFx } from "../render/BlossomFx";
 import { DragonFx } from "../render/DragonFx";
+import { IbirikiFx } from "../render/IbirikiFx";
 import { ItemFx } from "../render/ItemFx";
 import { type ImpactEvent, MeleeFx } from "../render/MeleeFx";
 import { Nameplates } from "../render/Nameplates";
@@ -82,6 +92,13 @@ import {
 	PLAYER_WIDTH,
 	type World,
 } from "../simulation/Arena";
+import {
+	type AxeState,
+	axeTouches,
+	dropAxe,
+	launchAxe,
+	tickAxe,
+} from "../simulation/Axes";
 import {
 	HEROES,
 	type HeroId,
@@ -108,6 +125,7 @@ import {
 	trapCatches,
 	trapFor,
 } from "../simulation/Items";
+import { bloodlustFor } from "../simulation/Passive";
 import {
 	applyHitToDefender,
 	applyKnockdown,
@@ -150,6 +168,7 @@ import {
 	grenadeEnd,
 	grenadeTouches,
 	launchGrenade,
+	ruptureBleed,
 	type Singularity,
 	singularityGrip,
 	tickGrenade,
@@ -293,6 +312,7 @@ export class FighterStage {
 	private items: ItemFx | undefined;
 	private blackHole: BlackHoleFx | undefined;
 	private blossomFx: BlossomFx | undefined;
+	private ibirikiFx: IbirikiFx | undefined;
 	private dragonFx: DragonFx | undefined;
 	private plates: Nameplates | undefined;
 	private numbers: HitNumbers | undefined;
@@ -323,6 +343,13 @@ export class FighterStage {
 	private grenade: GrenadeState | null = null;
 	private singularity: Singularity | null = null;
 	private blossom: Blossom | null = null;
+	/** Ibiriki's axes in flight and at rest — the server's own list, scripted. */
+	private axes: AxeState[] = [];
+	/** The running rupture: ms left and each victim's last position. */
+	private rupture: {
+		remainingMs: number;
+		track: Map<string, { x: number; y: number; owed: number }>;
+	} | null = null;
 	private nextId = 1;
 
 	// ---- the server halves' accumulators and latches ----
@@ -395,6 +422,12 @@ export class FighterStage {
 		this.items = new ItemFx(stage.field, stage.effects, this.world, stage);
 		this.blackHole = new BlackHoleFx(stage.field, stage.effects, stage);
 		this.blossomFx = new BlossomFx(stage.field, stage.effects, stage);
+		this.ibirikiFx = new IbirikiFx(
+			stage.effects,
+			stage.projectiles,
+			stage,
+			() => this.world,
+		);
 		this.dragonFx = new DragonFx(stage.field, stage.effects);
 		// The dummies' names and health bars, and the floating damage numbers,
 		// and the bullets — all drawn by the modules a match feeds.
@@ -444,6 +477,13 @@ export class FighterStage {
 				vx: f?.body.vx ?? 0,
 				grounded: f?.body.grounded ?? false,
 				ammo: f?.body.ammo ?? 0,
+				throwCharge: f?.body.throwChargeTimer ?? 0,
+				stompTimer: f?.body.stompTimer ?? 0,
+				axes: this.axes.map((a) => ({
+					x: Math.round(a.x),
+					y: Math.round(a.y),
+					resting: a.resting,
+				})),
 				...this.score,
 				singularity: this.singularity
 					? {
@@ -545,7 +585,7 @@ export class FighterStage {
 				fighter: {
 					id: `target-${i}`,
 					local: false,
-					hp: MAX_HP,
+					hp: this.story.targetHp ?? MAX_HP,
 					maxHp: MAX_HP,
 					name: "TARGET",
 					team: null,
@@ -617,6 +657,51 @@ export class FighterStage {
 			blackHole.update(this.singularity, [], dtMs, "preview", null);
 		}
 		this.blossomFx?.update(this.blossom, dtMs);
+		if (this.ibirikiFx) {
+			this.ibirikiFx.syncAxes(this.axes, this.clockMs, "preview");
+			const f = this.fighter;
+			const views = [];
+			if (f) {
+				const at = f.renderPos ?? f.body;
+				views.push({
+					serverId: f.fighter.id,
+					team: null,
+					x: at.x,
+					y: at.y,
+					body: f.body,
+					ibiriki: f.fighter.hero === "ibiriki",
+					alive: true,
+				});
+			}
+			for (const d of this.targets) {
+				views.push({
+					serverId: d.entity.fighter.id,
+					team: null,
+					x: d.entity.body.x,
+					y: d.entity.body.y,
+					body: d.entity.body,
+					ibiriki: false,
+					alive: d.entity.fighter.hp > 0,
+				});
+			}
+			const victims = this.rupture
+				? this.targets.map((d) => d.entity.fighter.id)
+				: [];
+			this.ibirikiFx.update(
+				views,
+				this.rupture
+					? {
+							id: 0,
+							ownerId: "preview",
+							ownerTeam: null,
+							remainingMs: this.rupture.remainingMs,
+							totalMs: RUPTURE_DURATION_MS,
+							victims,
+						}
+					: null,
+				dtMs,
+			);
+		}
 		this.dragonFx?.update(this.dragonRider(), dtMs);
 
 		// The bullets: despawn spent rounds, land hits, move the sprites — the
@@ -690,6 +775,16 @@ export class FighterStage {
 			timer: f.body.meleeTimer,
 			plunging: f.body.plunging,
 		};
+		const prevThrowCharge = f.body.throwChargeTimer;
+		// The bloodlust, exactly as the server reads the room: the weakest
+		// living dummy's HP. Zero for a kit without the passive.
+		if (this.kit.passive === "bloodlust") {
+			const alive = this.targets.filter((d) => d.entity.fighter.hp > 0);
+			const weakest = alive.length
+				? Math.min(...alive.map((d) => d.entity.fighter.hp / MAX_HP))
+				: null;
+			f.body.bloodlust = bloodlustFor(weakest);
+		}
 
 		f.body = tickPlayer(
 			f.body,
@@ -724,6 +819,9 @@ export class FighterStage {
 		this.resolveBlasts(f, blasts);
 		this.resolveMeleeHits(f);
 		this.fireBullet(intent, f);
+		this.throwAxe(intent, f, prevThrowCharge);
+		this.tickAxes();
+		this.tickRupture();
 		this.resolveThrusts(f);
 		this.resolveDragonHits(f);
 		this.tickBullets();
@@ -737,7 +835,12 @@ export class FighterStage {
 		// This exists so the gun-fire clip plays: the animation system reads an
 		// ammo drop as firing, exactly as it does on the wire.
 		const attackEdge = intent.attack && !this.prevAttack;
-		if (attackEdge && f.body.stance === "gun" && f.body.ammo > 0) {
+		if (
+			attackEdge &&
+			f.body.stance === "gun" &&
+			f.body.ammo > 0 &&
+			this.kit.ranged.thrown !== true
+		) {
 			f.body.ammo--;
 		}
 		tickReload(f.body, intent, this.kit, DT);
@@ -1012,6 +1115,7 @@ export class FighterStage {
 	 */
 	private fireBullet(intent: PlayerIntent, f: FighterEntity): void {
 		if (
+			this.kit.ranged.thrown === true ||
 			f.body.stance !== "gun" ||
 			!intent.attack ||
 			f.body.ammo <= 0 ||
@@ -1033,6 +1137,93 @@ export class FighterStage {
 					: Math.PI;
 		this.bullets?.fireFan(muzzleX, muzzleY, aim, "player", this.kit.ranged);
 		this.score.bulletsFired += this.kit.ranged.pellets ?? 1;
+	}
+
+	/** The story's aim, turned to the hero's facing. */
+	private storyAim(f: FighterEntity): number {
+		const facing = f.body.facing >= 0 ? 1 : -1;
+		const aim = this.story.aim ?? 0;
+		return facing > 0 ? aim : Math.PI - aim;
+	}
+
+	/**
+	 * A thrown weapon fires on the release of its charge, read off the shared
+	 * timer the tick it drops — the server's `tryThrowAxe`, scripted.
+	 */
+	private throwAxe(
+		intent: PlayerIntent,
+		f: FighterEntity,
+		prevCharge: number,
+	): void {
+		if (this.kit.ranged.thrown !== true) return;
+		if (prevCharge <= 0 || f.body.throwChargeTimer > 0 || intent.attack) return;
+		if (f.body.ammo <= 0) return;
+		f.body.ammo--;
+		this.axes.push(
+			launchAxe(
+				this.nextId++,
+				"preview",
+				null,
+				f.body.x + PLAYER_WIDTH / 2,
+				f.body.y + PLAYER_HEIGHT / 3,
+				this.storyAim(f),
+				prevCharge,
+			),
+		);
+		this.score.bulletsFired++;
+	}
+
+	/** Fly the axes and land them on the dummies — the server's `tickAxes`. */
+	private tickAxes(): void {
+		for (const a of this.axes) {
+			if (a.resting) continue;
+			tickAxe(a, DT, this.world);
+			if (a.dropped || a.resting) continue;
+			for (const d of this.targets) {
+				const v = d.entity;
+				if (v.fighter.hp <= 0) continue;
+				if (!axeTouches(a, "preview-axe", null, v.body.x, v.body.y)) continue;
+				v.body.stunTimer = Math.max(
+					v.body.stunTimer,
+					a.full ? AXE_FULL_HIT_STUN_MS : AXE_HIT_STUN_MS,
+				);
+				v.body.vx +=
+					(a.vx >= 0 ? 1 : -1) *
+					(a.full ? AXE_FULL_KNOCKBACK_VX : AXE_KNOCKBACK_VX);
+				dropAxe(a);
+				this.score.bulletHits++;
+				this.ibirikiFx?.axeHit({
+					ownerId: "preview",
+					victimId: v.fighter.id,
+					outcome: "hit",
+					x: a.x,
+					y: a.y,
+					full: a.full,
+				});
+				this.hurt(d, a.damage, a.x, a.y);
+				break;
+			}
+		}
+	}
+
+	/** Bleed every dummy for the distance it moved — the server's `tickRupture`. */
+	private tickRupture(): void {
+		const r = this.rupture;
+		if (!r) return;
+		r.remainingMs -= STEP_MS;
+		for (const d of this.targets) {
+			const t = r.track.get(d.entity.fighter.id);
+			if (!t || d.entity.fighter.hp <= 0) continue;
+			t.owed += ruptureBleed(d.entity.body.x - t.x, d.entity.body.y - t.y);
+			t.x = d.entity.body.x;
+			t.y = d.entity.body.y;
+			const whole = Math.floor(t.owed);
+			if (whole > 0) {
+				t.owed -= whole;
+				this.hurt(d, whole, undefined, undefined, 0xff3b3b);
+			}
+		}
+		if (r.remainingMs <= 0) this.rupture = null;
 	}
 
 	/** Advance and let `resolve` land the hits, on the fixed step. */
@@ -1296,6 +1487,21 @@ export class FighterStage {
 				f.body.dragonVY = v.vy;
 				break;
 			}
+			case "rupture": {
+				f.body.stompTimer = RUPTURE_STOMP_MS;
+				const track = new Map<string, { x: number; y: number; owed: number }>();
+				for (const d of this.targets) {
+					track.set(d.entity.fighter.id, {
+						x: d.entity.body.x,
+						y: d.entity.body.y,
+						owed: 0,
+					});
+					this.hurt(d, RUPTURE_CAST_DAMAGE, undefined, undefined, 0xff3b3b);
+				}
+				this.rupture = { remainingMs: RUPTURE_DURATION_MS, track };
+				this.ibirikiFx?.ruptureOpened(cx, f.body.y + PLAYER_HEIGHT, null);
+				break;
+			}
 			case "death-blossom": {
 				f.body.blossomTimer = BLOSSOM_DURATION_MS;
 				this.blossom = {
@@ -1453,7 +1659,7 @@ export class FighterStage {
 				GROUND.y - PLAYER_HEIGHT,
 				facing,
 			);
-			d.entity.fighter.hp = d.entity.fighter.maxHp;
+			d.entity.fighter.hp = this.story.targetHp ?? d.entity.fighter.maxHp;
 			d.entity.anim = {
 				clip: facing < 0 ? "left-idle" : "right-idle",
 				frame: 0,
@@ -1474,6 +1680,9 @@ export class FighterStage {
 		this.grenade = null;
 		this.singularity = null;
 		this.blossom = null;
+		this.axes = [];
+		this.rupture = null;
+		this.ibirikiFx?.reset();
 
 		this.fx?.reset();
 		this.items?.reset();

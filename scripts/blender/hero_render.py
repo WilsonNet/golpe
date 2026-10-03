@@ -36,10 +36,12 @@ portrait_scale = int(scene.get("lia_portrait_scale", 4))
 GUNS = ("Rifle", "Shotgun", "Gun")
 # `Dagger` is Anands' melee weapon: in hand for her melee clips, put away
 # (hidden — she has no scabbard on her back) for the gun and the tumble.
+# `AxeOff` is Ibiriki's berserk off-hand axe: only the `dual` clips show it.
 PROPS = {
-    "sword": {"Sword": True, "SwordBack": False, "Dagger": True, "DaggerL": True, **dict.fromkeys(GUNS, False)},
-    "rifle": {"Sword": False, "SwordBack": True, "Dagger": False, "DaggerL": False, **dict.fromkeys(GUNS, True)},
-    "none": {"Sword": False, "SwordBack": True, "Dagger": False, "DaggerL": False, **dict.fromkeys(GUNS, False)},
+    "sword": {"Sword": True, "SwordBack": False, "Dagger": True, "DaggerL": True, "AxeOff": False, **dict.fromkeys(GUNS, False)},
+    "rifle": {"Sword": False, "SwordBack": True, "Dagger": False, "DaggerL": False, "AxeOff": False, **dict.fromkeys(GUNS, True)},
+    "none": {"Sword": False, "SwordBack": True, "Dagger": False, "DaggerL": False, "AxeOff": False, **dict.fromkeys(GUNS, False)},
+    "dual": {"Sword": True, "SwordBack": False, "Dagger": False, "DaggerL": False, "AxeOff": True, **dict.fromkeys(GUNS, False)},
 }
 
 

@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { ITEMS } from "../../tweakables/items.js";
 import { RANGED_WEAPONS } from "../../tweakables/ranged.js";
-import { reserveRoundsFor } from "./Physics.js";
 import {
 	type AmmoPackFighter,
 	ammoPackReach,
 	ammoPackUseful,
 	takeAmmoPack,
 } from "./AmmoPacks.js";
+import { reserveRoundsFor } from "./Physics.js";
 
 const rifle = RANGED_WEAPONS.rifle;
 const shotgun = RANGED_WEAPONS.shotgun;
@@ -37,11 +37,19 @@ describe("ammo pack usefulness", () => {
 		expect(ammoPackUseful(full, rifle, grenade)).toBe(false);
 		// One spent round in the reserve is enough to take it.
 		expect(
-			ammoPackUseful({ ...full, reserveRounds: full.reserveRounds - 1 }, rifle, grenade),
+			ammoPackUseful(
+				{ ...full, reserveRounds: full.reserveRounds - 1 },
+				rifle,
+				grenade,
+			),
 		).toBe(true);
 		// So is a spent item charge, even with a full gun.
 		expect(
-			ammoPackUseful({ ...full, itemCharges: full.itemCharges - 1 }, rifle, grenade),
+			ammoPackUseful(
+				{ ...full, itemCharges: full.itemCharges - 1 },
+				rifle,
+				grenade,
+			),
 		).toBe(true);
 	});
 });
@@ -50,9 +58,9 @@ describe("taking a pack", () => {
 	it("adds two magazines, capped at the life's reserve", () => {
 		// Rifle: 12 rounds a magazine, so +24 — capped at the 36-round reserve.
 		expect(takeAmmoPack(used, rifle, grenade).reserveRounds).toBe(36);
-		expect(takeAmmoPack({ reserveRounds: 0, itemCharges: 0 }, rifle, grenade)).toEqual(
-			{ reserveRounds: 24, itemCharges: 1 },
-		);
+		expect(
+			takeAmmoPack({ reserveRounds: 0, itemCharges: 0 }, rifle, grenade),
+		).toEqual({ reserveRounds: 24, itemCharges: 1 });
 	});
 
 	it("reads the magazine size of the weapon, not a flat number", () => {
@@ -63,10 +71,16 @@ describe("taking a pack", () => {
 	});
 
 	it("adds one item charge, capped at the kit's maximum", () => {
-		expect(takeAmmoPack({ reserveRounds: 36, itemCharges: 0 }, rifle, grenade).itemCharges).toBe(1);
 		expect(
-			takeAmmoPack({ reserveRounds: 36, itemCharges: grenade.maxCharges }, rifle, grenade)
+			takeAmmoPack({ reserveRounds: 36, itemCharges: 0 }, rifle, grenade)
 				.itemCharges,
+		).toBe(1);
+		expect(
+			takeAmmoPack(
+				{ reserveRounds: 36, itemCharges: grenade.maxCharges },
+				rifle,
+				grenade,
+			).itemCharges,
 		).toBe(grenade.maxCharges);
 	});
 });

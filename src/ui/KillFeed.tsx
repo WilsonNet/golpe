@@ -92,6 +92,16 @@ function daggerShape(): ReactNode {
 	);
 }
 
+/** Ibiriki's throwing axe: a haft and a bearded head. */
+function axeShape(): ReactNode {
+	return (
+		<>
+			<path d="M8 20 L15 6" />
+			<path d="M13.2 5 C17.5 4.2 20 7.2 19.4 10.6 C17.6 9.8 15.6 9.6 14.2 9.8 Z" />
+		</>
+	);
+}
+
 /** One petal of the blossom: an arc bowing out of the centre. */
 function petalShape(): ReactNode {
 	return <path d="M12 12 C12 8.6 9.6 6.2 8.2 6.9 C5.9 8 8.4 12 12 12" />;
@@ -216,6 +226,43 @@ function iconFor(cause: KillCause): ReactNode {
 					<g transform="rotate(270 12 12)">{petalShape()}</g>
 				</>
 			);
+		// Ibiriki's hews: the slash family's rotations, a heavier blade.
+		case "hew":
+		case "rend":
+			return <g transform="rotate(-45 12 12)">{swordShape()}</g>;
+		case "hew2":
+			return <g transform="rotate(45 12 12)">{swordShape()}</g>;
+		case "rend2":
+			return <g transform="rotate(30 12 12)">{axeShape()}</g>;
+		case "hew3":
+			return <g transform="rotate(180 12 12)">{swordShape()}</g>;
+		case "rend3":
+			// The X: sword and axe crossed.
+			return (
+				<>
+					<g transform="rotate(-45 12 12)">{swordShape()}</g>
+					<g transform="rotate(-20 12 12)">{axeShape()}</g>
+				</>
+			);
+		case "sunder":
+			// Blade straight down through a broken guard line.
+			return (
+				<>
+					<g transform="rotate(180 12 12)">{swordShape()}</g>
+					<path d="M5 9 L10 9" />
+					<path d="M14 9 L19 9" />
+				</>
+			);
+		case "axe":
+			return axeShape();
+		case "rupture":
+			// A drop of blood over the stomp line.
+			return (
+				<>
+					<path d="M12 3.5 C9 8.5 7.6 11 7.6 13.4 A4.4 4.4 0 0 0 16.4 13.4 C16.4 11 15 8.5 12 3.5 Z" />
+					<path d="M5 20.5 L19 20.5" />
+				</>
+			);
 	}
 }
 
@@ -270,6 +317,22 @@ function meansLabel(cause: KillCause, hero: HeroId | null): string {
 			return "BLACK HOLE";
 		case "blossom":
 			return "DEATH BLOSSOM";
+		case "hew":
+			return "HEW";
+		case "hew2":
+			return "HEW II";
+		case "hew3":
+			return "HEW III";
+		case "sunder":
+			return "SUNDER";
+		case "rend":
+		case "rend2":
+		case "rend3":
+			return "FRENZY";
+		case "axe":
+			return "AXE";
+		case "rupture":
+			return "RUPTURE";
 	}
 }
 

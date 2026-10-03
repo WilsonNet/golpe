@@ -22,13 +22,30 @@
 
 import { useEffect, useRef, useState } from "react";
 import { EventBus } from "../game/EventBus";
+import type { HeroId } from "../game/simulation/Heroes";
 import { ULTIMATE_CSS } from "./ultimateStyles";
+
+/** Each hero's ultimate, as its card names it. */
+const ULT_NAME: Record<HeroId, string> = {
+	lia: "Black Hole",
+	anands: "Dragon Thrust",
+	jeffs: "Death Blossom",
+	ibiriki: "Rupture",
+};
+
+/** The card's one line under the name. */
+const ULT_LINE: Record<HeroId, string> = {
+	lia: "Gravity has a winner",
+	anands: "Nothing stops a line",
+	jeffs: "The storm is coming",
+	ibiriki: "Do not move",
+};
 
 interface CastEvent {
 	casterId: string;
 	casterName: string;
 	/** The caster's hero — the portrait card draws their own sheet. */
-	hero: "lia" | "anands" | "jeffs";
+	hero: HeroId;
 	/** True when this client is the one casting, for the "YOU" marker. */
 	mine: boolean;
 	/** The freeze length the server declared. Drives the timer bar. */
@@ -150,20 +167,8 @@ export function UltimateCinematic() {
 				</div>
 
 				<div className="vu-ability">
-					<div className="vu-ability-name">
-						{cast.hero === "anands"
-							? "Dragon Thrust"
-							: cast.hero === "jeffs"
-								? "Death Blossom"
-								: "Black Hole"}
-					</div>
-					<div className="vu-ability-sub">
-						{cast.hero === "anands"
-							? "Nothing stops a line"
-							: cast.hero === "jeffs"
-								? "The storm is coming"
-								: "Gravity has a winner"}
-					</div>
+					<div className="vu-ability-name">{ULT_NAME[cast.hero]}</div>
+					<div className="vu-ability-sub">{ULT_LINE[cast.hero]}</div>
 				</div>
 
 				{/* Empties over exactly the freeze the server declared. The only thing

@@ -557,9 +557,7 @@ const BATTERY: BatteryRow[] = [
 					.then(() => true)
 					.catch(() => false);
 				if (!falling) continue;
-				await page.evaluate(() =>
-					window.__training!.input({ up: true }, 100),
-				);
+				await page.evaluate(() => window.__training!.input({ up: true }, 100));
 				await page.waitForTimeout(500);
 				report = await page.evaluate(() => window.__training!.report());
 				if ((report.melee?.knockdownsRecovered ?? 0) > 0) break;
@@ -650,7 +648,8 @@ const BATTERY: BatteryRow[] = [
 			}
 
 			return {
-				report: report ?? (await page.evaluate(() => window.__training!.report())),
+				report:
+					report ?? (await page.evaluate(() => window.__training!.report())),
 				extra: { attempts },
 			};
 		},
@@ -1665,8 +1664,8 @@ async function main() {
 		);
 	}
 
-	const rows = BATTERY.filter((r) =>
-		!ONLY || r.name.toLowerCase().includes(ONLY.toLowerCase()),
+	const rows = BATTERY.filter(
+		(r) => !ONLY || r.name.toLowerCase().includes(ONLY.toLowerCase()),
 	).filter(
 		// The sword rows press buttons that mean different things to the
 		// dagger (attack = stab, not slash), so a dagger run keeps only the

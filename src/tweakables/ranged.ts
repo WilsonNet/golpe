@@ -4,7 +4,7 @@
  * shotgun's pellet fan, and the magazine + reload every gun now carries.
  */
 
-export type RangedWeaponId = "rifle" | "machinegun" | "shotgun";
+export type RangedWeaponId = "rifle" | "machinegun" | "shotgun" | "axe";
 
 /** Degrees per π radians: `deg * Math.PI / DEGREES_PER_PI_RADIANS` → radians. */
 export const DEGREES_PER_PI_RADIANS = 180;
@@ -73,6 +73,12 @@ type RangedWeaponBase = {
 	 * a few whiffed blasts. Tune per weapon, not globally.
 	 */
 	magazinesPerLife: number;
+	/**
+	 * A **thrown** weapon: hold to charge, release to throw, and the projectile
+	 * is a physical axe that stays in the world until its owner picks it up.
+	 * Absent for every gun. See specs/ibiriki.md.
+	 */
+	thrown?: boolean;
 };
 
 /**
@@ -107,6 +113,9 @@ type ReloadProfile =
 	  };
 
 export type RangedWeaponDef = RangedWeaponBase & ReloadProfile;
+
+/** The shortest gap between two throws, release to release. */
+const AXE_COOLDOWN_MS = 300;
 
 export const RANGED_WEAPONS: Record<RangedWeaponId, RangedWeaponDef> = {
 	rifle: {
@@ -177,7 +186,28 @@ export const RANGED_WEAPONS: Record<RangedWeaponId, RangedWeaponDef> = {
 		reloadRoundMs: 1200,
 		reloadFirstRoundMs: 1300,
 	},
+	axe: {
+		id: "axe",
+		label: "AXES",
+		// Ibiriki's throwing axes: hold to charge, release to throw. The
+		// stat card's `damage` and `speed` are the *full charge*'s; the tap's
+		// are `AXE_MIN_*` below, linear in between. Ten a life and no reload —
+		// the reserve is empty by construction (one magazine per life), and
+		// the only way back is to walk over a resting axe.
+		cooldownMs: AXE_COOLDOWN_MS,
+		damage: 85,
+		speed: 1180,
+		magazine: 10,
+		magazinesPerLife: 1,
+		thrown: true,
+		reloadStyle: "clip",
+		reloadMs: 0,
+	},
 };
+
+// ---------------------------------------------------------------------------
+// The throwing axe (specs/ibiriki.md)
+// ---------------------------------------------------------------------------
 
 /**
  * The damage one round deals, read at the distance it has travelled from the
@@ -212,3 +242,44 @@ export function pelletDamageAt(
 		(weapon.falloffEndPx - weapon.falloffStartPx);
 	return Math.round(weapon.damage + (floor - weapon.damage) * t);
 }
+
+/** How long a hold takes to reach a full-charge throw. */
+export const AXE_CHARGE_MS = 1200;
+
+/** A tap's throw: a short lob. */
+export const AXE_MIN_SPEED = 560;
+
+export const AXE_MIN_DAMAGE = 14;
+
+/**
+ * Every axe falls at the same rate, so the charge is what decides the arc: a
+ * tap is a short lob, a full charge flies flat and far.
+ */
+export const AXE_GRAVITY = 1300;
+
+/** Walk speed while an axe throw is charging (past `CHARGE_LOCK_MS`). */
+export const AXE_CHARGE_WALK_MULTIPLIER = 0.75;
+
+/** How far past Ibiriki's body a resting axe is picked back up. */
+export const AXE_PICKUP_PX = 30;
+
+/** The axe's collision radius against platforms and fighters. */
+export const AXE_RADIUS_PX = 9;
+
+/** The bounce a fighter's body gives an axe that hit it: it drops. */
+export const AXE_DROP_VY = -160;
+
+/** Spin, radians per second: drawn only, never simulated. */
+export const AXE_SPIN_RAD_PER_S = 18;
+
+/** The flinch a part-charged axe leaves on a body. */
+export const AXE_HIT_STUN_MS = 160;
+
+/** The reel a full-charge axe leaves: a heavy blow, not a flinch. */
+export const AXE_FULL_HIT_STUN_MS = 420;
+
+/** The shove a part-charged axe gives, along its flight. */
+export const AXE_KNOCKBACK_VX = 90;
+
+/** The shove a full-charge axe gives. */
+export const AXE_FULL_KNOCKBACK_VX = 260;

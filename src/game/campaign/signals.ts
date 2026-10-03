@@ -54,6 +54,9 @@ export function zeroCounters(): LessonCounters {
 		denies: 0,
 		itemsUsed: 0,
 		reloads: 0,
+		guardsCrushed: 0,
+		axesRecovered: 0,
+		berserks: 0,
 		bulletsFired: 0,
 		bulletHits: 0,
 		damageDealt: 0,
@@ -78,6 +81,8 @@ interface BodySample {
 	massiveReady: boolean;
 	plunging: boolean;
 	reloadTimer: number;
+	/** Ibiriki's bloodlust: 1 is berserk. */
+	bloodlust: number;
 	/** The launch debt and the floor it becomes — the safe fall's two halves. */
 	knockdownPendingTimer: number;
 	knockdownTimer: number;
@@ -98,6 +103,7 @@ function sample(body: PlayerPosition): BodySample {
 		massiveReady: body.massiveReady,
 		plunging: body.plunging,
 		reloadTimer: body.reloadTimer,
+		bloodlust: body.bloodlust,
 		knockdownPendingTimer: body.knockdownPendingTimer,
 		knockdownTimer: body.knockdownTimer,
 	};
@@ -135,6 +141,8 @@ export class LessonTracker {
 	private itemCharges: number | null = null;
 	/** True while the dummy is up, so a knockout is counted once per fall. */
 	private dummyUp = true;
+	/** True for the stretch of frames the fighter has been berserk, counted once. */
+	private berserkCounted = false;
 
 	/** Arm a fresh lesson: everything back to zero, nothing carried over. */
 	reset() {
@@ -144,6 +152,7 @@ export class LessonTracker {
 		this.statBase = null;
 		this.itemCharges = null;
 		this.dummyUp = true;
+		this.berserkCounted = false;
 	}
 
 	/** The counters as they stand. A copy: nothing outside here may mutate them. */
@@ -168,6 +177,15 @@ export class LessonTracker {
 		const now = sample(body);
 		const before = this.prev;
 		this.prev = now;
+		// Berserk is a *state* the lesson may begin in — its bleeding dummy is
+		// staged before the first frame, so there is no edge to see. The first
+		// berserk frame of a stretch counts, whichever frame that is.
+		if (now.bloodlust >= 1 && !this.berserkCounted) {
+			this.counters.berserks++;
+			this.berserkCounted = true;
+		} else if (now.bloodlust < 1) {
+			this.berserkCounted = false;
+		}
 		if (!before) return;
 
 		// -- melee moves, and the cancel that makes the butterfly ---------------
@@ -266,6 +284,12 @@ export class LessonTracker {
 					this.counters.bombs++;
 					this.counters.movesLanded[event.move]++;
 					break;
+				case "crushed":
+					// Through the guard: a landed hit, and the crush the Sunder
+					// exists for.
+					this.counters.movesLanded[event.move]++;
+					this.counters.guardsCrushed++;
+					break;
 			}
 			return;
 		}
@@ -286,6 +310,12 @@ export class LessonTracker {
 
 	noteUltimateCast() {
 		this.counters.ultimates++;
+	}
+
+	/** An axe event of the local fighter's: a crushed guard or a pickup. */
+	noteAxe(outcome: "hit" | "blocked" | "crushed" | "stuck" | "pickup") {
+		if (outcome === "crushed") this.counters.guardsCrushed++;
+		if (outcome === "pickup") this.counters.axesRecovered++;
 	}
 
 	/**

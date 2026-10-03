@@ -25,15 +25,34 @@ import { EventBus } from "../game/EventBus";
 import { HUD_EVENTS, type HudState } from "../game/hud";
 import { bindings, codeLabel } from "../game/input/Bindings";
 import type { ControlStatus } from "../game/simulation/ControlPoints";
+import type { HeroId } from "../game/simulation/Heroes";
 import { ULT_MAX_CHARGE } from "../game/simulation/Physics";
 import { TEAM_COUNT, TEAM_NAMES, type TeamId } from "../game/simulation/Teams";
 import { teamCss } from "../game/teamPalette";
 import { FIGHT_HUD_CSS } from "./fightHudStyles";
 import { KillFeed } from "./KillFeed";
 import { useEndgameCeremony } from "./PlayOfTheGame";
+import { RuptureCurse } from "./RuptureCurse";
 import { formatClock, type MatchView, useMatch } from "./useMatch";
 
 /** The live fight state, or null before the first snapshot. */
+/**
+ * The badge names the actual weapon in the slot: the stance is the slot, the
+ * hero is the weapon in it. Presentation, so per-hero tables belong here.
+ */
+const SWORD_BADGE: Record<HeroId, string> = {
+	lia: "SWORD",
+	anands: "DAGGER",
+	jeffs: "SWORD",
+	ibiriki: "VIKING SWORD",
+};
+const GUN_BADGE: Record<HeroId, string> = {
+	lia: "GUN",
+	anands: "MACHINE GUN",
+	jeffs: "SHOTGUN",
+	ibiriki: "AXES",
+};
+
 function useHudState(): HudState | null {
 	const [hud, setHud] = useState<HudState | null>(null);
 	useEffect(
@@ -94,13 +113,7 @@ function FighterPanel({
 			<div className="vdh-plaque">
 				<span className="vdh-name">{name}</span>
 				{foe ? (
-					<span className="vdh-hero">
-						{hud.foeHero === "anands"
-							? "ANANDS"
-							: hud.foeHero === "jeffs"
-								? "JEFFS"
-								: "LIA"}
-					</span>
+					<span className="vdh-hero">{hud.foeHero.toUpperCase()}</span>
 				) : (
 					<span
 						className={`vdh-stance${hud.stance === "gun" ? " vdh-stance-gun" : ""}${hud.massiveReady ? " vdh-massive" : ""}`}
@@ -109,14 +122,10 @@ function FighterPanel({
 						    Anands' dagger and machine gun, Jeffs' sword and shotgun.
 						    The stance is the slot; the hero is the weapon in it. */}
 						{hud.stance === "gun"
-							? hud.hero === "anands"
-								? "MACHINE GUN"
-								: hud.hero === "jeffs"
-									? "SHOTGUN"
-									: "GUN"
-							: hud.hero === "anands"
-								? "DAGGER"
-								: "SWORD"}
+							? GUN_BADGE[hud.hero]
+							: hud.berserk
+								? "BERSERK"
+								: SWORD_BADGE[hud.hero]}
 					</span>
 				)}
 			</div>
@@ -450,6 +459,9 @@ export function FightHud({ training = false }: { training?: boolean }) {
 			{/* Whoever fights in the corner of the eye: the frags nobody saw. */}
 			<KillFeed />
 
+			{/* Ibiriki's curse on this fighter: the vignette and DON'T MOVE. */}
+			<RuptureCurse />
+
 			{clock ? (
 				<section
 					className={`vdh-clock${clock.danger ? " vdh-clock-danger" : ""}`}
@@ -481,7 +493,11 @@ export function FightHud({ training = false }: { training?: boolean }) {
 				<span className="vdh-ammo-label">AMMO</span>
 				{(hud?.ammo ?? 0) > 0 || (hud?.reserveRounds ?? 0) > 0 ? (
 					<span className="vdh-ammo-count">
-						{`${hud?.ammo ?? 0}/${hud?.reserveRounds ?? 0}`}
+						{/* A thrown weapon has no reserve to read: Ibiriki counts
+						    the axes in his hands. */}
+						{hud?.hero === "ibiriki"
+							? `${hud.ammo} AXES`
+							: `${hud?.ammo ?? 0}/${hud?.reserveRounds ?? 0}`}
 					</span>
 				) : (
 					<span className="vdh-ammo-count vdh-ammo-count-dry">DRY</span>

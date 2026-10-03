@@ -547,7 +547,7 @@ def apply_pose(arm, p):
     arm.pose.bones["forearm.L"].constraints["IK"].influence = p["ikL"]
 
 
-WEAPONS = {"Sword", "SwordBack", "Dagger", "DaggerL", "Rifle", "Shotgun", "Gun"}
+WEAPONS = {"Sword", "SwordBack", "Dagger", "DaggerL", "Rifle", "Shotgun", "Gun", "AxeOff"}
 
 
 def lowest_point(arm):

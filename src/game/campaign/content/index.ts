@@ -12,6 +12,7 @@
 import type { HeroId } from "../../simulation/Heroes.js";
 import type { CampaignModule } from "../types.js";
 import { ANANDS_COURSE } from "./anands.js";
+import { IBIRIKI_COURSE } from "./ibiriki.js";
 import { JEFFS_COURSE } from "./jeffs.js";
 import { LIA_COURSE } from "./lia.js";
 
@@ -20,6 +21,7 @@ export const MODULES: CampaignModule[] = [
 	LIA_COURSE,
 	ANANDS_COURSE,
 	JEFFS_COURSE,
+	IBIRIKI_COURSE,
 ];
 
 /** The tutorial course for a hero. Every hero has exactly one. */
@@ -27,6 +29,7 @@ const TUTORIALS: Record<HeroId, CampaignModule> = {
 	lia: LIA_COURSE,
 	anands: ANANDS_COURSE,
 	jeffs: JEFFS_COURSE,
+	ibiriki: IBIRIKI_COURSE,
 };
 
 export function tutorialFor(hero: HeroId): CampaignModule {

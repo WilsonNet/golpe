@@ -18,7 +18,11 @@
  */
 
 import type { AIInput, AIOutput } from "../src/game/characters/types.js";
-import { JUMP_HOLD_MS, scriptFor, slashBeats } from "../src/game/training/scripts.js";
+import {
+	JUMP_HOLD_MS,
+	scriptFor,
+	slashBeats,
+} from "../src/game/training/scripts.js";
 import {
 	type DummyBeat,
 	type DummyStatus,
@@ -312,6 +316,11 @@ export class TrainingDummy {
 		const right = Math.max(walkLeftX, walkRightX);
 		if (input.selfX <= left) this.walkDir = 1;
 		else if (input.selfX >= right) this.walkDir = -1;
+		// A wall turns it round too: the drill arena's ground pillar sits just
+		// inside the default right turn point, and a dummy that only turned at
+		// the point stood pushing the pillar for the rest of the lesson.
+		if (input.touchingRight) this.walkDir = -1;
+		else if (input.touchingLeft) this.walkDir = 1;
 		out.moveLeft = this.walkDir < 0;
 		out.moveRight = this.walkDir > 0;
 	}

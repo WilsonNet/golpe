@@ -25,7 +25,16 @@ export type MeleeMove =
 	| "massive"
 	| "stab"
 	| "thrust"
-	| "shoryuken";
+	| "shoryuken"
+	// Ibiriki's viking sword: the hew chain, the Sunder, and the berserk
+	// frenzy chain. See specs/ibiriki.md.
+	| "hew"
+	| "hew2"
+	| "hew3"
+	| "sunder"
+	| "rend"
+	| "rend2"
+	| "rend3";
 
 /**
  * One attack's complete definition. This table *is* the balance of the game —
@@ -94,6 +103,16 @@ export interface MoveDef {
 	 */
 	selfVx?: number;
 	/**
+	 * Does this move **crush** a front guard instead of being stopped by it?
+	 *
+	 * Ibiriki's Sunder. A guard in its path is knocked down rather than
+	 * honoured: the defender takes `GUARD_CRUSH_DAMAGE_FRACTION` of the damage
+	 * and a `GUARD_CRUSH_STUN_MS` mini stun, and the attacker is *not* guard
+	 * broken. Only meaningful on a `blockable` move — an unblockable one never
+	 * meets the guard to begin with.
+	 */
+	guardCrush?: boolean;
+	/**
 	 * Vertical speed the *attacker* travels during the active frames — the
 	 * shoryuken's rise. Pinned for the whole active window, then gravity owns
 	 * the recovery.
@@ -109,7 +128,7 @@ export interface MoveDef {
  * parameterised by the weapon's definition so a future weapon is a new table
  * and a new entry here, not a branch anywhere else.
  */
-export type MeleeWeaponId = "sword" | "dagger";
+export type MeleeWeaponId = "sword" | "dagger" | "viking";
 
 /**
  * What a weapon is allowed to do, and which moves it can start.
@@ -126,10 +145,28 @@ export interface MeleeWeaponDef {
 	moves: readonly MeleeMove[];
 	/** Can this weapon raise a guard at all? Only the sword. */
 	blockable: boolean;
-	/** Does this weapon charge a massive? Only the sword. */
+	/** Does this weapon charge a heavy move on a held attack? */
 	hasCharge: boolean;
+	/**
+	 * The move a full charge (or a guard-break reward) fires: the sword's
+	 * Massive, the viking sword's Sunder. Ignored when `hasCharge` is false.
+	 */
+	chargeMove: MeleeMove;
+	/** How long the attack must be held to arm `chargeMove`. */
+	chargeMs: number;
+	/**
+	 * Does an airborne release become the plunge bomb? Only the Massive's
+	 * weapon — the Sunder is simply swung in the air.
+	 */
+	plunge: boolean;
 	/** The ground chain, or null for a chainless weapon. */
 	chain: readonly MeleeMove[] | null;
+	/**
+	 * The chain the attack button runs while the fighter is **berserk**
+	 * (`bloodlust` at full — see specs/ibiriki.md). Absent for every weapon
+	 * that has no berserk.
+	 */
+	berserkChain?: readonly MeleeMove[];
 	/**
 	 * The move the block button starts in neutral. Null for the sword, whose
 	 * block button *blocks*.
@@ -141,6 +178,19 @@ export interface MeleeWeaponDef {
 	burst: { speed: number; durationMs: number; lockoutMs: number };
 }
 export const COMBO_CHAIN = ["slash", "slash2", "slash3"] as const;
+
+/** Ibiriki's hew chain: the viking sword's three heavier links. */
+const HEW_CHAIN = ["hew", "hew2", "hew3"] as const;
+
+/** Ibiriki's berserk frenzy: sword, axe, both. */
+const REND_CHAIN = ["rend", "rend2", "rend3"] as const;
+
+/** Every ground chain in the game. A move belongs to at most one. */
+export const CHAINS: readonly (readonly MeleeMove[])[] = [
+	COMBO_CHAIN,
+	HEW_CHAIN,
+	REND_CHAIN,
+];
 
 /**
  * How long either anti-air keeps its victim on the floor: 700ms.
@@ -473,6 +523,151 @@ export const MOVES: Record<MeleeMove, MoveDef> = {
 		/** The rise: a clean anti-air hop, not a jump (see `selfVy`). */
 		selfVy: -420,
 	},
+	/**
+	 * Ibiriki's first hew: the viking sword's opener. Heavier than the slash
+	 * everywhere — 445ms against 330, 10 damage against 7 — and the hitstun is
+	 * a stagger rather than a flinch. Like every chain link, the hitstun is set
+	 * by the gap to the next link's hitbox: the follow-up chains from this
+	 * move's recovery (215ms in) and opens 120ms later, 215ms after this one
+	 * did, so 300ms covers it with room for a late press. See specs/ibiriki.md.
+	 */
+	hew: {
+		startupMs: 120,
+		activeMs: 95,
+		recoveryMs: 230,
+		damage: 10,
+		reachPx: 54,
+		boxTopOffset: 4,
+		boxHeight: 40,
+		blockable: true,
+		cancellable: true,
+		piercesIframes: false,
+		hitstunMs: 300,
+		launchVy: 0,
+		knockbackVx: 170,
+		knockdown: false,
+	},
+	/** The second hew: the backhand. Same rhythm as the opener. */
+	hew2: {
+		startupMs: 120,
+		activeMs: 95,
+		recoveryMs: 230,
+		damage: 10,
+		reachPx: 56,
+		boxTopOffset: 2,
+		boxHeight: 42,
+		blockable: true,
+		cancellable: true,
+		piercesIframes: true,
+		/** Longer than the opener's: the finisher's startup is longer. */
+		hitstunMs: 330,
+		launchVy: 0,
+		knockbackVx: 190,
+		knockdown: false,
+	},
+	/**
+	 * The finisher: an overhead chop that knocks down. Its knockdown equals its
+	 * own active-plus-recovery, by the same construction as `slash3`'s, so a
+	 * landed hew chain ends in neutral.
+	 */
+	hew3: {
+		startupMs: 140,
+		activeMs: 110,
+		recoveryMs: 460,
+		damage: 15,
+		reachPx: 60,
+		boxTopOffset: -8,
+		boxHeight: 56,
+		blockable: true,
+		cancellable: false,
+		piercesIframes: true,
+		hitstunMs: 570,
+		launchVy: 0,
+		knockbackVx: 340,
+		knockdown: true,
+		knockdownMs: 570,
+	},
+	/**
+	 * **Sunder** — the viking sword's charged overhead (hold attack for
+	 * `SUNDER_CHARGE_MS`, release). Top to bottom, the biggest single swing a
+	 * sword makes, and it **crushes guards**: a front block takes a fraction of
+	 * it and a mini stun instead of turning it away. Short startup for the same
+	 * reason the Massive's is short — the sword was raised for the whole hold.
+	 */
+	sunder: {
+		startupMs: 110,
+		activeMs: 140,
+		recoveryMs: 420,
+		damage: 28,
+		reachPx: 60,
+		/** From over the head down to the feet: the whole overhead arc. */
+		boxTopOffset: -24,
+		boxHeight: 72,
+		blockable: true,
+		guardCrush: true,
+		cancellable: false,
+		piercesIframes: false,
+		hitstunMs: 700,
+		launchVy: 0,
+		knockbackVx: 260,
+		knockdown: false,
+	},
+	/**
+	 * Berserk frenzy, link one: the sword. Fast — 245ms — and a mini stun on
+	 * every hit. The follow-up chains from recovery (125ms in) and opens 55ms
+	 * later, so the 240ms hitstun covers the 125ms gap twice over: the frenzy is
+	 * meant to *hold* its victim.
+	 */
+	rend: {
+		startupMs: 55,
+		activeMs: 70,
+		recoveryMs: 120,
+		damage: 8,
+		reachPx: 50,
+		boxTopOffset: 6,
+		boxHeight: 36,
+		blockable: true,
+		cancellable: true,
+		piercesIframes: false,
+		hitstunMs: 240,
+		launchVy: 0,
+		knockbackVx: 110,
+		knockdown: false,
+	},
+	/** Berserk frenzy, link two: the axe in the off hand. */
+	rend2: {
+		startupMs: 55,
+		activeMs: 70,
+		recoveryMs: 120,
+		damage: 8,
+		reachPx: 50,
+		boxTopOffset: 4,
+		boxHeight: 38,
+		blockable: true,
+		cancellable: true,
+		piercesIframes: true,
+		hitstunMs: 240,
+		launchVy: 0,
+		knockbackVx: 120,
+		knockdown: false,
+	},
+	/** Berserk frenzy, link three: both weapons in an X — the shove. */
+	rend3: {
+		startupMs: 70,
+		activeMs: 90,
+		recoveryMs: 260,
+		damage: 12,
+		reachPx: 56,
+		boxTopOffset: -2,
+		boxHeight: 48,
+		blockable: true,
+		cancellable: false,
+		piercesIframes: true,
+		hitstunMs: 380,
+		launchVy: 0,
+		knockbackVx: 300,
+		knockdown: false,
+	},
 };
 
 /**
@@ -521,6 +716,37 @@ export const DAGGER_DASH_DURATION_MS = 150;
 
 export const DAGGER_DASH_LOCKOUT_MS = 220;
 
+/**
+ * Hold the attack button this long to arm a Massive Strike.
+ *
+ * 1.6s — long enough that arming in somebody's face is a read they can punish
+ * (a stun, a guard break, a stance switch all spend it), short enough that the
+ * armed delivery phase — walk it in, hop it into a bomb — is the majority of
+ * the commitment rather than a distant reward. The original 4s made the
+ * charge itself the whole move, and the fighter spent most of the gesture
+ * standing still.
+ */
+export const MASSIVE_CHARGE_MS = 1600;
+
+/**
+ * Hold the attack button this long to arm Ibiriki's Sunder: 1s.
+ *
+ * Shorter than the Massive's 1.6s because the payoff is smaller — one swing,
+ * no blast, no bomb — and longer than any tap, so the raised sword is a tell
+ * a foe can read and punish. See specs/ibiriki.md.
+ */
+export const SUNDER_CHARGE_MS = 1000;
+
+/** What fraction of a guard-crushing hit a front guard still lets through. */
+export const GUARD_CRUSH_DAMAGE_FRACTION = 0.4;
+
+/**
+ * The mini stun a crushed guard leaves: long enough that the crusher's next
+ * hew lands before the guard can come back up (120ms startup plus a step),
+ * far shorter than a guard break's full second.
+ */
+export const GUARD_CRUSH_STUN_MS = 450;
+
 export const MELEE_WEAPONS: Record<MeleeWeaponId, MeleeWeaponDef> = {
 	sword: {
 		id: "sword",
@@ -528,6 +754,9 @@ export const MELEE_WEAPONS: Record<MeleeWeaponId, MeleeWeaponDef> = {
 		moves: ["slash", "slash2", "slash3", "uppercut", "massive"],
 		blockable: true,
 		hasCharge: true,
+		chargeMove: "massive",
+		chargeMs: MASSIVE_CHARGE_MS,
+		plunge: true,
 		chain: COMBO_CHAIN,
 		shiftMove: null,
 		specialMove: "uppercut",
@@ -543,6 +772,9 @@ export const MELEE_WEAPONS: Record<MeleeWeaponId, MeleeWeaponDef> = {
 		moves: ["stab", "thrust", "shoryuken"],
 		blockable: false,
 		hasCharge: false,
+		chargeMove: "massive",
+		chargeMs: MASSIVE_CHARGE_MS,
+		plunge: false,
 		chain: null,
 		shiftMove: "thrust",
 		specialMove: "shoryuken",
@@ -550,6 +782,39 @@ export const MELEE_WEAPONS: Record<MeleeWeaponId, MeleeWeaponDef> = {
 			speed: DAGGER_DASH_SPEED,
 			durationMs: DAGGER_DASH_DURATION_MS,
 			lockoutMs: DAGGER_DASH_LOCKOUT_MS,
+		},
+	},
+	/**
+	 * Ibiriki's viking sword: the sword's guard and uppercut, its own heavier
+	 * chain, the Sunder on the charge, and the berserk frenzy. The burst is the
+	 * sword's — a heavy weapon does not dash faster. See specs/ibiriki.md.
+	 */
+	viking: {
+		id: "viking",
+		label: "VIKING SWORD",
+		moves: [
+			"hew",
+			"hew2",
+			"hew3",
+			"uppercut",
+			"sunder",
+			"rend",
+			"rend2",
+			"rend3",
+		],
+		blockable: true,
+		hasCharge: true,
+		chargeMove: "sunder",
+		chargeMs: SUNDER_CHARGE_MS,
+		plunge: false,
+		chain: HEW_CHAIN,
+		berserkChain: REND_CHAIN,
+		shiftMove: null,
+		specialMove: "uppercut",
+		burst: {
+			speed: DASH_SPEED,
+			durationMs: DASH_DURATION_MS,
+			lockoutMs: DASH_LOCKOUT_MS,
 		},
 	},
 };
@@ -589,18 +854,6 @@ export const KNOCKDOWN_MS = 520;
  * drifting through their own knockdown.
  */
 export const KNOCKDOWN_SLAM_VY = 520;
-
-/**
- * Hold the attack button this long to arm a Massive Strike.
- *
- * 1.6s — long enough that arming in somebody's face is a read they can punish
- * (a stun, a guard break, a stance switch all spend it), short enough that the
- * armed delivery phase — walk it in, hop it into a bomb — is the majority of
- * the commitment rather than a distant reward. The original 4s made the
- * charge itself the whole move, and the fighter spent most of the gesture
- * standing still.
- */
-export const MASSIVE_CHARGE_MS = 1600;
 
 /**
  * Hold past this and the charge roots your walk.

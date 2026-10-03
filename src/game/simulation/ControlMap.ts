@@ -5,6 +5,7 @@ import {
 	CP_ZONE_H,
 	CP_ZONE_W,
 } from "../../tweakables/control.js";
+import type { AmmoPackSpot } from "./AmmoPacks.js";
 import {
 	GROUND,
 	PLAYER_HEIGHT,
@@ -18,7 +19,6 @@ import {
 	WORLD_TOP,
 	type World,
 } from "./Arena.js";
-import type { AmmoPackSpot } from "./AmmoPacks.js";
 import type { ControlPad } from "./ControlPoints.js";
 
 /**

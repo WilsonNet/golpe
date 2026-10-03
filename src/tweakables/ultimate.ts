@@ -24,6 +24,7 @@ export const ULT_CAP: Record<string, number> = {
 	"black-hole": 100,
 	"dragon-thrust": 100,
 	"death-blossom": 65,
+	rupture: 100,
 };
 
 /**
@@ -38,6 +39,7 @@ export const ULT_CHARGE_MULTIPLIER: Record<string, number> = {
 	"black-hole": 1,
 	"dragon-thrust": 1,
 	"death-blossom": 1.3,
+	rupture: 1,
 };
 
 /**
@@ -312,3 +314,43 @@ export const BLOSSOM_TICK_MS = 250;
  * not a turret — a slow one, so the room can always just leave.
  */
 export const BLOSSOM_WALK_MULTIPLIER = 0.5;
+
+// ---------------------------------------------------------------------------
+// Rupture — Ibiriki's ultimate (specs/ibiriki.md)
+// ---------------------------------------------------------------------------
+
+/**
+ * How long every hostile fighter stays ruptured: 6s. Long enough to be a
+ * siege — six seconds of deciding whether a step is worth its blood — and
+ * short enough that standing still through it is a real option.
+ */
+export const RUPTURE_DURATION_MS = 6000;
+
+/**
+ * HP per pixel a ruptured body travels. 0.09: a second's walk (220px) is ~20,
+ * a dash (~160px) ~15, a full jump up and down ~25. Six seconds of running
+ * kills from full health; six seconds of standing costs nothing.
+ */
+export const RUPTURE_DAMAGE_PER_PX = 0.09;
+
+/** The cut on application, so the cast lands as a hit on everyone. */
+export const RUPTURE_CAST_DAMAGE = 5;
+
+/**
+ * How often the accrued bleed is paid, in whole HP. Accrued every tick from
+ * the exact distance travelled, so the interval changes nothing but how often
+ * a damage number is drawn.
+ */
+export const RUPTURE_TICK_MS = 100;
+
+/**
+ * A single tick's travel beyond this is not movement, it is a teleport (a
+ * respawn, a round reset) and never bleeds.
+ */
+export const RUPTURE_TELEPORT_PX = 200;
+
+/**
+ * The stomp: how long the caster is planted after the freeze, both weapons
+ * drawn, slamming the ground. Rooted and holding nothing — the cast's tell.
+ */
+export const RUPTURE_STOMP_MS = 650;

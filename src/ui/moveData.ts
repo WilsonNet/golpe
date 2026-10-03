@@ -24,7 +24,25 @@ import type { HeroId } from "../game/simulation/Heroes";
 import { ROOT_MS, TRAP_DAMAGE, TRAP_RADIUS } from "../game/simulation/Items";
 import { type MeleeMove, MOVES, moveDuration } from "../game/simulation/Melee";
 import { HE_GRENADE_MAX_DAMAGE, HE_GRENADE_RADIUS } from "../tweakables/items";
+import {
+	GUARD_CRUSH_DAMAGE_FRACTION,
+	GUARD_CRUSH_STUN_MS,
+	SUNDER_CHARGE_MS,
+} from "../tweakables/melee";
 import { TUMBLE_SPEED } from "../tweakables/movement";
+import {
+	BERSERK_DAMAGE_TAKEN,
+	BERSERK_FRACTION,
+	BLOODLUST_ATTACK_SPEED_BONUS,
+	BLOODLUST_MOVE_SPEED_BONUS,
+} from "../tweakables/passive";
+import {
+	AXE_CHARGE_MS,
+	AXE_GRAVITY,
+	AXE_MIN_DAMAGE,
+	AXE_MIN_SPEED,
+	RANGED_WEAPONS,
+} from "../tweakables/ranged";
 import {
 	BLOSSOM_DURATION_MS,
 	BLOSSOM_RADIUS_PX,
@@ -34,6 +52,9 @@ import {
 	DRAGON_KNOCKBACK_PX_S,
 	DRAGON_RIDE_MS,
 	DRAGON_SPEED,
+	RUPTURE_CAST_DAMAGE,
+	RUPTURE_DAMAGE_PER_PX,
+	RUPTURE_DURATION_MS,
 	SINGULARITY_DAMAGE_INTERVAL_MS,
 	SINGULARITY_DURATION_MS,
 	SINGULARITY_RADIUS,
@@ -225,6 +246,15 @@ const MELEE_PROSE: Partial<Record<MeleeMove, string>> = {
 		"The dagger's whole identity and its Shift move: a committed lunge that knocks down everyone in its path for 1.5s. It is the answer to having no guard — the 260ms wind-up is the tell, and a jump clears the flat line entirely. The dash is unblockable once committed.",
 	shoryuken:
 		"The dagger's anti-air, on the uppercut button. A rising stab with a wide reach that **launches like the sword's uppercut** — the same arc, the same horizontal body, the same 700ms floor time, and the same safe fall and Insta Fall to escape or punish it. It only fires while the second jump is still in hand, so it can never be a third jump — and unlike the sword's uppercut it is blockable, so a read guard stops it.",
+	hew: "The viking sword's opener — heavier than a slash in every way. Slower to start (120ms), 10 damage, and a 300ms stagger instead of a flinch, so a landed hew holds its victim for the next one. Cancellable into the guard, and the first link of the hew chain.",
+	hew2: "The backhand — the second link, the same rhythm as the opener. It pierces the opener's invulnerability, so a landed chain keeps landing.",
+	hew3: "The finisher — an overhead chop that knocks down. It cannot be cancelled; the whole hew chain is 10 + 10 + 15 = 35, heavier than the katana's 25, for three slower swings that each have to land on the ground.",
+	sunder: `Hold the attack button and the sword goes up over his head while blood-red motes stream into it; after ${SUNDER_CHARGE_MS / 1000}s it is armed, and the release brings it down top to bottom. **It goes through blocks**: a front guard is crushed — the blocker takes ${Math.round(GUARD_CRUSH_DAMAGE_FRACTION * 100)}% and a ${GUARD_CRUSH_STUN_MS}ms mini stun — instead of guard breaking you. A guard break you land also arms a free Sunder.`,
+	rend: "**Berserk only** — some foe is below the berserk line, Ibiriki dual wields, and the attack button runs the frenzy: sword, axe, both. Every link is fast and every hit is a mini stun, so the frenzy holds its victim.",
+	rend2:
+		"**Berserk only** — the second link of the frenzy: the axe in the off hand.",
+	rend3:
+		"**Berserk only** — sword and axe together in an X. The frenzy's last link shoves the victim away.",
 };
 
 function meleeEntry(move: MeleeMove): MoveEntry {
@@ -250,6 +280,13 @@ const MOVE_DISPLAY_NAMES: Record<MeleeMove, string> = {
 	stab: "Stab",
 	thrust: "Thrust",
 	shoryuken: "Shoryuken",
+	hew: "Hew",
+	hew2: "Hew 2",
+	hew3: "Hew 3",
+	sunder: "Sunder",
+	rend: "Frenzy (sword)",
+	rend2: "Frenzy (axe)",
+	rend3: "Frenzy (X-cut)",
 };
 
 function moveName(move: MeleeMove): string {
@@ -272,6 +309,18 @@ function meleeCommand(move: MeleeMove): MoveCommand {
 			return { label: "LMB (dagger)", actions: ["attack"] };
 		case "thrust":
 			return { label: "SHIFT (dagger)", actions: ["block"] };
+		case "hew":
+		case "hew2":
+			return { label: "LMB — and again for the chain", actions: ["attack"] };
+		case "hew3":
+			return { label: "LMB × 3 on the ground", actions: ["attack"] };
+		case "sunder":
+			return { label: "HOLD LMB 1s, then release", actions: ["attack"] };
+		case "rend":
+		case "rend2":
+			return { label: "LMB while BERSERK", actions: ["attack"] };
+		case "rend3":
+			return { label: "LMB × 3 while BERSERK", actions: ["attack"] };
 		default:
 			return { label: moveName(move), actions: ["attack"] };
 	}
@@ -285,6 +334,7 @@ function meleeTags(move: MeleeMove): string {
 	if (d.piercesIframes) parts.push("PIERCES IFRAMES");
 	if (d.cancellable) parts.push("CANCELLABLE");
 	if (d.selfVx) parts.push("CARRIES BODY");
+	if (d.guardCrush) parts.push("CRUSHES GUARDS");
 	return parts.join(" · ");
 }
 
@@ -458,6 +508,83 @@ export const MOVE_LISTS: Record<HeroId, HeroMoveList> = {
 						label: "TICK",
 						value: `${BLOSSOM_TICK_DAMAGE} / ${BLOSSOM_TICK_MS}ms`,
 					},
+				],
+			},
+		],
+	},
+	ibiriki: {
+		hero: "ibiriki",
+		entries: [
+			...SYSTEM_ENTRIES,
+			...MOVEMENT_ENTRIES,
+			{
+				id: "bloodlust",
+				category: "system",
+				name: "Bloodlust (passive)",
+				command: { label: "ALWAYS ON", actions: [] },
+				prose: `Ibiriki smells the weakest foe in the room. The lower their HP, the faster he walks (up to +${Math.round(BLOODLUST_MOVE_SPEED_BONUS * 100)}%) and swings (up to +${Math.round(BLOODLUST_ATTACK_SPEED_BONUS * 100)}%). Below ${Math.round(BERSERK_FRACTION * 100)}% he goes **berserk**: his eyes glow, a red aura rises, he dual wields the sword and an axe, the attack button runs the frenzy, and he takes ${Math.round((1 - BERSERK_DAMAGE_TAKEN) * 100)}% less damage.`,
+				tags: "GLOBAL · BERSERK BELOW 30%",
+			},
+			meleeEntry("hew"),
+			meleeEntry("hew2"),
+			meleeEntry("hew3"),
+			meleeEntry("uppercut"),
+			meleeEntry("sunder"),
+			meleeEntry("rend"),
+			meleeEntry("rend2"),
+			meleeEntry("rend3"),
+			{
+				id: "axe",
+				category: "ranged",
+				name: "Throwing Axe",
+				command: {
+					label: "E, then HOLD LMB and release",
+					actions: ["gun", "attack"],
+				},
+				prose: `Hold to charge, release to throw. A tap is a ${AXE_MIN_SPEED} px/s lob for ${AXE_MIN_DAMAGE}; a full ${AXE_CHARGE_MS / 1000}s charge flies flat and far at ${RANGED_WEAPONS.axe.speed} px/s for ${RANGED_WEAPONS.axe.damage} — almost a whole bar — wreathed in embers, and it **crushes a guard** like the Sunder. Ten axes a life and no reload: every axe sticks where it lands and stays there until **you walk over it** to take it back, or you die.`,
+				tags: "CHARGED · BALLISTIC · PICK THEM BACK UP",
+				stats: [
+					{
+						label: "DMG",
+						value: `${AXE_MIN_DAMAGE}–${RANGED_WEAPONS.axe.damage}`,
+						level: 1,
+					},
+					{
+						label: "SPEED",
+						value: `${AXE_MIN_SPEED}–${RANGED_WEAPONS.axe.speed} px/s`,
+					},
+					{ label: "GRAVITY", value: `${AXE_GRAVITY} px/s²` },
+					{ label: "AXES", value: `${RANGED_WEAPONS.axe.magazine}` },
+				],
+			},
+			{
+				id: "trap",
+				category: "item",
+				name: "Trap",
+				command: { label: "F — 3 uses per life", actions: ["item"] },
+				prose:
+					"The hunter's snare: a thrown canister that plants into an armed mine. A caught fighter is rooted for 3s — no feet, but they can still swing and block — which is exactly long enough to walk a Sunder into them.",
+				stats: [
+					{
+						label: "RADIUS",
+						value: `${TRAP_RADIUS}px`,
+						level: TRAP_RADIUS / 200,
+					},
+					{ label: "ROOT", value: `${ROOT_MS}ms`, level: 1 },
+					{ label: "DMG", value: `${TRAP_DAMAGE}` },
+				],
+			},
+			{
+				id: "rupture",
+				category: "ultimate",
+				name: "Rupture",
+				command: { label: "HOLD R, release to cast", actions: ["ultimate"] },
+				prose: `Your ultimate — a curse on the whole room. After the freeze Ibiriki stomps with both weapons drawn, and every enemy alive is ruptured for ${RUPTURE_DURATION_MS / 1000}s: **every pixel they move costs blood** (${RUPTURE_DAMAGE_PER_PX} HP per px — a second of walking is ~20). Standing still costs nothing. Knockback and falls count — it is the body that moved. Global: no aim, no dodge but patience.`,
+				tags: "GLOBAL · MOVING HURTS · CANNOT BE GUARDED",
+				stats: [
+					{ label: "DURATION", value: `${RUPTURE_DURATION_MS}ms`, level: 1 },
+					{ label: "BLEED", value: `${RUPTURE_DAMAGE_PER_PX} / px` },
+					{ label: "CAST", value: `${RUPTURE_CAST_DAMAGE}` },
 				],
 			},
 		],

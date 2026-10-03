@@ -511,6 +511,7 @@ export class TrainingRoom {
 			blast: 0,
 			bomb: 0,
 			instaFall: 0,
+			crushed: 0,
 		};
 		let parriedByDummy = 0;
 		for (const e of this.events) {

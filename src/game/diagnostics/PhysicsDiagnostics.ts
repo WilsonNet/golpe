@@ -18,8 +18,7 @@ import {
 import {
 	AIR_JUMPS,
 	BULLET_SPEED,
-	COMBO_CHAIN,
-	isComboSlash,
+	chainOf,
 	MELEE_MOVES,
 	type MeleeAction,
 	type MeleeMove,
@@ -41,6 +40,7 @@ function zeroOutcomesByMove(): Record<MeleeMove, Record<MeleeOutcome, number>> {
 			blast: 0,
 			bomb: 0,
 			instaFall: 0,
+			crushed: 0,
 		};
 	}
 	return out;
@@ -426,6 +426,7 @@ export class PhysicsDiagnostics {
 		blast: 0,
 		bomb: 0,
 		instaFall: 0,
+		crushed: 0,
 	};
 	private outcomeByMove: Record<MeleeMove, Record<MeleeOutcome, number>> =
 		zeroOutcomesByMove();
@@ -607,6 +608,7 @@ export class PhysicsDiagnostics {
 			blast: 0,
 			bomb: 0,
 			instaFall: 0,
+			crushed: 0,
 		};
 		this.outcomeByMove = zeroOutcomesByMove();
 		this.meleeViolations = [];
@@ -1156,9 +1158,10 @@ export class PhysicsDiagnostics {
 			// of another one. Counting starts rather than hits, because a chain that
 			// is never thrown and a chain that is thrown and whiffed are different
 			// defects with different fixes.
-			if (isComboSlash(s.meleeAction) && s.comboStep > 1) {
+			const chain = chainOf(s.meleeAction);
+			if (chain !== null && s.comboStep > 1) {
 				this.comboLinks++;
-				if (s.comboStep >= COMBO_CHAIN.length) this.combosFinished++;
+				if (s.comboStep >= chain.length) this.combosFinished++;
 				// The chain is a *ground* technique. A link thrown in the air means
 				// `canChain` let go of the one rule that keeps a combo from being a
 				// free three-hit string out of a jump-in.

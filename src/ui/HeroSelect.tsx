@@ -31,6 +31,7 @@ export const HERO_SPRITE_CSS = `
 .hp-sprite-lia { background-image: url("assets/lia-portrait.png"); }
 .hp-sprite-anands { background-image: url("assets/anands-portrait.png"); }
 .hp-sprite-jeffs { background-image: url("assets/jeffs-portrait.png"); }
+.hp-sprite-ibiriki { background-image: url("assets/ibiriki-portrait.png"); }
 `;
 
 /** The ultimate's name per hero, so the card never invents one. */
@@ -153,7 +154,9 @@ export function HeroSelect({
 					? "The duelist: a guard to read with, a chain to walk, a black hole to earn."
 					: current === "anands"
 						? "The storm: no guard at all — stabs, a lunge that knocks down, a dragon."
-						: "The executioner: a one-blast kill at point blank, a smoke to vanish in, a storm."}
+						: current === "jeffs"
+							? "The executioner: a one-blast kill at point blank, a smoke to vanish in, a storm."
+							: "The bloodthirsty: heavy hews, axes you walk back to, faster the more the room bleeds."}
 			</div>
 		</>
 	);

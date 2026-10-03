@@ -346,7 +346,11 @@ type Drill =
 	| "shoryuken"
 	| "safeFall"
 	| "instaFall"
-	| "mash";
+	| "mash"
+	| "hew"
+	| "sunder"
+	| "axes"
+	| "frenzy";
 
 /** Longest suffix wins, so `-basics-walk` beats `-walk` would-be matches. */
 const DRILLS: [suffix: string, drill: Drill][] = [
@@ -374,6 +378,12 @@ const DRILLS: [suffix: string, drill: Drill][] = [
 	["-thrust", "thrust"],
 	["-shoryuken", "shoryuken"],
 	["-pressure", "swings"],
+	// Ibiriki: the hew chain's slower rhythm, the Sunder's hold, the axes'
+	// throw-and-fetch, and the berserk frenzy.
+	["-hew", "hew"],
+	["-sunder", "sunder"],
+	["-axes", "axes"],
+	["-berserk", "frenzy"],
 ];
 
 function drillFor(lessonId: string): Drill | null {
@@ -576,9 +586,9 @@ async function drill(page: Page, kind: Drill) {
 				// arena, so the fall window is short and a blind jump cadence
 				// misses it.
 				const done = () =>
-					window.__tutorial?.state().objectives.some(
-						(o) => o.id === "safe-fall" && o.done,
-					) ?? false;
+					window.__tutorial
+						?.state()
+						.objectives.some((o) => o.id === "safe-fall" && o.done) ?? false;
 				for (let i = 0; i < 8 && !done(); i++) {
 					await closeIn();
 					for (let w = 0; w < 500; w++) {
@@ -598,9 +608,9 @@ async function drill(page: Page, kind: Drill) {
 			}
 			case "instaFall": {
 				const done = () =>
-					window.__tutorial?.state().objectives.some(
-						(o) => o.id === "insta-fall" && o.done,
-					) ?? false;
+					window.__tutorial
+						?.state()
+						.objectives.some((o) => o.id === "insta-fall" && o.done) ?? false;
 				// Three catches against a hopping dummy: the objective is 3, and
 				// the dummy is a moving target — so the launcher waits for it to
 				// touch down first. A launch from mid-hop starts too high for the
@@ -634,6 +644,71 @@ async function drill(page: Page, kind: Drill) {
 				}
 				break;
 			}
+			case "hew":
+				// The hew chain links from recovery: a press every ~240ms lands
+				// inside each link's recovery window.
+				for (let i = 0; i < 5; i++) {
+					await approach(40);
+					const angle = aim();
+					for (let k = 0; k < 3; k++) {
+						await t.input({ attack: true }, 70, angle);
+						await sleep(240);
+					}
+					await sleep(800);
+				}
+				break;
+			case "sunder":
+				// Charge out of the turtle's reach — the press opens with a hew,
+				// and a hew into a guard is a guard break that spends the charge —
+				// then walk the armed blade in (walking returns once armed) and
+				// let go on top of the guard.
+				for (let i = 0; i < 4; i++) {
+					await approach(110);
+					// Too close is the trap: back off to charging distance first.
+					if (Math.abs(gap()) < 100) {
+						await t.input(
+							gap() > 0 ? { left: true } : { right: true },
+							(110 - Math.abs(gap())) * 5,
+						);
+					}
+					const toward = gap() > 0 ? { right: true } : { left: true };
+					const hold = t.input({ attack: true }, 1150, aim());
+					await sleep(1100);
+					await t.input({ attack: true, ...toward }, 420);
+					await hold;
+					await sleep(1000);
+				}
+				break;
+			case "axes": {
+				// Throw three charged axes at the pacing dummy, then walk over
+				// every resting axe to take it back.
+				await t.input({ swordStance: false }, 220);
+				for (let i = 0; i < 4; i++) {
+					await t.input({ swordStance: false, attack: true }, 700, aim());
+					await t.input({ swordStance: false }, 400);
+				}
+				for (let i = 0; i < 6; i++) {
+					await t.input({ swordStance: false, right: true }, 900);
+					await t.input({ swordStance: false, left: true }, 900);
+				}
+				for (let i = 0; i < 6; i++) {
+					await t.input({ swordStance: false, left: true }, 700);
+					await t.input({ swordStance: false, right: true }, 700);
+				}
+				break;
+			}
+			case "frenzy":
+				// The bleeding dummy fills the bloodlust: the presses are rends.
+				for (let i = 0; i < 6; i++) {
+					await approach(34);
+					const angle = aim();
+					for (let k = 0; k < 3; k++) {
+						await t.input({ attack: true }, 60, angle);
+						await sleep(150);
+					}
+					await sleep(600);
+				}
+				break;
 			case "mash":
 				for (let i = 0; i < 30; i++) {
 					const g = gap();

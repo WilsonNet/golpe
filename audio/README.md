@@ -1,6 +1,6 @@
 # golpe's soundtrack — the editable source
 
-The game ships four orchestrated loops (the title theme, one theme per hero)
+The game ships five orchestrated loops (the title theme, one theme per hero)
 and a bank of synthesized sound effects. **The music's source of truth is
 MIDI; the SFX are synthesized in the client.**
 
@@ -13,7 +13,8 @@ audio/
 │   ├── title-loop.mid   the main theme (title screen)
 │   ├── lia-loop.mid     Lia's theme
 │   ├── anands-loop.mid  Anands' theme
-│   └── jeffs-loop.mid   Jeffs' theme
+│   ├── jeffs-loop.mid   Jeffs' theme
+│   └── ibiriki-loop.mid Ibiriki's theme
 └── soundfonts/          the instrument banks (gitignored — downloaded once,
     │                    see below; do not commit, 36 MB)
     └── MuseScore_General.sf3
@@ -32,10 +33,11 @@ through the soundfont **per stem**, mixes and masters it, writes the WAV.
 | "Blade Pulse" (Lia) | `midi/lia-loop.mid` | 124 | A minor | 16 | 31.0s | `public/audio/lia-loop.wav` |
 | "Dagger Storm" (Anands) | `midi/anands-loop.mid` | 146 | E minor | 16 | 26.3s | `public/audio/anands-loop.wav` |
 | "Executioner" (Jeffs) | `midi/jeffs-loop.mid` | 104 | F minor | 16 | 36.9s | `public/audio/jeffs-loop.wav` |
+| "Bloodthirst" (Ibiriki) | `midi/ibiriki-loop.mid` | 120 | D minor (Phrygian ♭II) | 16 | 32.0s | `public/audio/ibiriki-loop.wav` |
 
-**Structure (all four):** intro 2 bars → A 4 → B 4 → C 4 (the crest, densest
+**Structure (all five):** intro 2 bars → A 4 → B 4 → C 4 (the crest, densest
 texture) → outro 2, where the last bar is the dominant (E major for A minor,
-B major for E minor, C major for F minor) so the seam is the cadence back to
+B major for E minor, C major for F minor, A major for D minor) so the seam is the cadence back to
 the top's tonic — the game-loop rule: *end on the dominant, never announce
 the seam with a fill*. Fills sit on interior section boundaries only.
 
@@ -65,7 +67,10 @@ bank 0. This is the answer to "what synth made this sound":
 arp(81 saw). **anands** — storm at 146: drums, bass(38), stabs(80 square
 knife), lead(81 saw whirl), pads(92 bowed), arp(82 calliope glint).
 **jeffs** — half-time weight: drums, bass(38), guitar(27 clean), horn(60
-French horn), pads(89).
+French horn), pads(89). **ibiriki** — a war march at 120: drums (war toms
+41/43/45 rolling the 16ths), bass(33 fingered), choir(52 Choir Aahs),
+brass(61 Brass Section — the chant D-F-A and the fall through E♭),
+horn(60 — the call and the answer), taiko(116 — the big hits).
 
 ### The mixed & mastered numbers
 

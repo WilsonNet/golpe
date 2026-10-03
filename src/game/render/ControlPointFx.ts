@@ -226,7 +226,9 @@ export class ControlPointFx {
 				point.owner !== myTeam &&
 				point.unlocked[myTeam] === true;
 			const breath = canAttack
-				? 1 - BREATH_DEPTH * (0.5 + 0.5 * Math.sin((this.timeMs / BREATH_MS) * Math.PI * 2))
+				? 1 -
+					BREATH_DEPTH *
+						(0.5 + 0.5 * Math.sin((this.timeMs / BREATH_MS) * Math.PI * 2))
 				: 1;
 
 			// A locked pad is neither side's next objective: dim it. The line has
@@ -236,7 +238,8 @@ export class ControlPointFx {
 
 			// Contested: the two sides are arguing and the bar is frozen, so the
 			// rim and the ring pulse between the colours rather than filling.
-			const contestMix = 0.5 + 0.5 * Math.sin((this.timeMs / CONTEST_MS) * Math.PI * 2);
+			const contestMix =
+				0.5 + 0.5 * Math.sin((this.timeMs / CONTEST_MS) * Math.PI * 2);
 			const accent = point.contested
 				? mixRgb(teamColor(0), teamColor(1), contestMix)
 				: point.owner === null

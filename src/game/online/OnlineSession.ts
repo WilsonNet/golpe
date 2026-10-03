@@ -49,6 +49,7 @@ import {
 } from "./Rollback";
 import type {
 	AmmoPickupMsg,
+	AxeHitMsg,
 	BlockedBulletMsg,
 	ControlCapturedMsg,
 	ControlOvertimeMsg,
@@ -64,18 +65,20 @@ import type {
 	RoundLiveMsg,
 	RoundWonMsg,
 	SnapshotAmmoPack,
+	SnapshotAxe,
 	SnapshotBullet,
 	SnapshotCinematic,
 	SnapshotGrenade,
 	SnapshotHeGrenade,
 	SnapshotPlayer,
+	SnapshotRupture,
 	SnapshotSmokeCloud,
 	SnapshotSmokeGrenade,
 	SnapshotTrap,
 	SnapshotTrapCanister,
 } from "./types";
 import { GAME_SERVER_PORT } from "./types";
-import { unpackIntent, unpackState } from "./wire";
+import { unpackAxe, unpackIntent, unpackState } from "./wire";
 
 /** Cap on ballistic extrapolation, so a bad clock estimate cannot fling a bullet. */
 const MAX_EXTRAPOLATION_MS = 250;
@@ -176,6 +179,10 @@ export interface OnlineCallbacks {
 	onBlockedBullet: (event: BlockedBulletMsg) => void;
 	/** Somebody took an ammo pack, for the pickup sound and pop. Effects only. */
 	onAmmoPickup: (event: AmmoPickupMsg) => void;
+	/** An axe struck a body, a guard or a surface, or was picked up. Effects only. */
+	onAxeHit: (event: AxeHitMsg) => void;
+	/** A rupture began: the stomp's one-shot, for the shockwave. */
+	onRuptureOpened: (rupture: SnapshotRupture) => void;
 	/** A fighter appeared in the snapshot for the first time. */
 	onFighterAdded: (id: string) => void;
 	/** A fighter is no longer in the room. */
@@ -314,6 +321,10 @@ export class OnlineSession {
 	private latestSmokeClouds: SnapshotSmokeCloud[] = [];
 	/** The control map's ammo packs, as the newest snapshot reports them. */
 	private latestAmmoPacks: SnapshotAmmoPack[] = [];
+	private latestAxes: SnapshotAxe[] = [];
+	private latestRupture: SnapshotRupture | null = null;
+	/** The last rupture announced, so its open fires once however often it repeats. */
+	private lastRuptureId = -1;
 	/** The open Death Blossom, copied from the newest snapshot. */
 	private latestBlossom: Blossom | null = null;
 	private _matchStatus: MatchStatus | undefined;
@@ -573,6 +584,16 @@ export class OnlineSession {
 	/** The open Death Blossom, or null. Read by the renderer; owned by the server. */
 	get blossom(): Blossom | null {
 		return this.latestBlossom;
+	}
+
+	/** Ibiriki's axes — flying, falling and resting — off the newest snapshot. */
+	get axes(): readonly SnapshotAxe[] {
+		return this.latestAxes;
+	}
+
+	/** The running Rupture, or null. Owned by the server; drawn here. */
+	get rupture(): SnapshotRupture | null {
+		return this.latestRupture;
 	}
 
 	nameOf(id: string): string {
@@ -1133,6 +1154,9 @@ export class OnlineSession {
 		for (const event of snap.ammoPickups ?? []) {
 			this.callbacks.onAmmoPickup(event);
 		}
+		for (const event of snap.axeHits ?? []) {
+			this.callbacks.onAxeHit(event);
+		}
 
 		this._matchStatus = snap.match;
 		this.callbacks.onMatch(snap.match, this.standings());
@@ -1261,6 +1285,14 @@ export class OnlineSession {
 		}));
 		this.latestSmokeClouds = (snap.smokeClouds ?? []).map((c) => ({ ...c }));
 		this.latestAmmoPacks = (snap.ammoPacks ?? []).map((p) => ({ ...p }));
+		this.latestAxes = (snap.axes ?? []).map(unpackAxe);
+		// The curse, adopted like the storm: full state, edge-detected open.
+		const rupture = snap.rupture ?? null;
+		if (rupture !== null && rupture.id !== this.lastRuptureId) {
+			this.lastRuptureId = rupture.id;
+			this.callbacks.onRuptureOpened(rupture);
+		}
+		this.latestRupture = rupture ? { ...rupture } : null;
 	}
 
 	/** Fold the authoritative local state in, and report how far ahead we are. */

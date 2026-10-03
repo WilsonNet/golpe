@@ -283,6 +283,36 @@ export const reload = (target = 1, opts: Opts = {}): Objective =>
 		{ keys: ["attack"], ...opts },
 	);
 
+/** Ibiriki: walk back over a thrown axe and take it. */
+export const recoverAxes = (target = 1, opts: Opts = {}): Objective =>
+	build(
+		"axes-recovered",
+		`Walk over a thrown axe to pick it back up${times(target)}`,
+		target,
+		(c) => c.axesRecovered,
+		opts,
+	);
+
+/** Ibiriki: put a hit through a raised guard — the Sunder or a full axe. */
+export const crushGuard = (target = 1, opts: Opts = {}): Objective =>
+	build(
+		"guard-crush",
+		`Crush a raised guard${times(target)}`,
+		target,
+		(c) => c.guardsCrushed,
+		opts,
+	);
+
+/** Ibiriki: enter berserk — the bloodlust filling all the way. */
+export const goBerserk = (target = 1, opts: Opts = {}): Objective =>
+	build(
+		"berserk",
+		`Go berserk${times(target)}`,
+		target,
+		(c) => c.berserks,
+		opts,
+	);
+
 export const useItem = (target = 1, opts: Opts = {}): Objective =>
 	build("item", `Throw your item${times(target)}`, target, (c) => c.itemsUsed, {
 		keys: ["item"],

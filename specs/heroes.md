@@ -11,18 +11,21 @@ Lia is the first hero and the reference kit: sword + gun + black hole + HE
 grenade. Anands is the second: dagger + machine gun + dragon thrust + trap — see
 [anands.md](anands.md) for her full kit and [items.md](items.md) for the item
 half of the kit. Jeffs is the third: sword + shotgun + death blossom + smoke
-grenade — see [jeffs.md](jeffs.md).
+grenade — see [jeffs.md](jeffs.md). Ibiriki is the fourth: viking sword + throwing
+axes + Rupture + trap, and the first hero with a **passive** (Bloodlust) — see
+[ibiriki.md](ibiriki.md).
 
 ## What a hero is
 
 A hero is defined by four things, and nothing else:
 
-| | Lia | Anands | Jeffs |
-|---|---|---|---|
-| **Melee weapon** (sword stance) | Sword | Dagger | Sword |
-| **Ranged weapon** (gun stance) | Gun | Machine gun | Shotgun |
-| **Ultimate** | Black Hole | Dragon Thrust | Death Blossom |
-| **Item** | HE Grenade | Trap | Smoke Grenade |
+| | Lia | Anands | Jeffs | Ibiriki |
+|---|---|---|---|---|
+| **Melee weapon** (sword stance) | Sword | Dagger | Sword | Viking sword |
+| **Ranged weapon** (gun stance) | Gun | Machine gun | Shotgun | Throwing axes |
+| **Ultimate** | Black Hole | Dragon Thrust | Death Blossom | Rupture |
+| **Item** | HE Grenade | Trap | Smoke Grenade | Trap |
+| **Passive** | — | — | — | Bloodlust |
 
 Everything else a fighter has — movement, jumps, dashes, the stance system,
 the meter economy, hitpoints — is shared code that a hero does not get to
@@ -42,7 +45,7 @@ fighter (like their name), so nothing about it ever has to be replayed.
   for every fighter it predicts and replays. The roster is on a 2s heartbeat;
   a hero that arrived there could not be rolled back with the state that
   depends on it.
-- `?hero=lia|anands|jeffs` in the URL picks the hero a client boots with. **Per-client,
+- `?hero=lia|anands|jeffs|ibiriki` in the URL picks the hero a client boots with. **Per-client,
   never creator-only** — it is the answer to "who do you want to be", and the
   last person through the door still gets to pick.
 - The Esc menu's *Heroes* item changes the hero. The request is a reliable
@@ -79,8 +82,9 @@ interface HeroKit {
   hero: HeroId;
   melee: MeleeWeaponDef;   // which moves, whether block/charge/chain exist
   ranged: RangedWeaponDef; // cooldown, damage, speed, and the shotgun's pellets
-  ultimate: UltimateId;    // black-hole | dragon-thrust | death-blossom
+  ultimate: UltimateId;    // black-hole | dragon-thrust | death-blossom | rupture
   item: ItemDef;           // he-grenade | trap | smoke-grenade, and its charge count
+  passive: PassiveId;      // "bloodlust" | null
 }
 ```
 
@@ -90,6 +94,14 @@ button blocks or thrusts, whether a charge exists, and its dash numbers. The
 moves themselves stay in the one global `MOVES` table — a move is globally
 unique (`slash` is the sword's, `stab` is the dagger's), which is what keeps
 `meleePhase`, the hitboxes and the diagnostics weapon-agnostic.
+
+**A passive is state, never a hero check.** Ibiriki's Bloodlust is a reading
+of the room the server writes into `PlayerPosition.bloodlust` every tick (only
+the server knows every HP); `tickPlayer` reads the field — the walk speed and
+the melee clock — on both sides. The kit's `passive` is what tells the server
+to produce it; the simulation never asks which hero it is. A **thrown** ranged
+weapon (`RangedWeaponDef.thrown`) charges on a held trigger in shared state
+(`throwChargeTimer`) and fires on the release, server-side.
 
 ## The hero select
 
@@ -116,6 +128,7 @@ Each hero's art has one source, and the game only ever loads what it made:
 | Lia | `art/lia/lia.blend` — an SNES-shaded 3D model, rig and one Action per clip | `scripts/make-hero-art.py lia` (see `art/README.md`) | `lia.png` + `lia.json` (packed, trimmed, every clip incl. both facings), `lia-portrait.png` |
 | Anands | `art/anands/anands.blend` — her Tripo mesh (from her Gemini boards) on the same rig, her own clips | `scripts/make-hero-art.py anands` (with her boards' palette snapped back) | `anands.png` + `anands.json`, `anands-portrait.png`; the dragon ride `anands-dragon.png` is still cut from her boards |
 | Jeffs | `art/jeffs/jeffs.blend` — his Tripo mesh (from his Gemini turnaround) on the same rig, every sword clip plus the item throw | `scripts/make-hero-art.py jeffs` | `jeffs.png` + `jeffs.json`, `jeffs-portrait.png`; his smoke canister's tumble `smoke-grenade.png` (from its model, `scripts/make-smoke-grenade-art.py`) |
+| Ibiriki | `art/ibiriki/ibiriki.blend` — a Tripo mesh of his T-pose turnaround on the shared rig (the ball rigid on the chest), his sword and axe cut from his first model by Tripo's segmentation, his own clips (hews, Sunder, frenzy, dual wield, axe wind-up, stomp) and the heavy cartoon outline | `scripts/make-hero-art.py ibiriki` | `ibiriki.png` + `ibiriki.json`, `ibiriki-portrait.png`; the flying axe `ibiriki-axe.png` (rendered from his model's axe) |
 
 - **The draw scale is the collider over the sheet's body height** (`bodyH`,
   default the cell height). Lia's cells are padded to whatever her raised
@@ -157,7 +170,8 @@ kit and the AI-vs-AI loop covers all three heroes' brains. `?botHero=`
 dagger or the shotgun at sixteen fighters. The bot brain is constructed with
 its hero, and `EnemyBrain` picks its melee module (`MeleeBrain` for the sword,
 `DaggerBrain` for the dagger), its ultimate module (`UltimateBrain` for the
-hole, `DragonBrain` for the thrust, `BlossomBrain` for the storm) and its item
+hole, `DragonBrain` for the thrust, `BlossomBrain` for the storm, `RuptureBrain`
+for the curse — and `AxeBrain`, the thrown weapon's release-to-throw trigger) and its item
 behaviour from it — see [anands.md](anands.md) for the dagger's strategies and
 [jeffs.md](jeffs.md) for the executioner's.
 
@@ -169,7 +183,7 @@ smokes the vanguard when it is rushed. See [jeffs.md](jeffs.md).
 
 ## Not implemented
 
-- More than three heroes. The registry (`HEROES` in `simulation/Heroes.ts`) is
+- More than four heroes. The registry (`HEROES` in `simulation/Heroes.ts`) is
   the single place a fourth is added.
 - Shared heroes with the same ultimate. Ultimates are unique by design.
 - Per-hero body sizes. Every hero collides as 32x48; a different collider is a

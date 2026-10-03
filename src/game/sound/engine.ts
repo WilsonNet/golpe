@@ -22,9 +22,10 @@
  * back on its own.
  */
 
+import type { HeroId } from "../simulation/Heroes";
 import { type AudioChannel, type AudioPreferences, audioMixer } from "./mixer";
 
-export type MusicTrack = "title" | "lia" | "anands" | "jeffs";
+export type MusicTrack = "title" | HeroId;
 
 export interface AudioKitState {
 	/** "running" once a user gesture unlocked the context; "suspended" before. */

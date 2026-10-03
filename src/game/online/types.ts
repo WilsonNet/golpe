@@ -121,16 +121,13 @@ export interface DenyEventMsg {
  * slam. The rest are items and ultimates, each its own story in the feed.
  */
 export type KillCause =
-	| "slash"
-	| "slash2"
-	| "slash3"
-	| "uppercut"
-	| "massive"
+	// Every melee move is its own cause — the hew, the Sunder and the frenzy
+	// included — so the table can never fall behind `MOVES`.
+	| MeleeMove
 	| "bomb"
-	| "stab"
-	| "thrust"
-	| "shoryuken"
 	| "bullet"
+	| "axe"
+	| "rupture"
 	| "grenade"
 	| "trap"
 	| "dragon"
@@ -399,6 +396,18 @@ export interface GameSnapshot {
 	blossom: SnapshotBlossom | null;
 	/** Set only while the room is frozen for a cast. */
 	cinematic: SnapshotCinematic | null;
+	/**
+	 * Ibiriki's throwing axes: flying, falling or resting. Server-owned and
+	 * sent in full every snapshot while they exist — a resting axe is world
+	 * furniture its owner walks back to, and a flying one is dead-reckoned by
+	 * the shared `tickAxe` between snapshots. Packed (`packAxe` in `wire.ts`):
+	 * a room of axe-throwers rests over a hundred of them.
+	 */
+	axes: WireAxe[];
+	/** The running Rupture, or null. At most one per room. */
+	rupture: SnapshotRupture | null;
+	/** Axes that struck something since the previous snapshot. Effects only. */
+	axeHits: AxeHitMsg[];
 	/** Anands' floor traps, as they stand. Cleared on a round reset. */
 	traps: SnapshotTrap[];
 	/**
@@ -434,6 +443,63 @@ export interface GameSnapshot {
 	 * costs the purple sparks, never the reward.
 	 */
 	blockedBullets: BlockedBulletMsg[];
+}
+
+/** One of Ibiriki's axes, as both sides see it. See `AxeState`. */
+/**
+ * An axe as it travels: `SnapshotAxe` with every field that is zero, false or
+ * null left out. A resting axe is most of a big room's axes and never moves,
+ * so it is sent as an id, an owner and a place. See `packAxe`/`unpackAxe`.
+ */
+export interface WireAxe {
+	id: number;
+	ownerId: string;
+	ownerTeam?: TeamId;
+	x: number;
+	y: number;
+	vx?: number;
+	vy?: number;
+	full?: true;
+	dropped?: true;
+	resting?: true;
+	restAngle?: number;
+}
+
+export interface SnapshotAxe {
+	id: number;
+	ownerId: string;
+	ownerTeam: TeamId | null;
+	x: number;
+	y: number;
+	vx: number;
+	vy: number;
+	full: boolean;
+	dropped: boolean;
+	resting: boolean;
+	restAngle: number;
+}
+
+/** The running Rupture: who it curses and how long it has left. */
+export interface SnapshotRupture {
+	id: number;
+	ownerId: string;
+	ownerTeam: TeamId | null;
+	remainingMs: number;
+	totalMs: number;
+	victims: string[];
+}
+
+/**
+ * An axe struck: a body (`victimId`), a raised guard (`outcome`), or a
+ * surface it stuck in (no victim). Effects only.
+ */
+export interface AxeHitMsg {
+	ownerId: string;
+	victimId: string | null;
+	outcome: "hit" | "blocked" | "crushed" | "stuck" | "pickup";
+	x: number;
+	y: number;
+	full: boolean;
 }
 
 /**

@@ -59,6 +59,19 @@ const COLOR = {
 	thrust: 0x59d0ff,
 	shoryuken: 0xff9a3d,
 	/**
+	 * Ibiriki's family: the hews are dull iron warming to the finisher's
+	 * rust; the Sunder is blood red — the colour of the motes that charged it;
+	 * the berserk frenzy is a hot crimson so a room reads "berserk" from the
+	 * trail alone.
+	 */
+	hew: 0xe6e1d6,
+	hew2: 0xffd9a8,
+	hew3: 0xff9d5c,
+	sunder: 0xff3b3b,
+	rend: 0xff6a6a,
+	rend2: 0xff5050,
+	rend3: 0xff2a2a,
+	/**
 	 * A massive granted by a guard break is drawn a different colour, because it
 	 * came from a different place: it is not a charge you committed to, it is a
 	 * read you were rewarded for. Cool cyan — the guard's own family, one step
@@ -171,6 +184,26 @@ const SWING = {
 	 * a swing it is not making.
 	 */
 	shoryuken: { from: -1.2, to: -1.6, depth: 0, lift: -14 },
+	/** Ibiriki's hews: the slash's diagonals, a little wider for a heavier blade. */
+	hew: { from: -1.35, to: 2.2, depth: 0.85, lift: -6 },
+	hew2: { from: -2.3, to: 1.1, depth: -0.85, lift: -4 },
+	hew3: { from: -1.62, to: 1.57, depth: 0.45, lift: -12 },
+	/**
+	 * The Sunder: top to bottom, from straight overhead to the floor in front —
+	 * the Massive's line without the slam, and the hand follows it down.
+	 */
+	sunder: {
+		from: -2.7,
+		to: 1.4,
+		depth: 0.3,
+		lift: -10,
+		handReach: 26,
+		handDrop: 14,
+	},
+	/** The frenzy: short fast diagonals, then the X. */
+	rend: { from: -1.1, to: 1.9, depth: 0.7, lift: -4 },
+	rend2: { from: -2.0, to: 0.9, depth: -0.7, lift: -2 },
+	rend3: { from: -1.9, to: 1.9, depth: 0.4, lift: -8 },
 } as const satisfies Record<MeleeMove, SwingArc>;
 
 /**

@@ -8,7 +8,12 @@
  * without a single edit.
  */
 
-import { KNOCKDOWN_SLAM_VY } from "../../tweakables/melee.js";
+import { CHARGE_LOCK_MS, KNOCKDOWN_SLAM_VY } from "../../tweakables/melee.js";
+import { BLOODLUST_MOVE_SPEED_BONUS } from "../../tweakables/passive.js";
+import {
+	AXE_CHARGE_MS,
+	AXE_CHARGE_WALK_MULTIPLIER,
+} from "../../tweakables/ranged.js";
 import {
 	DRAGON_MIN_RIDE_MS,
 	DRAGON_RIDE_MS,
@@ -140,11 +145,10 @@ export {
 	bodyRect,
 	bombBlastFor,
 	bombFallHeight,
-	COMBO_CHAIN,
+	chainOf,
 	DAGGER_DASH_DURATION_MS,
 	DAGGER_DASH_LOCKOUT_MS,
 	DAGGER_DASH_SPEED,
-	isComboSlash,
 	isKnockedDown,
 	isStunned,
 	MASSIVE_BLAST_DAMAGE,
@@ -486,6 +490,29 @@ export interface PlayerPosition extends MeleeState {
 	 * reload bar from it and never simulates it. See `tickReload`.
 	 */
 	reloadTimer: number;
+	/**
+	 * Ibiriki's **bloodlust**, 0..1: the server's reading of the weakest hostile
+	 * fighter's HP (see specs/ibiriki.md). It speeds the walk and the melee
+	 * clock, and at 1 the fighter is **berserk**. Written by the server every
+	 * tick from HP only it knows, read by `tickPlayer` on both sides — a speed
+	 * applied on top of predicted state would be erased by the next
+	 * reconciliation. Zero for every kit without the passive.
+	 */
+	bloodlust: number;
+	/**
+	 * ms a **thrown** weapon's throw has been charging (Ibiriki's axes): hold
+	 * attack in gun stance and it fills; the release is the throw. Shared
+	 * state both sides tick in `tickPlayer`, so the wind-up is drawn on the
+	 * press; the throw itself — the axe, the ammo — is the server's decision,
+	 * read off this timer on the release tick.
+	 */
+	throwChargeTimer: number;
+	/**
+	 * ms left of a Rupture **stomp**: the caster planted, both weapons drawn,
+	 * slamming the ground after the freeze. Rooted and holding nothing, like a
+	 * dragon rider. Set by the server at the release, ticked by both sides.
+	 */
+	stompTimer: number;
 }
 
 export function createPlayerState(
@@ -521,6 +548,9 @@ export function createPlayerState(
 		ammo: 0,
 		reserveRounds: 0,
 		reloadTimer: 0,
+		bloodlust: 0,
+		throwChargeTimer: 0,
+		stompTimer: 0,
 		...createMeleeState(facing),
 	};
 }
@@ -557,6 +587,9 @@ export function copyPlayerState(
 	target.ammo = source.ammo;
 	target.reserveRounds = source.reserveRounds;
 	target.reloadTimer = source.reloadTimer;
+	target.bloodlust = source.bloodlust;
+	target.throwChargeTimer = source.throwChargeTimer;
+	target.stompTimer = source.stompTimer;
 	copyMeleeState(source, target);
 	return target;
 }
@@ -703,6 +736,7 @@ export function tickPlayer(
 		s.plungeStuckTimer > 0 ||
 		s.plungeCarryTimer > 0 ||
 		s.dragonTimer > 0 ||
+		s.stompTimer > 0 ||
 		s.rootTimer > 0;
 	// The charge roots the *walk* and nothing else. Dash, jump and block are the
 	// delivery tools a 4s commitment has to keep — see `isCharging`.
@@ -738,6 +772,30 @@ export function tickPlayer(
 	// decayed here, outside the stun handling. Only a knockdown zeroes it, in
 	// `applyHitToDefender`.
 	s.blossomTimer = decay(s.blossomTimer, dt);
+	s.stompTimer = decay(s.stompTimer, dt);
+
+	// ---- the throw's charge (a thrown ranged weapon) ----
+	//
+	// Held attack in gun stance fills it; anything that takes the weapon away
+	// drops it — a stun, the melee stance, an empty hand. The release is read
+	// by the server off the *previous* tick's value, so the timer resets on
+	// the release tick here, on both sides, the same way a dash ends.
+	if (
+		kit.ranged.thrown === true &&
+		s.stance === "gun" &&
+		input.attack &&
+		!stunned &&
+		s.stompTimer <= 0 &&
+		s.dragonTimer <= 0 &&
+		s.ammo > 0
+	) {
+		s.throwChargeTimer = Math.min(
+			AXE_CHARGE_MS,
+			s.throwChargeTimer + dt * MS_PER_SECOND,
+		);
+	} else {
+		s.throwChargeTimer = 0;
+	}
 
 	const wantsJump = input.up && !rooted && s.blossomTimer <= 0;
 	if (wantsJump && !s.jumpHeld) {
@@ -773,7 +831,11 @@ export function tickPlayer(
 		// a turret, and a slow caster is a caster the room can always just
 		// leave. Blocking cannot happen mid-blossom (the melee gate), but the
 		// two multipliers compose rather than assume.
-		(s.blossomTimer > 0 ? BLOSSOM_WALK_MULTIPLIER : 1);
+		(s.blossomTimer > 0 ? BLOSSOM_WALK_MULTIPLIER : 1) *
+		// Planting the feet for a heavy throw: a held axe past the charge lock.
+		(s.throwChargeTimer >= CHARGE_LOCK_MS ? AXE_CHARGE_WALK_MULTIPLIER : 1) *
+		// Ibiriki's bloodlust: the weaker the room, the faster he closes.
+		(1 + Math.max(0, Math.min(1, s.bloodlust)) * BLOODLUST_MOVE_SPEED_BONUS);
 	const steerable = s.wallJumpTimer <= 0;
 	if (steerable && dir !== 0) {
 		const accel = s.grounded ? GROUND_ACCEL : AIR_ACCEL;

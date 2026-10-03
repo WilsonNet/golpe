@@ -33,6 +33,7 @@ const MELEE_CLIPS: Record<string, string[]> = {
 		"slash3",
 		"slash3-left",
 	],
+	viking: ["hew", "hew-left", "hew2", "hew2-left"],
 	dagger: [
 		"stab",
 		"stab-left",
@@ -42,7 +43,8 @@ const MELEE_CLIPS: Record<string, string[]> = {
 		"thrust-dash-left",
 	],
 };
-const melee = hero === "anands" ? "dagger" : "sword";
+const melee =
+	hero === "anands" ? "dagger" : hero === "ibiriki" ? "viking" : "sword";
 
 /** Clips an AI hero reliably reaches in half a minute of fighting. */
 const MUST_DRAW: string[][] = [
@@ -119,12 +121,20 @@ const remoteBands = Object.keys(drawn.aimBands.remote).length;
 console.log(
 	`aim bands drawn: local ${JSON.stringify(drawn.aimBands.local)} remote ${JSON.stringify(drawn.aimBands.remote)}`,
 );
-check(localBands >= 3, "the local rifle tracks the aim", `bands=${localBands}`);
-check(
-	remoteBands >= 3,
-	"a remote rifle tracks its aim",
-	`bands=${remoteBands}`,
-);
+// A thrown weapon is not aimed like a gun: Ibiriki's axe clips are the axe
+// held ready, carried and thrown, with no aim bands to track.
+if (hero !== "ibiriki") {
+	check(
+		localBands >= 3,
+		"the local rifle tracks the aim",
+		`bands=${localBands}`,
+	);
+	check(
+		remoteBands >= 3,
+		"a remote rifle tracks its aim",
+		`bands=${remoteBands}`,
+	);
+}
 check(errors.length === 0, "no page errors", errors.slice(0, 3).join(" | "));
 console.log(failed ? "ART PROBE FAIL" : "ART PROBE PASS");
 process.exit(failed ? 1 : 0);

@@ -105,6 +105,12 @@ export interface LessonCounters {
 	itemsUsed: number;
 	/** Reloads begun. */
 	reloads: number;
+	/** Guards of theirs your Sunder or full-charge axe crushed. */
+	guardsCrushed: number;
+	/** Thrown axes of yours walked back over and picked up. */
+	axesRecovered: number;
+	/** Berserk entered: some foe fell below the line (your bloodlust filled). */
+	berserks: number;
 
 	// -- the server's own tallies, as deltas ---------------------------------
 	bulletsFired: number;

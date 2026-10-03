@@ -30,6 +30,9 @@ const SAFE = {
 	disableRoundReset: true,
 } as const;
 
+/** The safe room, for a course that builds its own stages. */
+export const SAFE_STAGE = SAFE;
+
 /** A dummy that stands there and takes it. */
 const idle = { ...SAFE, behaviour: "idle" } as const;
 
@@ -168,12 +171,8 @@ export function swordChapter(hero: HeroId): Chapter {
 				brief:
 					"A foe who safe-falls escapes your uppercut — unless you follow them. Jump after the launch and land a swing while they are still in the air and the arc is **cut short**: they are spiked down, and no jump can cancel the knockdown that lands. GunZ players called it the Insta Fall. This dummy keeps **hopping** — a moving target that will bounce back to its feet if you let it — so catch it **three times**.",
 				stage: BOUNCING_DUMMY,
-				objectives: [
-					o.land("uppercut", "an uppercut", 1),
-					o.instaFall(3),
-				],
-				outro:
-					"The launch is the setup. The air is where the punish lives.",
+				objectives: [o.land("uppercut", "an uppercut", 1), o.instaFall(3)],
+				outro: "The launch is the setup. The air is where the punish lives.",
 			},
 			{
 				id: `${hero}-backstab`,

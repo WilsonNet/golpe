@@ -11,8 +11,8 @@
 import * as o from "../objectives.js";
 import type { CampaignModule } from "../types.js";
 import {
-	basicsChapter,
 	BOUNCING_DUMMY,
+	basicsChapter,
 	graduationChapter,
 	gunLesson,
 	IDLE_DUMMY,
@@ -91,11 +91,9 @@ export const ANANDS_COURSE: CampaignModule = {
 					brief:
 						"Rise with them. The shoryuken leaves you airborne beside the foe it launched — press jump into a midair stab and the arc is **cut short**: they are spiked down, and no safe fall can cancel it. GunZ's Insta Fall, with a dagger. This dummy keeps **hopping** — a moving target that will bounce back to its feet if you let it — so catch it **three times**.",
 					stage: BOUNCING_DUMMY,
-					objectives: [
-						o.land("shoryuken", "a shoryuken", 1),
-						o.instaFall(3),
-					],
-					outro: "The anti-air is the setup. The air is where the punish lives.",
+					objectives: [o.land("shoryuken", "a shoryuken", 1), o.instaFall(3)],
+					outro:
+						"The anti-air is the setup. The air is where the punish lives.",
 				},
 				{
 					id: "anands-pressure",

@@ -12,6 +12,12 @@ the full workflow** — this file is the reference for the tool itself.
 - `window.__gameState()` — HP, AI states, and full `playerPhys` / `enemyPhys`
 - `window.__aimState()` — cursor in world space, aim angle, facing, move phase,
   and the local fighter's live bullets with their headings
+- `window.__ibirikiState()` — Ibiriki's tallies since load: axe events (thrown,
+  stuck, hit, crushed, blocked, recovered — the room's and the local
+  fighter's), axes in the world and his resting, ruptures cast and cursed
+  frames, berserk frames and max bloodlust, Sunder and throw charge frames.
+  What `scripts/ibiriki-probe.ts` asserts on: every count is zero in a build
+  where none of it happens, so the probe needs each one non-zero.
 - `window.__toggleAIVsAI()` — or press **P** in-game
 - `window.__training` — the training room's controller, present only under
   `?training=true`. See *The training probe* below and

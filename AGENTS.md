@@ -4,7 +4,8 @@ An online-first 2D hero shooter: GunZ: The Duel's K-Style, rebuilt in two
 dimensions on a deterministic simulation shared by client and server. Every
 fighter is a **hero** — a composition of a melee weapon, a ranged weapon, a
 unique ultimate and an item (see `specs/heroes.md`). Lia is the sword-and-rifle
-reference kit; Anands is the dagger storm (see `specs/anands.md`).
+reference kit; Anands is the dagger storm (see `specs/anands.md`); Ibiriki is
+the bloodthirsty viking, the first hero with a passive (see `specs/ibiriki.md`).
 
 **This file is an index.** It holds only what every session needs; everything
 else lives one link away and is loaded when it is actually relevant.
@@ -42,7 +43,7 @@ skill({ name: "feedback-loop" })    # the full workflow
 |---|---|
 | What should the game *do*? | [`specs/`](specs/README.md) — the source of truth |
 | **Where do the balance numbers live?** | [`src/tweakables/`](src/tweakables/README.md) — every tuning constant, one folder |
-| Who are the heroes, and how do kits work? | [`specs/heroes.md`](specs/heroes.md) · [`specs/anands.md`](specs/anands.md) |
+| Who are the heroes, and how do kits work? | [`specs/heroes.md`](specs/heroes.md) · [`specs/anands.md`](specs/anands.md) · [`specs/ibiriki.md`](specs/ibiriki.md) |
 | How do heroes interact with each other? | [`specs/interactions.md`](specs/interactions.md) — attributes, statuses, predicates, and the one rule for matchup exceptions |
 | What are items, and how do charges work? | [`specs/items.md`](specs/items.md) |
 | What should the menu do? | [`specs/menu.md`](specs/menu.md) — when it shows, and how choices become URLs |
@@ -312,6 +313,7 @@ tsx scripts/aim-probe.ts                             # cursor, facing and shot d
 tsx scripts/pad-probe.ts                             # controller aim, gamepad and the phone deck
 tsx scripts/training-probe.ts                        # one interaction, against a scripted dummy
 tsx scripts/training-probe.ts --hero=anands          # ...as the dagger (its rows are dagger-only)
+tsx scripts/ibiriki-probe.ts                         # Ibiriki: hews, Sunder through a guard, axes thrown/stuck/recovered, bloodlust, Rupture
 tsx scripts/tutorial-probe.ts                        # the guided course: every lesson stages its enemy, progress persists
 tsx scripts/tutorial-probe.ts --play                 # ...and every drill is played to the end
 tsx scripts/menu-probe.ts                            # the root menu: every click a URL, boots a match
@@ -324,7 +326,7 @@ tsx scripts/audio-probe.ts                           # the sound loop: music lat
 python3 scripts/make-audio.py                        # re-render the music loops from their MIDI sources (→ public/audio/)
 python3 scripts/make-potg-art.py                       # regenerate the ceremony's sunburst and medal
 python3 scripts/make-anands-art.py                       # cut Anands' dragon ride from her boards (--legacy: the old board-cut strips, for comparison)
-python3 scripts/make-hero-art.py lia                   # render a hero from art/<hero>/<hero>.blend → <hero>.png/.json + portrait (lia|jeffs|anands, needs blender)
+python3 scripts/make-hero-art.py lia                   # render a hero from art/<hero>/<hero>.blend → <hero>.png/.json + portrait (lia|jeffs|anands|ibiriki, needs blender)
 python3 scripts/make-smoke-grenade-art.py              # render Jeffs' smoke canister model → its tumble strip smoke-grenade.png
 python3 scripts/cut-turnaround.py <board> <out-dir>    # split a Gemini T-pose turnaround into Tripo multi-view inputs
 tsx scripts/art-probe.ts --hero=jeffs                 # a rendered hero's clips are what gets drawn: zero placeholder fallbacks, the gun tracks the aim
@@ -462,6 +464,22 @@ floor**, the first two links cancel into a block and the finisher does not, **an
 a cancel always drops the chain** — so the butterfly is an endless opener loop and
 walking the chain is a separate decision. It ends in neutral by construction.
 Every landed sword hit disables its target and is drawn that way. See [specs/melee.md](specs/melee.md).
+
+**Ibiriki is the bloodthirsty, and his kit is four new mechanics.** A heavy
+**viking sword** (the hew chain: slower, more damage, a stagger per hit) whose
+hold is the **Sunder** — 1s, then a top-down chop that **crushes a guard**
+(40% damage, a 450ms mini stun, no guard break for him). **Throwing axes**:
+ten per life, charged on a held trigger in shared state (`throwChargeTimer`)
+and thrown on the release, server-side; a ballistic arc that grows with the
+charge, a full charge crushes a guard too, and **every axe stays where it
+sticks** until he walks over it or dies. **Rupture** is a global curse: the
+room freezes for the card, then for 6s everyone hostile bleeds per pixel
+they move while he stomps. **Bloodlust** is the first passive: the server
+writes `PlayerPosition.bloodlust` from the room's HP and `tickPlayer` reads
+it for walk speed and the melee clock; under 30% on any foe he goes
+**berserk** (resistant, red aura and eyes, the dual-wield frenzy chain). A
+passive is state, never a hero check. See [specs/ibiriki.md](specs/ibiriki.md)
+and `scripts/ibiriki-probe.ts`.
 
 **The guard is strong, and the Massive is a 1.6-second commitment.** Every block
 that stops a sword attack guard-breaks the attacker — a full second of the

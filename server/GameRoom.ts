@@ -13,6 +13,7 @@ import type {
 } from "../src/game/characters/types.js";
 import {
 	type AmmoPickupMsg,
+	type AxeHitMsg,
 	type BlockedBulletMsg,
 	type DenyEventMsg,
 	type ExplosionMsg,
@@ -29,12 +30,17 @@ import {
 	type SnapshotPlayer,
 	type TeamStatus,
 } from "../src/game/online/types.js";
-import { packIntent, packState } from "../src/game/online/wire.js";
+import { packAxe, packIntent, packState } from "../src/game/online/wire.js";
 import {
 	POTG_ABSORB_BURST,
 	POTG_DAMAGE_BURST,
 } from "../src/game/potg/scoring.js";
 import type { PotgClip } from "../src/game/potg/types.js";
+import {
+	ammoPackReach,
+	ammoPackUseful,
+	takeAmmoPack,
+} from "../src/game/simulation/AmmoPacks.js";
 import {
 	buildWorld,
 	pickSpawn,
@@ -43,10 +49,13 @@ import {
 	type World,
 } from "../src/game/simulation/Arena.js";
 import {
-	ammoPackReach,
-	ammoPackUseful,
-	takeAmmoPack,
-} from "../src/game/simulation/AmmoPacks.js";
+	type AxeState,
+	axePickable,
+	axeTouches,
+	dropAxe,
+	launchAxe,
+	tickAxe,
+} from "../src/game/simulation/Axes.js";
 import {
 	buildControlWorld,
 	CONTROL_AMMO_PACKS,
@@ -81,6 +90,11 @@ import {
 	TIME_LIMIT_MS,
 } from "../src/game/simulation/Deathmatch.js";
 import { smokeHidesFrom } from "../src/game/simulation/Items.js";
+import { applyGuardCrush, isBerserk } from "../src/game/simulation/Melee.js";
+import {
+	BERSERK_DAMAGE_TAKEN,
+	bloodlustFor,
+} from "../src/game/simulation/Passive.js";
 import {
 	aliveCounts,
 	balanceTeam,
@@ -96,6 +110,14 @@ import {
 	teamMatchWinner,
 	teamName,
 } from "../src/game/simulation/Teams.js";
+import {
+	RUPTURE_CAST_DAMAGE,
+	RUPTURE_DURATION_MS,
+	RUPTURE_STOMP_MS,
+	RUPTURE_TICK_MS,
+	type Rupture,
+	ruptureBleed,
+} from "../src/game/simulation/Ultimate.js";
 import type {
 	TrainingConfig,
 	TrainingConfigMsg,
@@ -109,7 +131,12 @@ import {
 	CP_SCORE_LIMIT,
 	CP_TIME_LIMIT_MS,
 } from "../src/tweakables/control.js";
+import { GUARD_CRUSH_DAMAGE_FRACTION } from "../src/tweakables/melee.js";
 import {
+	AXE_FULL_HIT_STUN_MS,
+	AXE_FULL_KNOCKBACK_VX,
+	AXE_HIT_STUN_MS,
+	AXE_KNOCKBACK_VX,
 	DEGREES_PER_PI_RADIANS,
 	pelletDamageAt,
 } from "../src/tweakables/ranged.js";
@@ -343,6 +370,12 @@ interface ConnectedPlayer {
 	 */
 	lastHurtByUlt: boolean;
 	lastAttackTime: number;
+	/**
+	 * A thrown weapon's release that the cooldown has not let go yet: the
+	 * charge it was released at, or null. Thrown the first tick the cooldown
+	 * allows, so a quick release is never simply eaten.
+	 */
+	pendingThrowCharge: number | null;
 	/** Inputs received but not yet simulated, in arrival order. */
 	queue: PlayerInput[];
 	/** Most recent input consumed; repeated when the queue runs dry. */
@@ -656,7 +689,31 @@ export class GameRoom {
 	private blossom: Blossom | null = null;
 	/** ms since the open storm last dealt damage. */
 	private blossomDamageAcc = 0;
+	/** Ibiriki's Rupture, waiting on the far side of the cinematic. */
+	private pendingRupture: { ownerId: string } | null = null;
+	/**
+	 * The running Rupture, or null — one at a time, like one hole. The bleed
+	 * is pure server damage: it moves nobody, so no client simulates it.
+	 */
+	private rupture: Rupture | null = null;
+	/** Each victim's position last tick and the bleed owed since the last payment. */
+	private ruptureTrack = new Map<
+		string,
+		{ x: number; y: number; owed: number }
+	>();
+	/** ms since the rupture last paid its bleed. */
+	private ruptureDamageAcc = 0;
 	private nextUltId = 0;
+
+	// ---- Ibiriki's axes ----
+	//
+	// World objects the server owns, like a trap canister: the throw spends a
+	// round only the server counts, and the hit is the server's to judge. They
+	// stay where they land until their owner walks over them or dies.
+	private axes: AxeState[] = [];
+	private nextAxeId = 0;
+	/** Axe strikes, sticks and pickups since the last broadcast. Effects only. */
+	private axeHits: AxeHitMsg[] = [];
 
 	// ---- items ----
 	//
@@ -1209,6 +1266,7 @@ export class GameRoom {
 			lastHurtCause: "bullet",
 			lastHurtByUlt: false,
 			lastAttackTime: 0,
+			pendingThrowCharge: null,
 			queue: [],
 			lastInput: idleInput(),
 			aim: 0,
@@ -1871,6 +1929,14 @@ export class GameRoom {
 			// The line, in a control match. Populated here and nowhere downstream,
 			// so `characters/` never has to ask what mode it is in.
 			control: this.controlInfoFor(bot),
+			// Ibiriki: his own resting axes (where to walk), the curse on him,
+			// and his throw's charge.
+			ownAxes: this.axes
+				.filter((a) => a.resting && a.ownerId === bot.id)
+				.map((a) => ({ x: a.x, y: a.y })),
+			selfRuptured: this.rupture?.victims.includes(bot.id) ?? false,
+			ruptureActive: this.rupture !== null || this.pendingRupture !== null,
+			selfThrowCharge: bot.state.throwChargeTimer,
 		};
 	}
 
@@ -2055,6 +2121,18 @@ export class GameRoom {
 		victim.state.meleeTimer = 0;
 		victim.state.plunging = false;
 		victim.state.plungeStuckTimer = 0;
+		victim.state.throwChargeTimer = 0;
+		victim.pendingThrowCharge = null;
+		// Every axe of a dead Ibiriki leaves the world with him: the next life
+		// starts with ten in hand, never ten more on the floor.
+		this.axes = this.axes.filter((a) => a.ownerId !== victim.id);
+		// A dead victim is freed from the rupture.
+		if (this.rupture) {
+			this.rupture.victims = this.rupture.victims.filter(
+				(v) => v !== victim.id,
+			);
+			this.ruptureTrack.delete(victim.id);
+		}
 
 		const killer =
 			victim.lastHurtBy && victim.lastHurtBy !== victim.id
@@ -2180,6 +2258,12 @@ export class GameRoom {
 		const from = this.players.get(sourceId);
 		if (from && from !== victim && !hostile(from.team, victim.team)) return;
 
+		// A berserk Ibiriki shrugs off a quarter of everything: the resistance
+		// that lets the predator stay in the fight it smelled. Asked of the
+		// state the passive produced, never of the hero.
+		if (isBerserk(victim.state)) {
+			amount = Math.max(1, Math.round(amount * BERSERK_DAMAGE_TAKEN));
+		}
 		victim.lastHurtBy = sourceId;
 		// The means, beside the credit: the kill feed's icon is the weapon that
 		// actually killed them, and "actually" is decided here at the one point
@@ -2285,6 +2369,9 @@ export class GameRoom {
 		// the (now new) hero, so no refill happens here.
 		player.itemCharges = kitFor(hero).item.maxCharges;
 		player.itemHeld = false;
+		// The old kit's axes are the old kit's.
+		this.axes = this.axes.filter((a) => a.ownerId !== player.id);
+		player.pendingThrowCharge = null;
 		console.log(
 			`[HERO] ${player.name} is now ${kitFor(hero).melee.label} / ${kitFor(hero).ranged.label}`,
 		);
@@ -2891,6 +2978,18 @@ export class GameRoom {
 			// with it.
 			blossom: this.blossom ? { ...this.blossom } : null,
 			cinematic,
+			axes: this.axes.map(packAxe),
+			rupture: this.rupture
+				? {
+						id: this.rupture.id,
+						ownerId: this.rupture.ownerId,
+						ownerTeam: this.rupture.ownerTeam,
+						remainingMs: Math.max(0, Math.round(this.rupture.remainingMs)),
+						totalMs: RUPTURE_DURATION_MS,
+						victims: this.rupture.victims.slice(),
+					}
+				: null,
+			axeHits: this.axeHits.slice(),
 			// Traps are fed into `tickPlayer` the same way the singularity is, so
 			// they travel in full every snapshot too. The canisters in flight
 			// dead-reckon like bullets — position and velocity, anchored by the
@@ -3035,6 +3134,10 @@ export class GameRoom {
 			}
 		}
 
+		// Ibiriki's bloodlust: the server's reading of the room, written into the
+		// state both sides' `tickPlayer` reads, before anybody moves this tick.
+		this.updateBloodlust();
+
 		for (const player of this.players.values()) {
 			const input =
 				player.brain || player.dummy
@@ -3053,6 +3156,7 @@ export class GameRoom {
 			// whether a massive's swing crossed the end of its active window and
 			// whether a dive was in the air. Both are transitions only this side
 			// of `tickPlayer` can see.
+			const prevThrowCharge = player.state.throwChargeTimer;
 			const prev = {
 				action: player.state.meleeAction,
 				timer: player.state.meleeTimer,
@@ -3122,7 +3226,22 @@ export class GameRoom {
 			// and the stat card is the hero's ranged weapon — the machine gun
 			// fires four times as often as the pistol, per its own cooldown.
 			const kit = kitFor(player.hero);
+			// A thrown weapon fires on the **release** of a charge, read off the
+			// shared timer the tick it drops back to zero: the charge both sides
+			// drew is exactly the charge the axe is thrown at.
 			if (
+				kit.ranged.thrown === true &&
+				prevThrowCharge > 0 &&
+				player.state.throwChargeTimer === 0 &&
+				!input.attack
+			) {
+				player.pendingThrowCharge = prevThrowCharge;
+			}
+			if (player.pendingThrowCharge !== null) {
+				this.tryThrowAxe(player, input.aimAngle, now);
+			}
+			if (
+				kit.ranged.thrown !== true &&
 				player.alive &&
 				// Decided out here rather than in `tickPlayer`, so it needs the same
 				// gate the intent already got: a frozen fighter's neutral intent never
@@ -3189,8 +3308,10 @@ export class GameRoom {
 		this.resolveThrusts();
 		this.resolveDragonHits();
 		this.tickBullets(dt);
+		this.tickAxes(dt);
 		this.tickUltimate(dt);
 		this.tickBlossom(dt);
+		this.tickRupture(dt);
 		this.tickItems(dt);
 		this.tickAmmoPacks(dt);
 		this.applyTrainingRules(dt);
@@ -3802,6 +3923,7 @@ export class GameRoom {
 		this.releasePendingThrow();
 		this.releasePendingDragon();
 		this.releasePendingBlossom();
+		this.releasePendingRupture();
 		return true;
 	}
 
@@ -3836,7 +3958,8 @@ export class GameRoom {
 			this.cinematic ||
 			this.pendingThrow ||
 			this.pendingDragon ||
-			this.pendingBlossom
+			this.pendingBlossom ||
+			this.pendingRupture
 		)
 			return;
 		if (kitFor(player.hero).ultimate === "black-hole" && this.singularity) {
@@ -3847,6 +3970,8 @@ export class GameRoom {
 		if (kitFor(player.hero).ultimate === "death-blossom" && this.blossom) {
 			return;
 		}
+		// One curse at a time: a second rupture would double-bleed every step.
+		if (kitFor(player.hero).ultimate === "rupture" && this.rupture) return;
 
 		// Spent at the release, before anything happens. A caster who
 		// disconnects mid-cast must not come back still armed.
@@ -3887,6 +4012,14 @@ export class GameRoom {
 			// against is opened here and closed in `tickBlossom`.
 			this.pendingBlossom = { ownerId: player.id };
 			console.log(`[ULT] ${player.name} casts Death Blossom`);
+			return;
+		}
+
+		if (kitFor(player.hero).ultimate === "rupture") {
+			// Ibiriki's ultimate: the same freeze, then the stomp *is* the
+			// curse. No aim — it is global.
+			this.pendingRupture = { ownerId: player.id };
+			console.log(`[ULT] ${player.name} casts Rupture`);
 			return;
 		}
 
@@ -3967,6 +4100,271 @@ export class GameRoom {
 		console.log(
 			`[ULT] blossom ${this.blossom.id} at ${Math.round(this.blossom.x)},${Math.round(this.blossom.y)}`,
 		);
+	}
+
+	// =========================================================
+	//  IBIRIKI — bloodlust, axes, rupture (specs/ibiriki.md)
+	// =========================================================
+
+	/**
+	 * Write every fighter's bloodlust into their state: the weakest *hostile,
+	 * living* foe's HP fraction, mapped by `bloodlustFor`. Only a kit with the
+	 * passive gets a value; everybody else is pinned to zero, so the field the
+	 * simulation reads is inert for them by construction.
+	 */
+	private updateBloodlust() {
+		for (const player of this.players.values()) {
+			if (kitFor(player.hero).passive !== "bloodlust" || !player.alive) {
+				player.state.bloodlust = 0;
+				continue;
+			}
+			let weakest: number | null = null;
+			for (const foe of this.players.values()) {
+				if (foe === player || !foe.alive || foe.hp <= 0) continue;
+				if (!hostile(player.team, foe.team)) continue;
+				const f = foe.hp / MAX_HP;
+				if (weakest === null || f < weakest) weakest = f;
+			}
+			player.state.bloodlust = bloodlustFor(weakest);
+		}
+	}
+
+	/**
+	 * Throw the axe a release asked for, once the cooldown allows. Silently
+	 * dropped when the fighter can no longer throw — dead, frozen, stunned, out
+	 * of the gun stance or out of axes — exactly like a refused cast.
+	 */
+	private tryThrowAxe(player: ConnectedPlayer, aimAngle: number, now: number) {
+		const charge = player.pendingThrowCharge;
+		if (charge === null) return;
+		const s = player.state;
+		const kit = kitFor(player.hero);
+		// No stance check: the charge that is being released only ever fills
+		// with the axe out, and a release that swaps to the sword on the same
+		// tick (a quick Q) must still throw the axe that was already drawn back.
+		if (
+			!player.alive ||
+			isFrozen(s) ||
+			isStunned(s) ||
+			s.ammo <= 0 ||
+			kit.ranged.thrown !== true
+		) {
+			player.pendingThrowCharge = null;
+			return;
+		}
+		if (!canFire(player.lastAttackTime, now, kit.ranged.cooldownMs)) return;
+		player.pendingThrowCharge = null;
+		player.lastAttackTime = now;
+		s.ammo--;
+		this.axes.push(
+			launchAxe(
+				this.nextAxeId++,
+				player.id,
+				player.team,
+				s.x + PLAYER_WIDTH / 2,
+				s.y + PLAYER_HEIGHT / 3,
+				aimAngle,
+				charge,
+			),
+		);
+		player.stats.bulletsFired++;
+	}
+
+	/**
+	 * Fly the axes, judge their hits, and let owners pick the resting ones back
+	 * up. An axe that hits a body drops at the victim's feet; one that meets a
+	 * front guard is turned away — unless it was a full charge, which crushes
+	 * the guard like the Sunder does.
+	 */
+	private tickAxes(dt: number) {
+		if (this.axes.length === 0) return;
+		for (const axe of this.axes) {
+			if (axe.resting) continue;
+			if (tickAxe(axe, dt, this.world)) {
+				this.axeHits.push({
+					ownerId: axe.ownerId,
+					victimId: null,
+					outcome: "stuck",
+					x: axe.x,
+					y: axe.y,
+					full: axe.full,
+				});
+				continue;
+			}
+			if (axe.dropped) continue;
+			for (const player of this.players.values()) {
+				if (!player.alive) continue;
+				if (
+					!axeTouches(
+						axe,
+						player.id,
+						player.team,
+						player.state.x,
+						player.state.y,
+					)
+				) {
+					continue;
+				}
+				const owner = this.players.get(axe.ownerId);
+				const dir = axe.vx >= 0 ? 1 : -1;
+				let outcome: AxeHitMsg["outcome"] = "hit";
+				let damage = axe.damage;
+				if (blocksBullet(player.state, axe.vx)) {
+					if (axe.full) {
+						// The full axe crushes the guard: a fraction of the damage
+						// and the same mini stun the Sunder leaves.
+						outcome = "crushed";
+						damage = Math.round(axe.damage * GUARD_CRUSH_DAMAGE_FRACTION);
+						applyGuardCrush(player.state, dir);
+					} else {
+						outcome = "blocked";
+						damage = 0;
+						this.absorbPotg(player, axe.damage, owner ?? null);
+					}
+				} else {
+					// A hit staggers like a heavy blow: the stun scales with the
+					// charge, a tap a flinch and a full axe a reel.
+					const v = player.state;
+					v.stunTimer = Math.max(
+						v.stunTimer,
+						axe.full ? AXE_FULL_HIT_STUN_MS : AXE_HIT_STUN_MS,
+					);
+					v.vx += dir * (axe.full ? AXE_FULL_KNOCKBACK_VX : AXE_KNOCKBACK_VX);
+					v.meleeAction = "none";
+					v.meleeTimer = 0;
+					v.hitLatch = false;
+					v.blocking = false;
+					v.plungeStuckTimer = 0;
+				}
+				dropAxe(axe);
+				this.axeHits.push({
+					ownerId: axe.ownerId,
+					victimId: player.id,
+					outcome,
+					x: axe.x,
+					y: axe.y,
+					full: axe.full,
+				});
+				if (damage > 0) {
+					if (owner) owner.stats.bulletHits++;
+					this.damage(player, damage, axe.ownerId, true, "bullet", "axe");
+				}
+				break;
+			}
+		}
+
+		// Pickups: an owner standing on a resting axe of theirs takes it back.
+		for (const player of this.players.values()) {
+			if (!player.alive) continue;
+			const ranged = kitFor(player.hero).ranged;
+			if (ranged.thrown !== true) continue;
+			if (player.state.ammo >= ranged.magazine) continue;
+			for (let i = 0; i < this.axes.length; i++) {
+				const axe = this.axes[i];
+				if (!axe) continue;
+				if (!axePickable(axe, player.id, player.state.x, player.state.y)) {
+					continue;
+				}
+				player.state.ammo = Math.min(ranged.magazine, player.state.ammo + 1);
+				this.axeHits.push({
+					ownerId: player.id,
+					victimId: null,
+					outcome: "pickup",
+					x: axe.x,
+					y: axe.y,
+					full: false,
+				});
+				this.axes.splice(i, 1);
+				i--;
+				if (player.state.ammo >= ranged.magazine) break;
+			}
+		}
+	}
+
+	/**
+	 * The freeze is over: Ibiriki stomps, and every hostile alive is ruptured.
+	 * The stomp is shared state (`stompTimer`, both sides root it); the curse
+	 * is the server's alone, because its whole effect is damage.
+	 */
+	private releasePendingRupture() {
+		const r = this.pendingRupture;
+		this.pendingRupture = null;
+		if (!r) return;
+		const caster = this.players.get(r.ownerId);
+		if (!caster?.alive) return;
+		caster.state.stompTimer = RUPTURE_STOMP_MS;
+		caster.state.vx = 0;
+		const victims: string[] = [];
+		this.ruptureTrack.clear();
+		for (const p of this.players.values()) {
+			if (p === caster || !p.alive) continue;
+			if (!hostile(caster.team, p.team)) continue;
+			victims.push(p.id);
+			this.ruptureTrack.set(p.id, { x: p.state.x, y: p.state.y, owed: 0 });
+		}
+		this.rupture = {
+			id: this.nextUltId++,
+			ownerId: caster.id,
+			ownerTeam: caster.team,
+			remainingMs: RUPTURE_DURATION_MS,
+			victims,
+		};
+		this.ruptureDamageAcc = 0;
+		// The cut on application: the cast lands as a hit on everyone.
+		for (const id of victims) {
+			const v = this.players.get(id);
+			if (v)
+				this.damage(
+					v,
+					RUPTURE_CAST_DAMAGE,
+					caster.id,
+					false,
+					"bullet",
+					"rupture",
+				);
+		}
+		console.log(
+			`[ULT] rupture ${this.rupture.id} on ${victims.length} fighters`,
+		);
+	}
+
+	/**
+	 * Bleed the ruptured: every pixel a victim's body travelled since last tick
+	 * is owed, and the debt is paid in whole HP every `RUPTURE_TICK_MS`.
+	 */
+	private tickRupture(dt: number) {
+		const r = this.rupture;
+		if (!r) return;
+		r.remainingMs -= dt * MS_PER_SECOND;
+		for (const id of r.victims) {
+			const v = this.players.get(id);
+			const track = this.ruptureTrack.get(id);
+			if (!v || !track || !v.alive) continue;
+			track.owed += ruptureBleed(v.state.x - track.x, v.state.y - track.y);
+			track.x = v.state.x;
+			track.y = v.state.y;
+		}
+		this.ruptureDamageAcc += dt * MS_PER_SECOND;
+		const payday =
+			this.ruptureDamageAcc >= RUPTURE_TICK_MS || r.remainingMs <= 0;
+		if (payday) {
+			this.ruptureDamageAcc = 0;
+			for (const id of r.victims.slice()) {
+				const v = this.players.get(id);
+				const track = this.ruptureTrack.get(id);
+				if (!v || !track) continue;
+				const whole = Math.floor(track.owed);
+				if (whole <= 0) continue;
+				track.owed -= whole;
+				// The curse pays nobody, like every ultimate.
+				this.damage(v, whole, r.ownerId, false, "bullet", "rupture");
+			}
+		}
+		r.victims = r.victims.filter((id) => this.players.get(id)?.alive === true);
+		if (r.remainingMs <= 0 || r.victims.length === 0) {
+			this.rupture = null;
+			this.ruptureTrack.clear();
+		}
 	}
 
 	/**
@@ -4626,6 +5024,7 @@ export class GameRoom {
 			p.lastHurtBy = null;
 			p.lastHurtCause = "bullet";
 			p.lastAttackTime = 0;
+			p.pendingThrowCharge = null;
 			p.queue.length = 0;
 			p.pendingInput = null;
 			p.tickInput = null;
@@ -4672,6 +5071,11 @@ export class GameRoom {
 		this.singularity = null;
 		this.blossom = null;
 		this.blossomDamageAcc = 0;
+		this.rupture = null;
+		this.ruptureTrack.clear();
+		this.pendingRupture = null;
+		this.axes = [];
+		this.axeHits.length = 0;
 		this.cinematic = null;
 		this.pendingThrow = null;
 		this.pendingDragon = null;
@@ -4736,5 +5140,7 @@ export class GameRoom {
 		this.blockedBullets.length = 0;
 		// Ammo pickups are the same shape: the sound and the pop fire once.
 		this.ammoPickups.length = 0;
+		// Axe strikes too.
+		this.axeHits.length = 0;
 	}
 }

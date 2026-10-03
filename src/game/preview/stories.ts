@@ -17,7 +17,8 @@
  * running the same simulation functions the server runs.
  */
 
-import { MASSIVE_CHARGE_MS } from "../../tweakables/melee";
+import { MASSIVE_CHARGE_MS, SUNDER_CHARGE_MS } from "../../tweakables/melee";
+import { AXE_CHARGE_MS } from "../../tweakables/ranged";
 import type { PlayerIntent } from "../simulation/Physics";
 
 /**
@@ -77,6 +78,11 @@ export interface Story {
 	 * dragon: a shallow climb that clears the ground-level pillars).
 	 */
 	castAngle?: number;
+	/**
+	 * The dummies' starting HP. Absent: full. Ibiriki's berserk stories stand
+	 * a bleeding dummy so the bloodlust fills and the frenzy is what plays.
+	 */
+	targetHp?: number;
 }
 
 /**
@@ -88,6 +94,7 @@ export const PULSE_MS = 110;
 
 /** A charge-and-release hold needs the charge plus a beat of margin. */
 const MASSIVE_HOLD_MS = MASSIVE_CHARGE_MS + 50;
+const SUNDER_HOLD_MS = SUNDER_CHARGE_MS + 50;
 
 function press(
 	at: number,
@@ -188,6 +195,68 @@ const STORIES: Record<string, Story> = {
 		steps: [press(400, { uppercut: true })],
 	},
 
+	// ---- Ibiriki's viking sword ----
+	hew: { loopMs: 2000, targets: [160], steps: [press(400, { attack: true })] },
+	hew2: {
+		loopMs: 2600,
+		targets: [160],
+		steps: [press(400, { attack: true }), press(1000, { attack: true })],
+	},
+	hew3: {
+		loopMs: 3600,
+		targets: [160],
+		steps: [
+			press(400, { attack: true }),
+			press(1000, { attack: true }),
+			press(1600, { attack: true }),
+		],
+	},
+	// Hold the charge (the motes stream in), release: the Sunder comes down.
+	sunder: {
+		loopMs: 3200,
+		targets: [170],
+		steps: [press(300, { attack: true }, SUNDER_HOLD_MS)],
+	},
+	// The frenzy needs the bloodlust full: the dummy is already bleeding.
+	rend: {
+		loopMs: 1800,
+		targets: [156],
+		targetHp: 28,
+		steps: [press(500, { attack: true })],
+	},
+	rend2: {
+		loopMs: 2200,
+		targets: [156],
+		targetHp: 28,
+		steps: [press(500, { attack: true }), press(800, { attack: true })],
+	},
+	rend3: {
+		loopMs: 2600,
+		targets: [156],
+		targetHp: 28,
+		steps: [
+			press(500, { attack: true }),
+			press(800, { attack: true }),
+			press(1100, { attack: true }),
+		],
+	},
+	bloodlust: { loopMs: 3000, targets: [200], targetHp: 28, steps: [] },
+	// Hold the axe back until the charge is full, then let it fly.
+	axe: {
+		loopMs: 3600,
+		// In front of the ground-level pillar (x ~270) — an axe that bites the
+		// pillar is the axe working, and the preview would show nothing hit.
+		targets: [236],
+		// A screen angle: negative climbs. A hair up, so the flat full-charge
+		// arc meets the dummy's chest.
+		aim: -0.08,
+		steps: [
+			press(300, { swordStance: false }, 3200),
+			// The charge counts from the first held tick, so the hold outlasts it.
+			press(600, { attack: true }, AXE_CHARGE_MS + 160),
+		],
+	},
+
 	// ---- ranged: the gun stays out, and every round flies at the target ----
 	rifle: {
 		loopMs: 2600,
@@ -251,6 +320,18 @@ const STORIES: Record<string, Story> = {
 		castAngle: -0.35,
 		targets: [560],
 		steps: [press(400, { ultimate: true }, 600), { at: 1000, cue: "cast-ult" }],
+	},
+	// The curse: a standing dummy bleeds only the cast, so the hero
+	// uppercuts it after the stomp — the launch's rise and fall is a body
+	// moving, and every pixel of it bleeds.
+	rupture: {
+		loopMs: 5200,
+		targets: [150],
+		steps: [
+			press(400, { ultimate: true }, 500),
+			{ at: 900, cue: "cast-ult" },
+			press(2200, { uppercut: true }),
+		],
 	},
 	"death-blossom": {
 		loopMs: 4200,

@@ -8,6 +8,8 @@
  * and the client and server would immediately disagree.
  */
 
+import { AXE_CHARGE_MS } from "../../tweakables/ranged";
+import { RUPTURE_STOMP_MS } from "../../tweakables/ultimate";
 import { syncSpriteToBody } from "../render/ArenaRenderer";
 import {
 	heroFrames,
@@ -21,7 +23,7 @@ import type { MeleeFx } from "../render/MeleeFx";
 import type { Nameplates } from "../render/Nameplates";
 import type { Shadows } from "../render/Shadows";
 import { HEROES, type HeroId } from "../simulation/Heroes";
-import { meleePhase, moveDuration } from "../simulation/Melee";
+import { type MeleeMove, meleePhase, moveDuration } from "../simulation/Melee";
 import { PLAYER_WIDTH } from "../simulation/Physics";
 import { BLOSSOM_SPIN_RAD_PER_MS } from "../simulation/Ultimate";
 import { TINT, teamTint } from "../teamPalette";
@@ -132,6 +134,31 @@ const CLIPS = {
 	// only by a hero whose art has it; the rest keep their current clip.
 	throw: { frames: [], fps: 1, sheet: "own" },
 	"throw-left": { frames: [], fps: 1, sheet: "own" },
+	// Ibiriki's own clips (packed-sheet only, gated on `ownClip`): the viking
+	// sword's hews and Sunder, the berserk frenzy and dual-wield idle and walk,
+	// the axe's wind-up and the Rupture stomp.
+	hew: { frames: [], fps: 1, sheet: "own" },
+	"hew-left": { frames: [], fps: 1, sheet: "own" },
+	hew2: { frames: [], fps: 1, sheet: "own" },
+	"hew2-left": { frames: [], fps: 1, sheet: "own" },
+	hew3: { frames: [], fps: 1, sheet: "own" },
+	"hew3-left": { frames: [], fps: 1, sheet: "own" },
+	sunder: { frames: [], fps: 1, sheet: "own" },
+	"sunder-left": { frames: [], fps: 1, sheet: "own" },
+	rend: { frames: [], fps: 1, sheet: "own" },
+	"rend-left": { frames: [], fps: 1, sheet: "own" },
+	rend2: { frames: [], fps: 1, sheet: "own" },
+	"rend2-left": { frames: [], fps: 1, sheet: "own" },
+	rend3: { frames: [], fps: 1, sheet: "own" },
+	"rend3-left": { frames: [], fps: 1, sheet: "own" },
+	"axe-windup": { frames: [], fps: 1, sheet: "own" },
+	"axe-windup-left": { frames: [], fps: 1, sheet: "own" },
+	stomp: { frames: [], fps: 1, sheet: "own" },
+	"stomp-left": { frames: [], fps: 1, sheet: "own" },
+	berserk: { frames: [], fps: 1, sheet: "own" },
+	"berserk-left": { frames: [], fps: 1, sheet: "own" },
+	"berserk-walk": { frames: [], fps: 1, sheet: "own" },
+	"berserk-walk-left": { frames: [], fps: 1, sheet: "own" },
 	"roll-right": { frames: [0, 1, 2, 3, 4, 5, 6, 7], fps: 25, sheet: "roll" },
 	"roll-left": {
 		frames: [8, 9, 10, 11, 12, 13, 14, 15],
@@ -315,6 +342,28 @@ const POSE_BY_CLIP: Record<ClipName, PoseKey> = {
 	"helpless-left": "helpless",
 	throw: "disabled",
 	"throw-left": "disabled",
+	hew: "disabled",
+	"hew-left": "disabled",
+	hew2: "disabled",
+	"hew2-left": "disabled",
+	hew3: "disabled",
+	"hew3-left": "disabled",
+	sunder: "disabled",
+	"sunder-left": "disabled",
+	rend: "disabled",
+	"rend-left": "disabled",
+	rend2: "disabled",
+	"rend2-left": "disabled",
+	rend3: "disabled",
+	"rend3-left": "disabled",
+	"axe-windup": "disabled",
+	"axe-windup-left": "disabled",
+	stomp: "disabled",
+	"stomp-left": "disabled",
+	berserk: "disabled",
+	"berserk-left": "disabled",
+	"berserk-walk": "disabled",
+	"berserk-walk-left": "disabled",
 };
 
 /**
@@ -368,6 +417,25 @@ function tally(hero: HeroId, name: ClipName, fallback: boolean) {
 }
 
 const HALF_PI = Math.PI / 2;
+
+/** The melee moves whose clip is driven by the move's own progress. */
+const MOVE_DRIVEN = new Set<string>([
+	"slash",
+	"slash2",
+	"slash3",
+	"uppercut",
+	"hew",
+	"hew2",
+	"hew3",
+	"sunder",
+	"rend",
+	"rend2",
+	"rend3",
+]);
+
+function isMoveDrivenClip(move: string): move is ClipName & MeleeMove {
+	return MOVE_DRIVEN.has(move);
+}
 
 /** `__animStats` buckets the drawn aim in eighths of a half turn: 0 up, 8 down. */
 const AIM_STAT_BUCKETS = 9;
@@ -548,6 +616,20 @@ export function animationSystem(
 			continue;
 		}
 
+		// The Rupture stomp: both weapons drawn, slamming the ground. Planted,
+		// so it outranks everything a rooted fighter could be doing.
+		if (body.stompTimer > 0 && ownClip(hero, "stomp")) {
+			driveClip(
+				e.anim,
+				e.sprite,
+				hero,
+				sided(hero, "stomp", facingLeft),
+				dtMs,
+				1 - body.stompTimer / RUPTURE_STOMP_MS,
+			);
+			continue;
+		}
+
 		// The Death Blossom: the caster *spins*. The texture keeps its own
 		// sheet (there is no pose for a blur), and the rotation is accumulated
 		// here on frame time and unwound by `spriteSyncSystem` the moment the
@@ -587,13 +669,7 @@ export function animationSystem(
 		// by construction. Heroes without the clips keep the walk cycle under
 		// `MeleeFx`'s drawn blade.
 		const cut = body.meleeAction;
-		if (
-			(cut === "slash" ||
-				cut === "slash2" ||
-				cut === "slash3" ||
-				cut === "uppercut") &&
-			ownClip(hero, cut)
-		) {
+		if (isMoveDrivenClip(cut) && ownClip(hero, cut)) {
 			driveClip(
 				e.anim,
 				e.sprite,
@@ -701,6 +777,23 @@ export function animationSystem(
 		// cycle with its muzzle flash, and the run with the gun out. The firing
 		// cycle is driven by the magazine dropping — ammo is server-ticked, so
 		// both the local fighter and the remotes fire on the same evidence.
+		// A thrown weapon's wind-up: the axe raised behind the head while the
+		// charge fills. The frame is the charge's progress.
+		if (
+			body.stance === "gun" &&
+			body.throwChargeTimer > 0 &&
+			ownClip(hero, "axe-windup")
+		) {
+			driveClip(
+				e.anim,
+				e.sprite,
+				hero,
+				sided(hero, "axe-windup", facingLeft),
+				dtMs,
+				Math.min(1, body.throwChargeTimer / AXE_CHARGE_MS),
+			);
+			continue;
+		}
 		if (body.stance === "gun") {
 			// The rifle points where the shots go: an aim clip picks its band
 			// from this fighter's aim — the local one's live, a remote's from the
@@ -740,6 +833,25 @@ export function animationSystem(
 		// until the apex and a fall after it.
 		if (body.blocking && ownClip(hero, "block")) {
 			driveClip(e.anim, e.sprite, hero, sided(hero, "block", facingLeft), dtMs);
+			continue;
+		}
+		if (
+			body.stance === "sword" &&
+			body.bloodlust >= 1 &&
+			body.chargeTimer <= 0 &&
+			!body.blocking &&
+			body.grounded &&
+			ownClip(hero, "berserk")
+		) {
+			// Berserk: the axe comes out in the off hand, and he stands and
+			// walks dual-wielding.
+			driveClip(
+				e.anim,
+				e.sprite,
+				hero,
+				sided(hero, moving ? "berserk-walk" : "berserk", facingLeft),
+				dtMs,
+			);
 			continue;
 		}
 		if (body.chargeTimer > 0 && ownClip(hero, "charge")) {

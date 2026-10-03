@@ -12,6 +12,7 @@ import type { HeroId } from "../simulation/Heroes.js";
 import { smokeLobAngle } from "../simulation/Items.js";
 import { BULLET_SPEED, JUMP_HEIGHT_PX } from "../simulation/Physics.js";
 import type { AIConfig } from "./AIConfig.js";
+import { AxeBrain } from "./AxeBrain.js";
 import { BlossomBrain } from "./BlossomBrain.js";
 import { ControlBrain } from "./ControlBrain.js";
 import { DaggerBrain } from "./DaggerBrain.js";
@@ -22,6 +23,7 @@ import {
 	STRIKE_RANGE_PX,
 	SWORD_DISENGAGE_PX,
 } from "./MeleeBrain.js";
+import { RuptureBrain } from "./RuptureBrain.js";
 import { TeamBrain } from "./TeamBrain.js";
 import type { AIInput, AIOutput, FoeInfo } from "./types.js";
 import { UltimateBrain } from "./UltimateBrain.js";
@@ -29,7 +31,7 @@ import { UltimateBrain } from "./UltimateBrain.js";
 /** The melee module, whichever hero's it is. See `EnemyBrain.constructor`. */
 type MeleeModule = MeleeBrain | DaggerBrain;
 /** The ultimate module, whichever hero's it is. */
-type UltModule = UltimateBrain | DragonBrain | BlossomBrain;
+type UltModule = UltimateBrain | DragonBrain | BlossomBrain | RuptureBrain;
 
 export enum AIState {
 	IDLE = "IDLE",
@@ -241,6 +243,15 @@ const RUSHED_ALLY_RANGE_PX = 200;
 /** A thrust winding up nearby means leave the floor: the designed dodge. */
 const THRUST_JUMP_RANGE_PX = 300;
 /**
+ * Inside this, a Sunder winding up will reach: its 60px reach past the body,
+ * plus the step the defender needs to take to be out of it when it lands.
+ */
+const SUNDER_STEP_RANGE_PX = 110;
+/** A ruptured bot fights only what is already this close. */
+const RUPTURED_ENGAGE_PX = 90;
+/** Above this HP a ruptured bot still walks into a fight in front of it. */
+const RUPTURED_BRAVE_HP = 60;
+/**
  * The fringe beyond the hole's outer reach where the tug is still felt.
  *
  * The escape is the dash, and the pull falls linearly from the horizon to
@@ -404,8 +415,16 @@ export class EnemyBrain {
 				? new DragonBrain()
 				: hero === "jeffs"
 					? new BlossomBrain()
-					: new UltimateBrain();
+					: hero === "ibiriki"
+						? new RuptureBrain()
+						: new UltimateBrain();
+		// A thrown weapon fires on the release, so its trigger is its own
+		// module — and it is the one that walks back over the axes.
+		this.axe = hero === "ibiriki" ? new AxeBrain() : null;
 	}
+
+	/** Ibiriki's axes: the release-to-throw trigger and the walk to pick them up. */
+	private readonly axe: AxeBrain | null;
 
 	getConfig(): AIConfig {
 		return { ...this.config };
@@ -430,6 +449,7 @@ export class EnemyBrain {
 		this.melee.reset();
 		this.jump.reset();
 		this.ultimate.reset();
+		this.axe?.reset();
 		this.team.reset();
 		this.control.reset();
 	}
@@ -574,6 +594,9 @@ export class EnemyBrain {
 		} else {
 			output.aimAngle = this.aimAt(perception);
 		}
+		// The axe rewrites the trigger last among the weapon layers: a held
+		// trigger would charge forever and never throw.
+		this.axe?.decide(perception, output);
 
 		// ---- the bomb ----
 		//
@@ -660,6 +683,21 @@ export class EnemyBrain {
 			output.block = false;
 		}
 
+		// ---- the Sunder ----
+		//
+		// Ibiriki's charged overhead crushes a guard, so the guard is the wrong
+		// answer to it — the read is to step out of its reach while it comes
+		// down. Same shared-reflex shape as the thrust's jump.
+		if (
+			input.enemyAction === "sunder" &&
+			input.enemyPhase === "startup" &&
+			input.distanceToPlayer < SUNDER_STEP_RANGE_PX
+		) {
+			output.block = false;
+			output.moveRight = input.playerX < input.selfX;
+			output.moveLeft = input.playerX >= input.selfX;
+		}
+
 		// ---- the jump ----
 		output.jump = this.jump.resolve(
 			perception,
@@ -668,6 +706,23 @@ export class EnemyBrain {
 			delta,
 		);
 		this.decideItem(input, output, delta);
+
+		// ---- the rupture ----
+		//
+		// Cursed: every pixel moved bleeds. A hurt bot plants its feet and only
+		// swings at what is already in reach; a healthy one will still walk into
+		// a fight that is right in front of it, but never dashes or jumps — the
+		// six seconds are meant to be a standoff, and the bots play it as one.
+		if (input.selfRuptured) {
+			const close = input.distanceToPlayer < RUPTURED_ENGAGE_PX;
+			const brave = input.selfHP > RUPTURED_BRAVE_HP && close;
+			if (!brave) {
+				output.moveLeft = false;
+				output.moveRight = false;
+			}
+			output.dash = 0;
+			output.jump = false;
+		}
 		this.huntingActive = hunting;
 		return output;
 	}
@@ -683,6 +738,8 @@ export class EnemyBrain {
 	 * face of somebody rushing in.
 	 */
 	private decideItem(input: AIInput, output: AIOutput, delta: number) {
+		// Ibiriki carries the trap too: the same snare, the same throw.
+		const trapper = input.selfHero === "anands" || input.selfHero === "ibiriki";
 		this.itemCooldownMs = Math.max(0, this.itemCooldownMs - delta);
 		if (this.itemCooldownMs > 0) return;
 		if (input.selfItemCharges <= 0) return;
@@ -707,7 +764,7 @@ export class EnemyBrain {
 		// mine a step short of the foe, exactly where a rusher is about to
 		// stand. A cooldown and the three-charge cap stop a brain from
 		// littering the floor with them.
-		if (input.selfHero === "anands") {
+		if (trapper) {
 			if (
 				input.distanceToPlayer < TRAP_MAX_RANGE_PX &&
 				input.distanceToPlayer > TRAP_MIN_RANGE_PX &&

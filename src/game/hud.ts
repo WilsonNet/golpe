@@ -75,9 +75,9 @@ export interface HudState {
 	/** The local fighter's stance — the badge beside the name. */
 	stance: "sword" | "gun";
 	/** The local fighter's hero — the badge reads "SWORD" or "SHOTGUN" from it. */
-	hero: "lia" | "anands" | "jeffs";
+	hero: HeroId;
 	/** The primary remote's hero, for the mirrored duel panel. */
-	foeHero: "lia" | "anands" | "jeffs";
+	foeHero: HeroId;
 	/** The local fighter's name, once the roster knows it. */
 	name: string;
 	/** The primary remote fighter, for a duel's mirrored panel. */
@@ -89,6 +89,8 @@ export interface HudState {
 	online: boolean;
 	/** The held slash has finished charging — the Massive Strike is armed. */
 	massiveReady: boolean;
+	/** Ibiriki is berserk: the badge says so and the panel burns. */
+	berserk: boolean;
 	/**
 	 * The local fighter's side in a team deathmatch, or `null` in a free-for-all.
 	 *

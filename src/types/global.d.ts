@@ -341,6 +341,22 @@ declare global {
 		__inputState?: () => InputSnapshot;
 		/** Charge, the cinematic freeze, the grenade and the open black hole. */
 		__ultState?: () => UltSnapshot;
+		/** Ibiriki's kit: axe events, the rupture, the bloodlust. */
+		__ibirikiState?: () => {
+			axeEvents: Record<string, number>;
+			myAxeEvents: Record<string, number>;
+			axesInWorld: number;
+			myAxesResting: number;
+			myAmmo: number;
+			ruptures: number;
+			ruptureActive: boolean;
+			cursedFrames: number;
+			berserkFrames: number;
+			maxBloodlust: number;
+			sunderChargeFrames: number;
+			throwChargeFrames: number;
+			stompFrames: number;
+		};
 		/** The end-of-match ceremony: the announcement, the clip, and the camera edit. */
 		__potgState?: () => PotgSnapshot;
 		/**
@@ -420,6 +436,9 @@ declare global {
 			vx?: number;
 			grounded?: boolean;
 			ammo?: number;
+			throwCharge?: number;
+			stompTimer?: number;
+			axes?: { x: number; y: number; resting: boolean }[];
 			bulletsFired?: number;
 			bulletHits?: number;
 			meleeHits?: number;

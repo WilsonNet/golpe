@@ -40,7 +40,7 @@ interface Meta {
 }
 
 /** The heroes whose art is a packed sheet rendered from Blender. */
-const RENDERED_HEROES = ["lia", "jeffs", "anands"];
+const RENDERED_HEROES = ["lia", "jeffs", "anands", "ibiriki"];
 
 function load(hero: string) {
 	const meta = JSON.parse(
@@ -98,6 +98,25 @@ const REQUIRED_MELEE: Record<string, string[]> = {
 		n,
 		`${n}-left`,
 	]),
+	// Ibiriki's viking sword: the guard, the Sunder's charge, the hews, the
+	// berserk frenzy and dual wield, the axe's wind-up and Rupture's stomp.
+	viking: [
+		"block",
+		"charge",
+		"charge-walk",
+		"hew",
+		"hew2",
+		"hew3",
+		"uppercut",
+		"sunder",
+		"rend",
+		"rend2",
+		"rend3",
+		"berserk",
+		"berserk-walk",
+		"axe-windup",
+		"stomp",
+	].flatMap((n) => [n, `${n}-left`]),
 };
 
 /** Which melee weapon each rendered hero's art draws. */
@@ -105,6 +124,7 @@ const MELEE: Record<string, string> = {
 	lia: "sword",
 	jeffs: "sword",
 	anands: "dagger",
+	ibiriki: "viking",
 };
 
 describe.each(RENDERED_HEROES)("%s's atlas", (hero) => {
@@ -144,19 +164,44 @@ describe.each(RENDERED_HEROES)("%s's atlas", (hero) => {
 		},
 	);
 
-	it("splits the rifle clips into aim bands the frames divide evenly", () => {
-		// The rifle follows the aim: each gun clip is `bands` equal runs, one
-		// per elevation from straight up to straight down. A band count that
-		// does not divide the frames would draw the wrong elevation's pose.
-		for (const name of ["gun-hold", "gun-fire", "gun-run"]) {
-			for (const clip of [meta.clips[name], meta.clips[`${name}-left`]]) {
-				expect(clip?.drive).toBe("aim");
-				const bands = clip?.bands ?? 0;
-				expect(bands % 2, "an odd band count has a level band").toBe(1);
-				expect((clip?.frames.length ?? 0) % bands).toBe(0);
+	it.runIf(MELEE[hero] === "viking")(
+		"drives the viking sword's moves, the wind-up and the stomp by progress",
+		() => {
+			for (const name of [
+				"hew",
+				"hew2",
+				"hew3",
+				"sunder",
+				"rend",
+				"rend2",
+				"rend3",
+				"axe-windup",
+				"stomp",
+			]) {
+				expect(meta.clips[name]?.drive).toBe("move");
+				expect(meta.clips[`${name}-left`]?.drive).toBe("move");
 			}
-		}
-	});
+		},
+	);
+
+	// A thrown axe is not aimed like a rifle: Ibiriki's gun clips are the axe
+	// held ready, carried and thrown, unbanded.
+	it.runIf(hero !== "ibiriki")(
+		"splits the rifle clips into aim bands the frames divide evenly",
+		() => {
+			// The rifle follows the aim: each gun clip is `bands` equal runs, one
+			// per elevation from straight up to straight down. A band count that
+			// does not divide the frames would draw the wrong elevation's pose.
+			for (const name of ["gun-hold", "gun-fire", "gun-run"]) {
+				for (const clip of [meta.clips[name], meta.clips[`${name}-left`]]) {
+					expect(clip?.drive).toBe("aim");
+					const bands = clip?.bands ?? 0;
+					expect(bands % 2, "an odd band count has a level band").toBe(1);
+					expect((clip?.frames.length ?? 0) % bands).toBe(0);
+				}
+			}
+		},
+	);
 
 	it("keeps every frame inside the atlas and inside its cell", () => {
 		for (const f of meta.frames) {

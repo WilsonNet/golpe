@@ -191,6 +191,14 @@ export class TutorialDirector {
 			EventBus.on("ultimate-cast", ((cast: { mine: boolean }) => {
 				if (cast.mine) this.tracker.noteUltimateCast();
 			}) as never),
+			// Ibiriki's axes: a crushed guard and a pickup are the server's
+			// word, relayed by the scene.
+			EventBus.on("axe-event", ((e: {
+				outcome: "hit" | "blocked" | "crushed" | "stuck" | "pickup";
+				mine: boolean;
+			}) => {
+				if (e.mine) this.tracker.noteAxe(e.outcome);
+			}) as never),
 		);
 	}
 

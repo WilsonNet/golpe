@@ -752,6 +752,137 @@ def half_time(d: Track, t0: int, bars: int, *, fill: bool = False) -> None:
             d.note(b + 14, DR["esnare"], 102)
 
 
+def war_drums(d: Track, t0: int, bars: int, *, fill: bool = False, toms: bool = True) -> None:
+    """The war march: kick on 1 and the "and" of 2, a hard snare on 3, the
+    toms rolling the 16ths in between — a shield wall stepping forward.
+    `fill` is the interior roll down the toms."""
+    for k in range(bars):
+        b = t0 + k * 16
+        d.note(b, DR["kick"], 116)
+        d.note(b + 6, DR["kick"], 100)
+        d.note(b + 10, DR["kick2"], 92)
+        d.note(b + 8, DR["snare"], 110)
+        for i in range(0, 16, 4):
+            d.note(b + i + 2, DR["hat"], 50)
+        if toms:
+            d.note(b + 3, 45, 74)
+            d.note(b + 11, 43, 78)
+            d.note(b + 14, 41, 84)
+        if fill:
+            for j, t in enumerate((12, 13, 14, 15)):
+                d.note(b + t, (50, 47, 45, 41)[j], 96 + 3 * j)
+
+
+def ibiriki_stems() -> tuple[int, list[Track], list[tuple[str, float, float]]]:
+    """Ibiriki — 'Bloodthirst', D minor @ 120. A war march: toms and taiko
+    under a pumping bass, a choir holding the chords, and the brass chanting
+    the theme (D-F-A, then the fall through the Phrygian E-flat) with the
+    horn answering. The crest stacks everything; the last bar is A major —
+    V of D minor — so the seam is the cadence back to the top."""
+    chords = ["Dm", "Dm", "Dm", "Eb", "Dm", "C", "Bb", "F", "C", "Dm", "Dm", "Bb", "Gm", "A", "Dm", "A"]
+    voice = {
+        "Dm": [50, 57, 62, 65],
+        "Eb": [51, 58, 63, 67],
+        "C": [48, 55, 60, 64],
+        "Bb": [46, 53, 58, 62],
+        "F": [53, 57, 60, 65],
+        "Gm": [55, 58, 62, 67],
+        "A": [45, 57, 61, 64],
+    }
+    root = {"Dm": 38, "Eb": 39, "C": 36, "Bb": 34, "F": 41, "Gm": 43, "A": 33}
+
+    drums = Track("Drums", 9, 0)
+    bass = Track("Bass", 2, 33)  # fingered: the march's floor
+    choir = Track("Choir", 3, 52)  # Choir Aahs: the horde holding the chord
+    brass = Track("Brass", 4, 61)  # Brass Section: the war chant
+    horn = Track("Horn", 5, 60)  # French horn: the answer
+    taiko = Track("Taiko", 6, 116)  # Taiko: the big hits
+
+    chant = [n("D4"), n("D4"), n("F4"), n("G4"), n("A4")]
+    fall = [n("A4"), n("G4"), n("F4"), n("Eb4"), n("D4")]
+
+    # Intro 0-1: taiko and choir — the horde gathering.
+    for bar in (0, 1):
+        b = bar * 16
+        pad_bar(choir, b, 1, [voice[chords[bar]]], 58)
+        taiko.note(b, n("D2"), 110, 4)
+        taiko.note(b + 8, n("D2"), 96, 4)
+        if bar == 1:
+            taiko.note(b + 12, n("D2"), 100, 2)
+            taiko.note(b + 14, n("D2"), 108, 2)
+        bass.note(b, root[chords[bar]], 96, 8)
+        bass.note(b + 8, root[chords[bar]], 90, 8)
+        # The horn calls the horde: the chant's first three notes, held.
+        if bar == 0:
+            horn.note(b, n("D4"), 92, 6)
+            horn.note(b + 6, n("F4"), 92, 10)
+        else:
+            horn.note(b, n("A4"), 96, 8)
+            horn.note(b + 8, n("G4"), 90, 4)
+            horn.note(b + 12, n("Eb4"), 92, 4)
+
+    # A 2-5: the march — the brass chants the theme, the horn answers.
+    for bar in range(2, 6):
+        b = bar * 16
+        g = bar - 2
+        war_drums(drums, b, 1, fill=g == 3)
+        bass_pump(bass, b, 1, [root[chords[bar]]], vel=98)
+        pad_bar(choir, b, 1, [voice[chords[bar]]], 52)
+        taiko.note(b, n("D2"), 104, 4)
+        if g in (0, 2):
+            for i, m in enumerate(chant):
+                brass.note(b + [0, 2, 4, 8, 10][i], m, 100, [2, 2, 4, 2, 6][i])
+        else:
+            for i, m in enumerate(fall):
+                horn.note(b + i * 3, m - (0 if chords[bar] != "Eb" else 0), 88, 3)
+
+    # B 6-9: the turn to the relative major, toms only, the choir up front.
+    for bar in range(6, 10):
+        b = bar * 16
+        g = bar - 6
+        war_drums(drums, b, 1, toms=g % 2 == 0, fill=g == 3)
+        bass_offbeat(bass, b, 1, [root[chords[bar]]], vel=96)
+        pad_bar(choir, b, 1, [voice[chords[bar]]], 64)
+        top = voice[chords[bar]][-1] + 12
+        horn.note(b, top - 12, 86, 8)
+        horn.note(b + 8, top - 10, 84, 8)
+
+    # C 10-13: the crest — brass doubled an octave, taiko on every beat.
+    for bar in range(10, 14):
+        b = bar * 16
+        g = bar - 10
+        war_drums(drums, b, 1, fill=g == 1)
+        drums.note(b, DR["crash"], 84 if g == 0 else 66, 12)
+        bass_pump(bass, b, 1, [root[chords[bar]]], vel=104)
+        pad_bar(choir, b, 1, [voice[chords[bar]]], 60)
+        for i in range(4):
+            taiko.note(b + i * 4, n("D2"), 100 + (8 if i == 0 else 0), 3)
+        line = chant if g % 2 == 0 else fall
+        for i, m in enumerate(line):
+            brass.note(b + i * 3, m, 104, 3)
+            brass.note(b + i * 3, m + 12, 80, 3)
+
+    # Outro 14-15: Dm, then A — V. The horn holds the leading tone.
+    for bar in (14, 15):
+        b = bar * 16
+        war_drums(drums, b, 1, toms=False)
+        bass_offbeat(bass, b, 1, [root[chords[bar]]], vel=90)
+        pad_bar(choir, b, 1, [voice[chords[bar]]], 54)
+        horn.note(b, n(["D4", "C#4"][bar - 14]), 90, 14)
+        taiko.note(b, n("D2"), 104, 4)
+
+    bpm = 120
+    sheet = [
+        ("drums", -7.5, 0.0),
+        ("bass", -4.0, 0.0),
+        ("choir", -10.5, -0.25),
+        ("brass", -5.5, 0.1),
+        ("horn", -7.0, 0.3),
+        ("taiko", -6.0, -0.1),
+    ]
+    return bpm, [drums, bass, choir, brass, horn, taiko], sheet
+
+
 # -------------------------------------------------------------------- main
 
 TRACKS: dict[str, Callable[[], tuple[int, list[Track], list[tuple[str, float, float]]]]] = {
@@ -759,6 +890,7 @@ TRACKS: dict[str, Callable[[], tuple[int, list[Track], list[tuple[str, float, fl
     "lia": lia_stems,
     "anands": anands_stems,
     "jeffs": jeffs_stems,
+    "ibiriki": ibiriki_stems,
 }
 
 

@@ -12,7 +12,8 @@
  * anything else.
  */
 
-import { isComboSlash, MASSIVE_CHARGE_MS } from "../simulation/Melee.js";
+import { type HeroId, kitFor } from "../simulation/Heroes.js";
+import { isChainLink, MASSIVE_CHARGE_MS } from "../simulation/Melee.js";
 import type { AIInput, AIOutput, TeamRole } from "./types.js";
 
 /** Draw the sword inside this range; holster it beyond `SWORD_DISENGAGE_PX`. */
@@ -159,6 +160,16 @@ const CHARGE_BEATS: MeleeBeat[] = [
 	{ ms: MASSIVE_CHARGE_MS + 60, attack: true, block: true },
 	{ ms: 90 },
 ];
+
+/**
+ * The same hold for a weapon whose charge is shorter (Ibiriki's Sunder): the
+ * beat lasts exactly as long as *this* weapon's charge, plus the margin.
+ */
+function chargeBeats(hero: HeroId): MeleeBeat[] {
+	const ms = kitFor(hero).melee.chargeMs;
+	if (ms === MASSIVE_CHARGE_MS) return CHARGE_BEATS;
+	return [{ ms: ms + 60, attack: true, block: true }, { ms: 90 }];
+}
 
 /** Fire an already-armed Massive: one clean press. */
 const RELEASE_MASSIVE: MeleeBeat[] = [{ ms: 60, attack: true }, { ms: 80 }];
@@ -444,7 +455,7 @@ export class MeleeBrain {
 		return (
 			// Any link of the chain, not just its opener: reading only the first
 			// swing would leave a bot standing still through the two that follow it.
-			(isComboSlash(input.enemyAction) ||
+			(isChainLink(input.enemyAction) ||
 				// And the massive's own swing: it is blockable now, and the guard
 				// break that stops it is the same one that stops a slash — so a
 				// turtle can read the wind-up and turn the heaviest move in the
@@ -537,7 +548,9 @@ export class MeleeBrain {
 		}
 
 		if (this.willPunishStun(input.enemyStunned) && distance < CHARGE_RANGE_PX) {
-			return input.selfMassiveReady ? RELEASE_MASSIVE : CHARGE_BEATS;
+			return input.selfMassiveReady
+				? RELEASE_MASSIVE
+				: chargeBeats(input.selfHero);
 		}
 
 		// A charge that is already paid for. Spend it when there is no swing to
@@ -666,7 +679,7 @@ export class MeleeBrain {
 			input.enemyAction === "none" &&
 			Math.random() < CHARGE_CHANCE_PER_SKILL * skill
 		) {
-			return CHARGE_BEATS;
+			return chargeBeats(input.selfHero);
 		}
 
 		return null;

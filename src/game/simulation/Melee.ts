@@ -19,6 +19,7 @@ import {
 	BACKSTAB_BONUS_STUN_MS,
 	BLOCK_PUSHBACK,
 	BLOCK_STARTUP_MS,
+	CHAINS,
 	CHARGE_LOCK_MS,
 	COMBO_CHAIN,
 	COMBO_LINK_MS,
@@ -29,6 +30,8 @@ import {
 	DASH_LOCKOUT_MS,
 	DASH_SPEED,
 	GUARD_BREAK_STUN_MS,
+	GUARD_CRUSH_DAMAGE_FRACTION,
+	GUARD_CRUSH_STUN_MS,
 	KNOCKDOWN_MS,
 	KNOCKDOWN_SLAM_VY,
 	MASSIVE_BLAST_DAMAGE,
@@ -60,6 +63,7 @@ import {
 	PLUNGE_STUN_MAX_MS,
 	PLUNGE_STUN_PER_PX_MS,
 } from "../../tweakables/melee.js";
+import { BLOODLUST_ATTACK_SPEED_BONUS } from "../../tweakables/passive.js";
 import {
 	PLAYER_HEIGHT,
 	PLAYER_WIDTH,
@@ -117,10 +121,47 @@ export type { MeleeMove, MeleeWeaponDef };
 export type MeleeAction = "none" | MeleeMove;
 export type MeleePhase = "none" | "startup" | "active" | "recovery";
 export type Stance = "sword" | "gun";
-export type ComboSlash = (typeof COMBO_CHAIN)[number];
 
-export function isComboSlash(move: MeleeAction): move is ComboSlash {
-	return (COMBO_CHAIN as readonly string[]).includes(move);
+/**
+ * The ground chain a move is a link of, or null. Every chain in the game —
+ * the sword's slashes, Ibiriki's hews and his berserk frenzy — runs on the
+ * same `comboStep` machinery, so the rules (both feet down, links from
+ * recovery, a cancel drops the chain) are one rule, not one per weapon.
+ */
+export function chainOf(move: MeleeAction): readonly MeleeMove[] | null {
+	if (move === "none") return null;
+	for (const chain of CHAINS) if (chain.includes(move)) return chain;
+	return null;
+}
+
+/** Is this move a link of any ground chain? */
+export function isChainLink(move: MeleeAction): boolean {
+	return chainOf(move) !== null;
+}
+
+/** Is this move some weapon's charged heavy (the Massive, the Sunder)? */
+function isChargeMove(move: MeleeMove): boolean {
+	for (const w of Object.values(MELEE_WEAPONS)) {
+		if (w.hasCharge && w.chargeMove === move) return true;
+	}
+	return false;
+}
+
+/**
+ * Is this fighter **berserk** — full bloodlust? Only Ibiriki's kit ever sets
+ * `bloodlust` above zero (the server computes it from the room's weakest
+ * foe), so for everybody else this is false by construction.
+ */
+export function isBerserk(s: { bloodlust?: number }): boolean {
+	return (s.bloodlust ?? 0) >= 1;
+}
+
+/** How fast a fighter's melee clock runs: 1, plus the bloodlust haste. */
+export function meleeHaste(s: { bloodlust?: number }): number {
+	return (
+		1 +
+		Math.max(0, Math.min(1, s.bloodlust ?? 0)) * BLOODLUST_ATTACK_SPEED_BONUS
+	);
 }
 
 /** Every move there is, derived from the table so it can never fall behind it. */
@@ -296,6 +337,14 @@ export interface MeleeTickState extends MeleeState {
 	plungeCarryTimer?: number;
 	/** ms left of a root (trap lock). Only `PlayerPosition` ever sets it. */
 	rootTimer?: number;
+	/**
+	 * Ibiriki's bloodlust, 0..1 — the server's reading of the room's weakest
+	 * foe. Speeds the melee clock and, at 1, swaps in the berserk chain. Only
+	 * `PlayerPosition` ever sets it.
+	 */
+	bloodlust?: number;
+	/** ms left of a Rupture stomp: the caster is rooted and holds nothing. */
+	stompTimer?: number;
 }
 
 /** What `resolveMelee` needs of a fighter: melee state plus a body. */
@@ -541,7 +590,8 @@ function endMove(s: MeleeState) {
 	// out of its recovery. A block cancel is the exception and clears the chain
 	// itself. The finisher ends the chain because there is nothing left to link
 	// into.
-	if (isComboSlash(s.meleeAction) && s.comboStep < COMBO_CHAIN.length) {
+	const chain = chainOf(s.meleeAction);
+	if (chain !== null && s.comboStep < chain.length) {
 		s.comboTimer = COMBO_LINK_MS;
 	} else {
 		resetCombo(s);
@@ -575,15 +625,16 @@ function startMove(s: MeleeTickState, move: MeleeMove) {
 	// An attack replaces a guard. Holding block and tapping attack is the
 	// butterfly, so this must not be an error case.
 	s.blocking = false;
-	if (move === "massive") {
+	if (isChargeMove(move)) {
 		s.massiveReady = false;
 		s.parryMassiveTimer = 0;
 		s.chargeTimer = 0;
 	}
 	// Anything that is not a link breaks the chain. An uppercut in the middle of a
 	// combo is a different decision, not the second hit of this one.
-	if (isComboSlash(move)) {
-		s.comboStep = COMBO_CHAIN.indexOf(move) + 1;
+	const chain = chainOf(move);
+	if (chain !== null) {
+		s.comboStep = chain.indexOf(move) + 1;
 		s.comboTimer = 0;
 	} else {
 		resetCombo(s);
@@ -623,11 +674,11 @@ function startPlunge(s: MeleeTickState) {
  * cannot walk out of, and the ground requirement is what keeps the combo a
  * commitment rather than a mobility option.
  */
-function canChain(s: MeleeTickState): boolean {
+function canChain(s: MeleeTickState, chain: readonly MeleeMove[]): boolean {
 	if (s.grounded !== true) return false;
-	if (s.comboStep < 1 || s.comboStep >= COMBO_CHAIN.length) return false;
+	if (s.comboStep < 1 || s.comboStep >= chain.length) return false;
 	if (s.meleeAction === "none") return s.comboTimer > 0;
-	return isComboSlash(s.meleeAction) && meleePhase(s) === "recovery";
+	return chainOf(s.meleeAction) !== null && meleePhase(s) === "recovery";
 }
 
 function decay(ms: number, dtMs: number): number {
@@ -704,7 +755,7 @@ export function tickMelee(
 	// to the dragon's line), and all this gate does is not fight it. The only
 	// thing that ends a ride early is a hostile black hole, which arrives as a
 	// stun and lands in the stun gate above.
-	if ((s.dragonTimer ?? 0) > 0) {
+	if ((s.dragonTimer ?? 0) > 0 || (s.stompTimer ?? 0) > 0) {
 		s.attackHeld = input.attack;
 		s.blockHeld = input.block;
 		s.uppercutHeld = input.uppercut;
@@ -837,7 +888,7 @@ export function tickMelee(
 	// ---- charge ----
 	if (sword && weapon.hasCharge && input.attack) {
 		s.chargeTimer += dtMs;
-		if (s.chargeTimer >= MASSIVE_CHARGE_MS) s.massiveReady = true;
+		if (s.chargeTimer >= weapon.chargeMs) s.massiveReady = true;
 	} else {
 		s.chargeTimer = 0;
 	}
@@ -856,7 +907,11 @@ export function tickMelee(
 	// previous link's recovery. That exception is the combo.
 	if (sword) {
 		const neutral = s.meleeAction === "none";
-		const chaining = canChain(s);
+		// The berserk frenzy replaces the chain while bloodlust is full; every
+		// other rule of the chain is unchanged.
+		const chain =
+			isBerserk(s) && weapon.berserkChain ? weapon.berserkChain : weapon.chain;
+		const chaining = chain !== null && canChain(s, chain);
 		const attackPress = input.attack && !s.attackHeld;
 		const attackRelease = !input.attack && s.attackHeld;
 		const uppercutPress = input.uppercut && !s.uppercutHeld;
@@ -878,34 +933,34 @@ export function tickMelee(
 			// And if the fighter is airborne when it fires, the swing is refused
 			// and the massive becomes the plunge bomb instead.
 			const firesOnPress = s.parryMassiveTimer > 0;
-			if ((firesOnPress ? attackPress : attackRelease) && s.grounded) {
-				startMove(s, "massive");
+			if (
+				(firesOnPress ? attackPress : attackRelease) &&
+				(s.grounded || !weapon.plunge)
+			) {
+				startMove(s, weapon.chargeMove);
 			} else if (firesOnPress ? attackPress : attackRelease) {
 				startPlunge(s);
 			}
-		} else if (
-			attackPress &&
-			(neutral || (weapon.chain !== null && chaining))
-		) {
+		} else if (attackPress && (neutral || chaining)) {
 			// The dagger has no chain: every press is link one, the stab. `chain`
 			// being null is what makes a dagger's spam *just* spam — there is no
 			// third press that turns it into something bigger, which is the price
 			// of the button being that fast.
-			if (weapon.chain !== null && chaining) {
+			if (chain !== null && chaining) {
 				// `comboStep` is one-based, so it is already the index of the *next* link.
-				startMove(
-					s,
-					(COMBO_CHAIN[s.comboStep] as MeleeMove | undefined) ?? "slash",
-				);
+				startMove(s, chain[s.comboStep] ?? chain[0] ?? "slash");
 			} else if (neutral) {
-				startMove(s, (weapon.chain !== null ? "slash" : "stab") as MeleeMove);
+				// A chainless weapon's press is its first move (the dagger's stab).
+				startMove(s, chain?.[0] ?? weapon.moves[0] ?? "stab");
 			}
 		}
 	}
 
 	// ---- advance ----
 	if (s.meleeAction !== "none") {
-		s.meleeTimer += dtMs;
+		// Bloodlust runs the move's clock faster — the whole of "attack
+		// speed": every phase, the hitbox and the recovery shrink together.
+		s.meleeTimer += dtMs * meleeHaste(s);
 		if (s.meleeTimer >= moveDuration(s.meleeAction)) endMove(s);
 	}
 
@@ -1004,7 +1059,13 @@ export type MeleeOutcome =
 	 * in `resolveMelee`, where the attacker's feet and the victim's debt are
 	 * both visible.
 	 */
-	| "instaFall";
+	| "instaFall"
+	/**
+	 * A guard-crushing move (Ibiriki's Sunder, a full-charge axe) met a front
+	 * guard: the guard is knocked down — a fraction of the damage and a mini
+	 * stun — and the attacker is *not* guard broken.
+	 */
+	| "crushed";
 
 export interface MeleeResult {
 	move: MeleeMove;
@@ -1132,6 +1193,17 @@ export function resolveMelee(
 		return { move, outcome: "instaFall", damage: def.damage, x, y, dir };
 	}
 
+	if (defender.blocking && def.blockable && !behind && def.guardCrush) {
+		return {
+			move,
+			outcome: "crushed",
+			damage: Math.round(def.damage * GUARD_CRUSH_DAMAGE_FRACTION),
+			x,
+			y,
+			dir,
+		};
+	}
+
 	if (defender.blocking && def.blockable && !behind) {
 		// Every guard that stops a sword attack breaks it. There is no
 		// "absorbed without reward" tier any more — a turtle wins any exchange
@@ -1193,6 +1265,14 @@ export function applyMeleeResult(
 			return 0;
 		}
 
+		case "crushed": {
+			// The guard is knocked down, not honoured: a mini stun and a shove,
+			// the stun gate drops the guard on the defender's next tick, and the
+			// attacker swung through it — no guard break, no reward.
+			applyGuardCrush(defender, result.dir);
+			return result.damage;
+		}
+
 		default: {
 			// The shared hit branch — see `applyHitToDefender`. A normal swing
 			// additionally spends the attacker's `hitLatch`, because a swing hits
@@ -1202,6 +1282,23 @@ export function applyMeleeResult(
 			return damage;
 		}
 	}
+}
+
+/**
+ * Knock a front guard down: the mini stun a guard-crushing hit leaves.
+ * Shared by the Sunder's swing and the full-charge axe, so both crush the
+ * same way. Mutates the defender.
+ */
+export function applyGuardCrush(defender: MeleeBody, dir: number): void {
+	defender.stunTimer = Math.max(defender.stunTimer, GUARD_CRUSH_STUN_MS);
+	defender.iframeTimer = MELEE_IFRAME_MS;
+	defender.blocking = false;
+	defender.vx += dir * BLOCK_PUSHBACK;
+	defender.meleeAction = "none";
+	defender.meleeTimer = 0;
+	defender.hitLatch = false;
+	defender.comboStep = 0;
+	defender.comboTimer = 0;
 }
 
 /**

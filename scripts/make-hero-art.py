@@ -35,7 +35,7 @@ import numpy as np
 from PIL import Image, ImageEnhance, ImageOps
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-HEROES = ("lia", "jeffs", "anands")
+HEROES = ("lia", "jeffs", "anands", "ibiriki")
 HERO = next((a for a in sys.argv[1:] if not a.startswith("--")), "")
 if HERO not in HEROES:
     sys.exit(f"usage: make-hero-art.py <{'|'.join(HEROES)}> [--pack-only]")
@@ -139,8 +139,11 @@ def pack(images):
 # side of every strong colour edge draws the shapes inside the silhouette the
 # way the board does.
 PALETTE_FILE = os.path.join(ROOT, "art", HERO, "palette.json")
-BOARD_LOOK = os.path.exists(PALETTE_FILE)
-LOOK = json.load(open(PALETTE_FILE)) if BOARD_LOOK else {}
+LOOK = json.load(open(PALETTE_FILE)) if os.path.exists(PALETTE_FILE) else {}
+BOARD_LOOK = "colours" in LOOK
+# The silhouette line's width in sprite px. One for the SNES heroes; a hero
+# drawn in a heavier cartoon line (Ibiriki) asks for more in his look file.
+OUTLINE_PX = int(LOOK.get("outline_px", 1))
 # A textured (unlit) render needs the lift and the inner ink to get its fills
 # and shapes back; a toon-shaded one already has both, and only snaps.
 LIFT = LOOK.get("lift", True)
@@ -187,7 +190,7 @@ def portrait(manifest):
     im = harden(Image.open(os.path.join(RAW, clip["files"][0])).convert("RGBA"))
     if BOARD_LOOK:
         im = board_look(im)
-    im = ink_outline(im, 2)
+    im = ink_outline(im, 2 * OUTLINE_PX)
     x0, y0, x1, y1 = im.getbbox()
     h = (y1 - y0) + 16
     w = h * 2 // 3
@@ -230,7 +233,9 @@ def measure(frames, clips, centre, body_h):
             top, bottom = box[1], box[3]
             height = bottom - top
             print(f"  measure {c['right']:<11} feet y={bottom} (floor {floor}) height={height}px (body {body_h})")
-            if abs(bottom - floor) > 3:
+            # A silhouette line wider than one pixel hangs that much lower
+            # below the soles than the shared one does.
+            if abs(bottom - (floor + OUTLINE_PX - 1)) > 3:
                 problems.append(f"{f}: feet at y={bottom}, the collider floor is y={floor}")
             if not (body_h - 16 <= height <= body_h + 4):
                 problems.append(f"{f}: figure is {height}px tall, the body box is {body_h}px")
@@ -254,7 +259,7 @@ def main():
             im = harden(Image.open(os.path.join(RAW, f)).convert("RGBA"))
             if BOARD_LOOK:
                 im = board_look(im)
-            frames[f] = ink_outline(clean_orphans(im), 1)
+            frames[f] = ink_outline(clean_orphans(im), OUTLINE_PX)
 
     # 2. The cell: every frame's content, symmetric about the body centre.
     half_w = half_h = 0

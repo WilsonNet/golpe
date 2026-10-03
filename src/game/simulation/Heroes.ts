@@ -23,15 +23,22 @@ import { MELEE_WEAPONS, type MeleeWeaponDef } from "./Melee.js";
 
 export { RANGED_WEAPONS };
 
-export type HeroId = "lia" | "anands" | "jeffs";
-export const HERO_IDS = ["lia", "anands", "jeffs"] as const;
+export type HeroId = "lia" | "anands" | "jeffs" | "ibiriki";
+export const HERO_IDS = ["lia", "anands", "jeffs", "ibiriki"] as const;
 export const DEFAULT_HERO: HeroId = "lia";
 
 export function isHeroId(v: unknown): v is HeroId {
 	return typeof v === "string" && (HERO_IDS as readonly string[]).includes(v);
 }
 
-type UltimateId = "black-hole" | "dragon-thrust" | "death-blossom";
+type UltimateId = "black-hole" | "dragon-thrust" | "death-blossom" | "rupture";
+
+/**
+ * A hero's passive, or null. The simulation never asks *which hero* — it reads
+ * the state the passive produces (`bloodlust`); the server asks the kit
+ * whether to produce it.
+ */
+type PassiveId = "bloodlust" | null;
 
 export interface HeroDef {
 	id: HeroId;
@@ -43,8 +50,10 @@ export interface HeroDef {
 	ultimate: UltimateId;
 	/** The item this hero carries. Not unique — a future hero can share one. */
 	item: ItemDef;
+	/** The passive this hero carries, or null. */
+	passive: PassiveId;
 	/** The sprite sheet this hero is drawn from. See `render/assets.ts`. */
-	sheet: "lia" | "anands" | "jeffs";
+	sheet: "lia" | "anands" | "jeffs" | "ibiriki";
 }
 
 export const HEROES: Record<HeroId, HeroDef> = {
@@ -57,6 +66,7 @@ export const HEROES: Record<HeroId, HeroDef> = {
 		ranged: RANGED_WEAPONS.rifle,
 		ultimate: "black-hole",
 		item: ITEMS["he-grenade"],
+		passive: null,
 		sheet: "lia",
 	},
 	anands: {
@@ -68,6 +78,7 @@ export const HEROES: Record<HeroId, HeroDef> = {
 		ranged: RANGED_WEAPONS.machinegun,
 		ultimate: "dragon-thrust",
 		item: ITEMS.trap,
+		passive: null,
 		sheet: "anands",
 	},
 	jeffs: {
@@ -79,7 +90,20 @@ export const HEROES: Record<HeroId, HeroDef> = {
 		ranged: RANGED_WEAPONS.shotgun,
 		ultimate: "death-blossom",
 		item: ITEMS["smoke-grenade"],
+		passive: null,
 		sheet: "jeffs",
+	},
+	ibiriki: {
+		id: "ibiriki",
+		name: "Ibiriki",
+		blurb:
+			"Viking sword and throwing axes. The weaker the room, the faster he hunts.",
+		melee: MELEE_WEAPONS.viking,
+		ranged: RANGED_WEAPONS.axe,
+		ultimate: "rupture",
+		item: ITEMS.trap,
+		passive: "bloodlust",
+		sheet: "ibiriki",
 	},
 };
 
@@ -90,6 +114,7 @@ export interface HeroKit {
 	ranged: RangedWeaponDef;
 	ultimate: UltimateId;
 	item: ItemDef;
+	passive: PassiveId;
 }
 
 export function kitFor(hero: HeroId): HeroKit {
@@ -100,6 +125,7 @@ export function kitFor(hero: HeroId): HeroKit {
 		ranged: def.ranged,
 		ultimate: def.ultimate,
 		item: def.item,
+		passive: def.passive,
 	};
 }
 

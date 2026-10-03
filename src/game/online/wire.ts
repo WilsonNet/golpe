@@ -23,6 +23,7 @@
  * `dash`) are packed as signs because the simulation only ever reads their sign.
  */
 
+import type { AxeState } from "../simulation/Axes.js";
 import type {
 	MeleeAction,
 	PlayerIntent,
@@ -30,6 +31,7 @@ import type {
 	Stance,
 	WallSide,
 } from "../simulation/Physics.js";
+import type { SnapshotAxe, WireAxe } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Intent
@@ -113,6 +115,14 @@ const MELEE_ACTIONS: readonly MeleeAction[] = [
 	"stab",
 	"thrust",
 	"shoryuken",
+	// Ibiriki's viking sword, appended for the same reason.
+	"hew",
+	"hew2",
+	"hew3",
+	"sunder",
+	"rend",
+	"rend2",
+	"rend3",
 ];
 
 /**
@@ -176,6 +186,12 @@ const NUMBER_FIELDS = [
 	// same reason as every field before it: both sides must pay it on the same
 	// tick, so the debt has to survive the trip.
 	"knockdownPendingTimer",
+	// Ibiriki: the server's bloodlust reading (an input to both sides' walk
+	// and melee clock), the axe throw's charge, and the Rupture stomp —
+	// appended for the same reason as every field before them.
+	"bloodlust",
+	"throwChargeTimer",
+	"stompTimer",
 ] as const;
 
 const ENUM_FIELDS = ["wallTouch", "stance", "meleeAction"] as const;
@@ -255,5 +271,57 @@ export function unpackState(p: PackedState): PlayerPosition {
 		wallTouch: WALL_SIDES[p[ENUM_BASE] ?? 0] ?? "none",
 		stance: STANCES[p[ENUM_BASE + 1] ?? 0] ?? "sword",
 		meleeAction: MELEE_ACTIONS[p[ENUM_BASE + 2] ?? 0] ?? "none",
+	};
+}
+
+// ---------------------------------------------------------------------------
+// Axes
+// ---------------------------------------------------------------------------
+
+/** Positions travel to a tenth of a pixel, a resting angle to a hundredth. */
+const AXE_POS_STEPS = 10;
+const AXE_ANGLE_STEPS = 100;
+
+/**
+ * One of Ibiriki's axes for the snapshot: rounded, and every field that is
+ * zero, false or null omitted. Sixteen axe-throwers rest up to 160 axes in a
+ * room, and every resting one is in every snapshot: packing them took a
+ * sixteen-Ibiriki deathmatch from 10.9 KB to 9.8 KB a snapshot on average
+ * (a Lia room is 8.2 KB) — `deathmatch-probe --hero=ibiriki --botHero=ibiriki`.
+ */
+export function packAxe(a: AxeState): WireAxe {
+	const w: WireAxe = {
+		id: a.id,
+		ownerId: a.ownerId,
+		x: Math.round(a.x * AXE_POS_STEPS) / AXE_POS_STEPS || 0,
+		y: Math.round(a.y * AXE_POS_STEPS) / AXE_POS_STEPS || 0,
+	};
+	if (a.ownerTeam !== null) w.ownerTeam = a.ownerTeam;
+	const vx = Math.round(a.vx);
+	const vy = Math.round(a.vy);
+	if (vx !== 0) w.vx = vx;
+	if (vy !== 0) w.vy = vy;
+	if (a.full) w.full = true;
+	if (a.dropped) w.dropped = true;
+	if (a.resting) w.resting = true;
+	const restAngle = Math.round(a.restAngle * AXE_ANGLE_STEPS) / AXE_ANGLE_STEPS;
+	if (restAngle !== 0) w.restAngle = restAngle;
+	return w;
+}
+
+/** The snapshot's axe back in full: every omitted field is its zero. */
+export function unpackAxe(w: WireAxe): SnapshotAxe {
+	return {
+		id: w.id,
+		ownerId: w.ownerId,
+		ownerTeam: w.ownerTeam ?? null,
+		x: w.x,
+		y: w.y,
+		vx: w.vx ?? 0,
+		vy: w.vy ?? 0,
+		full: w.full === true,
+		dropped: w.dropped === true,
+		resting: w.resting === true,
+		restAngle: w.restAngle ?? 0,
 	};
 }

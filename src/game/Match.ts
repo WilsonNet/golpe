@@ -83,14 +83,15 @@ import type {
 	PotgTrackEntry,
 } from "./potg/types";
 import { AimLine } from "./render/AimLine";
+import { AmmoPackFx } from "./render/AmmoPackFx";
 import { bodyCentre, drawArena } from "./render/ArenaRenderer";
 import { heroFrames, sheetScale, TEX, tex } from "./render/assets";
 import { BlackHoleFx } from "./render/BlackHoleFx";
 import { BlossomFx } from "./render/BlossomFx";
-import { AmmoPackFx } from "./render/AmmoPackFx";
 import { ControlPointFx } from "./render/ControlPointFx";
 import { DenyFx } from "./render/DenyFx";
 import { DragonFx } from "./render/DragonFx";
+import { type IbirikiFighterView, IbirikiFx } from "./render/IbirikiFx";
 import { ItemFx } from "./render/ItemFx";
 import { type ImpactEvent, MeleeFx } from "./render/MeleeFx";
 import { Nameplates } from "./render/Nameplates";
@@ -403,6 +404,7 @@ export class Match {
 	private tutorial: TutorialDirector | undefined;
 	private dragonFx!: DragonFx;
 	private blossomFx!: BlossomFx;
+	private ibirikiFx!: IbirikiFx;
 
 	private localBrain: EnemyBrain | undefined;
 	private remoteBrain: EnemyBrain | undefined;
@@ -490,6 +492,14 @@ export class Match {
 		// reason the hole's core sits behind them) and the heaviest particle
 		// budget in the game in front of them.
 		this.blossomFx = new BlossomFx(stage.field, stage.effects, stage);
+		// Ibiriki: axes are projectiles that stay, and his charges, berserk
+		// and curse are effects over the fighters.
+		this.ibirikiFx = new IbirikiFx(
+			stage.effects,
+			stage.projectiles,
+			stage,
+			() => this.arena,
+		);
 		// The control pads: arena furniture under every field effect, so a
 		// fighter standing on an objective still reads over its colour.
 		this.controlFx = new ControlPointFx(stage.field);
@@ -830,6 +840,7 @@ export class Match {
 				(this.offlineFoe ? 1 : 0),
 			online: this.onlineMode,
 			massiveReady: this.local.body.massiveReady,
+			berserk: this.local.body.bloodlust >= 1,
 			team: this.local.fighter.team,
 		};
 		const stanceChanged = state.stance !== this.lastHudStance;
@@ -1137,6 +1148,47 @@ export class Match {
 					// point hears it faintly and knows supply just moved.
 					this.ammoPackFx.burst(event.x, event.y);
 					this.playAt("pickup-ammo", event.x, event.y, { gain: 0.9 });
+				},
+				onAxeHit: (event) => {
+					// The axe's consequence already travelled (HP, ammo, the stun);
+					// this is the spark, the thunk and the tutorial's tally.
+					this.ibirikiFx.axeHit(event);
+					const t = this.ibirikiTally;
+					t.axeEvents[event.outcome] = (t.axeEvents[event.outcome] ?? 0) + 1;
+					if (event.ownerId === this.online?.manager.myId) {
+						t.myAxeEvents[event.outcome] =
+							(t.myAxeEvents[event.outcome] ?? 0) + 1;
+					}
+					const sfx =
+						event.outcome === "pickup"
+							? "axe-pickup"
+							: event.outcome === "stuck"
+								? "axe-thunk"
+								: event.outcome === "blocked"
+									? "axe-block"
+									: event.outcome === "crushed"
+										? "guard-crush"
+										: "axe-hit";
+					this.playAt(sfx, event.x, event.y);
+					// The tutorial counts a crushed guard and a recovered axe.
+					EventBus.emit("axe-event", {
+						outcome: event.outcome,
+						mine: event.ownerId === this.online?.manager.myId,
+					});
+				},
+				onRuptureOpened: (rupture) => {
+					this.ibirikiTally.ruptures++;
+					const caster = this.entityByServerId(rupture.ownerId);
+					const at = caster ? (caster.renderPos ?? caster.body) : null;
+					if (at) {
+						this.ibirikiFx.ruptureOpened(
+							at.x + PLAYER_WIDTH / 2,
+							at.y + PLAYER_HEIGHT,
+							rupture.ownerTeam,
+						);
+						this.playAt("stomp", at.x + PLAYER_WIDTH / 2, at.y + PLAYER_HEIGHT);
+					}
+					this.diagnostics.markTeleport(TELEPORT_GRACE_FRAMES);
 				},
 				onFighterAdded: (id) => this.addRemoteFighter(id),
 				onFighterRemoved: (id) => this.despawnFighter(id),
@@ -1563,6 +1615,29 @@ export class Match {
 		// deathmatch probe reads scores, and the physics diagnostic reads positions
 		// — so the freeze, the throw and the capture are invisible to all three.
 		// `scripts/ultimate-probe.ts` reads exactly this.
+		// Ibiriki's kit, measured: every axe event the server announced, the
+		// curse, and the passive. `scripts/ibiriki-probe.ts` reads this — the
+		// physics diagnostic sees positions and nothing of what the axes did.
+		window.__ibirikiState = () => {
+			const session = this.online;
+			const me = session?.manager.myId ?? "";
+			const axes = session?.axes ?? [];
+			return {
+				axeEvents: { ...this.ibirikiTally.axeEvents },
+				myAxeEvents: { ...this.ibirikiTally.myAxeEvents },
+				axesInWorld: axes.length,
+				myAxesResting: axes.filter((a) => a.resting && a.ownerId === me).length,
+				myAmmo: this.local.body.ammo,
+				ruptures: this.ibirikiTally.ruptures,
+				ruptureActive: session?.rupture != null,
+				cursedFrames: this.ibirikiTally.cursedFrames,
+				berserkFrames: this.ibirikiTally.berserkFrames,
+				maxBloodlust: this.ibirikiTally.maxBloodlust,
+				sunderChargeFrames: this.ibirikiTally.sunderChargeFrames,
+				throwChargeFrames: this.ibirikiTally.throwChargeFrames,
+				stompFrames: this.ibirikiTally.stompFrames,
+			};
+		};
 		window.__ultState = () => {
 			const session = this.online;
 			const field = session?.singularity ?? null;
@@ -1978,6 +2053,19 @@ export class Match {
 	private cueRolling = new Map<string, boolean>();
 	private cueMelee = new Map<string, string>();
 	private cuePlunging = new Map<string, boolean>();
+	private cueBerserk = new Map<string, boolean>();
+	/** What `__ibirikiState` reports: tallies of the kit actually happening. */
+	private readonly ibirikiTally = {
+		axeEvents: {} as Record<string, number>,
+		myAxeEvents: {} as Record<string, number>,
+		ruptures: 0,
+		cursedFrames: 0,
+		berserkFrames: 0,
+		maxBloodlust: 0,
+		sunderChargeFrames: 0,
+		throwChargeFrames: 0,
+		stompFrames: 0,
+	};
 	private cueAmmo = new Map<string, number>();
 	private cueReloading = new Map<string, boolean>();
 	private cueDead = new Map<string, boolean>();
@@ -2179,6 +2267,13 @@ export class Match {
 			}
 			this.cueMelee.set(id, move);
 
+			// Ibiriki scents blood: the berserk's roar, on the edge.
+			const berserk = b.bloodlust >= 1;
+			if (berserk && !this.cueBerserk.get(id)) {
+				this.playAt("berserk", b.x, b.y);
+			}
+			this.cueBerserk.set(id, berserk);
+
 			if (b.plunging && !this.cuePlunging.get(id)) {
 				this.playAt("massive-swing", b.x, b.y, { gain: 0.7 });
 			}
@@ -2276,6 +2371,18 @@ export class Match {
 				return "uppercut";
 			case "massive":
 				return "massive-swing";
+			// Ibiriki's viking sword: the hews are heavier air, the frenzy is
+			// the plain swish (fast), and the Sunder is its own roar.
+			case "hew":
+			case "hew2":
+			case "hew3":
+				return "swing-heavy";
+			case "rend":
+			case "rend2":
+			case "rend3":
+				return "swing";
+			case "sunder":
+				return "sunder";
 			default:
 				return "swing";
 		}
@@ -2286,6 +2393,7 @@ export class Match {
 	 * machine gun chatters, the shotgun booms. See specs/heroes.md.
 	 */
 	private shotSound(hero: string): string {
+		if (hero === "ibiriki") return "axe-throw";
 		return hero === "jeffs" ? "shot-heavy" : "shot";
 	}
 
@@ -2404,6 +2512,10 @@ export class Match {
 		// sprite, drawn by the animation system from `blossomTimer`.
 		this.blossomFx.update(session.blossom, dtMs);
 
+		// Ibiriki's axes, charges, berserk and the rupture's bleed. Read off
+		// the fighters' own predicted state and the snapshot's world objects.
+		this.updateIbiriki(session, dtMs);
+
 		// The dragon: a serpent behind whoever is riding. The rider's drawn
 		// position is what the trail chases — the same smoothing rule as the
 		// nameplates and the shadows. Anands' ride is her own art now (see
@@ -2519,6 +2631,58 @@ export class Match {
 		return entityId === LOCAL_ID
 			? (this.online?.manager.myId ?? entityId)
 			: entityId;
+	}
+
+	/** The fighter entity the server knows as `serverId`, if this client draws one. */
+	private entityByServerId(serverId: string) {
+		for (const e of this.queries.fighters) {
+			if (this.serverIdOf(e.fighter.id) === serverId) return e;
+		}
+		return undefined;
+	}
+
+	/**
+	 * Ibiriki's layer: the axes off the snapshot, and every fighter's charges,
+	 * berserk and bleed off their own predicted state. Presentation only.
+	 */
+	private updateIbiriki(session: OnlineSession, dtMs: number) {
+		this.ibirikiFx.syncAxes(
+			this.potgSample ? [] : session.axes,
+			session.renderClock,
+			session.manager.myId,
+		);
+		const views: IbirikiFighterView[] = [];
+		for (const e of this.queries.fighters) {
+			const at = e.renderPos ?? e.body;
+			views.push({
+				serverId: this.serverIdOf(e.fighter.id),
+				team: e.fighter.team,
+				x: at.x,
+				y: at.y,
+				body: e.body,
+				ibiriki: e.fighter.hero === "ibiriki",
+				alive: e.fighter.hp > 0,
+			});
+		}
+		const rupture = this.potgSample ? null : session.rupture;
+		this.ibirikiFx.update(views, rupture, dtMs);
+		// The local fighter's curse is told to the HUD, which draws the red
+		// vignette and DON'T MOVE over the whole screen.
+		const myId = session.manager.myId;
+		const cursed = rupture !== null && rupture.victims.includes(myId);
+		const me = this.local.body;
+		const t = this.ibirikiTally;
+		if (cursed) t.cursedFrames++;
+		if (me.bloodlust >= 1) t.berserkFrames++;
+		t.maxBloodlust = Math.max(t.maxBloodlust, me.bloodlust);
+		if (me.chargeTimer > 0 && me.stance === "sword") t.sunderChargeFrames++;
+		if (me.throwChargeTimer > 0) t.throwChargeFrames++;
+		if (me.stompTimer > 0) t.stompFrames++;
+		EventBus.emit("rupture-state", {
+			active: cursed,
+			msLeft: cursed ? rupture.remainingMs : 0,
+			totalMs: rupture?.totalMs ?? 0,
+		});
 	}
 
 	/**
@@ -3238,6 +3402,14 @@ export class Match {
 			// The line, in a control match — the snapshot's view turned into the
 			// module's, exactly as the server's bots get it.
 			control: this.controlInfo(selfTeam, session),
+			// Ibiriki: the snapshot's view of his axes and the curse.
+			ownAxes: (session?.axes ?? [])
+				.filter((a) => a.resting && a.ownerId === session?.manager.myId)
+				.map((a) => ({ x: a.x, y: a.y })),
+			selfRuptured:
+				session?.rupture?.victims.includes(session.manager.myId) ?? false,
+			ruptureActive: session?.rupture != null,
+			selfThrowCharge: self.throwChargeTimer,
 		};
 	}
 
@@ -3544,6 +3716,7 @@ export class Match {
 			lia: "anands",
 			anands: "lia",
 			jeffs: "anands",
+			ibiriki: "lia",
 		};
 		return mirror[this.hero];
 	}
@@ -3884,6 +4057,7 @@ export class Match {
 		this.fx.reset();
 		this.blackHole.reset();
 		this.blossomFx.reset();
+		this.ibirikiFx.reset();
 		this.denyFx.reset();
 		this.rootedFx.reset();
 		this.items.reset();

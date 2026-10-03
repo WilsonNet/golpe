@@ -37,6 +37,12 @@ import {
 	GRENADE_SPEED,
 	GRENADE_TOUCH_PX,
 	PULL_EPSILON,
+	RUPTURE_CAST_DAMAGE,
+	RUPTURE_DAMAGE_PER_PX,
+	RUPTURE_DURATION_MS,
+	RUPTURE_STOMP_MS,
+	RUPTURE_TELEPORT_PX,
+	RUPTURE_TICK_MS,
 	SINGULARITY_DAMAGE_INTERVAL_MS,
 	SINGULARITY_DRAW_SPEED,
 	SINGULARITY_DURATION_MS,
@@ -82,6 +88,10 @@ export {
 	GRENADE_FUSE_MS,
 	GRENADE_GRAVITY,
 	GRENADE_SPEED,
+	RUPTURE_CAST_DAMAGE,
+	RUPTURE_DURATION_MS,
+	RUPTURE_STOMP_MS,
+	RUPTURE_TICK_MS,
 	SINGULARITY_DAMAGE_INTERVAL_MS,
 	SINGULARITY_DURATION_MS,
 	SINGULARITY_HOLD_STUN_MS,
@@ -505,3 +515,34 @@ export function blossomSweeps(
 
 /** Spin speed for the caster's sprite — one revolution every 360ms. */
 export const BLOSSOM_SPIN_RAD_PER_MS = (Math.PI * 2) / BLOSSOM_SPIN_MS;
+
+// ---------------------------------------------------------------------------
+// Rupture — Ibiriki's ultimate (specs/ibiriki.md)
+//
+// A global curse with no field to stand in: every hostile alive at the release
+// is ruptured, and for the duration each pixel their body travels costs HP.
+// Nothing about it moves anybody, so — unlike the hole — it is not an argument
+// to `tickPlayer`: the bleed is damage, and damage is the server's alone. The
+// clients draw it from the snapshot.
+// ---------------------------------------------------------------------------
+
+export interface Rupture {
+	id: number;
+	ownerId: string;
+	ownerTeam: TeamId | null;
+	/** ms of the curse left. */
+	remainingMs: number;
+	/** Who is ruptured: the hostiles alive at the release, minus the dead. */
+	victims: string[];
+}
+
+/**
+ * What a body's travel this tick costs under the rupture, in fractional HP.
+ * A jump larger than `RUPTURE_TELEPORT_PX` in one tick is a respawn or a
+ * reset, never a step, and costs nothing.
+ */
+export function ruptureBleed(dx: number, dy: number): number {
+	const d = Math.hypot(dx, dy);
+	if (d > RUPTURE_TELEPORT_PX) return 0;
+	return d * RUPTURE_DAMAGE_PER_PX;
+}

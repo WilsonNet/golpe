@@ -80,6 +80,9 @@ gates: scale contract · heroAtlas.test.ts · art-probe --hero=<hero> · diagnos
   at the camera and vanishes; Gemini "fixes" that by drawing the arms
   sticking forward and back in profile, which no 3D body can do. An A-pose
   (arms 45° down) is visible from the side and consistent in 3D.
+- **A T-pose's side views are usually wrong** — an arm pointing at the
+  camera is drawn as a fist floating in front of the body. When only the
+  front and back are right, feed only those two (Tripo accepts it).
 - Gemini often draws **both side views facing the same way**:
   `cut-turnaround.py --mirror-side` mirrors one instead of spending prompts.
 
@@ -122,6 +125,23 @@ plan — the UI may be in Portuguese).
 - **The Tripo API is billed separately** from the Studio subscription
   (pay-as-you-go, 100 credits = $1). Stay in the web app unless the user says
   otherwise.
+- **Leave a bad view's slot empty.** Multi-view accepts front + back alone.
+  Ibiriki's T-pose board had side views with a fist pointing at the camera
+  (the Gemini T-pose side-view problem, below); feeding them would have put
+  a lump on each flank. Front + back came back clean.
+- **Segmentation ("Dividir", the scissors in the model's toolbar) splits a
+  finished model into parts** — Ibiriki's armed model came back in 13 pieces
+  (sword in 3, axe in 2, helmet, braids, gloves…). The first run was a free
+  trial on the Starter plan. **Use it for props, not for a body**: the parts
+  are open shells, so a rigid-parts character has holes wherever two parts
+  met, and a weapon baked into a fist leaves a gap where the hand was (model
+  a grip into it). The weapons are worth it — they match the body's texture
+  exactly, which no separate generation does. Export the split as GLB: each
+  part is its own mesh (`tripo_part_N`).
+- **Image generation and the cartoon preview**: Studio's viewer has a
+  toon/cartoon shading mode; it is a preview only (it does not change the
+  export), but it is a fast way to show the user what a thick outline
+  will look like before the Blender look is built.
 - Tried and rejected: 3DAI Studio (every export is paywalled — never pull a
   model out of a web viewer to get around it); Hunyuan3D-2.1's free Space
   (usable, rough); the Blender MCP's Rodin/Hunyuan need the user's own keys —
@@ -186,6 +206,51 @@ weights** (`jeffs_look.classify`).
   face in the portrait. A hero whose shoulder sits higher than Lia's needs
   his own grips for her raised-sword poses (block, portrait) — the scale
   contract catches the block.
+
+### A ball with a painted face (Ibiriki)
+
+A chibi whose body is one round shape with the face *painted* on it breaks
+three of Anands' assumptions:
+
+- **Rigid ball weights.** Heat weighting spreads a ball over hips, chest and
+  both arms, and the painted face stretches on every swing.
+  `ibiriki_rig.rigidify_ball`: everything inside the ball rides the chest
+  alone, the helmet the head; only the arms past the surface keep heat.
+- **Texture-driven toon.** At sprite density an eye is a handful of faces,
+  and a per-face family vote erases it. Feed the texture straight into
+  LiaToon's Lit/Shade/Highlight (multiply toward violet, screen toward
+  white), **linear** filtering (closest was texel noise), and lower `Shade
+  Below` — a sphere at the shared threshold sits half in shade.
+- **The face angle is a design decision.** Turning the head to the viewer
+  (the SNES convention) on a ball turns the *whole face*, and he stared at
+  the player with both eyes while running sideways — the user called it
+  "very weird". Damp the torso twist and set the chest near profile
+  (`CHEST_TURN_DEG` −8): one eye leading. Generate a T-pose so the rest
+  pose is neutral; a model posed with weapons in hand bakes the arm angles in.
+
+### Thick outlines
+
+The user likes a heavy ink line (Tripo's cartoon preview). Two knobs: the
+inverted hull's thickness (`sprite_rig.add_outline(thickness=…)`, Ibiriki
+0.06 m vs the shared 0.034) and the packer's silhouette width
+(`art/<hero>/palette.json` `"outline_px": 2`). The scale contract measures
+the outline as part of the figure — lower the rig scale (Ibiriki 0.89) and
+the feet check already allows `outline_px` below the floor line. **A hull on
+a decimated or segmented mesh scratches** — black slivers wherever the
+shell is open or thin; it wants one closed generated surface.
+
+### Blender traps found on Ibiriki
+
+- **A crashed bake leaves Cycles as the render engine**, and the hull's
+  back-face culling is an EEVEE material setting — under Cycles every
+  outline renders solid and the whole sprite comes out black. Set
+  `scene.render.engine` back (`BLENDER_EEVEE` / `_NEXT`, in try/except).
+- **The Read tool caches an image by path.** Re-rendering to the same file
+  and reading it again shows the *old* render. Render previews to a unique
+  filename each time.
+- Voxel remesh of open shells fails, and solidify-then-remesh loses the UVs
+  (the helmet baked black); Laplacian smoothing on a decimated mesh made it
+  worse. Fix the geometry upstream — a new generation — not in Blender.
 
 ## 5. Render, pack, gate
 

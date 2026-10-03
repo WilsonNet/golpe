@@ -77,10 +77,7 @@ export class AmmoPackFx {
 	 * replay — the clip records no packs, exactly like the items — so the
 	 * layer simply leaves the screen.
 	 */
-	update(
-		packs: readonly { id: number; x: number; y: number }[],
-		dtMs: number,
-	) {
+	update(packs: readonly { id: number; x: number; y: number }[], dtMs: number) {
 		this.timeMs += dtMs;
 		for (const node of this.nodes.values()) node.present = false;
 
@@ -163,9 +160,7 @@ export class AmmoPackFx {
 		for (const side of [-1, 1]) {
 			const x = side * 6.4;
 			crate.roundRect(x - 1.6, -1, 3.2, 6, 1.2).fill({ color: ROUND });
-			crate
-				.poly([x - 2.4, -1, x + 2.4, -1, x, -4.4])
-				.fill({ color: ROUND });
+			crate.poly([x - 2.4, -1, x + 2.4, -1, x, -4.4]).fill({ color: ROUND });
 		}
 		root.addChild(glow, crate);
 		this.root.addChild(root);

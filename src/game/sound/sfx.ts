@@ -693,6 +693,238 @@ const patches: Record<string, Patch> = {
 		noise(k, { filter: "bandpass", f0: 2200, q: 2.4, durMs: 32, peak: 0.14 });
 		osc(k, { type: "sine", f0: 1320, f1: 1180, durMs: 42, peak: 0.1 });
 	},
+	// ------------------------------------------------ Ibiriki
+	"swing-heavy": (k, o) => {
+		// A heavier blade moving more air: lower, longer, with a body thud.
+		noise(k, {
+			filter: "bandpass",
+			f0: 420,
+			f1: 1900,
+			q: 1.2,
+			durMs: 210,
+			peak: 0.44,
+			pan: o.pan,
+		});
+		osc(k, {
+			type: "sine",
+			f0: 110,
+			f1: 70,
+			durMs: 120,
+			peak: 0.18,
+			pan: o.pan,
+		});
+	},
+	sunder: (k, o) => {
+		// The overhead coming down: a long falling whoosh and a low growl.
+		noise(k, {
+			filter: "bandpass",
+			f0: 2600,
+			f1: 260,
+			q: 0.9,
+			durMs: 380,
+			peak: 0.6,
+			pan: o.pan,
+		});
+		osc(k, {
+			type: "sawtooth",
+			f0: 140,
+			f1: 55,
+			durMs: 360,
+			peak: 0.22,
+			pan: o.pan,
+			detune: 12,
+		});
+	},
+	"guard-crush": (k, o) => {
+		// A guard breaking under the weight: a crack and a low iron clang.
+		noise(k, {
+			filter: "highpass",
+			f0: 2800,
+			q: 0.7,
+			durMs: 70,
+			peak: 0.5,
+			pan: o.pan,
+		});
+		osc(k, {
+			type: "square",
+			f0: 260,
+			f1: 180,
+			durMs: 240,
+			peak: 0.2,
+			pan: o.pan,
+		});
+		osc(k, { type: "sine", f0: 90, f1: 50, durMs: 280, peak: 0.6, pan: o.pan });
+	},
+	"axe-throw": (k, o) => {
+		// The axe leaving the hand, spinning: a whirring band-pass flutter.
+		noise(k, {
+			filter: "bandpass",
+			f0: 900,
+			f1: 1800,
+			q: 3,
+			durMs: 90,
+			peak: 0.3,
+			pan: o.pan,
+		});
+		noise(k, {
+			filter: "bandpass",
+			f0: 1400,
+			f1: 700,
+			q: 3,
+			durMs: 110,
+			peak: 0.24,
+			pan: o.pan,
+			whenMs: 80,
+		});
+		noise(k, {
+			filter: "bandpass",
+			f0: 1100,
+			f1: 600,
+			q: 3,
+			durMs: 110,
+			peak: 0.16,
+			pan: o.pan,
+			whenMs: 170,
+		});
+	},
+	"axe-hit": (k, o) => {
+		// Iron into a body: a wet chop.
+		osc(k, {
+			type: "triangle",
+			f0: 200,
+			f1: 70,
+			durMs: 170,
+			peak: 0.85,
+			pan: o.pan,
+		});
+		noise(k, {
+			filter: "lowpass",
+			f0: 1800,
+			f1: 400,
+			q: 0.8,
+			durMs: 130,
+			peak: 0.5,
+			pan: o.pan,
+		});
+	},
+	"axe-thunk": (k, o) => {
+		// The blade biting wood or stone: a short knock and a ringing tail.
+		osc(k, {
+			type: "sine",
+			f0: 180,
+			f1: 120,
+			durMs: 90,
+			peak: 0.5,
+			pan: o.pan,
+		});
+		osc(k, {
+			type: "triangle",
+			f0: 1250,
+			durMs: 240,
+			peak: 0.08,
+			pan: o.pan,
+			whenMs: 10,
+		});
+		noise(k, {
+			filter: "bandpass",
+			f0: 600,
+			q: 2,
+			durMs: 50,
+			peak: 0.3,
+			pan: o.pan,
+		});
+	},
+	"axe-block": (k, o) => {
+		// Steel on steel, turned away.
+		osc(k, {
+			type: "square",
+			f0: 1400,
+			f1: 1100,
+			durMs: 140,
+			peak: 0.16,
+			pan: o.pan,
+		});
+		noise(k, {
+			filter: "highpass",
+			f0: 3000,
+			q: 0.8,
+			durMs: 60,
+			peak: 0.3,
+			pan: o.pan,
+		});
+	},
+	"axe-pickup": (k) => {
+		// Hefting the axe back: a leather creak and a small iron tick.
+		noise(k, { filter: "bandpass", f0: 500, q: 4, durMs: 70, peak: 0.14 });
+		osc(k, { type: "triangle", f0: 880, durMs: 80, peak: 0.16, whenMs: 50 });
+	},
+	stomp: (k, o) => {
+		// Rupture's stomp: the ground hit hard enough to curse it. A sub drop,
+		// a rumble, and a heartbeat that the whole room hears.
+		osc(k, {
+			type: "sine",
+			f0: 90,
+			f1: 28,
+			durMs: 700,
+			peak: 0.95,
+			pan: o.pan,
+		});
+		noise(k, {
+			filter: "lowpass",
+			f0: 900,
+			f1: 120,
+			q: 0.7,
+			durMs: 600,
+			peak: 0.6,
+			pan: o.pan,
+		});
+		osc(k, {
+			type: "sine",
+			f0: 62,
+			f1: 48,
+			durMs: 160,
+			peak: 0.7,
+			whenMs: 420,
+		});
+		osc(k, {
+			type: "sine",
+			f0: 62,
+			f1: 48,
+			durMs: 160,
+			peak: 0.55,
+			whenMs: 620,
+		});
+	},
+	berserk: (k, o) => {
+		// The berserk roar: a growl swelling up, detuned against itself.
+		osc(k, {
+			type: "sawtooth",
+			f0: 90,
+			f1: 150,
+			durMs: 420,
+			peak: 0.3,
+			pan: o.pan,
+			detune: 18,
+		});
+		osc(k, {
+			type: "sawtooth",
+			f0: 92,
+			f1: 148,
+			durMs: 420,
+			peak: 0.26,
+			pan: o.pan,
+			detune: -18,
+		});
+		noise(k, {
+			filter: "bandpass",
+			f0: 500,
+			f1: 900,
+			q: 1.2,
+			durMs: 380,
+			peak: 0.25,
+			pan: o.pan,
+		});
+	},
 	"pickup-ammo": (k) => {
 		// A short two-note confirm — the pack's rattle and a click, not a
 		// fanfare. Mags and brass, so the first note is a filtered noise tick

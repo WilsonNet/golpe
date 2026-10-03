@@ -233,6 +233,17 @@ export interface AIInput {
 	 * know that keeps pressing a trigger nothing answers.
 	 */
 	selfReserveRounds: number;
+	/**
+	 * Ibiriki's own resting axes, centre points — where to walk to take them
+	 * back. Empty for every other hero. See specs/ibiriki.md.
+	 */
+	ownAxes?: readonly { x: number; y: number }[];
+	/** This fighter is ruptured: every pixel it moves bleeds. */
+	selfRuptured?: boolean;
+	/** A rupture is running in the room (so a second cast would be refused). */
+	ruptureActive?: boolean;
+	/** ms this fighter's axe throw has been charging (shared state). */
+	selfThrowCharge?: number;
 }
 
 export interface AIOutput {

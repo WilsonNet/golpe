@@ -19,7 +19,14 @@ import {
 	type PlayerPosition,
 	tickPlayer,
 } from "../simulation/Physics";
-import { packIntent, packState, unpackIntent, unpackState } from "./wire";
+import {
+	packAxe,
+	packIntent,
+	packState,
+	unpackAxe,
+	unpackIntent,
+	unpackState,
+} from "./wire";
 
 /**
  * -1, 0 or 1 — and never `-0`.
@@ -142,5 +149,66 @@ describe("packState", () => {
 		const verbatim = JSON.stringify(state).length;
 		const packed = JSON.stringify(packState(state)).length;
 		expect(packed).toBeLessThan(verbatim / 2);
+	});
+});
+
+describe("packAxe", () => {
+	const finite = (max: number) =>
+		fc.double({ min: -max, max, noNaN: true, noDefaultInfinity: true });
+	const axe = fc.record({
+		id: fc.nat(),
+		ownerId: fc.string(),
+		ownerTeam: fc.constantFrom(null, 0 as const, 1 as const),
+		x: finite(10_000),
+		y: finite(10_000),
+		vx: finite(2000),
+		vy: finite(2000),
+		damage: fc.nat(100),
+		full: fc.boolean(),
+		dropped: fc.boolean(),
+		resting: fc.boolean(),
+		restAngle: finite(Math.PI),
+	});
+	// `|| 0` folds `Math.round`'s -0 into 0: the zero the wire omits.
+	const r = (v: number, step: number) => Math.round(v * step) / step || 0;
+
+	test.prop([axe])("round-trips every field the client draws", (a) => {
+		expect(unpackAxe(packAxe(a))).toEqual({
+			id: a.id,
+			ownerId: a.ownerId,
+			ownerTeam: a.ownerTeam,
+			x: r(a.x, 10),
+			y: r(a.y, 10),
+			vx: r(a.vx, 1),
+			vy: r(a.vy, 1),
+			full: a.full,
+			dropped: a.dropped,
+			resting: a.resting,
+			restAngle: r(a.restAngle, 100),
+		});
+	});
+
+	it("sends a resting axe as an id, an owner and a place", () => {
+		const packed = packAxe({
+			id: 7,
+			ownerId: "abc",
+			ownerTeam: null,
+			x: 120.04,
+			y: 480,
+			vx: 0,
+			vy: 0,
+			damage: 0,
+			full: false,
+			dropped: false,
+			resting: true,
+			restAngle: 0,
+		});
+		expect(packed).toEqual({
+			id: 7,
+			ownerId: "abc",
+			x: 120,
+			y: 480,
+			resting: true,
+		});
 	});
 });

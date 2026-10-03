@@ -246,6 +246,72 @@ const browser = await chromium.launch();
 	await ctx.close();
 }
 
+// ------------------------------------------------------------- Ibiriki ----
+{
+	const ctx = await browser.newContext();
+	const page = await ctx.newPage();
+	const errors: string[] = [];
+	page.on("pageerror", (e) => errors.push(String(e)));
+
+	// The hew: a heavier cut than the slash.
+	let name = await open(page, "ibiriki", 5);
+	check("ibiriki walks to the hew", name === "Hew", `entry=${name}`);
+	const hew = await watch(page, (s) => (s.damageDealt ?? 0) > 0);
+	check(
+		"hew lands its 10",
+		(hew?.damageDealt ?? 0) === 10,
+		`dmg=${hew?.damageDealt}`,
+	);
+
+	// The Sunder: the full charge comes down for 28.
+	name = await open(page, "ibiriki", 9);
+	check("ibiriki walks to the sunder", name === "Sunder", `entry=${name}`);
+	// The press opens with a hew (10) before the hold arms the Sunder (28).
+	const sunder = await watch(page, (s) => (s.damageDealt ?? 0) >= 28, 8000);
+	check(
+		"sunder lands its 28",
+		(sunder?.damageDealt ?? 0) >= 28,
+		`dmg=${sunder?.damageDealt}`,
+	);
+
+	// The frenzy: a bleeding dummy fills the bloodlust, so the press is a rend.
+	name = await open(page, "ibiriki", 10);
+	check(
+		"ibiriki walks to the frenzy",
+		name === "Frenzy (sword)",
+		`entry=${name}`,
+	);
+	const rend = await watch(page, (s) => (s.damageDealt ?? 0) > 0);
+	check(
+		"a berserk press is the frenzy (8, not a hew's 10)",
+		(rend?.damageDealt ?? 0) === 8,
+		`dmg=${rend?.damageDealt}`,
+	);
+
+	// The axe: a full charge flies flat and lands almost a whole bar.
+	name = await open(page, "ibiriki", 13);
+	check("ibiriki walks to the axe", name === "Throwing Axe", `entry=${name}`);
+	const axe = await watch(page, (s) => (s.bulletHits ?? 0) > 0, 8000);
+	check(
+		"a full-charge axe lands its 85",
+		(axe?.damageDealt ?? 0) >= 80,
+		`fired=${axe?.bulletsFired} hits=${axe?.bulletHits} dmg=${axe?.damageDealt}`,
+	);
+
+	// Rupture: the cast cuts, and a dummy knocked across the floor bleeds.
+	name = await open(page, "ibiriki", 15);
+	check("ibiriki walks to the ultimate", name === "Rupture", `entry=${name}`);
+	// 5 on the cast + the uppercut's 11 = 16; past 22 the launch arc bled (~8).
+	const rupture = await watch(page, (s) => (s.damageDealt ?? 0) >= 22, 12000);
+	check(
+		"rupture cuts on the cast and bleeds the launched dummy",
+		(rupture?.damageDealt ?? 0) >= 22,
+		`dmg=${rupture?.damageDealt}`,
+	);
+	check("no page errors (ibiriki)", errors.length === 0, errors.join("; "));
+	await ctx.close();
+}
+
 await browser.close();
 
 if (failures > 0) {
