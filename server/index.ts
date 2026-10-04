@@ -8,7 +8,7 @@ import {
 	type MatchMode,
 	TDM_MIN_SCREENS,
 } from "../src/game/simulation/Teams.js";
-import { ULT_MAX_CHARGE } from "../src/game/simulation/Ultimate.js";
+import { ULT_MAX_CAP } from "../src/game/simulation/Ultimate.js";
 import { MS_PER_SECOND } from "../src/game/simulation/units.js";
 import {
 	CP_CAP_TIME_DEFAULT_S,
@@ -120,13 +120,14 @@ interface JoinMsg {
 	 */
 	screens?: number;
 	/**
-	 * Ultimate charge every fighter starts and respawns with, 0..100.
+	 * Ultimate charge every fighter starts and respawns with, 0..`ULT_MAX_CAP`.
 	 *
 	 * The same argument as the shortened rules, for the same reason: the ultimate
 	 * takes ~285s of passive charge to arm, which is the right pace to play and the
 	 * wrong pace to measure — a probe that has to wait out the meter is a probe
-	 * nobody runs. `?ultCharge=100` makes the cast testable in seconds, and it is
-	 * how somebody practises the throw without earning it thirty times.
+	 * nobody runs. `?ultCharge=100` makes a 100-cap cast testable in seconds (a
+	 * Rupture asks for its own 150), and it is how somebody practises the throw
+	 * without earning it thirty times.
 	 *
 	 * **Creator-only**, like everything else in this block. It is a property of
 	 * the room, and a latecomer must not be able to hand everybody an ultimate.
@@ -208,9 +209,9 @@ function clamp(
 	return Math.max(lo, Math.min(hi, Math.round(n)));
 }
 
-/** A `?ultCharge` value, clamped to the meter the simulation owns. */
+/** A `?ultCharge` value, clamped to the largest cap any ultimate arms at. */
 function clampUltCharge(value: unknown): number {
-	return clamp(value, 0, ULT_MAX_CHARGE, 0);
+	return clamp(value, 0, ULT_MAX_CAP, 0);
 }
 
 function roomId(raw: unknown): string {

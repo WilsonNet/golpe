@@ -18,14 +18,27 @@ export const ULT_MAX_CHARGE = 100;
  * cheap one — it needs **less** charge to cast, which is what makes it "charge
  * faster": a jeffs fighter is armed sooner from the same damage, and the HUD
  * shows the smaller target so a player can see it at a glance. `ULT_MAX_CHARGE`
- * (100) is the universal bar scale and the default; only the blossom opts down.
+ * (100) is the universal bar scale and the default; the blossom opts down and
+ * **Rupture opts up**: a six-second global bleed that lands on everybody at
+ * once is worth half again a hole, so Ibiriki needs 150 — the meter's one
+ * expensive target, read on the HUD as `N/150`.
  */
 export const ULT_CAP: Record<string, number> = {
 	"black-hole": 100,
 	"dragon-thrust": 100,
 	"death-blossom": 65,
-	rupture: 100,
+	rupture: 150,
 };
+
+/**
+ * The largest meter any ultimate arms at — the ceiling `?ultCharge` may ask
+ * for.
+ *
+ * Derived from the table so the practice-room floor cannot drift behind a cap:
+ * the day an ultimate costs more than Rupture's 150, the flag still reaches it.
+ * It is not a cap any fighter is clamped to in play; `ultCap` is per ultimate.
+ */
+export const ULT_MAX_CAP = Math.max(...Object.values(ULT_CAP));
 
 /**
  * Charge multiplier applied to every source, by ultimate id.

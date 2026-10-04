@@ -22,7 +22,7 @@ Graviton Surge** for the fact that it is a *thrown* thing you can miss with.
 ## The shape of it, in order
 
 1. A fighter's **ult meter** fills, from damage they deal and from a slow
-   passive trickle. At 100 it is armed and the meter says so.
+   passive trickle. At the hero's own cap it is armed and the meter says so.
 2. They **hold R** (or the pad's ultimate button). While the button is held the
    meter is full and nothing forbids a cast, the fighter **aims with a special
    arc** — the grenade's own ballistic trajectory traced from the chest, ending
@@ -58,17 +58,26 @@ The Overwatch model: charge is a currency you are paid for participating.
 | A kill | **3 charge** |
 | A bullet blocked by the sword guard | **1.2 charge per bullet** — the anti-spam read |
 
-- The meter is **0..100**. It is **server-owned** — the client displays it and
-  never decides it, because charge is paid out of damage and only the server
-  knows a hit landed.
-- **Every ultimate arms at its own cap, and the blossom is the cheap one.** The
+- The meter runs **0..the hero's own cap** (100 by default; 65 for the blossom,
+  150 for Rupture). It is **server-owned** — the client displays it and never
+  decides it, because charge is paid out of damage and only the server knows a
+  hit landed.
+- **Every ultimate arms at its own cap, and the caps are per kit.** The
   black hole and the dragon need a full 100; the Death Blossom arms at **65**
-  and fills **1.3× as fast** per source (`ULT_CAP` / `ULT_CHARGE_MULTIPLIER`).
-  A jeffs fighter is armed sooner from the same damage — the blossom is a
-  shorter fight's worth of commitment, so it needs less of one to earn. The
-  HUD shows the absolute value out of the hero's cap (`37/65`), so a player
-  reads "this one needs less" from the number itself, not a percentage that
-  hides it.
+  and fills **1.3× as fast** per source (`ULT_CAP` / `ULT_CHARGE_MULTIPLIER`)
+  — a jeffs fighter is armed sooner from the same damage, because the blossom
+  is a shorter fight's worth of commitment; and **Rupture arms at 150** — half
+  again the universal meter — because a global curse that lands on every
+  hostile at once is worth more than one hole. The HUD shows the absolute
+  value out of the hero's cap (`37/65`, `90/150`), so a player reads "this one
+  needs less" or "this one is expensive" from the number itself, not a
+  percentage that hides it.
+- **Control points pays half of every source**, so an ultimate in that mode
+  costs double (`CP_ULT_CHARGE_MULTIPLIER` in `tweakables/control.ts`). It is a
+  rate, not a cap: the meter, the per-hero targets and the HUD are unchanged,
+  and the room applies it in one place — the server's charge grant — to every
+  source the table lists, including the passive. Measured in freezetime, where
+  the passive is the only thing moving, by `scripts/cp-probe.ts`.
 - **The meter is won by hits, and the ultimate is the one weapon that cannot
   pay.** The hole's damage feeds nobody: no charge for the caster, no kill
   bonus for a hole that scores. A caster whose own hole paid them would never
@@ -86,7 +95,8 @@ The Overwatch model: charge is a currency you are paid for participating.
   ticket; dying *while holding the button* is the aim phase's risk, and that
   death throws the whole meter away (see *Denying it*).
 - **A match reset zeroes it**, along with the scores.
-- Idling alone reaches 100 in ~285s — longer than a match. Landing a full
+- Idling alone reaches 100 in ~285s — longer than a match; Rupture's 150 takes
+  half again. Landing a full
   kill's worth of damage (100 HP) is worth 20, so a fighter who is actually
   fighting arms roughly every 3-5 minutes of fighting.
 - The passive is paid **only while alive**, so being dead is not a way to farm.
@@ -108,7 +118,7 @@ turn the throw into a guess.
 
 A cast is refused, silently, unless all of:
 
-- charge is at 100,
+- charge is at the ultimate's own cap,
 - the fighter is alive,
 - the match phase is `live`,
 - the fighter is not stunned or knocked down,
@@ -300,12 +310,13 @@ every replayed tick a different tick, and reconciliation would never settle.
 ## Practising it
 
 **`?ultCharge=N`** sets a *floor* on everybody's meter in a freshly created room
-— creator-only, like the shortened match rules and the screen count. At 100 the
-ultimate re-arms the instant it is spent, which turns ~285s of waiting into a
-practice range: the throw is a lob with a 707px ceiling and an arc you have to
-choose, and learning it against a meter that fills once a match is not learning
-it. It cannot be used to spam, because a cast is refused while a hole is already
-open.
+— creator-only, like the shortened match rules and the screen count. At a
+hero's cap the ultimate re-arms the instant it is spent, which turns minutes of
+waiting into a practice range: the throw is a lob with a 707px ceiling and an
+arc you have to choose, and learning it against a meter that fills once a match
+is not learning it. The flag's ceiling is `ULT_MAX_CAP` (150, Rupture's own
+meter), so even the expensive ultimate can be practised. It cannot be used to
+spam, because a cast is refused while a hole is already open.
 
 It is honoured in the **training room** too, which is where it is most useful —
 a dummy standing 60px away on clear ground, and a hole you can open on it as

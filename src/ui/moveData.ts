@@ -542,7 +542,7 @@ export const MOVE_LISTS: Record<HeroId, HeroMoveList> = {
 					label: "E, then HOLD LMB and release",
 					actions: ["gun", "attack"],
 				},
-				prose: `Hold to charge, release to throw. A tap is a ${AXE_MIN_SPEED} px/s lob for ${AXE_MIN_DAMAGE}; a full ${AXE_CHARGE_MS / 1000}s charge flies flat and far at ${RANGED_WEAPONS.axe.speed} px/s for ${RANGED_WEAPONS.axe.damage} — almost a whole bar — wreathed in embers, and it **crushes a guard** like the Sunder. Five axes a life and no reload: every axe sticks where it lands and stays there until **you walk over it** to take it back, or you die.`,
+				prose: `Hold to charge, release to throw. A tap is a ${AXE_MIN_SPEED} px/s lob for ${AXE_MIN_DAMAGE}; a full ${AXE_CHARGE_MS / 1000}s charge flies flat and far at ${RANGED_WEAPONS.axe.speed} px/s for ${RANGED_WEAPONS.axe.damage} — almost a whole bar — wreathed in embers, and it **crushes a guard**, still going through for half its damage and a mini stun. Three axes a life and no reload: every axe sticks where it lands until **an axe-bearer walks over it** and takes it back — anyone carrying axes can claim any resting axe, and they stay when you die.`,
 				tags: "CHARGED · BALLISTIC · PICK THEM BACK UP",
 				stats: [
 					{

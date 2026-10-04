@@ -7,8 +7,9 @@
  * standing still under the rupture or a predator going berserk. This plays two
  * AI Ibirikis in one room against two server bots (so the curse has a crowd to
  * bleed, and somebody is always low enough for the bloodlust to fill), armed
- * from the start (`ultCharge=100`), and asserts every part of the kit actually
- * happened — and that nothing desynced while it did.
+ * from the start (`ultCharge=150`, the meter Rupture's cap actually asks for),
+ * and asserts every part of the kit actually happened — and that nothing
+ * desynced while it did.
  *
  * Run: `tsx scripts/ibiriki-probe.ts [--duration=45000]` with both dev servers up.
  */
@@ -47,8 +48,10 @@ async function main() {
 	});
 	const errors: string[] = [];
 	// The creator asks for the crowd: two server bots playing Lia, so the
-	// rupture always has more than one body to bleed.
-	const creator = `${BASE}/?online=true&ai=true&mute=1&room=${ROOM}&hero=ibiriki&ultCharge=100&bots=2&botHero=lia&scoreLimit=99`;
+	// rupture always has more than one body to bleed. `ultCharge=150` is
+	// Rupture's own cap — with the old universal 100 the room would seat every
+	// Ibiriki 50 short of a cast, which is the bug this line exists to catch.
+	const creator = `${BASE}/?online=true&ai=true&mute=1&room=${ROOM}&hero=ibiriki&ultCharge=150&bots=2&botHero=lia&scoreLimit=99`;
 	const joiner = `${BASE}/?online=true&ai=true&mute=1&room=${ROOM}&hero=ibiriki`;
 	const a = await ctx.newPage();
 	await boot(a, creator, errors);

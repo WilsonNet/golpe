@@ -156,6 +156,7 @@ import {
 	sweptThrustBox,
 	tickPlayer,
 	tickReload,
+	ULT_MAX_CAP,
 	ultCap,
 } from "./simulation/Physics";
 import {
@@ -178,9 +179,12 @@ const THROW_CLIP_MS = 320;
 /**
  * The charge floor a tutorial room runs with, unless the URL says otherwise.
  *
- * Full, so the ultimate lesson can be attempted, failed and attempted again.
+ * The largest cap any ultimate arms at — full for every hero, so the ultimate
+ * lesson can be attempted, failed and attempted again. Rupture's 150 is why
+ * this is `ULT_MAX_CAP` rather than the universal 100: a lesson that stages
+ * Ibiriki's ultimate has to hand him a meter his ultimate can actually spend.
  */
-const TUTORIAL_ULT_CHARGE = 100;
+const TUTORIAL_ULT_CHARGE = ULT_MAX_CAP;
 
 /** Client physics runs at a fixed 60Hz to match the server, whatever the display does. */
 const PHYSICS_DT = 1 / 60;
@@ -3434,9 +3438,10 @@ export class Match {
 			// The line, in a control match — the snapshot's view turned into the
 			// module's, exactly as the server's bots get it.
 			control: this.controlInfo(selfTeam, session),
-			// Ibiriki: the snapshot's view of his axes and the curse.
-			ownAxes: (session?.axes ?? [])
-				.filter((a) => a.resting && a.ownerId === session?.manager.myId)
+			// Ibiriki: the snapshot's view of the axes on the floor and his
+			// curse. Any resting axe is claimable, so no owner filter here.
+			looseAxes: (session?.axes ?? [])
+				.filter((a) => a.resting)
 				.map((a) => ({ x: a.x, y: a.y })),
 			selfRuptured:
 				session?.rupture?.victims.includes(session.manager.myId) ?? false,

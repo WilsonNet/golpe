@@ -22,6 +22,10 @@ import type { Page } from "playwright";
  * - Rounds end by a capture of the enemy's last point, and the match by the
  *   capture limit — with friendly fire still off, reconstructed from the
  *   scoreboard the way `tdm-probe.ts` does it.
+ * - **Every ultimate in the mode costs double.** A control room pays half of
+ *   every charge source, so the mode's meter slope is measured in the one
+ *   state where nothing but the passive trickle can move it: freezetime, with
+ *   a team-deathmatch countdown as the control.
  *
  * Rules are shortened (`?capTime=1`) so a round is observable in seconds.
  * Everything else is the real path: real server, real snapshots, real
@@ -67,6 +71,22 @@ const ULT_CHARGE = Math.max(0, Number(arg("ultCharge", "0")) || 0);
 const DIAG_MS = Number(arg("diagnostic", "12000"));
 /** Wall-clock budget: the match clock is live time; freeze and cooldown are not. */
 const WALL_CLOCK_MS = (TIME_LIMIT_SEC + 90) * 1000;
+
+/**
+ * The mode's ultimate economy, restated rather than imported.
+ *
+ * Same reason `aim-probe.ts` restates the world size and `ultimate-probe.ts`
+ * restates the grenade: a probe that shares the constant under test cannot
+ * disagree with it, and one that expected a broken passive's own value would
+ * pass. If the game is retuned these checks fail loudly, which is the point.
+ */
+const ULT_PASSIVE_PER_SEC = 0.35;
+/** `CP_ULT_CHARGE_MULTIPLIER`: a control room pays half of every source. */
+const CP_ULT_CHARGE_MULTIPLIER = 0.5;
+/** A countdown long enough to hold the measurement window with room to boot. */
+const ECONOMY_FREEZE_S = 60;
+/** The window the slope is taken over, in wall ms. */
+const ECONOMY_WINDOW_MS = 35_000;
 
 /** The control map's fixed shape, asserted rather than requested. */
 const SCREENS = 5;
@@ -147,6 +167,25 @@ interface OvertimeObservation {
 }
 
 /**
+ * What the mode's charge economy paid while nothing but the passive could
+ * move it.
+ *
+ * One rate per room, in charge per second, plus the window each was measured
+ * over — the same wall-clock spanner in the same browser, against a 5CP
+ * countdown and a team-deathmatch control countdown of the same length. The
+ * control is not decoration: `0.175/s` alone could be a build whose passive
+ * had been cut everywhere, and only the ratio can tell the mode apart from
+ * the constant.
+ */
+interface EconomyObservation {
+	cpRate: number | null;
+	controlRate: number | null;
+	cpWindowMs: number;
+	controlWindowMs: number;
+	errors: string[];
+}
+
+/**
  * The spawn screen the line implies for a side, asked of the **real rule**.
  *
  * A local copy of the frontier arithmetic was wrong for team 1 (it took the
@@ -173,6 +212,7 @@ function assess(
 	state: MatchStateSnapshot | null,
 	obs: Observation,
 	overtime: OvertimeObservation,
+	economy: EconomyObservation,
 	lines: string[],
 	diagnostic: { verdict?: string } | null,
 ) {
@@ -386,6 +426,50 @@ function assess(
 		failures.push("the overtime room never captured anything");
 	}
 
+	// ---- every ultimate in the mode costs double ----
+	//
+	// The mode halves every charge source, so the passive paid in freezetime —
+	// the one window where nothing else can move the meter — must sit at half
+	// the spec's rate. The team-deathmatch room is the control: it runs the
+	// same countdown and the same client, and its slope proves the passive
+	// itself still runs at full price, so a halved 5CP number cannot be a
+	// broken passive wearing the mode's name.
+	const expectedCp = ULT_PASSIVE_PER_SEC * CP_ULT_CHARGE_MULTIPLIER;
+	if (economy.cpRate === null) {
+		failures.push("the control room never produced a frozen charge window");
+	} else if (Math.abs(economy.cpRate - expectedCp) > expectedCp * 0.3) {
+		failures.push(
+			`5CP paid ${economy.cpRate.toFixed(3)} charge/s in freezetime, wanted ~${expectedCp}`,
+		);
+	}
+	if (economy.controlRate === null) {
+		failures.push(
+			"the team-deathmatch control never produced a frozen charge window",
+		);
+	} else if (
+		Math.abs(economy.controlRate - ULT_PASSIVE_PER_SEC) >
+		ULT_PASSIVE_PER_SEC * 0.25
+	) {
+		failures.push(
+			`the control room paid ${economy.controlRate.toFixed(3)} charge/s, wanted ~${ULT_PASSIVE_PER_SEC}`,
+		);
+	}
+	if (economy.cpRate !== null && economy.controlRate !== null) {
+		const ratio = economy.cpRate / economy.controlRate;
+		if (ratio < 0.38 || ratio > 0.62) {
+			failures.push(
+				`5CP paid ${ratio.toFixed(2)}× the control's charge — wanted half`,
+			);
+		} else {
+			notes.push(
+				`the ultimate economy paid ${ratio.toFixed(2)}× the control in freezetime`,
+			);
+		}
+	}
+	if (economy.errors.length > 0) {
+		failures.push(`${economy.errors.length} economy page error(s)`);
+	}
+
 	// ---- the HUD showed the war ----
 	if (!obs.hudBar) failures.push("the control bar never rendered");
 	if (obs.hudPips !== 5) {
@@ -516,6 +600,107 @@ async function runOvertimePhase(
 		if (obs.paidBack) break;
 	}
 	return best;
+}
+
+/**
+ * Measure the ultimate economy during freezetime, 5CP against a control.
+ *
+ * Freezetime is the instrument: a frozen fighter discards its intent, so no
+ * hit lands, no bullet flies and the passive trickle is the only charge source
+ * left. The two rooms run side by side — independent ids, independent
+ * countdowns — so the pair costs one wait rather than two. The charge arrives
+ * from the server **rounded to whole points**, which is why the window is
+ * tens of seconds and the slope, never a single sample, is the measurement.
+ *
+ * The window is read from the page's own clock in the same `evaluate` as the
+ * charge, so boot latency and snapshot cadence are inside the measured span
+ * rather than assumed away.
+ */
+async function runEconomyPhase(
+	browser: Awaited<ReturnType<typeof chromium.launch>>,
+): Promise<EconomyObservation> {
+	const errors: string[] = [];
+
+	const measure = async (
+		modeParam: string,
+	): Promise<{ rate: number | null; windowMs: number }> => {
+		const ctx = await browser.newContext();
+		const page = await ctx.newPage();
+		page.on("pageerror", (e) => errors.push(e.message));
+		page.on("console", (m) => {
+			if (m.type() === "error") errors.push(m.text());
+		});
+		try {
+			const url =
+				`${BASE_URL}/?ai=true&mute=1${modeParam}` +
+				`&freezeTime=${ECONOMY_FREEZE_S}&timeLimit=300&room=${randomUUID()}`;
+			console.log(`[PROBE] economy room: ${url}`);
+			await page.goto(url);
+			await page.waitForFunction(
+				() => typeof window.__ultState === "function",
+				{ timeout: 20000 },
+			);
+			const sample = () =>
+				page.evaluate(() => {
+					const s = window.__ultState?.() ?? null;
+					const m = window.__matchState?.() ?? null;
+					return {
+						charge: s?.charge ?? null,
+						freezeMs: m?.teams?.freezeMs ?? null,
+						now: Date.now(),
+					};
+				});
+			// The first snapshot carries `teams` and the countdown; before it, the
+			// client's own defaults read "live with no freeze". Wait for the frozen
+			// state rather than sampling the client's fiction.
+			const first = await (async () => {
+				const deadline = Date.now() + 20_000;
+				while (Date.now() < deadline) {
+					const s = await sample();
+					if (s.charge !== null && s.freezeMs !== null && s.freezeMs > 0) {
+						return { charge: s.charge, freezeMs: s.freezeMs, now: s.now };
+					}
+					await page.waitForTimeout(200);
+				}
+				return null;
+			})();
+			if (!first) {
+				return { rate: null, windowMs: 0 };
+			}
+			await page.waitForTimeout(ECONOMY_WINDOW_MS);
+			const last = await sample();
+			const windowMs = last.now - first.now;
+			if (last.charge === null || (last.freezeMs ?? 0) <= 0 || windowMs <= 0) {
+				return { rate: null, windowMs };
+			}
+			return {
+				rate: (last.charge - first.charge) / (windowMs / 1000),
+				windowMs,
+			};
+		} finally {
+			await ctx.close();
+		}
+	};
+
+	const [cp, control] = await Promise.all([
+		measure("&mode=5cp"),
+		measure("&mode=tdm"),
+	]);
+	if (cp.rate === null) {
+		errors.push("the 5CP economy room never produced a frozen charge window");
+	}
+	if (control.rate === null) {
+		errors.push(
+			"the team-deathmatch economy room never produced a frozen charge window",
+		);
+	}
+	return {
+		cpRate: cp.rate,
+		controlRate: control.rate,
+		cpWindowMs: cp.windowMs,
+		controlWindowMs: control.windowMs,
+		errors,
+	};
 }
 
 async function main() {
@@ -714,13 +899,26 @@ async function main() {
 	finished = true;
 	await domWatcher;
 
-	// The dedicated overtime room, once the main line has had its run.
+	// The dedicated overtime rooms first, then the economy rooms — **sequentially**,
+	// not together. Overtime is an arranged race between a 15s clock and a
+	// capture (its whole point is landing the whistle mid-cap), so it is not
+	// something to run beside two more rooms competing for the same server.
+	// The economy measurement is a slope over tens of seconds and does not care
+	// who else is on the machine, so it is the one that waits its turn.
 	const overtime = await runOvertimePhase(browser, lines);
+	const economy = await runEconomyPhase(browser);
 
 	// The verdict is the state at the *whistle*, not a later read: the room
 	// restarts a new match 44 seconds after the podium, and the overtime phase
 	// takes longer than that — a re-read would grade a fresh 0-0.
-	const verdict = assess(finalState ?? state, obs, overtime, lines, diagnostic);
+	const verdict = assess(
+		finalState ?? state,
+		obs,
+		overtime,
+		economy,
+		lines,
+		diagnostic,
+	);
 
 	console.log("\n===== CONTROL POINTS =====");
 	console.log(
@@ -752,6 +950,17 @@ async function main() {
 					clockDriftMs: Math.round(overtime.clockDriftMs),
 					attempts: overtime.attempts,
 					captures: overtime.captures,
+				},
+				economy: {
+					cpRate:
+						economy.cpRate === null ? null : Number(economy.cpRate.toFixed(3)),
+					controlRate:
+						economy.controlRate === null
+							? null
+							: Number(economy.controlRate.toFixed(3)),
+					cpWindowMs: Math.round(economy.cpWindowMs),
+					controlWindowMs: Math.round(economy.controlWindowMs),
+					errors: economy.errors,
 				},
 				hud: {
 					bar: obs.hudBar,

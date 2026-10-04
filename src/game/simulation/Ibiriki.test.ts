@@ -19,6 +19,7 @@ import {
 } from "../../tweakables/passive.js";
 import {
 	AXE_CHARGE_MS,
+	AXE_CRUSH_DAMAGE_FRACTION,
 	AXE_MIN_DAMAGE,
 	AXE_MIN_SPEED,
 	RANGED_WEAPONS,
@@ -303,7 +304,7 @@ describe("the berserk frenzy", () => {
 		let s: PlayerPosition = {
 			...createPlayerState(100, 552),
 			stance: "gun",
-			ammo: 5,
+			ammo: 3,
 		};
 		const hold = intent({ swordStance: false, attack: true });
 		for (let i = 0; i < 20; i++)
@@ -387,7 +388,7 @@ describe("the berserk frenzy", () => {
 
 	it("is not a hero check: a calm Ibiriki's empty hands change nothing", () => {
 		const calm = body(100, 1, { ammo: 0 });
-		const full = body(100, 1, { ammo: 5 });
+		const full = body(100, 1, { ammo: 3 });
 		for (let i = 0; i < 6; i++) {
 			tickMelee(calm, intent({ attack: true }), DT, VIKING);
 			tickMelee(full, intent({ attack: true }), DT, VIKING);
@@ -412,9 +413,19 @@ describe("the throwing axe", () => {
 		expect(full.full).toBe(true);
 	});
 
-	it("is five a life with no reserve", () => {
-		expect(RANGED_WEAPONS.axe.magazine).toBe(5);
+	it("is three a life with no reserve", () => {
+		expect(RANGED_WEAPONS.axe.magazine).toBe(3);
 		expect(RANGED_WEAPONS.axe.magazinesPerLife).toBe(1);
+	});
+
+	it("puts half a full axe through the guard, and a tap none of it", () => {
+		// The fraction the server's `tickAxes` applies to a blocked full charge
+		// (`AXE_CRUSH_DAMAGE_FRACTION`): 50% of the card's 85, rounded like every
+		// other damage number. A part-charged axe is stopped whole.
+		expect(AXE_CRUSH_DAMAGE_FRACTION).toBe(0.5);
+		expect(
+			Math.round(RANGED_WEAPONS.axe.damage * AXE_CRUSH_DAMAGE_FRACTION),
+		).toBe(43);
 	});
 
 	it("flies an arc and sticks in the floor, then never moves again", () => {
@@ -459,20 +470,21 @@ describe("the throwing axe", () => {
 		expect(axeTouches(a, "foe", 1, 100, 380)).toBe(false);
 	});
 
-	it("only its owner picks it up, and only at rest", () => {
-		const a = launchAxe(1, "ibi", null, 100, 400, 0, 0);
-		expect(axePickable(a, "ibi", 90, 380)).toBe(false);
+	it("any axe-bearer picks it up, but only at rest and in reach", () => {
+		// Ownership is not in the predicate at all: an axe on the ground is
+		// ground, whoever threw it — the caller checks the kit carries axes.
+		const a = launchAxe(1, "ibi", 0, 100, 400, 0, 0);
+		expect(axePickable(a, 90, 380)).toBe(false);
 		a.resting = true;
-		expect(axePickable(a, "ibi", 90, 380)).toBe(true);
-		expect(axePickable(a, "someone", 90, 380)).toBe(false);
-		expect(axePickable(a, "ibi", 400, 380)).toBe(false);
+		expect(axePickable(a, 90, 380)).toBe(true);
+		expect(axePickable(a, 400, 380)).toBe(false);
 	});
 
 	it("charges on a held attack in gun stance, and the release resets it", () => {
 		let s: PlayerPosition = {
 			...createPlayerState(200, 520),
 			stance: "gun",
-			ammo: 5,
+			ammo: 3,
 		};
 		const hold = intent({ attack: true, swordStance: false });
 		for (let i = 0; i < 30; i++)
@@ -498,7 +510,7 @@ describe("the throwing axe", () => {
 		let s: PlayerPosition = {
 			...createPlayerState(200, 520),
 			stance: "gun",
-			ammo: 5,
+			ammo: 3,
 		};
 		const hold = intent({ attack: true, swordStance: false });
 		for (let i = 0; i < 10; i++) {

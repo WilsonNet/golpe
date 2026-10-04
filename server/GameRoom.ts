@@ -130,9 +130,10 @@ import {
 	CP_CAPTURE_MS,
 	CP_SCORE_LIMIT,
 	CP_TIME_LIMIT_MS,
+	CP_ULT_CHARGE_MULTIPLIER,
 } from "../src/tweakables/control.js";
-import { GUARD_CRUSH_DAMAGE_FRACTION } from "../src/tweakables/melee.js";
 import {
+	AXE_CRUSH_DAMAGE_FRACTION,
 	AXE_FULL_HIT_STUN_MS,
 	AXE_FULL_KNOCKBACK_VX,
 	AXE_HIT_STUN_MS,
@@ -244,7 +245,7 @@ import {
 	ULT_CHARGE_PER_DAMAGE,
 	ULT_CHARGE_PER_KILL,
 	ULT_CINEMATIC_MS,
-	ULT_MAX_CHARGE,
+	ULT_MAX_CAP,
 	ULT_PASSIVE_PER_SEC,
 	ultCap,
 	ultChargeMultiplier,
@@ -1003,8 +1004,12 @@ export class GameRoom {
 				: [...CP_CAPTURE_MS];
 		this.startUltCharge = Math.max(
 			0,
-			Math.min(rules.startUltCharge ?? 0, ULT_MAX_CHARGE),
+			Math.min(rules.startUltCharge ?? 0, ULT_MAX_CAP),
 		);
+		// The mode's ultimate economy: 5CP pays half of every source, so a full
+		// meter costs double there. Read by `grantUlt`, the one place charge is
+		// paid — a new source cannot forget it.
+		this.ultChargeRate = this.mode === "5cp" ? CP_ULT_CHARGE_MULTIPLIER : 1;
 		// The room is filmed from the moment it exists. Nothing here is optional or
 		// opt-in: a highlight cannot be recorded retroactively, so the buffer has to
 		// already be running when the moment worth keeping happens.
@@ -1032,6 +1037,17 @@ export class GameRoom {
 	 * refused while a hole is already open.
 	 */
 	private readonly startUltCharge: number;
+
+	/**
+	 * How much of every ultimate charge source this room pays.
+	 *
+	 * **5CP pays half** (`CP_ULT_CHARGE_MULTIPLIER`), so every ultimate in the
+	 * mode costs double; every other ruleset pays the spec's rates in full.
+	 * Fixed when the room is created, with the mode itself. It is deliberately
+	 * *not* a cap change: the meter, its per-hero targets and the HUD all stay
+	 * where they are, and only the rate the meter fills moves.
+	 */
+	private readonly ultChargeRate: number;
 
 	get playerCount(): number {
 		return this.channelIds.length;
@@ -1929,10 +1945,11 @@ export class GameRoom {
 			// The line, in a control match. Populated here and nowhere downstream,
 			// so `characters/` never has to ask what mode it is in.
 			control: this.controlInfoFor(bot),
-			// Ibiriki: his own resting axes (where to walk), the curse on him,
-			// and his throw's charge.
-			ownAxes: this.axes
-				.filter((a) => a.resting && a.ownerId === bot.id)
+			// Ibiriki: the resting axes on the floor (where to walk — anybody's,
+			// because anybody's is his now), the curse on him, and his throw's
+			// charge.
+			looseAxes: this.axes
+				.filter((a) => a.resting)
 				.map((a) => ({ x: a.x, y: a.y })),
 			selfRuptured: this.rupture?.victims.includes(bot.id) ?? false,
 			ruptureActive: this.rupture !== null || this.pendingRupture !== null,
@@ -2124,9 +2141,10 @@ export class GameRoom {
 		victim.state.plungeStuckTimer = 0;
 		victim.state.throwChargeTimer = 0;
 		victim.pendingThrowCharge = null;
-		// Every axe of a dead Ibiriki leaves the world with him: the next life
-		// starts with ten in hand, never ten more on the floor.
-		this.axes = this.axes.filter((a) => a.ownerId !== victim.id);
+		// A dead Ibiriki's axes stay where they stuck. They are ground now, not
+		// his property: anybody who carries axes can claim them, and the next
+		// life starts with a full hand regardless — wiping them would be an
+		// invisible cleanup the fighters standing next to them could see.
 		// A dead victim is freed from the rupture.
 		if (this.rupture) {
 			this.rupture.victims = this.rupture.victims.filter(
@@ -2144,12 +2162,7 @@ export class GameRoom {
 			// The kill bonus is a weapon's payment, and the ultimate is the one
 			// weapon that does not pay: a hole that kills somebody fed nobody.
 			if (!victim.lastHurtByUlt) {
-				killer.ult = addCharge(
-					killer.ult,
-					ULT_CHARGE_PER_KILL *
-						ultChargeMultiplier(kitFor(killer.hero).ultimate),
-					ultCap(kitFor(killer.hero).ultimate),
-				);
+				this.grantUlt(killer, ULT_CHARGE_PER_KILL);
 			}
 		}
 		// The ultimate survives death — except the one death that is a deny.
@@ -2290,19 +2303,13 @@ export class GameRoom {
 				// The sword pays double per point: it is the closer, riskier weapon
 				// and this game's heart, so a melee fighter arms their ultimate
 				// first. The multiplier is the whole of "slashes charge more than
-				// shots", and it lives in the simulation beside the base rate.
+				// shots", and it lives in the simulation beside the base rate. The
+				// kit's and the room's own multipliers are `grantUlt`'s business.
 				const rate =
 					source === "melee"
 						? ULT_CHARGE_PER_DAMAGE * ULT_CHARGE_MELEE_MULTIPLIER
 						: ULT_CHARGE_PER_DAMAGE;
-				// The per-ultimate multiplier is the blossom's second lever: even
-				// per point of damage a jeffs fighter fills toward its smaller cap
-				// faster than anyone else fills the full meter.
-				from.ult = addCharge(
-					from.ult,
-					amount * rate * ultChargeMultiplier(kitFor(from.hero).ultimate),
-					ultCap(kitFor(from.hero).ultimate),
-				);
+				this.grantUlt(from, amount * rate);
 				// The reel's own economy rides the same gate: the ultimate is the
 				// one weapon that feeds nothing — not the meter, not the highlight.
 				// Banked in bursts so the tracker hears about a health bar's worth
@@ -2370,8 +2377,9 @@ export class GameRoom {
 		// the (now new) hero, so no refill happens here.
 		player.itemCharges = kitFor(hero).item.maxCharges;
 		player.itemHeld = false;
-		// The old kit's axes are the old kit's.
-		this.axes = this.axes.filter((a) => a.ownerId !== player.id);
+		// The old kit's axes stay where they stuck, like any trap it left on the
+		// floor: they are ground now, and whoever carries axes can claim them.
+		// The new kit's hand refills with the new kit's charges below.
 		player.pendingThrowCharge = null;
 		console.log(
 			`[HERO] ${player.name} is now ${kitFor(hero).melee.label} / ${kitFor(hero).ranged.label}`,
@@ -3869,12 +3877,7 @@ export class GameRoom {
 				// one time blocking actually feeds an ultimate.
 				if (blocksBullet(player.state, b.vx)) {
 					this.absorbPotg(player, shotDamage, shooter ?? null);
-					player.ult = addCharge(
-						player.ult,
-						ULT_CHARGE_PER_BLOCKED_BULLET *
-							ultChargeMultiplier(kitFor(player.hero).ultimate),
-						ultCap(kitFor(player.hero).ultimate),
-					);
+					this.grantUlt(player, ULT_CHARGE_PER_BLOCKED_BULLET);
 					this.blockedBullets.push({
 						victimId: player.id,
 						x: b.x,
@@ -3901,6 +3904,25 @@ export class GameRoom {
 	// =========================================================
 	//  THE ULTIMATE
 	// =========================================================
+
+	/**
+	 * Pay a fighter ultimate charge, through every multiplier it has earned.
+	 *
+	 * **The one place charge is credited.** There are two multipliers now — the
+	 * kit's own (`ultChargeMultiplier`, the blossom's cheap meter) and the
+	 * mode's economy (`ultChargeRate`, 5CP's half pay) — and a charge source
+	 * added later must not be able to pay through one and forget the other.
+	 * Callers pass their raw amount; the clamp to the ultimate's own cap lives
+	 * in `addCharge`.
+	 */
+	private grantUlt(player: ConnectedPlayer, amount: number): void {
+		const ultimate = kitFor(player.hero).ultimate;
+		player.ult = addCharge(
+			player.ult,
+			amount * ultChargeMultiplier(ultimate) * this.ultChargeRate,
+			ultCap(ultimate),
+		);
+	}
 
 	/**
 	 * Count the cinematic down. Returns true while the room must not simulate.
@@ -4183,10 +4205,11 @@ export class GameRoom {
 	}
 
 	/**
-	 * Fly the axes, judge their hits, and let owners pick the resting ones back
-	 * up. An axe that hits a body drops at the victim's feet; one that meets a
-	 * front guard is turned away — unless it was a full charge, which crushes
-	 * the guard like the Sunder does.
+	 * Fly the axes, judge their hits, and let any axe-bearer pick the resting
+	 * ones up. An axe that hits a body drops at the victim's feet; one that
+	 * meets a front guard is turned away — unless it was a full charge, which
+	 * punches through for half its damage and crushes the guard like the
+	 * Sunder does.
 	 */
 	private tickAxes(dt: number) {
 		if (this.axes.length === 0) return;
@@ -4223,10 +4246,11 @@ export class GameRoom {
 				let damage = axe.damage;
 				if (blocksBullet(player.state, axe.vx)) {
 					if (axe.full) {
-						// The full axe crushes the guard: a fraction of the damage
-						// and the same mini stun the Sunder leaves.
+						// The full axe punches through the guard: half its damage
+						// and the same mini stun the Sunder leaves, at the axe's
+						// own fraction rather than the melee crush's.
 						outcome = "crushed";
-						damage = Math.round(axe.damage * GUARD_CRUSH_DAMAGE_FRACTION);
+						damage = Math.round(axe.damage * AXE_CRUSH_DAMAGE_FRACTION);
 						applyGuardCrush(player.state, dir);
 					} else {
 						outcome = "blocked";
@@ -4265,7 +4289,8 @@ export class GameRoom {
 			}
 		}
 
-		// Pickups: an owner standing on a resting axe of theirs takes it back.
+		// Pickups: any axe-bearer standing on any resting axe takes it — ownership
+		// ended when the axe stuck. First come, first served.
 		for (const player of this.players.values()) {
 			if (!player.alive) continue;
 			const ranged = kitFor(player.hero).ranged;
@@ -4274,7 +4299,7 @@ export class GameRoom {
 			for (let i = 0; i < this.axes.length; i++) {
 				const axe = this.axes[i];
 				if (!axe) continue;
-				if (!axePickable(axe, player.id, player.state.x, player.state.y)) {
+				if (!axePickable(axe, player.state.x, player.state.y)) {
 					continue;
 				}
 				player.state.ammo = Math.min(ranged.magazine, player.state.ammo + 1);
@@ -4829,12 +4854,7 @@ export class GameRoom {
 		// where the damage is counted, in `damage`.
 		const passive = ULT_PASSIVE_PER_SEC * dt;
 		for (const player of this.players.values()) {
-			if (player.alive)
-				player.ult = addCharge(
-					player.ult,
-					passive * ultChargeMultiplier(kitFor(player.hero).ultimate),
-					ultCap(kitFor(player.hero).ultimate),
-				);
+			if (player.alive) this.grantUlt(player, passive);
 			// The practice-room floor. No-op in a real match, where it is zero.
 			if (player.ult < this.startUltCharge)
 				player.ult = Math.min(

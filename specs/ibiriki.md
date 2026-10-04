@@ -139,10 +139,14 @@ by killing Ibiriki first.
 
 ## The throwing axes (gun stance)
 
-**Five axes a life, no reload.** An axe stays where it lands — stuck in the
-floor, a wall, a ledge — until Ibiriki **walks over it and picks it up** (one
-axe back per pickup) or **dies** (every axe of his vanishes, and he respawns
-with five).
+**Three axes a life, no reload.** An axe stays where it lands — stuck in the
+floor, a wall, a ledge — until an axe-bearer **walks over it and picks it up**
+(one axe back per pickup). Axes are **ground, not property**: any fighter
+carrying a thrown weapon can claim any resting axe, whoever threw it — in a
+room with two Ibirikis the thrown axes are contested resources. **A dead
+Ibiriki's axes stay where they stuck**; he respawns with a full hand of three,
+and the ones he left behind are there for whoever walks over them first. A
+round reset sweeps them with the rest of the arena.
 
 - **Hold to charge, release to throw.** The charge (`throwChargeTimer`,
   shared state both sides tick) fills over **1200ms**; the release throws at
@@ -156,20 +160,24 @@ with five).
   Linear in between. Gravity is **1300 px/s²** for every throw, so a tap is a
   short lob and a full charge flies flat and far (~1000px at 45°).
 - **A full-charge axe** flies wreathed in red embers, and it **crushes
-  guards** like the Sunder: a blocker facing it takes 40% (34) and the 450ms
-  mini stun. A part-charged axe is stopped by a front guard like a bullet.
-  Unguarded, a full axe takes 85 of a 100 HP bar — almost a kill.
+  guards** like the Sunder: a blocker facing it takes **50%** (43) and the
+  450ms mini stun — it still goes through the block, just at half the damage
+  it would have dealt an open body. A part-charged axe is stopped by a front
+  guard like a bullet. Unguarded, a full axe takes 85 of a 100 HP bar — almost
+  a kill.
 - Charging slows the walk to **75%** after 250ms (planting the feet for the
   throw). A stun, a stance switch or running out of axes drops the charge.
 - **Axes are physical.** In flight an axe spins along a ballistic arc. It
   sticks into the first platform, wall or floor it meets. A fighter it hits
   takes the damage and the axe **drops** at their feet. Out of the world's
   sides it sticks at the edge.
-- **Pickup:** Ibiriki's body within 30px of one of *his own* resting axes
-  takes it back (ammo +1, capped at five). Nobody else can take them.
+- **Pickup:** any axe-bearer's body within 30px of **any** resting axe takes
+  it (ammo +1, capped at the picker's own three). The owner is not consulted:
+  an axe that has stuck is up for grabs, and the first body to reach it takes
+  it.
 - The axes are server-owned world objects (like trap canisters), sent in
   full every snapshot while they exist.
-- The HUD reads **axes in hand** (`4 AXES`), and DRY when none are left.
+- The HUD reads **axes in hand** (`2 AXES`), and DRY when none are left.
 
 ## The ultimate: Rupture
 
@@ -191,7 +199,10 @@ drawn** (650ms, rooted) and every hostile fighter alive is **ruptured** for
   while he holds R.
 - Ruptured fighters drip blood as they move, and the local victim sees a red
   vignette and **DON'T MOVE** — a tense six seconds is the whole point.
-- `ULT_CAP` 100, the shared economy.
+- `ULT_CAP` **150** — half again the universal meter, under "expensive one"
+  rather than "shared economy": a global curse that lands on every hostile at
+  once is worth more than one hole, and the HUD reads `N/150` so the price is
+  visible before the fight starts.
 
 Bots understand it: a ruptured bot plants its feet and only swings at what
 is already in reach.

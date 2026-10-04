@@ -121,6 +121,20 @@ export const CP_RESPAWN_ADVANTAGE_MS = 1100;
 export const CP_RESPAWN_MIN_MS = 2000;
 
 /**
+ * What every ultimate charge source pays in a control match: **half**.
+ *
+ * 5CP is a long fight over ground, not a duel, and its meter ran hot — every
+ * source the shared economy defines (damage, kills, blocked bullets, the
+ * passive) kept paying full price across lives that come back in seconds, so a
+ * round produced more holes than it had fights to earn them in. Halving every
+ * source doubles the price of **every ultimate in the mode** without touching
+ * a single kit's stat card: the meter fills at half speed, the ready check and
+ * the HUD need no change, and the per-hero caps (the blossom's 65, Rupture's
+ * 150) keep their shape. It is a property of the room, fixed at creation.
+ */
+export const CP_ULT_CHARGE_MULTIPLIER = 0.5;
+
+/**
  * The capture pad's size, in world px.
  *
  * Wide enough that a fighter standing beside it is not accidentally on it,

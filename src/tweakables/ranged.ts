@@ -191,13 +191,13 @@ export const RANGED_WEAPONS: Record<RangedWeaponId, RangedWeaponDef> = {
 		label: "AXES",
 		// Ibiriki's throwing axes: hold to charge, release to throw. The
 		// stat card's `damage` and `speed` are the *full charge*'s; the tap's
-		// are `AXE_MIN_*` below, linear in between. Five a life and no reload —
+		// are `AXE_MIN_*` below, linear in between. Three a life and no reload —
 		// the reserve is empty by construction (one magazine per life), and
 		// the only way back is to walk over a resting axe.
 		cooldownMs: AXE_COOLDOWN_MS,
 		damage: 85,
 		speed: 1180,
-		magazine: 5,
+		magazine: 3,
 		magazinesPerLife: 1,
 		thrown: true,
 		reloadStyle: "clip",
@@ -283,3 +283,16 @@ export const AXE_KNOCKBACK_VX = 90;
 
 /** The shove a full-charge axe gives. */
 export const AXE_FULL_KNOCKBACK_VX = 260;
+
+/**
+ * What a full-charge axe leaves a guard that stopped it: **half** its damage,
+ * and the guard still crushed.
+ *
+ * The axe is not the Sunder — it is thrown, and a blocker who read the wind-up
+ * still eats half of an 85-point blow as a price for the read. It shares the
+ * crush *shape* with `GUARD_CRUSH_DAMAGE_FRACTION` (the Sunder's 40%) but not
+ * the number, so the two can be tuned apart: a melee commitment that beat a
+ * guard outright and a projectile that merely punched through it should not
+ * pay the same.
+ */
+export const AXE_CRUSH_DAMAGE_FRACTION = 0.5;

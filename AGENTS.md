@@ -469,10 +469,13 @@ Every landed sword hit disables its target and is drawn that way. See [specs/mel
 **viking sword** (the hew chain: slower, more damage, a stagger per hit) whose
 hold is the **Sunder** — 1s, then a top-down chop that **crushes a guard**
 (40% damage, a 450ms mini stun, no guard break for him). **Throwing axes**:
-ten per life, charged on a held trigger in shared state (`throwChargeTimer`)
+three per life, charged on a held trigger in shared state (`throwChargeTimer`)
 and thrown on the release, server-side; a ballistic arc that grows with the
-charge, a full charge crushes a guard too, and **every axe stays where it
-sticks** until he walks over it or dies. **Rupture** is a global curse: the
+charge, a full charge still goes through a guard for **half its damage**, and
+**every axe stays where it sticks** until an axe-bearer walks over it — any
+resting axe is claimable by anyone carrying axes, and they outlive their
+thrower. **Rupture**
+is a global curse (150 charge — half again the universal meter): the
 room freezes for the card, then for 6s everyone hostile bleeds per pixel
 they move while he stomps. **Bloodlust** is the first passive: the server
 writes `PlayerPosition.bloodlust` from the room's HP and `tickPlayer` reads
@@ -566,7 +569,10 @@ and the line's times are the last points fastest (2s), yards 5s, middle 8s at
 and **a defender standing alone on their own point does not hold the bar** —
 only a contested pad freezes it. **A capture takes a crowd standing on the pad —
 the server is the only judge**,
-and the whole line arrives in the snapshot inside `TeamStatus.control`. Dead
+and the whole line arrives in the snapshot inside `TeamStatus.control`.
+**Every ultimate in the mode costs double** — 5CP halves every charge source
+(`CP_ULT_CHARGE_MULTIPLIER`), because a long round across lives that come back
+in seconds was farming meter faster than it had fights to earn it. Dead
 fighters respawn individually, **faster for the side with fewer points** (6s
 even, −1.1s per point behind, floor 2s) — TF2's comeback rule, with the base
 sized up for this game's mobility: a screen is four seconds of walking, so a

@@ -43,6 +43,7 @@ import {
 	type Singularity,
 	singularityGrip,
 	tickGrenade,
+	ULT_MAX_CAP,
 	ULT_MAX_CHARGE,
 	ultCap,
 	ultChargeMultiplier,
@@ -261,6 +262,21 @@ describe("charge", () => {
 		expect(ultChargeMultiplier("black-hole")).toBe(1);
 		expect(ultChargeMultiplier("dragon-thrust")).toBe(1);
 		expect(ultChargeMultiplier("death-blossom")).toBeGreaterThan(1);
+	});
+
+	it("makes Rupture cost half again the universal meter", () => {
+		// 50% more than the 100 every other full-cost ultimate arms at: the
+		// meter scale is a percentage, so the target is 150 and `?ultCharge`
+		// reaches it through `ULT_MAX_CAP`.
+		expect(ultCap("rupture")).toBe(ULT_MAX_CHARGE * 1.5);
+		expect(ULT_MAX_CAP).toBeGreaterThanOrEqual(ultCap("rupture"));
+		// A full universal meter is no longer armed for Ibiriki, and the very
+		// last hundredth below his own cap is not either.
+		expect(ultReady(ULT_MAX_CHARGE, ultCap("rupture"))).toBe(false);
+		expect(ultReady(ultCap("rupture") - 0.01, ultCap("rupture"))).toBe(false);
+		expect(ultReady(ultCap("rupture"), ultCap("rupture"))).toBe(true);
+		// And the cap bounds him, so overkill damage cannot spill past it.
+		expect(addCharge(0, 10_000, ultCap("rupture"))).toBe(ultCap("rupture"));
 	});
 });
 

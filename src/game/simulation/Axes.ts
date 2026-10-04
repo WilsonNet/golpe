@@ -6,7 +6,9 @@
  * throw spends a round only the server counts, and a hit is the server's to
  * judge), and the client dead-reckons it between snapshots with this same
  * `tickAxe`. Unlike every other projectile, an axe **stays**: it sticks in the
- * first surface it meets and rests there until its owner walks over it or dies.
+ * first surface it meets and rests there until **any axe-bearer** walks over
+ * it — a resting axe is ground, not property, and it outlives the fighter who
+ * threw it.
  *
  * Pure and shared: no wall clock, no randomness, no rendering.
  */
@@ -180,14 +182,15 @@ export function dropAxe(a: AxeState): void {
 	a.vy = AXE_DROP_VY;
 }
 
-/** Can this fighter pick this axe back up? Only its owner, only at rest. */
-export function axePickable(
-	a: AxeState,
-	fighterId: string,
-	x: number,
-	y: number,
-): boolean {
-	if (!a.resting || a.ownerId !== fighterId) return false;
+/**
+ * Can this fighter pick this axe up? **Any resting axe within reach** — the
+ * owner is irrelevant now, and the caller is the one that knows whether the
+ * fighter carries throwing axes at all (`kit.ranged.thrown`). A dropped axe
+ * that has come to rest counts; one still in flight, or still falling, does
+ * not.
+ */
+export function axePickable(a: AxeState, x: number, y: number): boolean {
+	if (!a.resting) return false;
 	const m = AXE_PICKUP_PX;
 	return (
 		a.x > x - m &&

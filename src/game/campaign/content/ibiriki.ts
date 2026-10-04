@@ -90,7 +90,7 @@ export const IBIRIKI_COURSE: CampaignModule = {
 					id: "ibiriki-axes",
 					title: "Throwing axes",
 					brief:
-						"Switch to the axes, hold attack to wind up, release to throw. A tap is a short lob; a full charge flies flat and far wreathed in embers, for almost a whole bar. Five a life and no reload — every axe sticks where it lands until **you walk over it** and take it back.",
+						"Switch to the axes, hold attack to wind up, release to throw. A tap is a short lob; a full charge flies flat and far wreathed in embers, for almost a whole bar. Three a life and no reload — every axe sticks where it lands until you (or any axe-bearer) walk over it and take it back.",
 					stage: PACING_DUMMY,
 					objectives: [o.shoot(3), o.hitShots(2), o.recoverAxes(2)],
 					outro:

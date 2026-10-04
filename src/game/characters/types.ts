@@ -234,10 +234,12 @@ export interface AIInput {
 	 */
 	selfReserveRounds: number;
 	/**
-	 * Ibiriki's own resting axes, centre points — where to walk to take them
-	 * back. Empty for every other hero. See specs/ibiriki.md.
+	 * The resting throwing axes on the floor, centre points — where to walk to
+	 * take one. Any axe on the ground is up for grabs, so this is not filtered
+	 * by owner; empty for every non-axe hero and for an axe-less arena. See
+	 * specs/ibiriki.md.
 	 */
-	ownAxes?: readonly { x: number; y: number }[];
+	looseAxes?: readonly { x: number; y: number }[];
 	/** This fighter is ruptured: every pixel it moves bleeds. */
 	selfRuptured?: boolean;
 	/** A rupture is running in the room (so a second cast would be refused). */

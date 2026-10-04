@@ -157,7 +157,7 @@ export class AxeBrain {
 
 	/** Walk back over a resting axe when the hands are nearly empty. */
 	private shop(input: AIInput, output: AIOutput, ammo: number) {
-		const axes = input.ownAxes ?? [];
+		const axes = input.looseAxes ?? [];
 		if (axes.length === 0 || ammo >= LOW_AXES) return;
 		if (input.distanceToPlayer < SHOPPING_SAFE_PX && ammo > 0) return;
 		const cx = input.selfX + PLAYER_WIDTH / 2;

@@ -57,6 +57,7 @@ import { MAX_NAME, readStoredName, storeName } from "../game/playerName";
 import { HERO_IDS, HEROES, type HeroId } from "../game/simulation/Heroes";
 import type { MatchMode } from "../game/simulation/Teams";
 import { CP_SCREENS } from "../tweakables/control";
+import { ULT_MAX_CAP } from "../tweakables/ultimate";
 import { ControlsDialog } from "./ControlsDialog";
 import { HUD_CSS } from "./hudStyles";
 import { MoveList } from "./MoveList";
@@ -756,18 +757,18 @@ function HostForm({
 						) : null}
 						<div className="gd-field">
 							<span className="gd-field-label">
-								Ultimate charge floor (0–100)
+								Ultimate charge floor (0–{ULT_MAX_CAP})
 							</span>
 							<input
 								type="number"
 								min={0}
-								max={100}
+								max={ULT_MAX_CAP}
 								value={settings.ultCharge}
 								onChange={(e) => {
 									const n = Number.parseInt(e.target.value, 10);
 									set({
 										ultCharge: Number.isFinite(n)
-											? Math.max(0, Math.min(100, n))
+											? Math.max(0, Math.min(ULT_MAX_CAP, n))
 											: 0,
 									});
 								}}

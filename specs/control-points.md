@@ -106,6 +106,27 @@ TF2's own rule, and a standoff is a thing players do deliberately.
   that lets a pick become a push; TF2's ten is measured against maps several
   times this one's traverse.
 
+### The ultimate economy
+
+**5CP halves every ultimate charge source** (`CP_ULT_CHARGE_MULTIPLIER`), so
+every ultimate in the mode costs double. A round is a long fight over ground,
+and a full-price meter paid across lives that come back in seconds produced
+more holes than the mode had fights to earn them in.
+
+The modifier is a **rate, not a cap**: the meter, the per-hero targets (the
+blossom's 65, Rupture's 150) and the HUD are untouched, and only the rate the
+meter fills moves. It is a property of the room, fixed at creation, and it is
+applied in one place — the server's charge grant — to every source the shared
+economy defines: damage, kills, blocked bullets and the passive. The practice
+floor `?ultCharge=N` is an absolute starting charge, not a payment, so a probe
+can still seat a 5CP room half-armed.
+
+The probe measures it in the one state where nothing else can move the meter:
+**freezetime**. A frozen fighter discards its intent, so no hit lands and the
+passive trickle is the only source left; a 5CP countdown and a
+team-deathmatch countdown of the same length run side by side, and their
+charge slopes must sit at half and full `ULT_PASSIVE_PER_SEC` respectively.
+
 ### Forward spawns
 
 **A team spawns on the screen of its furthest-forward point** — the friendly
@@ -213,7 +234,8 @@ interface ControlStatus {
 All of it lives in `tweakables/control.ts` (the simulation re-exports; no
 constants in the logic): the five per-point capture times, the decay time and
 its overtime multiplier, the overtime time bonus, the respawn base and
-advantage, the round score limit and match time, and the map's screen count.
+advantage, the round score limit and match time, the map's screen count, and
+the mode's ultimate charge multiplier.
 
 ## Creator-only practice flags
 
