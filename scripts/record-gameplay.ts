@@ -34,8 +34,11 @@ const WIDTH = Number(arg("width", "800"));
 const HEIGHT = Number(arg("height", "600"));
 const FPS = Number(arg("fps", "15"));
 const QUALITY = Number(arg("quality", "55"));
-/** x264 quality. GitHub's blob viewer refuses to play files over ~5MB, so the
- * MP4 the README links to must stay under that — CRF 26 is the proven floor. */
+/**
+ * x264 quality. GitHub's blob viewer never plays a repo-committed MP4 — it
+ * offers a raw download — and it scolds anything over ~2MB, so the README's
+ * clip is kept to a few megabytes. The WebP is the inline player.
+ */
 const CRF = Number(arg("crf", "26"));
 const OUT = arg("out", "media");
 const NAME = arg("name", "gameplay");
