@@ -330,6 +330,7 @@ python3 scripts/make-hero-art.py lia                   # render a hero from art/
 python3 scripts/make-smoke-grenade-art.py              # render Jeffs' smoke canister model → its tumble strip smoke-grenade.png
 python3 scripts/cut-turnaround.py <board> <out-dir>    # split a Gemini T-pose turnaround into Tripo multi-view inputs
 tsx scripts/art-probe.ts --hero=jeffs                 # a rendered hero's clips are what gets drawn: zero placeholder fallbacks, the gun tracks the aim
+tsx scripts/record-gameplay.ts                        # record the README clip: the busiest 30s of an AI deathmatch → media/ (MP4 + inline WebP)
 ```
 
 Both `diagnose.ts` and `deathmatch-probe.ts` take `--screens=N` to run their

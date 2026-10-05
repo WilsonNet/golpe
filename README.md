@@ -8,6 +8,14 @@ verbatim between the client and an authoritative Geckos.io server.
 the server fills the other slot with a bot. Playing the game is dogfooding the
 netcode.
 
+## Gameplay
+
+[![Thirty seconds of an eight-fighter AI deathmatch](media/gameplay.webp)](media/gameplay.mp4)
+
+Thirty seconds from a live eight-fighter AI deathmatch — sword chains, dash
+trails, grenade arcs, traps and ultimates — recorded from the running game by
+[`scripts/record-gameplay.ts`](scripts/record-gameplay.ts). Click for the MP4.
+
 ## Documentation
 
 | Doc | What's in it |
