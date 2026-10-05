@@ -34,7 +34,9 @@ const WIDTH = Number(arg("width", "800"));
 const HEIGHT = Number(arg("height", "600"));
 const FPS = Number(arg("fps", "15"));
 const QUALITY = Number(arg("quality", "55"));
-const CRF = Number(arg("crf", "23"));
+/** x264 quality. GitHub's blob viewer refuses to play files over ~5MB, so the
+ * MP4 the README links to must stay under that — CRF 26 is the proven floor. */
+const CRF = Number(arg("crf", "26"));
 const OUT = arg("out", "media");
 const NAME = arg("name", "gameplay");
 const URL =
