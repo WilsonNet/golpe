@@ -19,12 +19,14 @@ import type { AimScheme, DeckSetting } from "../game/input/Scheme";
 import type { RosterEntry, TeamStatus } from "../game/online/types";
 import type { PotgPhase } from "../game/potg/Director";
 import type { PotgAnnounce, PotgTrackEntry } from "../game/potg/types";
+import type { SkyboxDebugState } from "../game/render/Skybox";
 import type {
 	MatchEndReason,
 	MatchPhase,
 	Standing,
 } from "../game/simulation/Deathmatch";
 import type { MeleePhase, PlayerPosition } from "../game/simulation/Physics";
+import type { ReadabilitySnapshot } from "../game/diagnostics/Readability";
 import type { MatchMode, TeamId } from "../game/simulation/Teams";
 import type { AudioKitState } from "../game/sound/engine";
 import type { AudioChannel } from "../game/sound/mixer";
@@ -482,5 +484,19 @@ declare global {
 		 * takes instead of a bypass nobody plays.
 		 */
 		__audioSetVolume?: (channel: AudioChannel, value: number) => void;
+		/**
+		 * The parallax skybox's current state: which candidate loaded, how
+		 * many layers and animated falls it has, and the animation clock.
+		 * `scripts/sky-probe.ts` reads this to prove the art reached a frame
+		 * rather than trusting a screenshot's file size.
+		 */
+		__skyboxDebug?: () => SkyboxDebugState | null;
+		/**
+		 * A pair of renders of the same frame (with and without fighters) plus
+		 * the measured readability metrics. `scripts/readability-probe.ts`
+		 * reads exactly this; the visuals are the evidence, the numbers are the
+		 * gate.
+		 */
+		__readabilitySnapshot?: () => ReadabilitySnapshot | null;
 	}
 }

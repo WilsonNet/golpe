@@ -55,6 +55,9 @@ export async function startGame(parent: HTMLElement): Promise<GameHandle> {
 	// must be measured against the world the game is authored in, or every aim is
 	// wrong by exactly the device pixel ratio.
 	const match = new Match(stage, app.canvas, app.screen);
+	// The readability probe's pair of renders. Installed with the game rather
+	// than reached through private state, like the physics diagnostic.
+	window.__readabilitySnapshot = () => match.readabilitySnapshot(app.renderer);
 
 	// The ticker hands over a Ticker, not a delta — `deltaMS` is real elapsed
 	// milliseconds, which is what the fixed-timestep accumulator needs. Using
@@ -68,6 +71,7 @@ export async function startGame(parent: HTMLElement): Promise<GameHandle> {
 		match,
 		destroy: () => {
 			app.ticker.remove(tick);
+			delete window.__readabilitySnapshot;
 			match.destroy();
 			app.destroy(true, { children: true });
 		},

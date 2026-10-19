@@ -84,6 +84,7 @@ import { IbirikiFx } from "../render/IbirikiFx";
 import { ItemFx } from "../render/ItemFx";
 import { type ImpactEvent, MeleeFx } from "../render/MeleeFx";
 import { Nameplates } from "../render/Nameplates";
+import { Skybox } from "../render/Skybox";
 import { Stage } from "../render/Stage";
 import {
 	buildWorld,
@@ -184,14 +185,12 @@ const DT = STEP_MS / 1000;
 
 /**
  * Draw zoom: stage height over this many world px. A close-up on purpose —
- * the fighter reads at roughly a third of the stage — and the sky's overscan
- * is what lets the camera look past the arena's edges instead of filling the
- * width with black bars.
+ * the fighter reads at roughly a third of the stage — and the skybox follows
+ * the camera's own visible world rectangle, so a close-up sees less panorama
+ * rather than black bars.
  */
 const ZOOM_REF_HEIGHT_PX = 100;
 const ZOOM_MIN = 1.1;
-/** How far the sky extends past each world edge, in world widths per side. */
-const SKY_OVERSCAN = 1;
 /** Camera chase per frame — snappy enough for a dash, soft enough to read as a camera. */
 const CAMERA_LERP = 0.12;
 /** How far ahead of the fighter the camera looks, in seconds of velocity. */
@@ -299,6 +298,7 @@ export class FighterStage {
 
 	private app: Application | undefined;
 	private stage: Stage | undefined;
+	private skybox: Skybox | undefined;
 	private resizeObserver: ResizeObserver | undefined;
 	private destroyed = false;
 
@@ -407,16 +407,10 @@ export class FighterStage {
 		const stage = new Stage(app.stage);
 		this.stage = stage;
 		drawArena(stage.background, stage.arena, this.world);
-
-		// A wider sky behind the arena's own, so the close-up camera can look
-		// past the world's edges without letterboxing: a wide stage gets a
-		// bigger fighter rather than black bars past the arena's rim.
-		const sky = new Sprite(tex(TEX.sky));
-		sky.anchor.set(0.5);
-		sky.position.set(this.world.right / 2, this.world.bottom / 2);
-		sky.width = this.world.right * SKY_OVERSCAN;
-		sky.height = this.world.bottom;
-		stage.background.addChild(sky);
+		// The sky is a parallax panorama, not a stretched texture: it follows
+		// the preview camera at its own fraction of the movement, exactly as it
+		// does in a match.
+		this.skybox = new Skybox(stage.background, { width: w, height: h });
 
 		this.fx = new MeleeFx(stage.effects, stage);
 		this.items = new ItemFx(stage.field, stage.effects, this.world, stage);
@@ -730,6 +724,16 @@ export class FighterStage {
 		this.numbers?.update(dtMs);
 
 		this.followCamera(stage, f);
+		const view = this.view();
+		if (view) {
+			this.skybox?.update(
+				stage.cameraX,
+				stage.cameraY,
+				dtMs,
+				view.viewW,
+				view.viewH,
+			);
+		}
 
 		this.opts.onFrame?.({ t: this.t, body: f.body, intent: this.lastIntent });
 	};
@@ -1747,6 +1751,7 @@ export class FighterStage {
 	destroy(): void {
 		this.destroyed = true;
 		this.resizeObserver?.disconnect();
+		this.skybox?.destroy();
 		this.numbers?.destroy();
 		const app = this.app;
 		if (app) {

@@ -1,0 +1,66 @@
+{
+  "name": "hand",
+  "title": "Solarpunk Noon \u2014 Hand-Painted",
+  "width": 1600,
+  "height": 600,
+  "haze": 1.3,
+  "layers": [
+    {
+      "id": "sky",
+      "type": "image",
+      "src": "assets/skybox/hand/sky.png",
+      "version": "083672a408a0",
+      "factor": 0.015,
+      "driftX": 0.6,
+      "alpha": 1
+    },
+    {
+      "id": "far",
+      "type": "image",
+      "src": "assets/skybox/hand/far.png",
+      "version": "d06a10beece0",
+      "factor": 0.06
+    },
+    {
+      "id": "mid",
+      "type": "image",
+      "src": "assets/skybox/hand/mid.png",
+      "version": "7769853278e9",
+      "factor": 0.18
+    },
+    {
+      "id": "falls",
+      "type": "strip",
+      "src": "assets/skybox/hand/falls.png",
+      "version": "cbe6417be396",
+      "factor": 0.3,
+      "frameW": 48,
+      "frameH": 240,
+      "frames": 6,
+      "fps": 9,
+      "align": "mid",
+      "items": [
+        {
+          "u": 280,
+          "v": 356
+        },
+        {
+          "u": 970,
+          "v": 310
+        },
+        {
+          "u": 1416,
+          "v": 292
+        }
+      ]
+    },
+    {
+      "id": "near",
+      "type": "image",
+      "src": "assets/skybox/hand/near.png",
+      "version": "1489f6bc0b02",
+      "factor": 0.5,
+      "alpha": 0.2
+    }
+  ]
+}

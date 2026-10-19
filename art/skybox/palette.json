@@ -1,0 +1,32 @@
+{
+  "name": "solarpunk-noon",
+  "note": "The shared palette for both skybox candidates. Pick from `all`; the named groups are there to keep the two pipelines in the same world. No pure black and no pure white: the deepest shadow is indigo, the brightest highlight is warm cream.",
+  "groups": {
+    "sky": ["#244f7d", "#2f6b98", "#3f88ad", "#5aa6bd", "#78c2c7", "#9ad8cd", "#c6ebdc", "#eaf3df"],
+    "sun": ["#fff3c9", "#ffe6a1", "#ffd37a", "#f6b45b"],
+    "clouds": ["#fff8e8", "#f6e6c9", "#e9c9a2", "#d3a17f", "#a87876", "#72586e"],
+    "farCity": ["#8ea9ae", "#7b98a3", "#688596", "#587387", "#4b657e"],
+    "cityCream": ["#fff2d6", "#f3e0bb", "#e4c99b", "#d2b07c", "#b98f61"],
+    "cityStone": ["#e2b98c", "#cfa074", "#b9855e", "#9b6a50", "#7f5446"],
+    "brass": ["#ffe08a", "#f7c85f", "#e4a73f", "#c9852f", "#a36428"],
+    "greens": ["#d7e98c", "#b7d879", "#8dc46f", "#68a963", "#478a58", "#2f6c4d", "#235342"],
+    "water": ["#effff4", "#c8f7ec", "#96e8dc", "#66d0cf", "#42b2c2", "#2f8ba8", "#2b6c8b"],
+    "flowers": ["#ffd2e0", "#f49bb8", "#e66d97", "#c94d7c"],
+    "shadows": ["#4c4a72", "#3b395e", "#2d2b4b", "#22213a"],
+    "accents": ["#ff8a4c", "#f26a4f", "#d24f4a", "#8e6bc0", "#6e54a8"]
+  },
+  "all": [
+    "#244f7d", "#2f6b98", "#3f88ad", "#5aa6bd", "#78c2c7", "#9ad8cd", "#c6ebdc", "#eaf3df",
+    "#fff3c9", "#ffe6a1", "#ffd37a", "#f6b45b",
+    "#fff8e8", "#f6e6c9", "#e9c9a2", "#d3a17f", "#a87876", "#72586e",
+    "#8ea9ae", "#7b98a3", "#688596", "#587387", "#4b657e",
+    "#fff2d6", "#f3e0bb", "#e4c99b", "#d2b07c", "#b98f61",
+    "#e2b98c", "#cfa074", "#b9855e", "#9b6a50", "#7f5446",
+    "#ffe08a", "#f7c85f", "#e4a73f", "#c9852f", "#a36428",
+    "#d7e98c", "#b7d879", "#8dc46f", "#68a963", "#478a58", "#2f6c4d", "#235342",
+    "#effff4", "#c8f7ec", "#96e8dc", "#66d0cf", "#42b2c2", "#2f8ba8", "#2b6c8b",
+    "#ffd2e0", "#f49bb8", "#e66d97", "#c94d7c",
+    "#4c4a72", "#3b395e", "#2d2b4b", "#22213a",
+    "#ff8a4c", "#f26a4f", "#d24f4a", "#8e6bc0", "#6e54a8"
+  ]
+}

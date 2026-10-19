@@ -17,7 +17,7 @@ const SPRITE_ANCHOR_CENTRE = 0.5;
  * code path.
  */
 
-import { Container, Sprite } from "pixi.js";
+import { Container, type Renderer, Sprite } from "pixi.js";
 import { SMOKE_REVEAL_MS } from "../tweakables/items.js";
 import { pelletDamageAt } from "../tweakables/ranged.js";
 import { TutorialDirector, tutorialFor } from "./campaign";
@@ -37,6 +37,10 @@ import {
 	PhysicsDiagnostics,
 	RESPAWN_CORRECTION_PX,
 } from "./diagnostics/PhysicsDiagnostics";
+import {
+	measureReadability,
+	type ReadabilitySnapshot,
+} from "./diagnostics/Readability";
 import { EventBus } from "./EventBus";
 import {
 	animationStats,
@@ -97,6 +101,7 @@ import { type ImpactEvent, MeleeFx } from "./render/MeleeFx";
 import { Nameplates } from "./render/Nameplates";
 import { RootedFx } from "./render/RootedFx";
 import { Shadows } from "./render/Shadows";
+import { Skybox } from "./render/Skybox";
 import { SpritePool } from "./render/SpritePool";
 import type { Stage } from "./render/Stage";
 import { UltAimLine } from "./render/UltAimLine";
@@ -298,6 +303,13 @@ export class Match {
 	private arenaIsControl = false;
 	/** Logical view size (`app.screen`), for camera clamping. */
 	private readonly view: { readonly width: number; readonly height: number };
+	/**
+	 * The parallax backdrop, rebuilt with the arena because it is a child of
+	 * `stage.background` and a rebuilt arena owns that container.
+	 */
+	private skybox: Skybox | undefined;
+	/** The stable hook identity, so a destroyed match cannot delete its successor's. */
+	private readonly skyboxHook = () => this.skybox?.debugState() ?? null;
 	private readonly fx: MeleeFx;
 	private readonly blackHole: BlackHoleFx;
 	private readonly plates: Nameplates;
@@ -481,7 +493,7 @@ export class Match {
 		// fighter has a theme. The menu's title theme hands off under the
 		// engine's crossfade; `onLocalHero` re-points it mid-match.
 		sound.setMusic(this.hero);
-		drawArena(stage.background, stage.arena, this.arena);
+		this.redrawArena();
 
 		this.queries = createQueries(this.world);
 		this.fx = new MeleeFx(stage.effects, stage);
@@ -1388,7 +1400,7 @@ export class Match {
 						if (wantsControl) applyControlWorld(this.arena);
 						else applyWorld(this.arena, screens);
 						this.arenaIsControl = wantsControl;
-						drawArena(this.stage.background, this.stage.arena, this.arena);
+						this.redrawArena();
 						console.log(
 							wantsControl
 								? "[ONLINE] room arena rebuilt as the control map"
@@ -1396,7 +1408,7 @@ export class Match {
 						);
 					} else if (!wantsControl && screens !== this.arena.screens) {
 						applyWorld(this.arena, screens);
-						drawArena(this.stage.background, this.stage.arena, this.arena);
+						this.redrawArena();
 						console.log(`[ONLINE] room arena resized to ${screens} screens`);
 					}
 					if (!this.trainingMode) {
@@ -1923,6 +1935,16 @@ export class Match {
 		this.stage.update(dtMs);
 		if (shot) this.applyReplayCamera(shot.shot, dtMs);
 		else this.updateCamera();
+		// The backdrop follows the same camera as the arena, at its own fraction
+		// of the movement. The visible world shrinks when a replay pushes in, and
+		// the sky has to know that to cull its wrapped copies correctly.
+		this.skybox?.update(
+			this.stage.cameraX,
+			this.stage.cameraY,
+			dtMs,
+			this.view.width / this.stage.zoom,
+			this.view.height / this.stage.zoom,
+		);
 
 		this.training?.update(dtMs);
 		this.tutorial?.update(dtMs);
@@ -2719,6 +2741,84 @@ export class Match {
 			msLeft: cursed ? rupture.remainingMs : 0,
 			totalMs: rupture?.totalMs ?? 0,
 		});
+	}
+
+	/**
+	 * Rebuild the arena and its backdrop in place.
+	 *
+	 * `drawArena` owns the platform layer, the `Skybox` owns the pixels behind
+	 * it, and both are children of `stage.background` — so a room that learns
+	 * its authoritative width after connecting has to rebuild both together.
+	 * The skybox is destroyed first: a rebuild must not leave a stale panorama
+	 * under the new one.
+	 */
+	private redrawArena() {
+		this.skybox?.destroy();
+		drawArena(this.stage.background, this.stage.arena, this.arena);
+		this.skybox = new Skybox(this.stage.background, this.view);
+		window.__skyboxDebug = this.skyboxHook;
+	}
+
+	/**
+	 * Capture the same frame with and without fighter sprites, then measure how
+	 * separable the bodies are from the world behind them.
+	 *
+	 * The with/without pair is the whole trick: the difference is the body
+	 * mask, and the without-frame is exactly the background the body covers.
+	 * A guessed bounding box would include the platform and the sky, and a
+	 * palette picked from the atlas would ignore what is actually behind the
+	 * fighter at that spot. The two extracts are synchronous, so no tick — and
+	 * therefore no sky drift, waterfall frame or animation — can slip between
+	 * them.
+	 *
+	 * Presentation-only; it never touches the simulation. `scripts/readability-probe.ts`
+	 * is the caller.
+	 */
+	readabilitySnapshot(renderer: Renderer): ReadabilitySnapshot | null {
+		const root = this.stage.root;
+		const fighters = [...this.queries.fighters];
+		const withCanvas = renderer.extract.canvas(root) as HTMLCanvasElement;
+		const visible: [Sprite, boolean][] = [];
+		for (const e of fighters) {
+			const sprite = e.sprite;
+			if (!sprite) continue;
+			visible.push([sprite, sprite.visible]);
+			sprite.visible = false;
+		}
+		let bgCanvas: HTMLCanvasElement;
+		try {
+			bgCanvas = renderer.extract.canvas(root) as HTMLCanvasElement;
+		} finally {
+			for (const [sprite, wasVisible] of visible) sprite.visible = wasVisible;
+		}
+		const fgCtx = withCanvas.getContext("2d", { willReadFrequently: true });
+		const bgCtx = bgCanvas.getContext("2d", { willReadFrequently: true });
+		if (!fgCtx || !bgCtx) return null;
+		const metrics = measureReadability(
+			fgCtx.getImageData(0, 0, withCanvas.width, withCanvas.height),
+			bgCtx.getImageData(0, 0, bgCanvas.width, bgCanvas.height),
+		);
+		return {
+			cameraX: this.stage.cameraX,
+			variant: this.skybox?.debugState().variant ?? "off",
+			metrics,
+			withFighters: withCanvas.toDataURL("image/png"),
+			background: bgCanvas.toDataURL("image/png"),
+			combatants: fighters.flatMap((e) => {
+				const sprite = e.sprite;
+				if (!sprite) return [];
+				const b = sprite.getBounds();
+				return [
+					{
+						id: e.fighter.id,
+						x: Math.round(b.x),
+						y: Math.round(b.y),
+						w: Math.round(b.width),
+						h: Math.round(b.height),
+					},
+				];
+			}),
+		};
 	}
 
 	/**
@@ -4125,6 +4225,8 @@ export class Match {
 		this.potgSkipUnsubscribe?.();
 		window.clearTimeout(this.shareHintTimer);
 		this.input.destroy();
+		this.skybox?.destroy();
+		if (window.__skyboxDebug === this.skyboxHook) delete window.__skyboxDebug;
 		this.blackHole.destroy();
 		this.aimLine.destroy();
 		this.ultAim.destroy();

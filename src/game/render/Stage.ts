@@ -11,6 +11,7 @@
  */
 
 import { Container } from "pixi.js";
+import { OutlineFilter } from "pixi-filters";
 
 export class Stage {
 	/** Deliberate camera movement. What the diagnostic reads. */
@@ -59,7 +60,7 @@ export class Stage {
 	private shakeDuration = 0;
 	private shakeAmplitude = 0;
 
-	constructor(root: Container) {
+	constructor(readonly root: Container) {
 		this.scroll.addChild(this.shake);
 		this.shake.addChild(
 			this.background,
@@ -71,6 +72,23 @@ export class Stage {
 			this.effects,
 			this.nameplates,
 		);
+		// A 1px ink rim around every fighter. The hero sheets are rendered at
+		// 2x and drawn at half size, so on a 1x display the sheet's own outline
+		// can land between pixels and disappear exactly where the background is
+		// busiest. The filter restores the silhouette the readability probe
+		// measures; it is presentation only, and it never touches the wire.
+		const thickness = Math.min(
+			2,
+			Math.max(1, Math.round(window.devicePixelRatio || 1)),
+		);
+		this.actors.filters = [
+			new OutlineFilter({
+				thickness,
+				color: 0x10131f,
+				alpha: 0.9,
+				quality: 0.1,
+			}),
+		];
 		root.addChild(this.scroll);
 	}
 

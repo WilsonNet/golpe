@@ -22,6 +22,10 @@ export interface Positionable {
  * Everything here is derived from `world.platforms`, so the two cannot
  * disagree.
  *
+ * The **sky is not drawn here**: `Skybox` owns it, because the backdrop has
+ * parallax and animation that the arena's geometry does not. `background` is
+ * still cleared here so a rebuilt arena cannot leave a stale backdrop behind.
+ *
  * Re-entrant: children are destroyed and rebuilt, so a client that learns the
  * room's authoritative screen count after connecting (the `match` message can
  * disagree with `?screen=`) redraws the same two containers in place.
@@ -37,13 +41,6 @@ export function drawArena(
 	arena.removeChildren().forEach((c) => {
 		c.destroy({ children: true });
 	});
-
-	const sky = new Sprite(tex(TEX.sky));
-	sky.anchor.set(0.5);
-	sky.position.set(world.right / 2, world.bottom / 2);
-	sky.width = world.right;
-	sky.height = world.bottom;
-	background.addChild(sky);
 
 	for (const p of world.platforms) {
 		const s = new Sprite(tex(TEX.platform));

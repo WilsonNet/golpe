@@ -5,6 +5,10 @@ Every sprite they draw in-game, and their portraits on the menus and the
 ultimate card, are rendered from these files. Open one, change anything,
 save, run one command:
 
+The arena's parallax backdrop is art too, and lives beside the heroes in
+[`art/skybox/`](skybox/README.md): a pre-rendered voxel city and a
+hand-authored pixel-art city, both generated from code and both shipping.
+
 ```bash
 blender art/lia/lia.blend               # edit, then Ctrl+S   (or art/jeffs/jeffs.blend)
 python3 scripts/make-hero-art.py lia    # render + pack → public/assets/lia.{png,json}, lia-portrait.png

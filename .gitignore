@@ -33,7 +33,10 @@ home/
 fight-logs*.txt
 audio/soundfonts/
 __pycache__/
+.venv/
 .venv-audio/
 art/*/.render/
 art/anands/.boards/
+scripts/skybox/*/.build/
+scripts/skybox/*/review/
 *.blend1

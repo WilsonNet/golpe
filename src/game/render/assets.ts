@@ -18,6 +18,7 @@ import {
 	Texture,
 } from "pixi.js";
 import { PLAYER_HEIGHT, PLAYER_WIDTH } from "../simulation/Arena";
+import { preloadSkyboxAssets } from "./skyboxAssets";
 
 export const TEX = {
 	/**
@@ -404,6 +405,10 @@ export async function loadAssets(): Promise<void> {
 			loadPackedSheet(name, png, json),
 		),
 	]);
+
+	// The parallax skybox is optional art: a missing candidate falls back to
+	// the gradient sky, so this await must never be allowed to fail the boot.
+	await preloadSkyboxAssets();
 }
 
 /**

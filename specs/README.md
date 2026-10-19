@@ -28,6 +28,7 @@ it.
 | [melee.md](melee.md) | Sword combat: frame data, blocking, parries, the butterfly, the Massive Strike |
 | [ultimate.md](ultimate.md) | The black hole grenade: charge, the cinematic freeze, the field, no friendly fire |
 | [arena.md](arena.md) | World bounds, platform layout, reachability rules, spawn points |
+| [skybox.md](skybox.md) | The parallax backdrop: the two art candidates, layer factors, animated falls, and how the depth is measured |
 | [deathmatch.md](deathmatch.md) | 16 fighters, frags, respawns, the win condition, names, the podium |
 | [play-of-the-game.md](play-of-the-game.md) | The end-of-match highlight: how a play is scored, how it is recorded, and the camera edit |
 | [team-deathmatch.md](team-deathmatch.md) | Two sides, no friendly fire, wipe-out rounds, and the team colour scheme |
