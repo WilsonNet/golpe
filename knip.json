@@ -8,5 +8,5 @@
 		"vite/**/*.ts"
 	],
 	"vitest": true,
-	"ignoreBinaries": ["herdr"]
+	"ignoreBinaries": ["ffmpeg", "herdr", "img2webp"]
 }

@@ -46,7 +46,7 @@ export const LIA_COURSE: CampaignModule = {
 					brief:
 						"Two throws per life. It bounces, then detonates: full damage at the point of the blast, nothing at all at the edge. It is a positioning weapon, not a delete button — and a wall is a legitimate thing to throw it at.",
 					stage: PACING_DUMMY,
-					objectives: [o.useItem(1), o.explode(1)],
+					objectives: [o.itemUse(1), o.explode(1)],
 					outro: "Learn the bounces. They are the difference between the two.",
 				},
 				{

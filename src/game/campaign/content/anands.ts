@@ -131,7 +131,7 @@ export const ANANDS_COURSE: CampaignModule = {
 					brief:
 						"Three per life. It plants where it lands and arms itself. What it takes is not health — it is *feet*: a caught fighter is rooted, unable to walk, dash or jump, though they can still swing, guard and cast. It is single-use, and a jump clears the patch entirely.",
 					stage: PACING_DUMMY,
-					objectives: [o.useItem(1), o.root(1)],
+					objectives: [o.itemUse(1), o.root(1)],
 					outro:
 						"A root stops a dash, a tumble and a lunge dead — no momentum carries anyone out of it.",
 				},

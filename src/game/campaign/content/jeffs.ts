@@ -45,7 +45,7 @@ export const JEFFS_COURSE: CampaignModule = {
 					brief:
 						"Two per life, and it does no damage at all. It blocks nothing — no bullets, no bodies. What it takes away is *information*: inside the cloud the enemy reads nothing, while your own side still sees ghosts through it.",
 					stage: PACING_DUMMY,
-					objectives: [o.useItem(1), o.dash(1)],
+					objectives: [o.itemUse(1), o.dash(1)],
 					outro:
 						"Throw it, then be somewhere else. A cloud is only a lie if you move inside it.",
 				},

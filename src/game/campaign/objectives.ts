@@ -313,7 +313,7 @@ export const goBerserk = (target = 1, opts: Opts = {}): Objective =>
 		opts,
 	);
 
-export const useItem = (target = 1, opts: Opts = {}): Objective =>
+export const itemUse = (target = 1, opts: Opts = {}): Objective =>
 	build("item", `Throw your item${times(target)}`, target, (c) => c.itemsUsed, {
 		keys: ["item"],
 		...opts,
