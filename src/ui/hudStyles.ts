@@ -492,6 +492,20 @@ export const HUD_CSS = `
 .gd-sky-card-on span {
 	color: #ffd166;
 }
+/* The platform comparison is a wide strip, not a 4:3 view: the tiles are the
+   subject, and a 4:1 preview shows a real ledge instead of cropping it. */
+.gd-tile-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+	gap: 10px;
+	margin-top: 10px;
+}
+.gd-tile-card img {
+	aspect-ratio: 4 / 1;
+	object-fit: cover;
+	object-position: center;
+	image-rendering: pixelated;
+}
 
 .gd-bind-table {
 	width: 100%;

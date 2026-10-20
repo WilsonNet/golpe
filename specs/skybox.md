@@ -25,6 +25,12 @@ URL chooses the background when the page loads, so a shared link and a probe can
 pin it; the menu's launch serializer does not carry the parameter, which is what
 lets a player's stored choice take over again.
 
+**The skybox is independent of the platform art.** Graphics also offers
+**Platforms → Waterfront art / Flat**, and `?tiles=art|flat` pins it. Turning the
+sky off keeps the painted platforms; choosing flat blocks does not turn the sky
+back on. The platform map and its tileset are specified in
+[tilemap.md](tilemap.md).
+
 ## How it is drawn
 
 Every layer is a **1600 x 600 panorama** that tiles horizontally. It is a
@@ -178,10 +184,11 @@ over everything:
 A faint top scrim (0..160, max 0.08) exists only so the HUD panel keeps its
 contrast. It is not the old dark band.
 
-**Off is the old look.** `?sky=off` (or Graphics → *Off — plain blue*) draws
-the original `TEX.sky` gradient directly, with no blur, no grade, no top scrim,
-no waterfalls, birds or boats. That is the competitive low-distraction mode;
-the old blue is not run through the new atmosphere pass.
+**Off is the old backdrop.** `?sky=off` (or Graphics → *Off — plain blue*)
+draws the original `TEX.sky` gradient directly, with no blur, no grade, no top
+scrim, no waterfalls, birds or boats. That is the competitive low-distraction
+mode; the old blue is not run through the new atmosphere pass. The arena
+surfaces keep whichever platform style is selected — see [tilemap.md](tilemap.md).
 
 ### Measuring it
 

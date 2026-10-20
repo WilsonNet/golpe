@@ -120,7 +120,10 @@ at all: see [team-deathmatch.md](team-deathmatch.md).
 
 - One-way / drop-through platforms. Every surface is solid from all sides.
 - Moving or destructible geometry.
-- A map editor. There are two maps, and both are code: the classic arena
+- A map editor UI. There are two maps, and both are code: the classic arena
   (`buildWorld(screens)`, wider or not) and the control line
   (`buildControlWorld()` — see [control-points.md](control-points.md), the one
-  mode whose map is part of its rules).
+  mode whose map is part of its rules). The **map format and collision
+  conversion already exist** — `src/game/simulation/Tilemap.ts` turns platform
+  objects or a painted solid grid into `World.platforms`; see
+  [tilemap.md](tilemap.md). The editor is the layer still missing.

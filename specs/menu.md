@@ -81,7 +81,7 @@ single column on a phone so every button is a thumb-sized target.
 | How to play | — | The controls reference, **grouped into three sections** (getting around / fighting / the match) and read from the *live* bindings — a hint that lies about the button is worse than no hint. One sentence per row; the advanced tactics point to the Move list, which is where their full cards live. |
 | Move list | — | The Guilty Gear-style command list, for the hero the picker has selected — the same module the Esc menu's *Moves* item opens. |
 | Options | — | The same controls dialog as the Esc menu, so rebinding is possible before the first match. |
-| Graphics | — | The visual-comfort submenu: a side-by-side Waterfront vs. Off skybox comparison. Off restores the plain blue gradient with no grade, blur, scenery or motion — the competitive low-distraction setting. The choice is stored and applies immediately: a live match swaps its backdrop in place without resetting the fight. The same submenu is in the Esc menu. |
+| Graphics | — | The visual-comfort submenu: a side-by-side Waterfront vs. Off skybox comparison, plus a Waterfront art vs. Flat competitive platform comparison. Off restores the plain blue gradient with no grade, blur, scenery or motion; Flat restores the original monochrome blocks. The two choices are **independent**: Off keeps painted platforms, and Flat does not bring the city back. Both are stored and apply immediately — a live match swaps only its backdrop or its arena container, without resetting the fight. The same submenu is in the Esc menu. |
 
 The hero is **per-client**: the picker's choice rides every commit as
 `?hero=`, and a shared room link deliberately does not carry one, so a joiner

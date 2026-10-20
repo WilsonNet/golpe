@@ -165,7 +165,7 @@ export function PauseMenu({
 					<>
 						<h2 className="gd-title">Graphics</h2>
 						<p className="gd-sub">
-							Visual comfort. The skybox choice applies from the next match.
+							Visual comfort. Sky and platform choices apply immediately in a match.
 						</p>
 						<GraphicsSettings onClose={() => setView("menu")} />
 					</>

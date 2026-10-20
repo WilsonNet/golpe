@@ -42,6 +42,7 @@ node scripts/controls-probe.ts                 # key bindings, the Esc menu and 
 node scripts/pad-probe.ts                      # controller aim, a gamepad, and the phone deck
 node scripts/sky-probe.ts                      # the Waterfront: loaded, animated, parallax, movers and loops
 node scripts/readability-probe.ts              # fighter vs background: value, silhouette and detail
+node scripts/tiles-probe.ts                    # platform atlas, Art/Flat live switch, skybox independence
 ```
 
 ## The readability probe
@@ -57,6 +58,16 @@ is the control: the painted Waterfront must not make the fighter more dark, more
 lost or less vivid than the old look. The method and literature are in
 [specs/skybox.md](../specs/skybox.md#readability-contract); the screenshots land
 in `.playwright-mcp/readability/`.
+
+## The tiles probe
+
+`tiles-probe.ts` covers the platform layer's two failure modes: a screenshot
+that looks painted even though the atlas never loaded, and a Graphics switch
+that secretly rebuilds the page. It reads `__tilemapDebug` for the style, map
+counts and atlas state, boots with **`?sky=off&tiles=art`** to prove the two
+choices are independent, and switches Art → Flat → Art through the real Esc
+menu. It records the local fighter's position before and after: a live redraw
+may move no fighter. Screenshots land in `.playwright-mcp/tiles/`.
 
 ## The deathmatch probe
 

@@ -6,8 +6,11 @@ ultimate card, are rendered from these files. Open one, change anything,
 save, run one command:
 
 The arena's parallax backdrop is art too, and lives beside the heroes in
-[`art/skybox/`](skybox/README.md): a pre-rendered voxel city and a
-hand-authored pixel-art city, both generated from code and both shipping.
+[`art/skybox/`](skybox/README.md): the hand-painted Waterfront, generated from
+code. The standable surfaces are a separate tile art set in
+[`scripts/tilesets/`](../scripts/tilesets/CONTRACT.md), also generated from the
+shared Waterfront palette — the map format and the two skins are specified in
+[`specs/tilemap.md`](../specs/tilemap.md).
 
 ```bash
 blender art/lia/lia.blend               # edit, then Ctrl+S   (or art/jeffs/jeffs.blend)

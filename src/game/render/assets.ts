@@ -19,6 +19,7 @@ import {
 } from "pixi.js";
 import { PLAYER_HEIGHT, PLAYER_WIDTH } from "../simulation/Arena";
 import { preloadSkyboxAssets } from "./skyboxAssets";
+import { loadTileArt } from "./tilesets";
 
 export const TEX = {
 	/**
@@ -409,6 +410,12 @@ export async function loadAssets(): Promise<void> {
 	// The parallax skybox is optional art: a missing candidate falls back to
 	// the gradient sky, so this await must never be allowed to fail the boot.
 	await preloadSkyboxAssets();
+
+	// The platform tileset is optional too: a missing atlas draws the original
+	// flat blocks. A broken art asset must never stop the fight.
+	await loadTileArt().catch((err) => {
+		console.warn("[tiles] Waterfront platform art unavailable", err);
+	});
 }
 
 /**

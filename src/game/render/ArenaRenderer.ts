@@ -1,11 +1,12 @@
-import { type Container, Sprite } from "pixi.js";
+import type { Container } from "pixi.js";
 import {
 	DEFAULT_WORLD,
 	PLAYER_HEIGHT,
 	PLAYER_WIDTH,
 	type World,
 } from "../simulation/Arena";
-import { TEX, tex } from "./assets";
+import { drawPlatforms } from "./PlatformArt";
+import { type TileStyle, tileStyleChoice } from "./tileStyle";
 
 /** Anything with a position — a Pixi display object, or a plain test double. */
 export interface Positionable {
@@ -20,7 +21,9 @@ export interface Positionable {
  * an earlier version drew a 400px-wide image for a 100px-wide collider, so
  * players appeared to walk through solid ground and stand on thin air.
  * Everything here is derived from `world.platforms`, so the two cannot
- * disagree.
+ * disagree. The platform layer itself is `PlatformArt`: it consumes the same
+ * rectangles through the tilemap format and chooses the Waterfront tiles or the
+ * flat competitive blocks.
  *
  * The **sky is not drawn here**: `Skybox` owns it, because the backdrop has
  * parallax and animation that the arena's geometry does not. `background` is
@@ -34,22 +37,12 @@ export function drawArena(
 	background: Container,
 	arena: Container,
 	world: World = DEFAULT_WORLD,
+	style: TileStyle = tileStyleChoice(),
 ) {
 	background.removeChildren().forEach((c) => {
 		c.destroy({ children: true });
 	});
-	arena.removeChildren().forEach((c) => {
-		c.destroy({ children: true });
-	});
-
-	for (const p of world.platforms) {
-		const s = new Sprite(tex(TEX.platform));
-		s.anchor.set(0.5);
-		s.position.set(p.x + p.w / 2, p.y + p.h / 2);
-		s.width = p.w;
-		s.height = p.h;
-		arena.addChild(s);
-	}
+	drawPlatforms(arena, world, style);
 }
 
 /**

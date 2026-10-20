@@ -19,6 +19,7 @@ import type { AimScheme, DeckSetting } from "../game/input/Scheme";
 import type { RosterEntry, TeamStatus } from "../game/online/types";
 import type { PotgPhase } from "../game/potg/Director";
 import type { PotgAnnounce, PotgTrackEntry } from "../game/potg/types";
+import type { TilemapDebugState } from "../game/render/PlatformArt";
 import type { SkyboxDebugState } from "../game/render/Skybox";
 import type {
 	MatchEndReason,
@@ -491,6 +492,12 @@ declare global {
 		 * rather than trusting a screenshot's file size.
 		 */
 		__skyboxDebug?: () => SkyboxDebugState | null;
+		/**
+		 * The platform layer's last draw: Art/Flat, the map's object counts,
+		 * and whether the Waterfront tileset actually loaded.
+		 * `scripts/tiles-probe.ts` reads this.
+		 */
+		__tilemapDebug?: () => TilemapDebugState | null;
 		/**
 		 * A pair of renders of the same frame (with and without fighters) plus
 		 * the measured readability metrics. `scripts/readability-probe.ts`

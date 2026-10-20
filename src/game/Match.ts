@@ -99,11 +99,17 @@ import { type IbirikiFighterView, IbirikiFx } from "./render/IbirikiFx";
 import { ItemFx } from "./render/ItemFx";
 import { type ImpactEvent, MeleeFx } from "./render/MeleeFx";
 import { Nameplates } from "./render/Nameplates";
+import {
+	drawPlatforms,
+	platformArtDebug,
+	type TilemapDebugState,
+} from "./render/PlatformArt";
 import { RootedFx } from "./render/RootedFx";
 import { Shadows } from "./render/Shadows";
 import { Skybox } from "./render/Skybox";
 import { SpritePool } from "./render/SpritePool";
 import type { Stage } from "./render/Stage";
+import { tileStyleChoice } from "./render/tileStyle";
 import { UltAimLine } from "./render/UltAimLine";
 import {
 	applyWorld,
@@ -311,6 +317,9 @@ export class Match {
 	/** The stable hook identity, so a destroyed match cannot delete its successor's. */
 	private readonly skyboxHook = () => this.skybox?.debugState() ?? null;
 	private skyboxUnsubscribe: (() => void) | undefined;
+	/** The platform layer's last draw: style, map counts and tile-art state. */
+	private readonly tilemapHook = (): TilemapDebugState => platformArtDebug();
+	private tilemapUnsubscribe: (() => void) | undefined;
 	private readonly fx: MeleeFx;
 	private readonly blackHole: BlackHoleFx;
 	private readonly plates: Nameplates;
@@ -500,6 +509,10 @@ export class Match {
 		// new textures, exactly as an arena resize does.
 		this.skyboxUnsubscribe = EventBus.on("skybox-changed", (() =>
 			this.refreshSkybox()) as never);
+		// Graphics → Platforms applies live too, but only the arena container is
+		// rebuilt. The sky, camera and simulation do not notice.
+		this.tilemapUnsubscribe = EventBus.on("tile-style-changed", (() =>
+			this.refreshPlatforms()) as never);
 
 		this.queries = createQueries(this.world);
 		this.fx = new MeleeFx(stage.effects, stage);
@@ -2760,7 +2773,12 @@ export class Match {
 	 */
 	private redrawArena() {
 		this.skybox?.destroy();
-		drawArena(this.stage.background, this.stage.arena, this.arena);
+		drawArena(
+			this.stage.background,
+			this.stage.arena,
+			this.arena,
+			tileStyleChoice(),
+		);
 		this.skybox = new Skybox(this.stage.background, this.view);
 		// The camera may already be scrolled when a room corrects its width;
 		// position the fresh backdrop before the next frame can show it at 0.
@@ -2772,6 +2790,19 @@ export class Match {
 			this.view.height / this.stage.zoom,
 		);
 		window.__skyboxDebug = this.skyboxHook;
+		window.__tilemapDebug = this.tilemapHook;
+	}
+
+	/**
+	 * Swap only the platform layer, in place.
+	 *
+	 * The arena container is cleared and redrawn from the same map rectangles;
+	 * the skybox, camera, simulation and fighters are untouched. This is what
+	 * makes Art/Flat a genuine live graphics option rather than a restart.
+	 */
+	private refreshPlatforms() {
+		drawPlatforms(this.stage.arena, this.arena, tileStyleChoice());
+		window.__tilemapDebug = this.tilemapHook;
 	}
 
 	/**
@@ -4259,11 +4290,14 @@ export class Match {
 		this.nameUnsubscribe?.();
 		this.potgSkipUnsubscribe?.();
 		this.skyboxUnsubscribe?.();
+		this.tilemapUnsubscribe?.();
 		window.clearTimeout(this.shareHintTimer);
 		this.input.destroy();
 		this.skybox?.destroy();
 		this.stage.destroy();
 		if (window.__skyboxDebug === this.skyboxHook) delete window.__skyboxDebug;
+		if (window.__tilemapDebug === this.tilemapHook)
+			delete window.__tilemapDebug;
 		this.blackHole.destroy();
 		this.aimLine.destroy();
 		this.ultAim.destroy();

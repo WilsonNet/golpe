@@ -51,6 +51,8 @@ skill({ name: "feedback-loop" })    # the full workflow
 | What happens when a match ends? | [`specs/play-of-the-game.md`](specs/play-of-the-game.md) — the reel, the camera edit, then the podium |
 | What should the game sound like, and where does the music come from? | [`specs/audio.md`](specs/audio.md) · [`audio/README.md`](audio/README.md) — MIDI sources, the soundfont per track, the mixer |
 | What is behind the arena, and how is it drawn? | [`specs/skybox.md`](specs/skybox.md) · [`art/skybox/README.md`](art/skybox/README.md) — the hand-painted Waterfront (house style) and its loop / ambient people plans |
+| What does the arena stand on, and how will the map maker work? | [`specs/tilemap.md`](specs/tilemap.md) — the map format, the two platform skins, 9-slice autotiling and the props |
+| How do I regenerate the platform art? | `.venv/bin/python scripts/tilesets/generate.py` → `public/assets/tilesets/`; see [`scripts/tilesets/CONTRACT.md`](scripts/tilesets/CONTRACT.md) |
 | What rule will I break if I'm careless? | [`docs/invariants.md`](docs/invariants.md) |
 | Where does this code live, and who owns it? | [`docs/architecture.md`](docs/architecture.md) |
 | How do I measure anything? | [`docs/diagnostics.md`](docs/diagnostics.md) + the `feedback-loop` skill |
@@ -166,6 +168,12 @@ One line each; the war story behind every one is in
 - **`specs/` is the source of truth.** Update it in the same commit.
 - **Draw from the collider data**, and position sprites via `syncSpriteToBody` —
   bodies are top-left, sprites are centre-origin.
+- **A platform's art is a skin over its collider, and the two Graphics choices
+  are independent.** `tilemapFromWorld` turns the same rectangles into the map
+  format; the Waterfront 9-slice and the flat competitive blocks both draw them
+  without moving one. `?sky=off` keeps the chosen platform art; `?tiles=flat`
+  does not turn the city back on. A live platform switch redraws only
+  `stage.arena`.
 - **A packed sheet's PNG is loaded by the content hash its JSON names**
   (`<hero>.png?v=<version>`, JSON fetched uncached). A browser that paired a
   cached atlas with a re-render's JSON cropped every frame at the wrong rect,
@@ -326,6 +334,7 @@ tsx scripts/potg-probe.ts                            # play of the game: the ree
 tsx scripts/audio-probe.ts                           # the sound loop: music latches, combat sfx fire, the mixer persists
 tsx scripts/sky-probe.ts                             # the Waterfront: loaded, animated, parallax, movers and loops measured
 tsx scripts/readability-probe.ts                     # fighter-vs-background value, silhouette and detail, gated against the old sky
+tsx scripts/tiles-probe.ts                           # platform art: atlas loaded, Art/Flat live, skybox off stays off
 python3 scripts/make-audio.py                        # re-render the music loops from their MIDI sources (→ public/audio/)
 python3 scripts/make-potg-art.py                       # regenerate the ceremony's sunburst and medal
 python3 scripts/make-anands-art.py                       # cut Anands' dragon ride from her boards (--legacy: the old board-cut strips, for comparison)
@@ -419,12 +428,16 @@ AI vs AI presses a key, so bindings are measured with
 `scripts/controls-probe.ts`. See [specs/controls.md](specs/controls.md).
 
 **Graphics is its own submenu**, beside Options and Sound in both menus. It
-shows a side-by-side **Waterfront / Off — plain blue** skybox comparison. Off
-is the low-distraction competitive background: the old flat blue gradient with
-no grade, blur, scenery or motion. A choice **applies immediately in a live
-match** — the skybox container is rebuilt in place and the simulation, camera
-and fighters keep running — and from the root menu it is used by the next
-match. See [specs/skybox.md](specs/skybox.md).
+shows a side-by-side **Waterfront / Off — plain blue** skybox comparison, and a
+second **Waterfront art / Flat — competitive** platform comparison. Off is the
+low-distraction competitive background: the old flat blue gradient with no
+grade, blur, scenery or motion. Flat is the original monochrome block. The two
+choices are **independent** — Off keeps the painted platforms, and Flat does not
+bring the city back. A choice **applies immediately in a live match** — the
+skybox container or only the arena container is rebuilt in place, and the
+simulation, camera and fighters keep running — and from the root menu it is
+used by the next match. See [specs/skybox.md](specs/skybox.md) and
+[specs/tilemap.md](specs/tilemap.md).
 
 **The *Move list* is a Guilty Gear-style command list** — opened by the root
 menu's Learn & settings (for the hero picked there) and the Esc menu's *Moves*

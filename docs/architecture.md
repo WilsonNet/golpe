@@ -11,6 +11,8 @@ src/game/
   simulation/     deterministic, engine-free gameplay — shared verbatim with the server
     Arena.ts        buildWorld(screens): per-room bounds, platforms, spawns — plus
                     line-of-sight, penetrationDepth, narrowGaps
+    Tilemap.ts      the map format: platform objects, solid cells, props, and
+                    solidRectsFromTilemap for the future map maker
     Collision.ts    swept axis-separated AABB: moveAndCollide, probeWall, resolveOverlap
     Physics.ts      tuning constants, PlayerPosition, tickPlayer, bullets
     Melee.ts        the shared MOVES frame-data table, the per-weapon tables
@@ -64,7 +66,10 @@ src/game/
                     disagree about the fleet. See `docs/regions.md`
     types.ts        the wire messages, shared with the server
   render/         Stage.ts (layers + camera), ArenaRenderer.ts (draws from collider
-                  data), assets.ts (per-hero sheets, strips, Lia's packed atlas and
+                  data), PlatformArt.ts (the Waterfront 9-slice or the flat
+                  competitive blocks), tileStyle.ts (the stored Art/Flat choice),
+                  tilesets.ts (the platform atlas and prop frames),
+                  assets.ts (per-hero sheets, strips, Lia's packed atlas and
                   generated poses),
                   SpritePool.ts, Particles.ts, MeleeFx.ts (per-hero blades and the
                   dagger's motion tells), DragonFx.ts (the dragon's wake),

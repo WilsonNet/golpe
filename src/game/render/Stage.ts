@@ -73,12 +73,14 @@ export class Stage {
 		);
 		// The backdrop is softened behind the fight, not the fighters. The
 		// skybox gets the atmospheric grade/blur in `Skybox`; here the actors
-		// get a small lift so they read as the bright, crisp layer over it.
-		// A dark outline was the old solution and made the whole roster read
-		// as silhouettes; the art's own ink line is enough once the world is
+		// get a small **chroma** lift so they read as the vivid, crisp layer
+		// over it. The lift is deliberately not a brightness lift: the
+		// Waterfront's canal sits near the fighters' mid-tones, and brightening
+		// the body closed the measured value gap instead of opening it. A dark
+		// outline was the old solution and made the whole roster read as
+		// silhouettes; the art's own ink line is enough once the world is
 		// desaturated and blurred.
 		const lift = new ColorMatrixFilter();
-		lift.brightness(1.1, false);
 		lift.saturate(1.1, true);
 		this.actors.filters = [lift];
 		root.addChild(this.scroll);
