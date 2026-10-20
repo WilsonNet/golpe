@@ -45,6 +45,11 @@ export interface ReadabilityMetrics {
 	/** Mean CIELAB lightness of the body and of the background it covers. */
 	foregroundL: number;
 	backgroundL: number;
+	/** Mean CIE LCh chroma (saturation) of the body and of the background. */
+	foregroundChroma: number;
+	backgroundChroma: number;
+	/** Body chroma minus background chroma; positive = the body is more vivid. */
+	chromaContrast: number;
 	/** Median ΔE (CIE76) between the body and the exact background behind it. */
 	interiorContrast: number;
 	/** The worst quarter of the body, where a busy background hides it. */
@@ -150,6 +155,8 @@ export function measureReadability(
 	let bgL = 0;
 	let fgY = 0;
 	let bgY = 0;
+	let fgChroma = 0;
+	let bgChroma = 0;
 	for (const i of pixels) {
 		const p = i * 4;
 		const fg = labAt(a, p);
@@ -160,6 +167,8 @@ export function measureReadability(
 		bgL += bg.L;
 		fgY += fg.Y;
 		bgY += bg.Y;
+		fgChroma += Math.hypot(fg.a, fg.b);
+		bgChroma += Math.hypot(bg.a, bg.b);
 		interior.push(deltaE(fg, bg));
 
 		let edge = 0;
@@ -260,6 +269,9 @@ export function measureReadability(
 		valueContrast,
 		foregroundL: fgL / count,
 		backgroundL: bgL / count,
+		foregroundChroma: fgChroma / count,
+		backgroundChroma: bgChroma / count,
+		chromaContrast: (fgChroma - bgChroma) / count,
 		interiorContrast: median(interior),
 		interiorP25: quantile(interior, 0.25),
 		silhouetteContrast: median(silhouette),

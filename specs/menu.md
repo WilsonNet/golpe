@@ -57,14 +57,16 @@ made every choice look like every other choice:
   match started here. There is no separate Heroes page; picking is the
   discoverable face of `golpe.hero`.
 - **Learn & settings** — How to play full-width, then the Move list and Options
-  as a pair. How to play is the stranger's one-page answer to "how do I play";
-  the Move list is a *different question* — "what does my fighter do" — and a
-  full-screen feature of its own (live preview, stats, frame data), so it sits
-  beside not under How to play. Both read the current hero: the move list opens
-  for whoever the picker above has selected.
+  as a pair, then Graphics and Sound as a pair. How to play is the stranger's
+  one-page answer to "how do I play"; the Move list is a *different question* —
+  "what does my fighter do" — and a full-screen feature of its own (live
+  preview, stats, frame data), so it sits beside not under How to play. Both
+  read the current hero: the move list opens for whoever the picker above has
+  selected. **Graphics** is where the skybox is switched off for a
+  low-distraction fight; **Sound** is the mixer.
 
-Two-column rows (Host/Join, Move list/Options) collapse to a single column on
-a phone so every button is a thumb-sized target.
+Two-column rows (Host/Join, Move list/Options, Graphics/Sound) collapse to a
+single column on a phone so every button is a thumb-sized target.
 
 ## The flows
 
@@ -79,6 +81,7 @@ a phone so every button is a thumb-sized target.
 | How to play | — | The controls reference, **grouped into three sections** (getting around / fighting / the match) and read from the *live* bindings — a hint that lies about the button is worse than no hint. One sentence per row; the advanced tactics point to the Move list, which is where their full cards live. |
 | Move list | — | The Guilty Gear-style command list, for the hero the picker has selected — the same module the Esc menu's *Moves* item opens. |
 | Options | — | The same controls dialog as the Esc menu, so rebinding is possible before the first match. |
+| Graphics | — | The visual-comfort submenu: a side-by-side Waterfront vs. Off skybox comparison. Off restores the plain blue gradient with no grade, blur, scenery or motion — the competitive low-distraction setting. The choice is stored and applies immediately: a live match swaps its backdrop in place without resetting the fight. The same submenu is in the Esc menu. |
 
 The hero is **per-client**: the picker's choice rides every commit as
 `?hero=`, and a shared room link deliberately does not carry one, so a joiner

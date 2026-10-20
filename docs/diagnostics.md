@@ -40,7 +40,7 @@ node scripts/aim-probe.ts                      # cursor, facing and shot directi
 node scripts/training-probe.ts                 # one interaction at a time, against a scripted dummy
 node scripts/controls-probe.ts                 # key bindings, the Esc menu and a rebind
 node scripts/pad-probe.ts                      # controller aim, a gamepad, and the phone deck
-node scripts/sky-probe.ts                      # every skybox candidate: loaded, animated, parallax and one ambient plan
+node scripts/sky-probe.ts                      # the Waterfront: loaded, animated, parallax, movers and loops
 node scripts/readability-probe.ts              # fighter vs background: value, silhouette and detail
 ```
 
@@ -50,10 +50,11 @@ Art is a gameplay surface. `readability-probe.ts` answers "can I find the
 fighter" with the same extraction trick the rest of this file uses: render the
 same frame with and without fighter sprites, subtract to get the body mask, and
 measure the body against the exact background it covers. It reports
-body/background ΔL*, silhouette ΔE and coverage, local background detail, and
-the WCAG-style luminance ratio. The flat `?sky=off` gradient is measured in the
-same run and is the control: the painted skyboxes must not regress from the
-look the game already shipped. The method and literature are in
+body/background ΔL*, silhouette ΔE and coverage, local background detail, the
+signed body/background lightness and chroma contrast, and the WCAG-style
+luminance ratio. The flat `?sky=off` gradient is measured in the same run and
+is the control: the painted Waterfront must not make the fighter more dark, more
+lost or less vivid than the old look. The method and literature are in
 [specs/skybox.md](../specs/skybox.md#readability-contract); the screenshots land
 in `.playwright-mcp/readability/`.
 

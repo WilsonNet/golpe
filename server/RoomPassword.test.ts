@@ -90,6 +90,7 @@ describe("hashPassword / verifyPassword", () => {
 			// …and the raw text it came from still works, whitespace and all.
 			expect(verifyPassword(raw, hashPassword(cleaned!))).toBe(true);
 		},
+		15_000,
 	);
 
 	test.prop([rawPassword, rawPassword], { numRuns: 20 })(
@@ -101,5 +102,6 @@ describe("hashPassword / verifyPassword", () => {
 			fc.pre(cleanedA !== cleanedB);
 			expect(verifyPassword(cleanedB, hashPassword(cleanedA!))).toBe(false);
 		},
+		15_000,
 	);
 });

@@ -10,8 +10,7 @@
  * below it.
  */
 
-import { Container } from "pixi.js";
-import { OutlineFilter } from "pixi-filters";
+import { ColorMatrixFilter, Container } from "pixi.js";
 
 export class Stage {
 	/** Deliberate camera movement. What the diagnostic reads. */
@@ -72,23 +71,16 @@ export class Stage {
 			this.effects,
 			this.nameplates,
 		);
-		// A 1px ink rim around every fighter. The hero sheets are rendered at
-		// 2x and drawn at half size, so on a 1x display the sheet's own outline
-		// can land between pixels and disappear exactly where the background is
-		// busiest. The filter restores the silhouette the readability probe
-		// measures; it is presentation only, and it never touches the wire.
-		const thickness = Math.min(
-			2,
-			Math.max(1, Math.round(window.devicePixelRatio || 1)),
-		);
-		this.actors.filters = [
-			new OutlineFilter({
-				thickness,
-				color: 0x10131f,
-				alpha: 0.9,
-				quality: 0.1,
-			}),
-		];
+		// The backdrop is softened behind the fight, not the fighters. The
+		// skybox gets the atmospheric grade/blur in `Skybox`; here the actors
+		// get a small lift so they read as the bright, crisp layer over it.
+		// A dark outline was the old solution and made the whole roster read
+		// as silhouettes; the art's own ink line is enough once the world is
+		// desaturated and blurred.
+		const lift = new ColorMatrixFilter();
+		lift.brightness(1.08, false);
+		lift.saturate(1.06, true);
+		this.actors.filters = [lift];
 		root.addChild(this.scroll);
 	}
 
@@ -174,5 +166,11 @@ export class Stage {
 		this.shakeMs = 0;
 		this.shake.position.set(0, 0);
 		this.setCamera(0, 0, 1);
+	}
+
+	/** Release the actor colour grade; the app owns the display tree. */
+	destroy() {
+		for (const filter of this.actors.filters ?? []) filter.destroy();
+		this.actors.filters = [];
 	}
 }

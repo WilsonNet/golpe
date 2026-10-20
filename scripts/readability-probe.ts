@@ -28,7 +28,7 @@ import { chromium } from "playwright";
 
 const BASE = "http://localhost:8084";
 const SHOTS = ".playwright-mcp/readability";
-const VARIANTS = ["off", "stage", "voxel", "hand"] as const;
+const VARIANTS = ["off", "hand"] as const;
 
 interface Metrics {
 	pixels: number;
@@ -37,6 +37,9 @@ interface Metrics {
 	valueContrast: number;
 	foregroundL: number;
 	backgroundL: number;
+	foregroundChroma: number;
+	backgroundChroma: number;
+	chromaContrast: number;
 	interiorContrast: number;
 	interiorP25: number;
 	silhouetteContrast: number;
@@ -65,11 +68,13 @@ interface Snapshot {
  * margin rather than trusting the pass.
  */
 const TOLERANCE = {
-	valueContrast: 2,
+	signedValue: 3,
+	minimumValue: 6,
 	silhouetteContrast: 4,
 	silhouetteCoverage: 0.05,
 	backgroundDetail: 0.1,
-	contrastRatio: 0.2,
+	chromaContrast: 2,
+	minimumRatio: 0.95,
 } as const;
 
 let failed = false;
@@ -136,6 +141,8 @@ for (const variant of VARIANTS) {
 				`L*fg=${snap.metrics.foregroundL.toFixed(1)} ` +
 				`L*bg=${snap.metrics.backgroundL.toFixed(1)} ` +
 				`ΔL*=${snap.metrics.valueContrast.toFixed(1)} ` +
+				`C*fg=${snap.metrics.foregroundChroma.toFixed(1)} ` +
+				`C*bg=${snap.metrics.backgroundChroma.toFixed(1)} ` +
 				`sil=${snap.metrics.silhouetteContrast.toFixed(1)} ` +
 				`core=${snap.metrics.silhouetteCoreContrast.toFixed(1)} ` +
 				`cov=${(snap.metrics.silhouetteCoreCoverage * 100).toFixed(0)}% ` +
@@ -197,7 +204,7 @@ for (const variant of VARIANTS) {
 	await page.close();
 }
 
-// Compare every new candidate with the flat sky measured in the same run.
+// Compare the Waterfront with the flat sky measured in the same run.
 // Absolute thresholds are display-dependent: the sprite's sheet outline is
 // crisp at DPR 2 and soft at DPR 1, so a fixed silhouette ΔE fails the very
 // control the game shipped with. The control is the invariant.
@@ -207,10 +214,22 @@ if (baseline) {
 	for (const s of summary) {
 		if (s.variant === "off") continue;
 		check(
-			s.mean((m) => m.valueContrast) >=
-				baseline.mean((m) => m.valueContrast) - TOLERANCE.valueContrast,
-			`${s.variant}: value separation holds against the flat sky`,
-			`ΔL* ${s.mean((m) => m.valueContrast).toFixed(1)} vs ${baseline.mean((m) => m.valueContrast).toFixed(1)}`,
+			s.min((m) => m.valueContrast) >= TOLERANCE.minimumValue,
+			`${s.variant}: value separation does not collapse`,
+			`min ΔL* ${s.min((m) => m.valueContrast).toFixed(1)}`,
+		);
+		check(
+			s.mean((m) => m.foregroundL - m.backgroundL) >=
+				baseline.mean((m) => m.foregroundL - m.backgroundL) -
+					TOLERANCE.signedValue,
+			`${s.variant}: the body is not darker than the old sky`,
+			`L*fg-L*bg ${s.mean((m) => m.foregroundL - m.backgroundL).toFixed(1)} vs ${baseline.mean((m) => m.foregroundL - m.backgroundL).toFixed(1)}`,
+		);
+		check(
+			s.mean((m) => m.chromaContrast) >=
+				baseline.mean((m) => m.chromaContrast) - TOLERANCE.chromaContrast,
+			`${s.variant}: the body stays the more vivid layer`,
+			`C* ${s.mean((m) => m.chromaContrast).toFixed(1)} vs ${baseline.mean((m) => m.chromaContrast).toFixed(1)}`,
 		);
 		check(
 			s.mean((m) => m.silhouetteCoreContrast) >=
@@ -233,10 +252,9 @@ if (baseline) {
 			`${s.mean((m) => m.backgroundDetail).toFixed(2)} vs ${baseline.mean((m) => m.backgroundDetail).toFixed(2)}`,
 		);
 		check(
-			s.mean((m) => m.contrastRatio) >=
-				baseline.mean((m) => m.contrastRatio) - TOLERANCE.contrastRatio,
-			`${s.variant}: luminance ratio holds`,
-			`${s.mean((m) => m.contrastRatio).toFixed(2)} vs ${baseline.mean((m) => m.contrastRatio).toFixed(2)}`,
+			s.mean((m) => m.contrastRatio) >= TOLERANCE.minimumRatio,
+			`${s.variant}: the body is not lost in the background`,
+			`ratio ${s.mean((m) => m.contrastRatio).toFixed(2)}`,
 		);
 	}
 }

@@ -1,8 +1,8 @@
 # Skybox asset contract
 
-Two candidates are generated independently, then compared in the game through
-the `?sky=` URL switch. Both must obey this contract exactly so the runtime
-does not need to know which one it is drawing.
+The hand-painted **Waterfront** is the only shipped style. This contract
+describes its layers and its two people plans so the runtime does not need to
+know what the art depicts.
 
 ## The world it has to sit in
 
@@ -17,8 +17,8 @@ Composition rules that keep the fight readable:
   background directly behind a platform reads as visual noise.
 - The **middle band (y 150-470)** should be quiet and hazy: the fighters,
   nameplates and platforms live there.
-- Put the strongest detail in **y 0-180** (sky, clouds, planet, airships) and
-  **y 470-600** (near rooftops, gardens, water, framing foliage).
+- Put human detail in **y 470-600** — the quay, canal and the looping people
+  vignettes. Keep it out of the fight band.
 - Keep contrast low in the far layers and higher in the near layers — aerial
   perspective is what sells depth.
 - The first 800 px of every panorama is the hero view. A single-screen match
@@ -53,16 +53,39 @@ That means:
 - **Keep a clear central line.** The horizon/water line and the platform line
   should read at a glance. Do not put a background edge directly behind a
   platform edge.
-- **Sparse, slow, one plan.** Three or four ambient groups maximum (a flock, one
-  airship, two boats, water glints). They are all driven by one `ambient` plan
-  and one clock, never one clock per element.
+- **Sparse, slow, two plans.** The **looping layer** holds a handful of
+  fixed quayside vignettes (cheer, picnic, date, spar, sport). The **moving
+  layer** holds walkers, a flock, one airship and two boats. Each is one plan
+  with one clock, never one clock per element.
 - **Stand back from the reference.** The DeepSeek reference is the visual
   language; Smash is the amount. When in doubt, remove an element.
 
-## The single ambient plan
+## The two people plans
 
-All moving background actors are declared once, in the manifest's `ambient`
-object:
+The people are split into two programmes because they do different jobs.
+
+### `loops` — the looping layer
+
+Fixed-position vignettes that cycle in place. Each group names a strip layer;
+the actors supply positions and an optional `frameOffset` so a crowd is not in
+lockstep:
+
+```json
+"loops": {
+  "clockMs": 16000,
+  "groups": [
+    { "layer": "cheer", "actors": [{ "u": 180, "v": 500, "frameOffset": 0 }] },
+    { "layer": "picnic", "actors": [ ... ] },
+    { "layer": "date", "actors": [ ... ] },
+    { "layer": "spar", "actors": [ ... ] },
+    { "layer": "sport", "actors": [ ... ] }
+  ]
+}
+```
+
+### `ambient` — the moving layer
+
+Moving actors are declared once in the manifest's `ambient` object:
 
 ```json
 "ambient": {
@@ -75,23 +98,24 @@ object:
       ]
     },
     { "layer": "zeppelin", "actors": [ ... ] },
-    { "layer": "boats", "actors": [ ... ] }
+    { "layer": "boats", "actors": [ ... ] },
+    { "layer": "walkers", "actors": [ ... ] }
   ]
 }
 ```
 
 - `layer` is the id of a `type: "strip"` layer that supplies that group's
   frames, fps and parallax. The actor list supplies positions and paths.
-- `loopMs` is the intended loop length. The runtime samples every actor from
-  the same elapsed clock; the panorama wrap is the continuous loop. Do not
-  force a reset that teleports an actor whose speed does not divide the
+- `loopMs`/`clockMs` are intended programme lengths. The runtime samples every
+  actor from the same elapsed clock; the panorama wrap is the continuous loop.
+  Do not force a reset that teleports an actor whose speed does not divide the
   panorama.
 - Actor fields: `u`, `v`, `speedX` (texture px/s), `bobAmp` (px), `bobFreq`
-  (Hz), `phase` (radians), `flip` (mirror art drawn facing right).
+  (Hz), `phase` (radians), `flip` (mirror art drawn facing right), and
+  `frameOffset` for loop actors.
 - A waterfall is not an ambient actor: it has no speed and no group.
-- If `ambient` is absent, the runtime falls back to the strip's own `items` for
-  backward compatibility, but a candidate with moving actors should ship the
-  single plan.
+- If a plan is absent, the runtime falls back to the strip's own `items` for
+  backward compatibility, but the Waterfront ships both plans.
 
 ## Texture contract
 
@@ -114,11 +138,20 @@ public/assets/skybox/<variant>/
   mid.png      1600x600  alpha    parallax 0.18
   falls.png    strip      alpha    parallax 0.30   (animated)
   near.png     1600x600  alpha    parallax 0.50
+  cheer.png    strip      alpha    looping vignette
+  picnic.png   strip      alpha    looping vignette
+  date.png     strip      alpha    looping vignette
+  spar.png     strip      alpha    looping vignette
+  sport.png    strip      alpha    looping vignette
+  walkers.png  strip      alpha    moving people
+  birds.png    strip      alpha    moving birds
+  zeppelin.png strip      alpha    moving airship
+  boats.png    strip      alpha    moving boats
   contact.png  1600x600  opaque   flattened review image, not loaded by the game
   manifest.json
 ```
 
-`<variant>` is `voxel` or `hand`.
+`<variant>` is `hand`.
 
 ### Falls strip
 
@@ -135,15 +168,15 @@ public/assets/skybox/<variant>/
 
 ```json
 {
-  "name": "voxel",
-  "title": "Solar Voxel",
+  "name": "hand",
+  "title": "Solarpunk Waterfront",
   "width": 1600,
   "height": 600,
   "layers": [
     {
       "id": "sky",
       "type": "image",
-      "src": "assets/skybox/voxel/sky.png",
+      "src": "assets/skybox/hand/sky.png",
       "version": "<sha256 first 12>",
       "factor": 0.015,
       "driftX": 0.6,
@@ -154,7 +187,7 @@ public/assets/skybox/<variant>/
     {
       "id": "falls",
       "type": "strip",
-      "src": "assets/skybox/voxel/falls.png",
+      "src": "assets/skybox/hand/falls.png",
       "version": "...",
       "factor": 0.30,
       "align": "mid",
@@ -183,22 +216,26 @@ public/assets/skybox/<variant>/
   or a very slow sky. Do not drift the city.
 - `version` is the first 12 hex chars of the file's SHA-256. The runtime appends
   `?v=<version>` so a regenerated asset can never be paired with a stale PNG.
-- `haze` is an optional art-direction multiplier on the runtime atmospheric
-  scrim (default `1`). A city with more fine detail in the combat band should
-  push it to `1.4`-`1.7`; a calm, open composition leaves it at `1`.
+- `haze` is an optional strength multiplier for the runtime background grade
+  (default `1`): a small blur, desaturation and brightness reduction applied to
+  the skybox art only. The actors are above it and get a small brightness lift.
+  `Off` bypasses the grade entirely and draws the original plain blue gradient.
 - `u`/`v` on a fall item are texture coordinates in the `mid` layer's space.
 
-## Both candidates must include
+## The Waterfront must include
 
-- A retrofuturistic **solarpunk city**: ivory/cream ceramic towers, domes,
-  capsule shapes, brass trim, solar arrays, wind turbines, lush hanging
-  gardens, aqueducts and waterfalls.
+- A retrofuturistic **solarpunk waterfront**: broad low blocks, conservatory
+  half-domes, flat/terrace roofs, brass trim, solar arrays, wind turbines,
+  hanging gardens, a long aqueduct and a canal/quay. No onion domes, pointed
+  spires or shaft-and-bulb silhouettes.
 - An **Akira Toriyama flavour**: rounded, chunky, playful silhouettes; big
   cumulus clouds with a warm rim; a ringed planet or a second moon; tiny
   airships; birds; curved bridges; a sense of adventure rather than realism.
 - At least one large, readable **waterfall** that animates.
-- A near layer that frames the bottom of the screen without covering the
-  fighters' feet.
+- A near layer of canal, stone quay and reflections that frames the bottom
+  without covering the fighters' feet.
+- Both people plans: `loops` with at least four fixed vignettes (cheer, picnic,
+  date, spar, sport) and `ambient` with walkers, birds, zeppelin and boats.
 - A `NOTES.md` in the variant directory describing how to regenerate, the
   palette, and the iteration history.
 - A `contact.png` so a human can judge the result without booting the game.

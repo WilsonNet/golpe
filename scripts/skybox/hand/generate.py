@@ -54,9 +54,41 @@ BOAT_ITEMS = [
 ]
 
 
+WALKER_ITEMS = [
+    {"u": 200, "v": 492, "speedX": 4.5, "bobAmp": 0.5, "bobFreq": 1.6, "phase": 0.0, "flip": False},
+    {"u": 280, "v": 492, "speedX": -5.2, "bobAmp": 0.6, "bobFreq": 1.7, "phase": 1.0, "flip": True},
+    {"u": 480, "v": 492, "speedX": 6.0, "bobAmp": 0.5, "bobFreq": 1.5, "phase": 2.0, "flip": False},
+    {"u": 880, "v": 492, "speedX": -4.5, "bobAmp": 0.6, "bobFreq": 1.8, "phase": 3.0, "flip": True},
+    {"u": 1120, "v": 492, "speedX": 7.0, "bobAmp": 0.5, "bobFreq": 1.6, "phase": 4.0, "flip": False},
+    {"u": 1380, "v": 492, "speedX": -6.2, "bobAmp": 0.6, "bobFreq": 1.7, "phase": 5.0, "flip": True},
+    {"u": 1520, "v": 492, "speedX": 5.0, "bobAmp": 0.5, "bobFreq": 1.5, "phase": 0.5, "flip": False},
+]
+
+LOOP_ACTORS = {
+    "cheer": [
+        {"u": 140, "v": 492, "frameOffset": 0, "flip": False},
+        {"u": 1000, "v": 492, "frameOffset": 2, "flip": False},
+    ],
+    "picnic": [
+        {"u": 360, "v": 492, "frameOffset": 1, "flip": False},
+        {"u": 1160, "v": 492, "frameOffset": 3, "flip": False},
+    ],
+    "date": [
+        {"u": 1340, "v": 492, "frameOffset": 2, "flip": False},
+    ],
+    "spar": [
+        {"u": 850, "v": 492, "frameOffset": 1, "flip": False},
+    ],
+    "sport": [
+        {"u": 640, "v": 488, "frameOffset": 0, "flip": False},
+        {"u": 1230, "v": 488, "frameOffset": 2, "flip": False},
+    ],
+}
+
 STRIP_SPECS = [
     {
         "id": "falls",
+        "plan": "falls",
         "factor": 0.18,
         "manifest_factor": 0.30,
         "fw": FALL_W,
@@ -68,7 +100,80 @@ STRIP_SPECS = [
         "items": [{"u": u, "v": v} for u, v in FALL_ITEMS],
     },
     {
+        "id": "cheer",
+        "plan": "loops",
+        "factor": 0.50,
+        "manifest_factor": 0.50,
+        "fw": 24,
+        "fh": 20,
+        "frames": 4,
+        "fps": 6,
+        "alpha": 1.0,
+        "items": LOOP_ACTORS["cheer"],
+    },
+    {
+        "id": "picnic",
+        "plan": "loops",
+        "factor": 0.50,
+        "manifest_factor": 0.50,
+        "fw": 32,
+        "fh": 20,
+        "frames": 4,
+        "fps": 6,
+        "alpha": 1.0,
+        "items": LOOP_ACTORS["picnic"],
+    },
+    {
+        "id": "date",
+        "plan": "loops",
+        "factor": 0.50,
+        "manifest_factor": 0.50,
+        "fw": 32,
+        "fh": 20,
+        "frames": 4,
+        "fps": 6,
+        "alpha": 1.0,
+        "items": LOOP_ACTORS["date"],
+    },
+    {
+        "id": "spar",
+        "plan": "loops",
+        "factor": 0.50,
+        "manifest_factor": 0.50,
+        "fw": 32,
+        "fh": 20,
+        "frames": 4,
+        "fps": 8,
+        "alpha": 1.0,
+        "items": LOOP_ACTORS["spar"],
+    },
+    {
+        "id": "sport",
+        "plan": "loops",
+        "factor": 0.50,
+        "manifest_factor": 0.50,
+        "fw": 40,
+        "fh": 24,
+        "frames": 4,
+        "fps": 8,
+        "alpha": 1.0,
+        "items": LOOP_ACTORS["sport"],
+    },
+    {
+        "id": "walkers",
+        "plan": "ambient",
+        "factor": 0.50,
+        "manifest_factor": 0.50,
+        "fw": 12,
+        "fh": 20,
+        "frames": 6,
+        "fps": 8,
+        "alpha": 1.0,
+        "items": WALKER_ITEMS,
+    },
+    {
         "id": "boats",
+        "plan": "ambient",
         "factor": 0.50,
         "manifest_factor": 0.50,
         "fw": 32,
@@ -80,6 +185,7 @@ STRIP_SPECS = [
     },
     {
         "id": "zeppelin",
+        "plan": "ambient",
         "factor": 0.10,
         "manifest_factor": 0.10,
         "fw": 64,
@@ -91,6 +197,7 @@ STRIP_SPECS = [
     },
     {
         "id": "birds",
+        "plan": "ambient",
         "factor": 0.06,
         "manifest_factor": 0.06,
         "fw": 16,
@@ -1718,7 +1825,6 @@ def quay_shop(layer: Layer, x, y=QUAY_Y, w=56, seed=0):
     layer.line((x + w - 6, top, x + w - 6, top + 7), C(CREAM["brass_dark"]))
     layer.rrect(x + w - 10, top + 7, x + w - 1, top + 14, 2, C("#9ad8cd"))
     layer.point(x + w - 5, top + 10, C("#5aa6bd"))
-    person(layer, x + 22, y - 1, seed + 5)
 
 
 def roof_tree(layer: Layer, cx, base_y, w=30, h=16, seed=0):
@@ -1877,11 +1983,10 @@ def aqueduct_wall(layer: Layer):
     for i, (sx, sw) in enumerate(((52, 54), (264, 48), (540, 62), (900, 46), (1088, 58), (1278, 52), (1458, 60))):
         quay_shop(layer, sx, QUAY_Y, sw, 120 + i)
 
-    # quay activity
+    # quay cargo and planters; the people here are animated by the loop
+    # and ambient strips, so no static figures compete with them
     for i, x in enumerate(range(30, 1560, 118)):
-        if i % 3 == 0:
-            person(layer, x, quay_y - 16, 800 + i)
-        elif i % 3 == 1:
+        if i % 2 == 0:
             layer.rrect(x, quay_y - 23, x + 10, quay_y - 16, 2, C("#b9855e"))
             layer.rrect(x + 2, quay_y - 28, x + 8, quay_y - 23, 1, C("#cfa074"))
         else:
@@ -2027,7 +2132,7 @@ def draw_mid() -> Layer:
     # parasols and market life on the terrace
     for i, (px, pr) in enumerate(((258, 16), (468, 14), (548, 15), (770, 17), (875, 13), (1150, 15), (1462, 14))):
         parasol(layer, px, DECK_Y - 1, pr, 90 + i)
-    for i, px in enumerate((226, 292, 430, 500, 612, 704, 806, 1032, 1246, 1412)):
+    for i, px in enumerate((292, 612, 806, 1246, 1412)):
         person(layer, px, DECK_Y - 3, 950 + i)
     person(layer, 270, 246, 960)
     for px in range(22, 1600, 63):
@@ -2300,6 +2405,223 @@ def draw_boats_strip() -> Image.Image:
     return strip
 
 
+
+
+def pix_fig(d, cx, base, frame, shirt, pose="stand", skin="#e2b98c", hair="#7f5446", pants="#2d2b4b", facing=1):
+    """A 3x11-ish person for the quayside strips. Feet sit on `base`."""
+    pants_c = C(pants)
+    skin_c = C(skin)
+    hair_c = C(hair)
+    shirt_c = C(shirt)
+    swing = [0, 1, 2, 1, 0, -1][frame % 6]
+    if pose == "walk":
+        d.line((cx - 1, base - 4, cx - 1 - swing, base), fill=pants_c)
+        d.line((cx + 1, base - 4, cx + 1 + swing, base), fill=pants_c)
+        d.point((cx - 1 - swing, base), fill=pants_c)
+        d.point((cx + 1 + swing, base), fill=pants_c)
+    elif pose == "kick":
+        d.line((cx - 1, base - 4, cx - 1, base), fill=pants_c)
+        d.line((cx + 1, base - 4, cx + 1 + 4 * facing, base - 2), fill=pants_c)
+        d.point((cx + 1 + 4 * facing, base - 2), fill=pants_c)
+    elif pose == "fight":
+        d.line((cx - 1, base - 4, cx - 3, base), fill=pants_c)
+        d.line((cx + 1, base - 4, cx + 3, base), fill=pants_c)
+        d.point((cx - 3, base), fill=pants_c)
+        d.point((cx + 3, base), fill=pants_c)
+    else:
+        d.line((cx - 1, base - 4, cx - 1, base), fill=pants_c)
+        d.line((cx + 1, base - 4, cx + 1, base), fill=pants_c)
+        d.point((cx - 1, base), fill=pants_c)
+        d.point((cx + 1, base), fill=pants_c)
+    # body and head
+    d.rectangle((cx - 1, base - 8, cx + 1, base - 5), fill=shirt_c)
+    d.rectangle((cx - 1, base - 10, cx, base - 9), fill=skin_c)
+    d.rectangle((cx - 1, base - 11, cx, base - 11), fill=hair_c)
+    d.point((cx + facing, base - 9), fill=skin_c)
+    # arms
+    if pose == "cheer":
+        lift = [0, 1, 0, -1][frame % 4]
+        d.line((cx - 1, base - 7, cx - 2, base - 12 + lift), fill=shirt_c)
+        d.line((cx + 1, base - 7, cx + 2, base - 12 - lift), fill=shirt_c)
+        d.point((cx - 2, base - 12 + lift), fill=skin_c)
+        d.point((cx + 2, base - 12 - lift), fill=skin_c)
+    elif pose == "fight":
+        swing = [0, 1, 0, -1][frame % 4]
+        d.line((cx, base - 7, cx + 4 * facing, base - 8 + swing), fill=shirt_c)
+        d.point((cx + 4 * facing, base - 8 + swing), fill=skin_c)
+        d.line((cx, base - 7, cx - 2 * facing, base - 5), fill=shirt_c)
+    elif pose == "kick":
+        d.line((cx - 1, base - 7, cx - 2, base - 4), fill=shirt_c)
+        d.line((cx + 1, base - 7, cx + 3 * facing, base - 6), fill=shirt_c)
+        d.point((cx + 3 * facing, base - 6), fill=skin_c)
+    elif pose == "walk":
+        d.line((cx - 1, base - 7, cx - 1 + swing, base - 4), fill=shirt_c)
+        d.line((cx + 1, base - 7, cx + 1 - swing, base - 4), fill=shirt_c)
+    else:
+        d.line((cx - 1, base - 7, cx - 2, base - 4), fill=shirt_c)
+        d.line((cx + 1, base - 7, cx + 2, base - 4), fill=shirt_c)
+
+
+def draw_cheer_strip():
+    fw, fh, n = 24, 20, 4
+    strip = Image.new("RGBA", (fw * n, fh), (0, 0, 0, 0))
+    for f in range(n):
+        img = Image.new("RGBA", (fw, fh), (0, 0, 0, 0))
+        d = ImageDraw.Draw(img)
+        d.line((2, 19, 21, 19), fill=C("#b9855e"))
+        for i, cx in enumerate((5, 12, 19)):
+            shirt = ["#ff8a4c", "#9ad8cd", "#f49bb8"][i]
+            pix_fig(d, cx, 19, f, shirt, pose="cheer", skin=["#e2b98c", "#cfa074", "#e2b98c"][i])
+            # flags on the outer two fans
+            if i != 1:
+                sway = [-1, 0, 1, 0][(f + i) % 4]
+                px = cx + 2
+                d.line((px, 5, px, 11), fill=C("#a36428"))
+                d.polygon([(px + 1, 4 + sway), (px + 4, 5 + sway), (px + 1, 7 + sway)], C("#ffe08a" if i == 0 else "#9ad8cd"))
+        strip.paste(img, (f * fw, 0))
+    return strip
+
+
+def draw_picnic_strip():
+    fw, fh, n = 32, 20, 4
+    strip = Image.new("RGBA", (fw * n, fh), (0, 0, 0, 0))
+    for f in range(n):
+        img = Image.new("RGBA", (fw, fh), (0, 0, 0, 0))
+        d = ImageDraw.Draw(img)
+        # checked blanket
+        for yy in range(15, 20, 2):
+            for xx in range(4, 29, 4):
+                d.rectangle((xx, yy, xx + 1, yy + 1), fill=C("#c8f7ec" if (xx // 4 + yy // 2) % 2 else "#f3e0bb"))
+        # basket and a little plate
+        d.rectangle((21, 11, 27, 15), fill=C("#c9852f"))
+        d.rectangle((21, 11, 27, 12), fill=C("#f7c85f"))
+        d.line((23, 11, 23, 8), fill=C("#a36428"))
+        d.line((25, 11, 25, 8), fill=C("#a36428"))
+        d.line((23, 8, 25, 8), fill=C("#a36428"))
+        # two seated figures, facing each other
+        for cx, face, shirt, skin in ((10, 1, "#9ad8cd", "#e2b98c"), (18, -1, "#ff8a4c", "#cfa074")):
+            d.rectangle((cx - 1, 11, cx + 1, 14), fill=C(shirt))
+            d.rectangle((cx - 1, 8, cx, 10), fill=C(skin))
+            d.rectangle((cx - 1, 7, cx, 7), fill=C("#7f5446"))
+            d.point((cx + face, 9), fill=C(skin))
+            d.line((cx - 1, 12, cx - 1 - 4 * face, 15), fill=C("#2d2b4b"))
+            d.point((cx - 1 - 4 * face, 15), fill=C("#2d2b4b"))
+            d.line((cx + 1, 12, cx + 1 + 2 * face, 15), fill=C("#2d2b4b"))
+            # gesturing arm; one lifts a cup on alternating frames
+            d.line((cx, 11, cx + 3 * face, 9), fill=C(skin))
+        cup_x = 14 + (f % 2)
+        cup_y = 7 - (f % 2)
+        d.rectangle((cup_x, cup_y, cup_x + 1, cup_y + 1), fill=C("#f3e0bb"))
+        d.point((cup_x + 1, cup_y + 1), fill=C("#f49bb8"))
+        # the near picnicker raises the cup; the far one turns a page
+        d.line((11, 11, cup_x - 1, cup_y + 1), fill=C("#e2b98c"))
+        d.line((18, 10, 17 + (f % 2), 9), fill=C("#cfa074"))
+        if f % 2:
+            d.point((4, 18), fill=C("#eaf3df"))
+        strip.paste(img, (f * fw, 0))
+    return strip
+
+
+def draw_date_strip():
+    fw, fh, n = 32, 20, 4
+    strip = Image.new("RGBA", (fw * n, fh), (0, 0, 0, 0))
+    for f in range(n):
+        img = Image.new("RGBA", (fw, fh), (0, 0, 0, 0))
+        d = ImageDraw.Draw(img)
+        # bench
+        d.rectangle((7, 14, 25, 16), fill=C("#9b6a50"))
+        d.rectangle((8, 12, 24, 14), fill=C("#cfa074"))
+        d.line((10, 16, 10, 19), fill=C("#7f5446"))
+        d.line((22, 16, 22, 19), fill=C("#7f5446"))
+        d.line((7, 13, 7, 17), fill=C("#7f5446"))
+        d.line((25, 13, 25, 17), fill=C("#7f5446"))
+        for cx, face, shirt, skin in ((12, 1, "#f49bb8", "#e2b98c"), (19, -1, "#9ad8cd", "#cfa074")):
+            lean = f % 2
+            d.rectangle((cx - 1, 9, cx + 1, 13), fill=C(shirt))
+            d.rectangle((cx - 1 + lean * face, 6, cx + lean * face, 8), fill=C(skin))
+            d.rectangle((cx - 1 + lean * face, 5, cx + lean * face, 5), fill=C("#7f5446"))
+            d.line((cx - 2, 11, cx - 3, 14), fill=C(skin))
+        # a little heart, pulsing
+        hx, hy = 15, 3
+        d.point((hx, hy), fill=C("#f49bb8"))
+        d.point((hx + 2, hy), fill=C("#f49bb8"))
+        d.point((hx - 1, hy + 1), fill=C("#f49bb8"))
+        d.point((hx + 1, hy + 1), fill=C("#ffd2e0"))
+        d.point((hx + 3, hy + 1), fill=C("#f49bb8"))
+        d.point((hx, hy + 2), fill=C("#f49bb8"))
+        d.point((hx + 2, hy + 2), fill=C("#f49bb8"))
+        d.point((hx + 1, hy + 3), fill=C("#e66d97"))
+        if f % 2:
+            d.point((hx + 1, hy + 4), fill=C("#f49bb8"))
+        strip.paste(img, (f * fw, 0))
+    return strip
+
+
+def draw_spar_strip():
+    fw, fh, n = 32, 20, 4
+    strip = Image.new("RGBA", (fw * n, fh), (0, 0, 0, 0))
+    for f in range(n):
+        img = Image.new("RGBA", (fw, fh), (0, 0, 0, 0))
+        d = ImageDraw.Draw(img)
+        # ducking left fighter
+        pix_fig(d, 10, 19, f, "#ff8a4c", pose="fight", skin="#e2b98c", facing=1)
+        # right fighter, leaning back
+        pix_fig(d, 21, 19, f, "#9ad8cd", pose="fight", skin="#cfa074", facing=-1)
+        # a tiny play dust puff between them
+        dx = 15 + (f % 2)
+        d.point((dx, 16), fill=C("#e9c9a2"))
+        d.point((dx + 1, 17), fill=C("#d3a17f"))
+        d.point((dx - 1, 17), fill=C("#e9c9a2"))
+        if f % 2:
+            d.point((dx + 2, 15), fill=C("#e9c9a2"))
+        # a stray bit of washing on the ground
+        d.point((13, 19), fill=C("#f3e0bb"))
+        strip.paste(img, (f * fw, 0))
+    return strip
+
+
+def draw_sport_strip():
+    fw, fh, n = 40, 24, 4
+    strip = Image.new("RGBA", (fw * n, fh), (0, 0, 0, 0))
+    for f in range(n):
+        img = Image.new("RGBA", (fw, fh), (0, 0, 0, 0))
+        d = ImageDraw.Draw(img)
+        # tiny goal: dark frame and pale net
+        d.line((29, 14, 29, 23), fill=C("#7f5446"))
+        d.line((29, 14, 38, 14), fill=C("#7f5446"))
+        d.line((38, 14, 38, 23), fill=C("#7f5446"))
+        d.line((30, 16, 37, 16), fill=C("#e4c99b"))
+        d.line((30, 19, 37, 19), fill=C("#e4c99b"))
+        d.line((32, 17, 32, 23), fill=C("#e4c99b"))
+        d.line((35, 17, 35, 23), fill=C("#e4c99b"))
+        d.line((29, 23, 38, 23), fill=C("#7f5446"))
+        # kicker and a defender
+        pix_fig(d, 8, 23, f, "#ff8a4c", pose="kick", skin="#e2b98c", facing=1)
+        pix_fig(d, 17, 23, f + 2, "#9ad8cd", pose="walk", skin="#cfa074", facing=1)
+        pix_fig(d, 27, 23, f + 1, "#f49bb8", pose="stand", skin="#e2b98c", facing=-1)
+        # ball, moving toward the goal
+        bx = 13 + (f % 3) * 3
+        by = 20 - (1 if f % 3 == 1 else 0)
+        d.rectangle((bx, by, bx + 2, by + 2), fill=C("#fff2d6"))
+        d.point((bx + 2, by + 2), fill=C("#f6b45b"))
+        d.point((bx, by + 3), fill=C("#7f5446"))
+        # a tiny ground line / shadow
+        for x in (5, 8, 11, 17, 20, 27, 30):
+            d.point((x, 23), fill=C("#b9855e"))
+        strip.paste(img, (f * fw, 0))
+    return strip
+
+
+def draw_walkers_strip():
+    fw, fh, n = 12, 20, 6
+    strip = Image.new("RGBA", (fw * n, fh), (0, 0, 0, 0))
+    for f in range(n):
+        img = Image.new("RGBA", (fw, fh), (0, 0, 0, 0))
+        d = ImageDraw.Draw(img)
+        pix_fig(d, 6, 19, f, "#9ad8cd", pose="walk", skin="#e2b98c", hair="#7f5446", pants="#2d2b4b", facing=1)
+        d.point((6, 19), fill=C("#9b6a50"))
+        strip.paste(img, (f * fw, 0))
+    return strip
 
 
 def draw_near() -> Layer:
@@ -2606,12 +2928,20 @@ def with_alpha(frame: Image.Image, alpha: float) -> Image.Image:
 
 def composite_strip(view: Image.Image, img: Image.Image, spec, cam_x: int, width: int, frame_index: int):
     fw, fh = spec["fw"], spec["fh"]
-    frame = img.crop((frame_index * fw, 0, (frame_index + 1) * fw, fh))
-    frame = with_alpha(frame, spec.get("alpha", 1.0))
+    frames = spec["frames"]
+    base_frame = img.crop((frame_index * fw, 0, (frame_index + 1) * fw, fh))
+    base_frame = with_alpha(base_frame, spec.get("alpha", 1.0))
     off = int(cam_x * spec["factor"]) % W
     for item in spec["items"]:
+        if spec.get("plan") == "loops":
+            fi = (frame_index + item.get("frameOffset", 0)) % frames
+            frame = img.crop((fi * fw, 0, (fi + 1) * fw, fh))
+            frame = with_alpha(frame, spec.get("alpha", 1.0))
+            bob = 0.0
+        else:
+            frame = base_frame
+            bob = item.get("bobAmp", 0.0) * math.sin(item.get("phase", 0.0))
         sx = (item["u"] - off) % W
-        bob = item.get("bobAmp", 0.0) * math.sin(item.get("phase", 0.0))
         y = int(round(item["v"] + bob))
         if sx >= width and width < W:
             continue
@@ -2619,7 +2949,6 @@ def composite_strip(view: Image.Image, img: Image.Image, spec, cam_x: int, width
         if item.get("flip"):
             piece = piece.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
         if width >= W:
-            # full-panorama review: wrap the item at the 1600 seam
             if sx + fw <= W:
                 view.alpha_composite(piece, (sx, y))
             else:
@@ -2701,12 +3030,13 @@ def draw_micro_text(img, x, y, text, colour, scale=2):
 
 def draw_strip_readonly(out: Image.Image, img: Image.Image, spec, frame_index: int, base: int = 0):
     fw, fh = spec["fw"], spec["fh"]
-    frame = img.crop((frame_index * fw, 0, (frame_index + 1) * fw, fh))
-    frame = with_alpha(frame, spec.get("alpha", 1.0))
+    frames = spec["frames"]
     for item in spec["items"]:
-        x = item["u"] + base
+        fi = (frame_index + item.get("frameOffset", 0)) % frames if spec.get("plan") == "loops" else frame_index
+        frame = img.crop((fi * fw, 0, (fi + 1) * fw, fh))
+        frame = with_alpha(frame, spec.get("alpha", 1.0))
         y = int(round(item["v"] + item.get("bobAmp", 0.0) * math.sin(item.get("phase", 0.0))))
-        out.alpha_composite(frame, (x, y))
+        out.alpha_composite(frame, (item["u"] + base, y))
 
 
 def tile_check(layers):
@@ -2766,20 +3096,7 @@ def manifest(layers):
             }
         layers_out.append(layer)
 
-    for spec in STRIP_SPECS[1:]:
-        items = []
-        for it in spec["items"]:
-            items.append(
-                {
-                    "u": it["u"],
-                    "v": it["v"],
-                    "speedX": it["speedX"],
-                    "bobAmp": it["bobAmp"],
-                    "bobFreq": it["bobFreq"],
-                    "phase": it["phase"],
-                    "flip": it["flip"],
-                }
-            )
+    def strip_layer(spec):
         layer = {
             "id": spec["id"],
             "type": "strip",
@@ -2790,28 +3107,57 @@ def manifest(layers):
             "frameH": spec["fh"],
             "frames": spec["frames"],
             "fps": spec["fps"],
-            "items": items,
         }
         if spec.get("alpha", 1.0) < 1.0:
             layer["alpha"] = spec["alpha"]
-        layers_out.append(layer)
+        return layer
 
-    ambient_groups = [
-        {"layer": layer["id"], "actors": layer["items"]}
-        for layer in layers_out
-        if layer["id"] in {"birds", "zeppelin", "boats"}
-    ]
+    loop_specs = [s for s in STRIP_SPECS if s.get("plan") == "loops"]
+    ambient_specs = [s for s in STRIP_SPECS if s.get("plan") == "ambient"]
+    for spec in loop_specs + ambient_specs:
+        layers_out.append(strip_layer(spec))
+
+    loops_groups = []
+    for spec in loop_specs:
+        actors = []
+        for it in spec["items"]:
+            actor = {"u": it["u"], "v": it["v"]}
+            if "frameOffset" in it:
+                actor["frameOffset"] = it["frameOffset"]
+            if it.get("flip"):
+                actor["flip"] = True
+            actors.append(actor)
+        loops_groups.append({"layer": spec["id"], "actors": actors})
+
+    ambient_groups = []
+    for spec in ambient_specs:
+        actors = []
+        for it in spec["items"]:
+            actors.append(
+                {
+                    "u": it["u"],
+                    "v": it["v"],
+                    "speedX": it["speedX"],
+                    "bobAmp": it["bobAmp"],
+                    "bobFreq": it["bobFreq"],
+                    "phase": it["phase"],
+                    "flip": it["flip"],
+                }
+            )
+        ambient_groups.append({"layer": spec["id"], "actors": actors})
+
     return {
         "name": "hand",
         "title": "Solarpunk Waterfront — Hand-Painted",
         "width": W,
         "height": H,
-        # The waterfront is a bright, pale city; 1.2 is enough atmospheric
-        # lift without bleaching the cream. See specs/skybox.md.
-        "haze": 1.4,
-        # One programme, one clock: the flock, the airship and the boats are
-        # actors in the same timeline, not three independent animations.
-        "ambient": {"loopMs": 400000, "groups": ambient_groups},
+        # The waterfront is a bright, pale city; 1.4 is the readability lift
+        # the stage needs. See specs/skybox.md.
+        "haze": 1.0,
+        # One programme, one clock: walkers, the flock, the airship and boats
+        # share a timeline; the fixed vignettes have their own loop clock.
+        "ambient": {"loopMs": 90000, "groups": ambient_groups},
+        "loops": {"clockMs": 16000, "groups": loops_groups},
         "layers": layers_out,
     }
 
@@ -2834,6 +3180,12 @@ def verify_dimensions(paths):
         "mid.png": (1600, 600),
         "falls.png": (288, 240),
         "near.png": (1600, 600),
+        "cheer.png": (96, 20),
+        "picnic.png": (128, 20),
+        "date.png": (128, 20),
+        "spar.png": (128, 20),
+        "sport.png": (160, 24),
+        "walkers.png": (72, 20),
         "boats.png": (128, 16),
         "zeppelin.png": (192, 28),
         "birds.png": (64, 8),
@@ -2854,6 +3206,12 @@ def main():
     mid = draw_mid()
     falls = draw_falls()
     near = draw_near()
+    cheer = draw_cheer_strip()
+    picnic = draw_picnic_strip()
+    date = draw_date_strip()
+    spar = draw_spar_strip()
+    sport = draw_sport_strip()
+    walkers = draw_walkers_strip()
     birds = draw_birds_strip()
     zeppelin = draw_zeppelin_strip()
     boats = draw_boats_strip()
@@ -2863,6 +3221,12 @@ def main():
         "mid": mid.img,
         "falls": falls,
         "near": near.img,
+        "cheer": cheer,
+        "picnic": picnic,
+        "date": date,
+        "spar": spar,
+        "sport": sport,
+        "walkers": walkers,
         "birds": birds,
         "zeppelin": zeppelin,
         "boats": boats,
@@ -2876,6 +3240,12 @@ def main():
     sanitize_transparency(mid.img).save(OUT / "mid.png")
     sanitize_transparency(falls).save(OUT / "falls.png")
     sanitize_transparency(near.img).save(OUT / "near.png")
+    sanitize_transparency(cheer).save(OUT / "cheer.png")
+    sanitize_transparency(picnic).save(OUT / "picnic.png")
+    sanitize_transparency(date).save(OUT / "date.png")
+    sanitize_transparency(spar).save(OUT / "spar.png")
+    sanitize_transparency(sport).save(OUT / "sport.png")
+    sanitize_transparency(walkers).save(OUT / "walkers.png")
     sanitize_transparency(birds).save(OUT / "birds.png")
     sanitize_transparency(zeppelin).save(OUT / "zeppelin.png")
     sanitize_transparency(boats).save(OUT / "boats.png")
@@ -2893,12 +3263,16 @@ def main():
 
     verify_dimensions({name: OUT / name for name in (
         "sky.png", "far.png", "mid.png", "falls.png", "near.png",
-        "boats.png", "zeppelin.png", "birds.png", "contact.png", "preview-3screens.png",
+        "cheer.png", "picnic.png", "date.png", "spar.png", "sport.png",
+        "walkers.png", "boats.png", "zeppelin.png", "birds.png",
+        "contact.png", "preview-3screens.png",
     )})
 
     # palette audit: every pixel must be transparent or a palette colour
     allowed = set(PAL.values())
-    for name in ("sky.png", "far.png", "mid.png", "near.png", "falls.png", "birds.png", "zeppelin.png", "boats.png"):
+    for name in ("sky.png", "far.png", "mid.png", "near.png", "falls.png",
+                 "cheer.png", "picnic.png", "date.png", "spar.png", "sport.png",
+                 "walkers.png", "birds.png", "zeppelin.png", "boats.png"):
         im = Image.open(OUT / name).convert("RGBA")
         a = np.array(im)
         opaque = a[..., 3] > 0

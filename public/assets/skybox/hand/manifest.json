@@ -3,10 +3,78 @@
   "title": "Solarpunk Waterfront \u2014 Hand-Painted",
   "width": 1600,
   "height": 600,
-  "haze": 1.4,
+  "haze": 1.0,
   "ambient": {
-    "loopMs": 400000,
+    "loopMs": 90000,
     "groups": [
+      {
+        "layer": "walkers",
+        "actors": [
+          {
+            "u": 200,
+            "v": 492,
+            "speedX": 4.5,
+            "bobAmp": 0.5,
+            "bobFreq": 1.6,
+            "phase": 0.0,
+            "flip": false
+          },
+          {
+            "u": 280,
+            "v": 492,
+            "speedX": -5.2,
+            "bobAmp": 0.6,
+            "bobFreq": 1.7,
+            "phase": 1.0,
+            "flip": true
+          },
+          {
+            "u": 480,
+            "v": 492,
+            "speedX": 6.0,
+            "bobAmp": 0.5,
+            "bobFreq": 1.5,
+            "phase": 2.0,
+            "flip": false
+          },
+          {
+            "u": 880,
+            "v": 492,
+            "speedX": -4.5,
+            "bobAmp": 0.6,
+            "bobFreq": 1.8,
+            "phase": 3.0,
+            "flip": true
+          },
+          {
+            "u": 1120,
+            "v": 492,
+            "speedX": 7.0,
+            "bobAmp": 0.5,
+            "bobFreq": 1.6,
+            "phase": 4.0,
+            "flip": false
+          },
+          {
+            "u": 1380,
+            "v": 492,
+            "speedX": -6.2,
+            "bobAmp": 0.6,
+            "bobFreq": 1.7,
+            "phase": 5.0,
+            "flip": true
+          },
+          {
+            "u": 1520,
+            "v": 492,
+            "speedX": 5.0,
+            "bobAmp": 0.5,
+            "bobFreq": 1.5,
+            "phase": 0.5,
+            "flip": false
+          }
+        ]
+      },
       {
         "layer": "boats",
         "actors": [
@@ -186,6 +254,76 @@
       }
     ]
   },
+  "loops": {
+    "clockMs": 16000,
+    "groups": [
+      {
+        "layer": "cheer",
+        "actors": [
+          {
+            "u": 140,
+            "v": 492,
+            "frameOffset": 0
+          },
+          {
+            "u": 1000,
+            "v": 492,
+            "frameOffset": 2
+          }
+        ]
+      },
+      {
+        "layer": "picnic",
+        "actors": [
+          {
+            "u": 360,
+            "v": 492,
+            "frameOffset": 1
+          },
+          {
+            "u": 1160,
+            "v": 492,
+            "frameOffset": 3
+          }
+        ]
+      },
+      {
+        "layer": "date",
+        "actors": [
+          {
+            "u": 1340,
+            "v": 492,
+            "frameOffset": 2
+          }
+        ]
+      },
+      {
+        "layer": "spar",
+        "actors": [
+          {
+            "u": 850,
+            "v": 492,
+            "frameOffset": 1
+          }
+        ]
+      },
+      {
+        "layer": "sport",
+        "actors": [
+          {
+            "u": 640,
+            "v": 488,
+            "frameOffset": 0
+          },
+          {
+            "u": 1230,
+            "v": 488,
+            "frameOffset": 2
+          }
+        ]
+      }
+    ]
+  },
   "layers": [
     {
       "id": "sky",
@@ -207,7 +345,7 @@
       "id": "mid",
       "type": "image",
       "src": "assets/skybox/hand/mid.png",
-      "version": "066f4109315a",
+      "version": "154af8da29a7",
       "factor": 0.18
     },
     {
@@ -241,6 +379,72 @@
       "alpha": 0.6
     },
     {
+      "id": "cheer",
+      "type": "strip",
+      "src": "assets/skybox/hand/cheer.png",
+      "version": "cc171de21b14",
+      "factor": 0.5,
+      "frameW": 24,
+      "frameH": 20,
+      "frames": 4,
+      "fps": 6
+    },
+    {
+      "id": "picnic",
+      "type": "strip",
+      "src": "assets/skybox/hand/picnic.png",
+      "version": "61cde6428e4d",
+      "factor": 0.5,
+      "frameW": 32,
+      "frameH": 20,
+      "frames": 4,
+      "fps": 6
+    },
+    {
+      "id": "date",
+      "type": "strip",
+      "src": "assets/skybox/hand/date.png",
+      "version": "bc7517c8014e",
+      "factor": 0.5,
+      "frameW": 32,
+      "frameH": 20,
+      "frames": 4,
+      "fps": 6
+    },
+    {
+      "id": "spar",
+      "type": "strip",
+      "src": "assets/skybox/hand/spar.png",
+      "version": "dfa8d9f01db7",
+      "factor": 0.5,
+      "frameW": 32,
+      "frameH": 20,
+      "frames": 4,
+      "fps": 8
+    },
+    {
+      "id": "sport",
+      "type": "strip",
+      "src": "assets/skybox/hand/sport.png",
+      "version": "b16f00ff46de",
+      "factor": 0.5,
+      "frameW": 40,
+      "frameH": 24,
+      "frames": 4,
+      "fps": 8
+    },
+    {
+      "id": "walkers",
+      "type": "strip",
+      "src": "assets/skybox/hand/walkers.png",
+      "version": "fd92b87f6a17",
+      "factor": 0.5,
+      "frameW": 12,
+      "frameH": 20,
+      "frames": 6,
+      "fps": 8
+    },
+    {
       "id": "boats",
       "type": "strip",
       "src": "assets/skybox/hand/boats.png",
@@ -249,45 +453,7 @@
       "frameW": 32,
       "frameH": 16,
       "frames": 4,
-      "fps": 4,
-      "items": [
-        {
-          "u": 160,
-          "v": 536,
-          "speedX": -2.6,
-          "bobAmp": 1.0,
-          "bobFreq": 0.8,
-          "phase": 0.0,
-          "flip": false
-        },
-        {
-          "u": 540,
-          "v": 554,
-          "speedX": -3.8,
-          "bobAmp": 1.2,
-          "bobFreq": 0.9,
-          "phase": 1.4,
-          "flip": false
-        },
-        {
-          "u": 980,
-          "v": 530,
-          "speedX": -2.2,
-          "bobAmp": 0.8,
-          "bobFreq": 0.7,
-          "phase": 2.1,
-          "flip": false
-        },
-        {
-          "u": 1370,
-          "v": 548,
-          "speedX": -4.6,
-          "bobAmp": 1.1,
-          "bobFreq": 1.0,
-          "phase": 3.2,
-          "flip": false
-        }
-      ]
+      "fps": 4
     },
     {
       "id": "zeppelin",
@@ -298,27 +464,7 @@
       "frameW": 64,
       "frameH": 28,
       "frames": 3,
-      "fps": 10,
-      "items": [
-        {
-          "u": 300,
-          "v": 112,
-          "speedX": 4.2,
-          "bobAmp": 2.4,
-          "bobFreq": 0.32,
-          "phase": 0.2,
-          "flip": false
-        },
-        {
-          "u": 1300,
-          "v": 70,
-          "speedX": 3.0,
-          "bobAmp": 2.0,
-          "bobFreq": 0.28,
-          "phase": 1.6,
-          "flip": false
-        }
-      ]
+      "fps": 10
     },
     {
       "id": "birds",
@@ -329,117 +475,7 @@
       "frameW": 16,
       "frameH": 8,
       "frames": 4,
-      "fps": 10,
-      "items": [
-        {
-          "u": 70,
-          "v": 58,
-          "speedX": 7.5,
-          "bobAmp": 1.2,
-          "bobFreq": 0.9,
-          "phase": 0.0,
-          "flip": false
-        },
-        {
-          "u": 210,
-          "v": 96,
-          "speedX": -9.0,
-          "bobAmp": 1.5,
-          "bobFreq": 1.2,
-          "phase": 1.1,
-          "flip": true
-        },
-        {
-          "u": 340,
-          "v": 74,
-          "speedX": 6.0,
-          "bobAmp": 1.0,
-          "bobFreq": 0.7,
-          "phase": 2.2,
-          "flip": false
-        },
-        {
-          "u": 470,
-          "v": 120,
-          "speedX": -11.0,
-          "bobAmp": 2.0,
-          "bobFreq": 1.4,
-          "phase": 3.3,
-          "flip": true
-        },
-        {
-          "u": 610,
-          "v": 88,
-          "speedX": 8.0,
-          "bobAmp": 1.3,
-          "bobFreq": 1.0,
-          "phase": 4.4,
-          "flip": false
-        },
-        {
-          "u": 760,
-          "v": 145,
-          "speedX": -7.0,
-          "bobAmp": 1.6,
-          "bobFreq": 1.1,
-          "phase": 5.5,
-          "flip": true
-        },
-        {
-          "u": 900,
-          "v": 64,
-          "speedX": 10.0,
-          "bobAmp": 1.1,
-          "bobFreq": 0.8,
-          "phase": 0.7,
-          "flip": false
-        },
-        {
-          "u": 1040,
-          "v": 170,
-          "speedX": -6.0,
-          "bobAmp": 1.8,
-          "bobFreq": 1.3,
-          "phase": 1.8,
-          "flip": true
-        },
-        {
-          "u": 1180,
-          "v": 100,
-          "speedX": 9.0,
-          "bobAmp": 1.4,
-          "bobFreq": 0.95,
-          "phase": 2.9,
-          "flip": false
-        },
-        {
-          "u": 1320,
-          "v": 55,
-          "speedX": -12.0,
-          "bobAmp": 1.2,
-          "bobFreq": 1.25,
-          "phase": 4.0,
-          "flip": true
-        },
-        {
-          "u": 1450,
-          "v": 130,
-          "speedX": 5.0,
-          "bobAmp": 1.0,
-          "bobFreq": 0.75,
-          "phase": 5.1,
-          "flip": false
-        },
-        {
-          "u": 1560,
-          "v": 185,
-          "speedX": -8.0,
-          "bobAmp": 1.7,
-          "bobFreq": 1.15,
-          "phase": 0.3,
-          "flip": true
-        }
-      ]
+      "fps": 10
     }
   ]
 }

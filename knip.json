@@ -1,15 +1,10 @@
 {
 	"$schema": "https://unpkg.com/knip@6/schema.json",
-	"entry": [
-		"scripts/*.ts",
-		"scripts/skybox/*/generate.*",
-		"scripts/skybox/*/scene.*",
-		"vite/*.ts"
-	],
+	"entry": ["scripts/*.ts", "vite/*.ts"],
 	"project": [
 		"src/**/*.{ts,tsx}",
 		"server/**/*.ts",
-		"scripts/**/*.{ts,js,mjs}",
+		"scripts/**/*.ts",
 		"vite/**/*.ts"
 	],
 	"vitest": true,

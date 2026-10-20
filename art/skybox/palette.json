@@ -1,6 +1,6 @@
 {
   "name": "solarpunk-noon",
-  "note": "The shared palette for both skybox candidates. Pick from `all`; the named groups are there to keep the two pipelines in the same world. No pure black and no pure white: the deepest shadow is indigo, the brightest highlight is warm cream.",
+  "note": "The shared palette for the hand-painted Waterfront. Pick from `all`; the named groups keep the canal, city, people and sky in one world. No pure black and no pure white: the deepest shadow is indigo, the brightest highlight is warm cream.",
   "groups": {
     "sky": ["#244f7d", "#2f6b98", "#3f88ad", "#5aa6bd", "#78c2c7", "#9ad8cd", "#c6ebdc", "#eaf3df"],
     "sun": ["#fff3c9", "#ffe6a1", "#ffd37a", "#f6b45b"],

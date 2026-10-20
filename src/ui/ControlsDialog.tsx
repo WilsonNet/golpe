@@ -31,11 +31,6 @@ import {
 	type DeckSetting,
 	inputSettings,
 } from "../game/input/Scheme";
-import {
-	type SkyChoice,
-	skyboxChoice,
-	storeSkybox,
-} from "../game/render/skyboxAssets";
 
 /** The aiming schemes, as a player chooses between them. */
 const SCHEMES: { value: AimScheme; label: string; hint: string }[] = [
@@ -58,14 +53,6 @@ const DECKS: { value: DeckSetting; label: string }[] = [
 	{ value: "off", label: "Off" },
 ];
 
-/** The stage candidates, the earlier art studies, and the plain gradient. */
-const SKIES: { value: SkyChoice; label: string }[] = [
-	{ value: "stage", label: "Stage" },
-	{ value: "hand", label: "Waterfront" },
-	{ value: "voxel", label: "Voxel" },
-	{ value: "off", label: "Plain" },
-];
-
 /** Which slot of which action is waiting for a button. */
 interface Capture {
 	action: Action;
@@ -84,7 +71,6 @@ export function ControlsDialog({ onClose }: { onClose: () => void }) {
 	// store's change events arriving at a bump state nothing in the JSX read.
 	const [bindingsMap, setBindingsMap] = useState(() => bindings.snapshot());
 	const [settings, setSettings] = useState(() => inputSettings.snapshot());
-	const [sky, setSky] = useState<SkyChoice>(() => skyboxChoice());
 	useEffect(() => {
 		const offBindings = bindings.subscribe(() =>
 			setBindingsMap(bindings.snapshot()),
@@ -213,35 +199,6 @@ export function ControlsDialog({ onClose }: { onClose: () => void }) {
 					<strong>Auto</strong> draws it when a finger is the pointer and aiming
 					is set to Controller. Pair a keyboard to a phone and turn it{" "}
 					<strong>Off</strong>.
-				</p>
-			</div>
-
-			<div className="gd-setting">
-				<div className="gd-setting-head">
-					<span>Skybox</span>
-					<div className="gd-choice">
-						{SKIES.map((s) => (
-							<button
-								key={s.value}
-								type="button"
-								className={`gd-chip${sky === s.value ? " gd-chip-on" : ""}`}
-								onClick={() => {
-									storeSkybox(s.value);
-									setSky(s.value);
-								}}
-							>
-								{s.label}
-							</button>
-						))}
-					</div>
-				</div>
-				<p className="gd-setting-hint">
-					The background behind the arena. <strong>Stage</strong> is the calm,
-					Smash-style waterfront built for readability; <strong>Waterfront</strong>{" "}
-					and <strong>Voxel</strong> are the earlier, busier art studies;{" "}
-					<strong>Plain</strong> keeps the old gradient. It applies from the next
-					match; a <strong>?sky=</strong> link chooses the candidate when the
-					page loads.
 				</p>
 			</div>
 

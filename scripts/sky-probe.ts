@@ -15,14 +15,14 @@
  *
  * It also writes a screenshot of each candidate at one and three screens, in
  * `.playwright-mcp/skybox/`, for a human to judge the composition. The game
- * itself is the gallery: `?sky=voxel` / `?sky=hand`.
+ * itself is the gallery: `?sky=hand` / `?sky=off`.
  */
 import { mkdir } from "node:fs/promises";
 import { chromium } from "playwright";
 
 const BASE = "http://localhost:8084";
 const SHOTS = ".playwright-mcp/skybox";
-const VARIANTS = ["stage", "voxel", "hand"] as const;
+const VARIANTS = ["hand"] as const;
 
 interface DebugState {
 	variant: string;
@@ -46,6 +46,8 @@ interface DebugState {
 	}[];
 	movers: { id: string; x: number; y: number; speedX: number }[];
 	ambient: { loopMs: number; groups: number; actors: number } | null;
+	loops: { clockMs: number; groups: number; actors: number } | null;
+	loopFrame: number;
 }
 
 let failed = false;
@@ -129,7 +131,7 @@ for (const variant of VARIANTS) {
 		`${variant}: at least one animated waterfall`,
 		`falls=${first.animatedFalls}`,
 	);
-	if (variant === "hand" || variant === "stage") {
+	if (variant === "hand") {
 		check(
 			first.movers.length >= 3,
 			`${variant}: birds, zeppelin and boats are movers`,
@@ -143,6 +145,15 @@ for (const variant of VARIANTS) {
 			first.ambient
 				? `loop=${first.ambient.loopMs}ms groups=${first.ambient.groups} actors=${first.ambient.actors}`
 				: "no ambient plan",
+		);
+		check(
+			first.loops !== null &&
+				first.loops.groups >= 4 &&
+				first.loops.actors >= 8,
+			`${variant}: one loop plan drives the stationary people`,
+			first.loops
+				? `clock=${first.loops.clockMs}ms groups=${first.loops.groups} actors=${first.loops.actors}`
+				: "no loops plan",
 		);
 	} else if (first.movers.length > 0) {
 		console.log(
@@ -202,6 +213,13 @@ for (const variant of VARIANTS) {
 			advanced,
 			`${variant}: the ambient movers advance`,
 			`${first.movers.length} movers over ${second.elapsedMs - first.elapsedMs}ms`,
+		);
+	}
+	if (first.loops) {
+		check(
+			second.loopFrame !== first.loopFrame,
+			`${variant}: the stationary people loop`,
+			`frame ${first.loopFrame} → ${second.loopFrame}`,
 		);
 	}
 

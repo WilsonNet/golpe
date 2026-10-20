@@ -447,6 +447,51 @@ export const HUD_CSS = `
 	line-height: 1.5;
 	margin: 8px 0 0;
 }
+/* The Graphics skybox comparison: two real previews, not a dropdown. */
+.gd-sky-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+	gap: 10px;
+	margin-top: 10px;
+}
+.gd-sky-card {
+	display: block;
+	padding: 0;
+	overflow: hidden;
+	border: 1px solid rgba(255, 255, 255, 0.22);
+	border-radius: 9px;
+	background: #000;
+	color: inherit;
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+.gd-sky-card img {
+	display: block;
+	width: 100%;
+	aspect-ratio: 4 / 3;
+	object-fit: cover;
+	object-position: left center;
+	opacity: 0.9;
+}
+.gd-sky-card span {
+	display: block;
+	padding: 8px 10px;
+	font-size: 12px;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+}
+.gd-sky-card:hover {
+	border-color: #0ec3c9;
+}
+.gd-sky-card-on,
+.gd-sky-card-on:hover {
+	border-color: #ffd166;
+	box-shadow: 0 0 0 1px #ffd166 inset;
+}
+.gd-sky-card-on span {
+	color: #ffd166;
+}
 
 .gd-bind-table {
 	width: 100%;

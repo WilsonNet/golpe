@@ -59,6 +59,7 @@ import type { MatchMode } from "../game/simulation/Teams";
 import { CP_SCREENS } from "../tweakables/control";
 import { ULT_MAX_CAP } from "../tweakables/ultimate";
 import { ControlsDialog } from "./ControlsDialog";
+import { GraphicsSettings } from "./GraphicsSettings";
 import { HUD_CSS } from "./hudStyles";
 import { MoveList } from "./MoveList";
 import { MENU_CSS } from "./menuStyles";
@@ -73,7 +74,15 @@ const SCORE_LIMIT_CP = 3;
 const TIME_LIMIT_SEC = 300;
 const FREEZE_TIME_SEC = 4;
 
-type View = "home" | "host" | "join" | "howto" | "controls" | "moves" | "sound";
+type View =
+	| "home"
+	| "host"
+	| "join"
+	| "howto"
+	| "controls"
+	| "graphics"
+	| "moves"
+	| "sound";
 
 interface HostSettings {
 	mode: MatchMode;
@@ -372,16 +381,26 @@ export function MainMenu({
 									<span>Aiming scheme, on-screen gamepad, rebinding.</span>
 								</button>
 							</div>
-							<button
-								className="gd-play-item"
-								type="button"
-								onClick={() => setView("sound")}
-							>
-								<strong>Sound</strong>
-								<span>
-									Master, music and effects — set the mix before you play.
-								</span>
-							</button>
+							<div className="gd-two">
+								<button
+									className="gd-play-item"
+									type="button"
+									onClick={() => setView("graphics")}
+								>
+									<strong>Graphics</strong>
+									<span>Skybox on or off — the low-distraction setting.</span>
+								</button>
+								<button
+									className="gd-play-item"
+									type="button"
+									onClick={() => setView("sound")}
+								>
+									<strong>Sound</strong>
+									<span>
+										Master, music and effects — set the mix before you play.
+									</span>
+								</button>
+							</div>
 						</div>
 					</>
 				) : null}
@@ -408,6 +427,16 @@ export function MainMenu({
 					<>
 						<h2 className="gd-title">Options</h2>
 						<ControlsDialog onClose={() => setView("home")} />
+					</>
+				) : null}
+
+				{view === "graphics" ? (
+					<>
+						<h2 className="gd-title">Graphics</h2>
+						<p className="gd-sub">
+							Visual comfort. The skybox choice applies from the next match.
+						</p>
+						<GraphicsSettings onClose={() => setView("home")} />
 					</>
 				) : null}
 

@@ -16,7 +16,7 @@
  * in the city layer so it cannot drift away from its aqueduct.
  */
 
-import { Container, Graphics, Sprite } from "pixi.js";
+import { BlurFilter, ColorMatrixFilter, Container, Graphics, Sprite } from "pixi.js";
 import { TEX, tex } from "./assets";
 import {
 	type LoadedSkyboxLayer,
@@ -24,6 +24,7 @@ import {
 	loadedSkybox,
 	type SkyboxAmbientDef,
 	type SkyChoice,
+	type SkyboxLoopsDef,
 	skyboxChoice,
 } from "./skyboxAssets";
 
@@ -58,6 +59,10 @@ export interface SkyboxDebugState {
 	movers: { id: string; x: number; y: number; speedX: number }[];
 	/** The single background-animation programme, if the candidate has one. */
 	ambient: { loopMs: number; groups: number; actors: number } | null;
+	/** The fixed-position looping-vignette programme. */
+	loops: { clockMs: number; groups: number; actors: number } | null;
+	/** The first loop strip's current frame, for the probe. */
+	loopFrame: number;
 }
 
 interface ImageView {
@@ -78,6 +83,7 @@ interface StripItem {
 	bobAmp: number;
 	bobFreq: number;
 	phase: number;
+	frameOffset: number;
 	flip: boolean;
 	copies: [Sprite, Sprite];
 	/** Last drawn screen position, for the probe. */
@@ -114,46 +120,42 @@ const IMAGE_COPIES = 3;
  * background back into the sky's value band.
  */
 const TOP_SCRIM_COLOR = 0x071823;
-/** The HUD scrim fades out instead of ending on a hard band across the sky. */
+/** A whisper of HUD scrim; the background itself is not darkened here. */
 const TOP_SCRIM_FADE: readonly [y: number, h: number, alpha: number][] = [
-	[0, 20, 0.16],
-	[20, 20, 0.15],
-	[40, 20, 0.14],
-	[60, 20, 0.12],
-	[80, 20, 0.1],
-	[100, 20, 0.07],
-	[120, 20, 0.04],
-	[140, 20, 0.02],
+	[0, 20, 0.08],
+	[20, 20, 0.07],
+	[40, 20, 0.06],
+	[60, 20, 0.05],
+	[80, 20, 0.04],
+	[100, 20, 0.03],
+	[120, 20, 0.02],
+	[140, 20, 0.01],
 ];
-/** [y, h, alpha] bands of the pale screen haze; alpha grows toward the floor. */
-const HAZE_BANDS: readonly [y: number, h: number, alpha: number][] = [
-	[0, 130, 0.0],
-	[130, 40, 0.03],
-	[170, 40, 0.05],
-	[210, 40, 0.07],
-	[250, 40, 0.1],
-	[290, 40, 0.14],
-	[330, 40, 0.18],
-	[370, 40, 0.23],
-	[410, 40, 0.28],
-	[450, 40, 0.34],
-	[490, 40, 0.4],
-	[530, 40, 0.44],
-	[570, 30, 0.46],
-];
-const HAZE_COLOR = 0xc8ece4;
+/** How far the background art is pushed behind the fight, at grade 1. */
+const BACKGROUND_BLUR_PX = 1.1;
+const BACKGROUND_DESATURATE = 0.32;
+const BACKGROUND_DARKEN = 0.045;
 
 export class Skybox {
 	private readonly root = new Container();
+	/** The painted world; the atmospheric grade and blur belong only to this. */
+	private readonly art = new Container();
+	/**
+	 * The people and moving actors above the blurred scenery. They are the
+	 * background's *life*, so they stay crisp while the city gives way to the
+	 * atmospheric grade behind them.
+	 */
+	private readonly inhabitants = new Container();
 	private readonly images: ImageView[] = [];
 	private readonly strips: StripView[] = [];
 	private readonly fallback: Sprite | null = null;
 	private readonly scrim: Graphics | null = null;
-	private readonly hazeOverlay: Graphics | null = null;
 	private readonly panoramaW: number;
 	private readonly panoramaH: number;
 	private readonly haze: number;
 	private readonly ambient: SkyboxAmbientDef | null;
+	private readonly loops: SkyboxLoopsDef | null;
+	private loopFrame = 0;
 	private elapsedMs = 0;
 	private fallFrame = 0;
 	private cameraX = 0;
@@ -167,6 +169,7 @@ export class Skybox {
 		this.panoramaH = loaded?.manifest.height ?? view.height;
 		this.haze = Math.max(0, Math.min(2, loaded?.manifest.haze ?? 1));
 		this.ambient = loaded?.manifest.ambient ?? null;
+		this.loops = loaded?.manifest.loops ?? null;
 		parent.addChild(this.root);
 
 		if (!loaded) {
@@ -181,11 +184,21 @@ export class Skybox {
 			return;
 		}
 
+		this.root.addChild(this.art);
+		this.root.addChild(this.inhabitants);
+		// The inhabitants stay crisp, but they are still background: pull a
+		// little chroma out so a bright boat or shirt behind a fighter cannot
+		// out-saturate the fighter the player is tracking.
+		const inhabitantGrade = new ColorMatrixFilter();
+		inhabitantGrade.saturate(0.8, false);
+		inhabitantGrade.brightness(0.98, true);
+		this.inhabitants.filters = [inhabitantGrade];
 		for (const def of loaded.layers) {
 			if (def.type === "strip") {
 				const frames = def.slices;
 				if (!frames?.length) continue;
 				const group = this.ambient?.groups.find((g) => g.layer === def.id);
+				const loopGroup = this.loops?.groups.find((g) => g.layer === def.id);
 				const strip: StripView = {
 					def,
 					order: this.images.length + this.strips.length,
@@ -193,14 +206,15 @@ export class Skybox {
 					items: [],
 					lastFrame: -1,
 				};
-				for (const item of group?.actors ?? def.items ?? []) {
+				for (const item of loopGroup?.actors ?? group?.actors ?? def.items ?? []) {
 					const a = new Sprite(frames[0]);
 					const b = new Sprite(frames[0]);
 					for (const s of [a, b]) {
 						s.anchor.set(0);
 						s.alpha = def.alpha ?? 1;
 						if (item.flip) s.scale.x = -1;
-						this.root.addChild(s);
+						if (group || loopGroup) this.inhabitants.addChild(s);
+						else this.art.addChild(s);
 					}
 					strip.items.push({
 						u: item.u,
@@ -209,6 +223,7 @@ export class Skybox {
 						bobAmp: item.bobAmp ?? 0,
 						bobFreq: item.bobFreq ?? 0,
 						phase: item.phase ?? 0,
+						frameOffset: item.frameOffset ?? 0,
 						flip: item.flip ?? false,
 						copies: [a, b],
 						lastX: 0,
@@ -237,26 +252,26 @@ export class Skybox {
 				sprite.width = layer.width;
 				sprite.height = layer.height;
 				sprite.alpha = def.alpha ?? 1;
-				this.root.addChild(sprite);
+				this.art.addChild(sprite);
 				layer.copies.push(sprite);
 			}
 			this.images.push(layer);
 		}
 
-		// Above every layer, below the arena. The pale screen haze carries the
-		// atmospheric grade through the combat band; the dark top scrim is the
-		// HUD's own backdrop. Both follow the camera and scale to the view, so
-		// they never repeat with the art.
-		const haze = this.haze;
-		const hazeOverlay = new Graphics();
-		hazeOverlay.blendMode = "screen";
-		for (const [y, h, alpha] of HAZE_BANDS) {
-			hazeOverlay
-				.rect(0, y, 1, h)
-				.fill({ color: HAZE_COLOR, alpha: Math.min(0.7, alpha * haze) });
-		}
-		this.hazeOverlay = hazeOverlay;
-		this.root.addChild(hazeOverlay);
+		// The grade lives behind the fight, not on it. Blur the painted world
+		// and pull a little brightness/saturation out of it; the actors layer
+		// is above this and gets a small brightness lift in Stage. The top
+		// scrim is the only dark overlay, and it exists just for the HUD.
+		const grade = new ColorMatrixFilter();
+		grade.brightness(1 - BACKGROUND_DARKEN * this.haze, false);
+		grade.saturate(1 - BACKGROUND_DESATURATE * this.haze, true);
+		this.art.filters = [
+			new BlurFilter({
+				strength: BACKGROUND_BLUR_PX,
+				quality: 2,
+			}),
+			grade,
+		];
 
 		const scrim = new Graphics();
 		for (const [y, h, alpha] of TOP_SCRIM_FADE) {
@@ -300,11 +315,6 @@ export class Skybox {
 			this.scrim.y = 0;
 			this.scrim.scale.x = viewW;
 		}
-		if (this.hazeOverlay) {
-			this.hazeOverlay.x = cameraX;
-			this.hazeOverlay.y = 0;
-			this.hazeOverlay.scale.x = viewW;
-		}
 
 		const W = this.panoramaW;
 		for (const layer of this.images) {
@@ -334,16 +344,20 @@ export class Skybox {
 			// whose speed does not divide the panorama.
 			const clockMs = this.elapsedMs;
 			const fps = strip.def.fps ?? 8;
-			const frame = Math.floor(clockMs / (1000 / fps)) % frames.length;
-			const frameTexture = frames[frame];
-			if (!frameTexture) continue;
-			if (frame !== strip.lastFrame) {
-				strip.lastFrame = frame;
-				if (strip.def.id === "falls") this.fallFrame = frame;
+			const baseFrame = Math.floor(clockMs / (1000 / fps)) % frames.length;
+			if (baseFrame !== strip.lastFrame) {
+				strip.lastFrame = baseFrame;
+				if (strip.def.id === "falls") this.fallFrame = baseFrame;
+				if (this.loops?.groups.some((g) => g.layer === strip.def.id))
+					this.loopFrame = baseFrame;
 				for (const item of strip.items) {
+					const frame =
+						(baseFrame + item.frameOffset + frames.length) % frames.length;
+					const texture = frames[frame];
+					if (!texture) continue;
 					const [a, b] = item.copies;
-					a.texture = frameTexture;
-					b.texture = frameTexture;
+					a.texture = texture;
+					b.texture = texture;
 				}
 			}
 
@@ -424,6 +438,16 @@ export class Skybox {
 					),
 				}
 			: null;
+		const loops = this.loops
+			? {
+					clockMs: this.loops.clockMs,
+					groups: this.loops.groups.length,
+					actors: this.loops.groups.reduce(
+						(n, group) => n + group.actors.length,
+						0,
+					),
+				}
+			: null;
 		return {
 			variant: loadedSkybox()?.variant ?? skyboxChoice(),
 			loaded: this.images.length > 0 || this.strips.length > 0,
@@ -441,12 +465,21 @@ export class Skybox {
 			imageScale: first?.copies[0]?.scale.x ?? 0,
 			movers,
 			ambient,
+			loops,
+			loopFrame: this.loopFrame,
 			order,
 		};
 	}
 
 	destroy() {
 		if (this.root.destroyed) return;
+		// Filters are GPU resources; the container tree does not own their
+		// lifetime. A Graphics switch can rebuild the skybox often, so release
+		// the blur and grade with it.
+		for (const filter of this.art.filters ?? []) filter.destroy();
+		this.art.filters = [];
+		for (const filter of this.inhabitants.filters ?? []) filter.destroy();
+		this.inhabitants.filters = [];
 		this.parent.removeChild(this.root);
 		// Textures are shared, loaded once and reused by the next arena build;
 		// the sprites are the only per-stage cost.

@@ -310,6 +310,7 @@ export class Match {
 	private skybox: Skybox | undefined;
 	/** The stable hook identity, so a destroyed match cannot delete its successor's. */
 	private readonly skyboxHook = () => this.skybox?.debugState() ?? null;
+	private skyboxUnsubscribe: (() => void) | undefined;
 	private readonly fx: MeleeFx;
 	private readonly blackHole: BlackHoleFx;
 	private readonly plates: Nameplates;
@@ -494,6 +495,11 @@ export class Match {
 		// engine's crossfade; `onLocalHero` re-points it mid-match.
 		sound.setMusic(this.hero);
 		this.redrawArena();
+		// Graphics → Skybox swaps the backdrop live. The simulation never hears
+		// this event; it only rebuilds the presentation container around the
+		// new textures, exactly as an arena resize does.
+		this.skyboxUnsubscribe = EventBus.on("skybox-changed", (() =>
+			this.refreshSkybox()) as never);
 
 		this.queries = createQueries(this.world);
 		this.fx = new MeleeFx(stage.effects, stage);
@@ -2756,6 +2762,35 @@ export class Match {
 		this.skybox?.destroy();
 		drawArena(this.stage.background, this.stage.arena, this.arena);
 		this.skybox = new Skybox(this.stage.background, this.view);
+		// The camera may already be scrolled when a room corrects its width;
+		// position the fresh backdrop before the next frame can show it at 0.
+		this.skybox.update(
+			this.stage.cameraX,
+			this.stage.cameraY,
+			0,
+			this.view.width / this.stage.zoom,
+			this.view.height / this.stage.zoom,
+		);
+		window.__skyboxDebug = this.skyboxHook;
+	}
+
+	/**
+	 * Swap only the backdrop, in place.
+	 *
+	 * The Graphics menu can change the skybox mid-match. The arena platforms,
+	 * camera and simulation are untouched; only the skybox container is
+	 * rebuilt around the newly loaded textures.
+	 */
+	private refreshSkybox() {
+		this.skybox?.destroy();
+		this.skybox = new Skybox(this.stage.background, this.view);
+		this.skybox.update(
+			this.stage.cameraX,
+			this.stage.cameraY,
+			0,
+			this.view.width / this.stage.zoom,
+			this.view.height / this.stage.zoom,
+		);
 		window.__skyboxDebug = this.skyboxHook;
 	}
 
@@ -4223,9 +4258,11 @@ export class Match {
 	destroy() {
 		this.nameUnsubscribe?.();
 		this.potgSkipUnsubscribe?.();
+		this.skyboxUnsubscribe?.();
 		window.clearTimeout(this.shareHintTimer);
 		this.input.destroy();
 		this.skybox?.destroy();
+		this.stage.destroy();
 		if (window.__skyboxDebug === this.skyboxHook) delete window.__skyboxDebug;
 		this.blackHole.destroy();
 		this.aimLine.destroy();

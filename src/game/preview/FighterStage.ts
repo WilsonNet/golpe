@@ -1752,6 +1752,7 @@ export class FighterStage {
 		this.destroyed = true;
 		this.resizeObserver?.disconnect();
 		this.skybox?.destroy();
+		this.stage?.destroy();
 		this.numbers?.destroy();
 		const app = this.app;
 		if (app) {

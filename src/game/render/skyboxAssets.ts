@@ -14,15 +14,16 @@
  */
 
 import { Assets, Rectangle, Texture } from "pixi.js";
+import { EventBus } from "../EventBus";
 
-/** The candidates. A new one is a folder and a line here. */
-const SKY_VARIANTS = ["stage", "voxel", "hand"] as const;
+/** The style. `off` is the plain-gradient escape hatch. */
+const SKY_VARIANTS = ["hand"] as const;
 type SkyVariant = (typeof SKY_VARIANTS)[number];
 
 /** What `?sky=off` means. */
 export type SkyChoice = SkyVariant | "off";
 
-const DEFAULT_VARIANT: SkyVariant = "stage";
+const DEFAULT_VARIANT: SkyVariant = "hand";
 
 interface SkyboxItemDef {
 	u: number;
@@ -41,6 +42,8 @@ interface SkyboxItemDef {
 	phase?: number;
 	/** Mirror the frame horizontally; use for art drawn facing right that moves left. */
 	flip?: boolean;
+	/** Start this actor's frame cycle this many frames later; for a varied crowd. */
+	frameOffset?: number;
 }
 
 /**
@@ -61,6 +64,19 @@ export interface SkyboxAmbientDef {
 	/** Master loop in milliseconds. All groups share this clock. */
 	loopMs: number;
 	groups: SkyboxAmbientGroupDef[];
+}
+
+/**
+ * Fixed-position looping vignettes — people cheering, picnicking, dating,
+ * sparring, playing a small match. This is the **looping layer**; the
+ * `ambient` plan is the separate **moving layer** (walkers, birds, boats).
+ * Both are sampled from the same elapsed clock, but they are authored as two
+ * distinct programmes so a stationary vignette never drifts across the quay.
+ */
+export interface SkyboxLoopsDef {
+	/** Intended programme length in milliseconds. */
+	clockMs: number;
+	groups: { layer: string; actors: SkyboxItemDef[] }[];
 }
 
 export interface SkyboxLayerDef {
@@ -99,6 +115,8 @@ export interface SkyboxManifest {
 	haze?: number;
 	/** One programme for every moving background actor. */
 	ambient?: SkyboxAmbientDef;
+	/** One programme for every fixed-position looping vignette. */
+	loops?: SkyboxLoopsDef;
 	layers: SkyboxLayerDef[];
 }
 
@@ -138,7 +156,7 @@ function storedSkybox(): SkyChoice | null {
 	}
 }
 
-/** Remember a choice for the next match, and make the next load honour it. */
+/** Remember a choice, and make the next load honour it. */
 export function storeSkybox(value: SkyChoice): void {
 	try {
 		window.localStorage.setItem(STORAGE_KEY, value);
@@ -147,14 +165,31 @@ export function storeSkybox(value: SkyChoice): void {
 	}
 	// The menu launches by swapping React state, not by reloading the page.
 	// Do **not** drop the current `loaded` candidate: a match already on screen
-	// must keep its backdrop if it rebuilds before the next match starts. The
+	// must keep its backdrop if it rebuilds before the new assets arrive. The
 	// next `preloadSkyboxAssets` sees `pendingChoice` and loads the new one;
-	// `Skybox` is constructed only after that await.
+	// `applySkyboxChoice` then tells the match to swap it in place.
 	choice = value;
 	pendingChoice = true;
 }
 
-/** `?sky=voxel|hand|off`; otherwise the stored choice; otherwise the default. */
+let applyToken = 0;
+
+/**
+ * Load the selected candidate and tell the live presentation to swap it in.
+ *
+ * The simulation never hears this event. A match keeps its tick, camera and
+ * fighters; the `Skybox` is destroyed and rebuilt around the new textures.
+ * Multiple quick clicks are tokenised so an older fetch cannot swap in after
+ * a newer choice.
+ */
+export async function applySkyboxChoice(): Promise<void> {
+	const token = ++applyToken;
+	await preloadSkyboxAssets();
+	if (token !== applyToken) return;
+	EventBus.emit("skybox-changed");
+}
+
+/** `?sky=hand|off`; otherwise the stored choice; otherwise the default. */
 export function skyboxChoice(): SkyChoice {
 	if (choice) return choice;
 	const raw =

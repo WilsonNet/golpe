@@ -20,13 +20,21 @@ import type { HeroId } from "../game/simulation/Heroes";
 import { TEAM_NAMES, type TeamId } from "../game/simulation/Teams";
 import { teamCss } from "../game/teamPalette";
 import { ControlsDialog } from "./ControlsDialog";
+import { GraphicsSettings } from "./GraphicsSettings";
 import { HeroSelect } from "./HeroSelect";
 import { HUD_CSS } from "./hudStyles";
 import { MoveList } from "./MoveList";
 import { SoundMixer } from "./SoundMixer";
 import { useMatch } from "./useMatch";
 
-type View = "menu" | "controls" | "heroes" | "room" | "moves" | "sound";
+type View =
+	| "menu"
+	| "controls"
+	| "graphics"
+	| "heroes"
+	| "room"
+	| "moves"
+	| "sound";
 
 // Cache last roster so a menu opened after the last broadcast still has data.
 // Updated by the single global listener below — no component needs to request it.
@@ -129,6 +137,7 @@ export function PauseMenu({
 						onHeroes={() => setView("heroes")}
 						onMoves={() => setView("moves")}
 						onControls={() => setView("controls")}
+						onGraphics={() => setView("graphics")}
 						onSound={() => setView("sound")}
 						onRoom={() => setView("room")}
 						onExit={onExitToMenu}
@@ -151,6 +160,14 @@ export function PauseMenu({
 						>
 							Back
 						</button>
+					</>
+				) : view === "graphics" ? (
+					<>
+						<h2 className="gd-title">Graphics</h2>
+						<p className="gd-sub">
+							Visual comfort. The skybox choice applies from the next match.
+						</p>
+						<GraphicsSettings onClose={() => setView("menu")} />
 					</>
 				) : view === "heroes" ? (
 					<>
@@ -195,6 +212,7 @@ function MainMenuView({
 	onHeroes,
 	onMoves,
 	onControls,
+	onGraphics,
 	onSound,
 	onRoom,
 	onExit,
@@ -205,6 +223,7 @@ function MainMenuView({
 	onHeroes: () => void;
 	onMoves: () => void;
 	onControls: () => void;
+	onGraphics: () => void;
 	onSound: () => void;
 	onRoom: () => void;
 	onExit: () => void;
@@ -235,6 +254,9 @@ function MainMenuView({
 				</button>
 				<button className="gd-btn" type="button" onClick={onControls}>
 					Controls
+				</button>
+				<button className="gd-btn" type="button" onClick={onGraphics}>
+					Graphics
 				</button>
 				<button className="gd-btn" type="button" onClick={onSound}>
 					Sound
