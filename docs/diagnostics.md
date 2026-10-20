@@ -40,7 +40,7 @@ node scripts/aim-probe.ts                      # cursor, facing and shot directi
 node scripts/training-probe.ts                 # one interaction at a time, against a scripted dummy
 node scripts/controls-probe.ts                 # key bindings, the Esc menu and a rebind
 node scripts/pad-probe.ts                      # controller aim, a gamepad, and the phone deck
-node scripts/sky-probe.ts                      # both skybox candidates: loaded, animated, parallax measured
+node scripts/sky-probe.ts                      # every skybox candidate: loaded, animated, parallax and one ambient plan
 node scripts/readability-probe.ts              # fighter vs background: value, silhouette and detail
 ```
 

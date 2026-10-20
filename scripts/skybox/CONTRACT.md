@@ -24,6 +24,75 @@ Composition rules that keep the fight readable:
 - The first 800 px of every panorama is the hero view. A single-screen match
   shows exactly that crop and never moves. Make it beautiful on its own.
 
+## Stage, not an illustration
+
+The arena is a **Smash Bros. stage**, not a painting with a fight in front of it.
+Sakurai's stage rules are the brief:
+
+- *"The characters have to be easy to identify. Characters tend to be pretty
+  small in Smash, so we can't make the background colors too pronounced or
+  prominent, or it'll make the characters hard to see."*
+- *"Platforms that can be stood on have saturated colors, parts that can't be
+  stood on have unsaturated colors."*
+- *"Emphasize things with hitboxes, and don't emphasize the rest."*
+- *"Don't draw too much, don't draw too little."*
+- *"Distinguish the major from the minor."*
+
+That means:
+
+- **One focal landmark, not a city of props.** Pick one huge aqueduct/tree/
+  conservatory mass and let the rest be negative space. If you cannot point at
+  the one thing the eye should read first, the composition is too busy.
+- **Large shapes, low contrast, few details.** The background is a set. Do not
+  fill the combat band with windows, people, laundry, market stalls, small
+  trees, or repeated domes. Detail belongs at the frame's edges, not behind the
+  fighters.
+- **Saturate the floor, desaturate the world.** The dark green arena platforms
+  are the only saturated, high-contrast surfaces in the play band; the sky and
+  city stay pale, cool and quiet.
+- **Keep a clear central line.** The horizon/water line and the platform line
+  should read at a glance. Do not put a background edge directly behind a
+  platform edge.
+- **Sparse, slow, one plan.** Three or four ambient groups maximum (a flock, one
+  airship, two boats, water glints). They are all driven by one `ambient` plan
+  and one clock, never one clock per element.
+- **Stand back from the reference.** The DeepSeek reference is the visual
+  language; Smash is the amount. When in doubt, remove an element.
+
+## The single ambient plan
+
+All moving background actors are declared once, in the manifest's `ambient`
+object:
+
+```json
+"ambient": {
+  "loopMs": 90000,
+  "groups": [
+    {
+      "layer": "birds",
+      "actors": [
+        { "u": 120, "v": 90, "speedX": 12, "bobAmp": 2, "bobFreq": 0.4, "phase": 0 }
+      ]
+    },
+    { "layer": "zeppelin", "actors": [ ... ] },
+    { "layer": "boats", "actors": [ ... ] }
+  ]
+}
+```
+
+- `layer` is the id of a `type: "strip"` layer that supplies that group's
+  frames, fps and parallax. The actor list supplies positions and paths.
+- `loopMs` is the intended loop length. The runtime samples every actor from
+  the same elapsed clock; the panorama wrap is the continuous loop. Do not
+  force a reset that teleports an actor whose speed does not divide the
+  panorama.
+- Actor fields: `u`, `v`, `speedX` (texture px/s), `bobAmp` (px), `bobFreq`
+  (Hz), `phase` (radians), `flip` (mirror art drawn facing right).
+- A waterfall is not an ambient actor: it has no speed and no group.
+- If `ambient` is absent, the runtime falls back to the strip's own `items` for
+  backward compatibility, but a candidate with moving actors should ship the
+  single plan.
+
 ## Texture contract
 
 - Every panorama is **1600 x 600 px**, one texture pixel = one world pixel.

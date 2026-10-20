@@ -5,17 +5,19 @@ authored panoramas, each split into layers that follow a fraction of the
 camera's scroll. It is presentation only. Nothing in `src/game/simulation/`
 knows it exists, and `?sky=` never changes a tick.
 
-## The two candidates
+## The candidates
 
 | URL | Pipeline | Look |
 |---|---|---|
-| `?sky=voxel` (default) | Three.js, tens of thousands of instanced voxels, pre-rendered at 800x300 and nearest-upscaled 2x | chunky, readable, materially lit |
-| `?sky=hand` | Pillow/numpy, hand-authored pixel art | finer 1px detail, Toriyama cloud rims and faces |
+| `?sky=stage` (default) | Pillow/numpy, purpose-built | the calm Smash-style waterfront: one focal tree + aqueduct + low conservatory, a waterline, one ambient plan |
+| `?sky=hand` | Pillow/numpy | the earlier, busier hand-painted waterfront/city study |
+| `?sky=voxel` | Three.js, tens of thousands of instanced voxels | the earlier, denser voxel city |
 | `?sky=off` | the original gradient | the readability fallback |
 
-The two ship together because choosing between them is an art-direction
-decision, not a runtime one. A new candidate is a folder under
-`public/assets/skybox/<name>/` and a line in `SKY_VARIANTS`.
+The **Stage** candidate is the one built to the brief. The other two are kept as
+comparison studies: the same runtime, the same manifest contract, but denser
+compositions that the playtest found too packed. A new candidate is a folder
+under `public/assets/skybox/<name>/` and a line in `SKY_VARIANTS`.
 
 The **Options** dialog (root menu and Esc menu) writes the same choice to
 `localStorage` and applies it from the next match. A `?sky=` in the URL chooses
@@ -54,12 +56,72 @@ image never repeats vertically (a city repeated above the sky reads as a bug).
   old gradient. The probe distinguishes `loaded: false` from a real skybox,
   because a screenshot cannot.
 
+## A stage, not an illustration
+
+The first pass was too packed. A background in a fighting game is a **set**, not
+a picture: Smash Bros. is the reference, and Sakurai's stage rules are explicit
+([Source Gaming's translation](https://sourcegaming.info/2016/04/17/melee-battlestages/)):
+
+> "The characters have to be easy to identify. Characters tend to be pretty
+> small in Smash, so we can't make the background colors too pronounced or
+> prominent, or it'll make the characters hard to see."
+
+> "Platforms that can be stood on have saturated colors, parts that can't be
+> stood on have unsaturated colors."
+
+> "Emphasize things with hitboxes, and don't emphasize the rest."
+
+> "Don't draw too much, don't draw too little."
+
+The stage layers are foreground / midground / background, with the closest
+plane getting the focus; Ultimate's team even lights platform edges unnaturally
+so the places a fighter can stand stay readable. The background is allowed to
+be beautiful, but it leans toward the game side.
+
+Applied here:
+
+- **One focal landmark** (the aqueduct/tree/conservatory mass), not a skyline
+  of repeated towers and props.
+- **Large shapes and negative space**; the combat band stays quiet. No market
+  stalls, laundry lines, rows of windows or tiny people directly behind the
+  fight.
+- **Low-contrast, desaturated background; saturated platform surfaces.** The
+  dark green ledges are the only high-contrast surfaces in the band.
+- **A clear water/horizon line**, kept clear of the platform edges.
+- **Sparse ambient motion**, not a hive: one flock, one airship, a couple of
+  boats, some water glints.
+
+## One ambient plan
+
+Every moving background actor lives in a single manifest `ambient` plan:
+
+```json
+"ambient": {
+  "loopMs": 90000,
+  "groups": [
+    { "layer": "birds", "actors": [ ... ] },
+    { "layer": "zeppelin", "actors": [ ... ] },
+    { "layer": "boats", "actors": [ ... ] }
+  ]
+}
+```
+
+The runtime samples all groups from the **same elapsed clock**; `loopMs` is the
+intended length of the programme. The panorama wrap is the continuous loop —
+do not force a reset that teleports a bird whose speed does not divide the
+panorama. The flock, the airship and the boats are composed rather than four
+independent widgets. The strip layer supplies frames, fps and parallax; the
+plan supplies the actors' positions, travel speed, bob and phase. A waterfall
+has no speed and is not part of the plan; if a candidate has no plan, the
+runtime falls back to the strip's own items for compatibility.
+
 ## Readability contract
 
 The middle band (y 150-470) is where fighters, nameplates and the dark green
-platforms live. The art keeps it hazy and puts detail in the sky band and the
-bottom near layer. This is why both candidates spend their contrast at the
-edges of the frame rather than behind the fight.
+platforms live. The art keeps it hazy; the Stage puts detail in large edge
+masses and the waterline, never behind the fight. The earlier studies spend
+their contrast at the frame's edges too, because that is where the eye can
+afford it.
 
 The first painted pass failed the playtest for a measurable reason: the city
 put the fighter in the same **value** band. At the spawn, the flat old sky had
@@ -107,15 +169,17 @@ not invented absolute numbers: an outline is crisp at DPR 2 and soft at DPR 1,
 so a fixed ΔE threshold would fail the very sky the game shipped with. Both
 candidates must match or beat the control on value separation, silhouette and
 outline coverage. In a representative run the control measures ΔL* 36.1, core
-silhouette ΔE 67.7, coverage 99%, luminance ratio 2.41; voxel 42.0 / 72.9 /
-99% / 2.84; hand 38.5 / 68.5 / 98% / 2.62. The exact values move a little with
-where the FIGHT leaves the body, so the probe gates on the same-run control
-rather than a frozen number. The outer edge is reported separately: it is the
-soft anti-aliased skirt of the sprite, and the solid ink line one pixel in is
-the number that matches what a player sees. A DPR 2 spot check agrees: voxel
-ΔL* 44.2 vs the flat sky's 38.3, core ΔE 33.2 vs 32.3. Spot checks on Jeffs,
-Anands and Ibiriki at the same spawn: ΔL* 51 / 49 / 43, luminance ratio 4.4 /
-4.2 / 3.2, all above their own flat-sky controls.
+silhouette ΔE 67.7, coverage 99%, luminance ratio 2.41; **stage 44.6 / 71.0 /
+98% / 3.03**; voxel 42.0 / 72.9 / 99% / 2.84; hand 38.5 / 68.5 / 98% / 2.62.
+The Stage candidate is the first one to clear the 3:1 large-element contrast
+figure, not merely match the old sky. The exact values move a little with where
+the FIGHT leaves the body, so the probe gates on the same-run control rather
+than a frozen number. The outer edge is reported separately: it is the soft
+anti-aliased skirt of the sprite, and the solid ink line one pixel in is the
+number that matches what a player sees. A DPR 2 spot check agrees: voxel ΔL*
+44.2 vs the flat sky's 38.3, core ΔE 33.2 vs 32.3. Spot checks on Jeffs, Anands
+and Ibiriki at the same spawn: ΔL* 51 / 49 / 43, luminance ratio 4.4 / 4.2 /
+3.2, all above their own flat-sky controls.
 
 The WCAG 3:1 figure is a UI guideline (Xbox XAG 102), not a sprite threshold —
 the old sky itself is ~2.4:1 — so the report keeps it visible rather than

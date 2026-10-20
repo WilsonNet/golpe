@@ -1,0 +1,256 @@
+{
+  "name": "stage",
+  "title": "Solarpunk Stage \u2014 Quiet Terrace",
+  "width": 1600,
+  "height": 600,
+  "haze": 1.15,
+  "ambient": {
+    "loopMs": 400000,
+    "groups": [
+      {
+        "layer": "birds",
+        "actors": [
+          {
+            "u": 140,
+            "v": 132,
+            "speedX": 16,
+            "bobAmp": 2.0,
+            "bobFreq": 0.35,
+            "phase": 0.0
+          },
+          {
+            "u": 322,
+            "v": 166,
+            "speedX": 16,
+            "bobAmp": 1.6,
+            "bobFreq": 0.32,
+            "phase": 0.9
+          },
+          {
+            "u": 512,
+            "v": 118,
+            "speedX": 16,
+            "bobAmp": 2.4,
+            "bobFreq": 0.3,
+            "phase": 1.8
+          },
+          {
+            "u": 724,
+            "v": 205,
+            "speedX": 16,
+            "bobAmp": 2.0,
+            "bobFreq": 0.38,
+            "phase": 2.6
+          },
+          {
+            "u": 1110,
+            "v": 150,
+            "speedX": 16,
+            "bobAmp": 2.2,
+            "bobFreq": 0.33,
+            "phase": 3.4
+          },
+          {
+            "u": 1430,
+            "v": 186,
+            "speedX": 16,
+            "bobAmp": 1.8,
+            "bobFreq": 0.36,
+            "phase": 4.2
+          }
+        ]
+      },
+      {
+        "layer": "zeppelin",
+        "actors": [
+          {
+            "u": 258,
+            "v": 78,
+            "speedX": 8,
+            "bobAmp": 2.0,
+            "bobFreq": 0.08,
+            "phase": 0.4
+          }
+        ]
+      },
+      {
+        "layer": "boats",
+        "actors": [
+          {
+            "u": 210,
+            "v": 518,
+            "speedX": 4,
+            "bobAmp": 1.2,
+            "bobFreq": 0.18,
+            "phase": 0.0
+          },
+          {
+            "u": 930,
+            "v": 530,
+            "speedX": -4,
+            "bobAmp": 1.0,
+            "bobFreq": 0.15,
+            "phase": 1.7,
+            "flip": true
+          }
+        ]
+      },
+      {
+        "layer": "water",
+        "actors": [
+          {
+            "u": 88,
+            "v": 508,
+            "speedX": 0,
+            "bobAmp": 0.8,
+            "bobFreq": 0.16,
+            "phase": 0.0
+          },
+          {
+            "u": 286,
+            "v": 534,
+            "speedX": 0,
+            "bobAmp": 0.6,
+            "bobFreq": 0.13,
+            "phase": 1.1
+          },
+          {
+            "u": 470,
+            "v": 548,
+            "speedX": 0,
+            "bobAmp": 0.9,
+            "bobFreq": 0.18,
+            "phase": 2.2
+          },
+          {
+            "u": 668,
+            "v": 516,
+            "speedX": 0,
+            "bobAmp": 0.7,
+            "bobFreq": 0.15,
+            "phase": 3.0
+          },
+          {
+            "u": 1044,
+            "v": 538,
+            "speedX": 0,
+            "bobAmp": 0.8,
+            "bobFreq": 0.14,
+            "phase": 4.1
+          },
+          {
+            "u": 1320,
+            "v": 522,
+            "speedX": 0,
+            "bobAmp": 0.6,
+            "bobFreq": 0.17,
+            "phase": 5.3
+          }
+        ]
+      }
+    ]
+  },
+  "layers": [
+    {
+      "id": "sky",
+      "type": "image",
+      "src": "assets/skybox/stage/sky.png",
+      "version": "c0631d60b0ac",
+      "factor": 0.015,
+      "driftX": 0.35,
+      "alpha": 1
+    },
+    {
+      "id": "far",
+      "type": "image",
+      "src": "assets/skybox/stage/far.png",
+      "version": "9db4036f6fad",
+      "factor": 0.06
+    },
+    {
+      "id": "mid",
+      "type": "image",
+      "src": "assets/skybox/stage/mid.png",
+      "version": "06737428b805",
+      "factor": 0.18
+    },
+    {
+      "id": "falls",
+      "type": "strip",
+      "src": "assets/skybox/stage/falls.png",
+      "version": "bde0b222cdcc",
+      "factor": 0.18,
+      "align": "mid",
+      "frameW": 48,
+      "frameH": 240,
+      "frames": 6,
+      "fps": 9,
+      "items": [
+        {
+          "u": 244,
+          "v": 372
+        },
+        {
+          "u": 960,
+          "v": 330
+        }
+      ]
+    },
+    {
+      "id": "near",
+      "type": "image",
+      "src": "assets/skybox/stage/near.png",
+      "version": "14cd940e5a30",
+      "factor": 0.5,
+      "alpha": 0.5
+    },
+    {
+      "id": "birds",
+      "type": "strip",
+      "src": "assets/skybox/stage/birds.png",
+      "version": "56e57d5f0cb9",
+      "factor": 0.04,
+      "frameW": 12,
+      "frameH": 8,
+      "frames": 4,
+      "fps": 6,
+      "alpha": 0.9
+    },
+    {
+      "id": "zeppelin",
+      "type": "strip",
+      "src": "assets/skybox/stage/zeppelin.png",
+      "version": "fa4bdfd2ce78",
+      "factor": 0.03,
+      "frameW": 64,
+      "frameH": 28,
+      "frames": 2,
+      "fps": 4,
+      "alpha": 0.9
+    },
+    {
+      "id": "boats",
+      "type": "strip",
+      "src": "assets/skybox/stage/boats.png",
+      "version": "16b619aea399",
+      "factor": 0.5,
+      "frameW": 32,
+      "frameH": 14,
+      "frames": 2,
+      "fps": 3,
+      "alpha": 1
+    },
+    {
+      "id": "water",
+      "type": "strip",
+      "src": "assets/skybox/stage/water.png",
+      "version": "cb7d0f7730fc",
+      "factor": 0.5,
+      "frameW": 32,
+      "frameH": 8,
+      "frames": 4,
+      "fps": 4,
+      "alpha": 0.8
+    }
+  ]
+}

@@ -50,7 +50,7 @@ skill({ name: "feedback-loop" })    # the full workflow
 | How does a new player learn the game? | [`specs/tutorial.md`](specs/tutorial.md) — the guided course, and the campaign layer it is built on |
 | What happens when a match ends? | [`specs/play-of-the-game.md`](specs/play-of-the-game.md) — the reel, the camera edit, then the podium |
 | What should the game sound like, and where does the music come from? | [`specs/audio.md`](specs/audio.md) · [`audio/README.md`](audio/README.md) — MIDI sources, the soundfont per track, the mixer |
-| What is behind the arena, and how is it drawn? | [`specs/skybox.md`](specs/skybox.md) · [`art/skybox/README.md`](art/skybox/README.md) — the two parallax candidates and their pre-rendering |
+| What is behind the arena, and how is it drawn? | [`specs/skybox.md`](specs/skybox.md) · [`art/skybox/README.md`](art/skybox/README.md) — the Smash-style Stage and the earlier voxel/hand studies |
 | What rule will I break if I'm careless? | [`docs/invariants.md`](docs/invariants.md) |
 | Where does this code live, and who owns it? | [`docs/architecture.md`](docs/architecture.md) |
 | How do I measure anything? | [`docs/diagnostics.md`](docs/diagnostics.md) + the `feedback-loop` skill |
@@ -324,7 +324,7 @@ tsx scripts/screens-probe.ts                         # ?screen=N room: spawn spr
 tsx scripts/ultimate-probe.ts                        # the black hole: hold to aim, release to cast, freeze, capture
 tsx scripts/potg-probe.ts                            # play of the game: the reel, the camera edit, the podium waiting
 tsx scripts/audio-probe.ts                           # the sound loop: music latches, combat sfx fire, the mixer persists
-tsx scripts/sky-probe.ts                             # both skybox candidates: loaded, animated, parallax measured
+tsx scripts/sky-probe.ts                             # every skybox candidate: loaded, animated, parallax and ambient-plan measured
 tsx scripts/readability-probe.ts                     # fighter-vs-background value, silhouette and detail, gated against the old sky
 python3 scripts/make-audio.py                        # re-render the music loops from their MIDI sources (→ public/audio/)
 python3 scripts/make-potg-art.py                       # regenerate the ceremony's sunburst and medal

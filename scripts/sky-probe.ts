@@ -22,7 +22,7 @@ import { chromium } from "playwright";
 
 const BASE = "http://localhost:8084";
 const SHOTS = ".playwright-mcp/skybox";
-const VARIANTS = ["voxel", "hand"] as const;
+const VARIANTS = ["stage", "voxel", "hand"] as const;
 
 interface DebugState {
 	variant: string;
@@ -44,6 +44,8 @@ interface DebugState {
 		shift: number;
 		drift: number;
 	}[];
+	movers: { id: string; x: number; y: number; speedX: number }[];
+	ambient: { loopMs: number; groups: number; actors: number } | null;
 }
 
 let failed = false;
@@ -114,7 +116,7 @@ for (const variant of VARIANTS) {
 	);
 	check(
 		first.layers >= 5,
-		`${variant}: five parallax layers`,
+		`${variant}: at least five background layers`,
 		`layers=${first.layers}`,
 	);
 	check(
@@ -127,6 +129,26 @@ for (const variant of VARIANTS) {
 		`${variant}: at least one animated waterfall`,
 		`falls=${first.animatedFalls}`,
 	);
+	if (variant === "hand" || variant === "stage") {
+		check(
+			first.movers.length >= 3,
+			`${variant}: birds, zeppelin and boats are movers`,
+			`movers=${first.movers.length}`,
+		);
+		check(
+			first.ambient !== null &&
+				first.ambient.groups >= 3 &&
+				first.ambient.actors >= first.movers.length,
+			`${variant}: one ambient plan drives every mover`,
+			first.ambient
+				? `loop=${first.ambient.loopMs}ms groups=${first.ambient.groups} actors=${first.ambient.actors}`
+				: "no ambient plan",
+		);
+	} else if (first.movers.length > 0) {
+		console.log(
+			`     ${variant}: ambient movers present (${first.movers.length})`,
+		);
+	}
 	const factors = new Set(
 		first.order.filter((l) => l.kind === "image").map((l) => l.factor),
 	);
@@ -166,6 +188,20 @@ for (const variant of VARIANTS) {
 			second.frame !== first.frame,
 			`${variant}: the waterfall frame changes`,
 			`frame ${first.frame} → ${second.frame}`,
+		);
+	}
+	if (first.movers.length > 0) {
+		const advanced = second.movers.some((m, i) => {
+			const before = first.movers[i];
+			return (
+				before !== undefined &&
+				(Math.abs(m.x - before.x) > 1 || Math.abs(m.y - before.y) > 0.5)
+			);
+		});
+		check(
+			advanced,
+			`${variant}: the ambient movers advance`,
+			`${first.movers.length} movers over ${second.elapsedMs - first.elapsedMs}ms`,
 		);
 	}
 

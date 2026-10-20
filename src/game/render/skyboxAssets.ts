@@ -16,13 +16,52 @@
 import { Assets, Rectangle, Texture } from "pixi.js";
 
 /** The candidates. A new one is a folder and a line here. */
-const SKY_VARIANTS = ["voxel", "hand"] as const;
+const SKY_VARIANTS = ["stage", "voxel", "hand"] as const;
 type SkyVariant = (typeof SKY_VARIANTS)[number];
 
 /** What `?sky=off` means. */
 export type SkyChoice = SkyVariant | "off";
 
-const DEFAULT_VARIANT: SkyVariant = "voxel";
+const DEFAULT_VARIANT: SkyVariant = "stage";
+
+interface SkyboxItemDef {
+	u: number;
+	v: number;
+	/**
+	 * Horizontal motion in texture pixels per second. A strip with a non-zero
+	 * speed is a mover — birds, a zeppelin, a boat — not a waterfall. Positive
+	 * moves right; wrap at the panorama edge.
+	 */
+	speedX?: number;
+	/** Vertical bob amplitude in pixels. */
+	bobAmp?: number;
+	/** Bob frequency in Hz (cycles per second). */
+	bobFreq?: number;
+	/** Phase offset in radians, so a flock does not bob in lockstep. */
+	phase?: number;
+	/** Mirror the frame horizontally; use for art drawn facing right that moves left. */
+	flip?: boolean;
+}
+
+/**
+ * The whole background motion programme, not one plan per element.
+ *
+ * A candidate has a single `ambient` plan: one loop length and one clock, with
+ * every moving actor grouped by the strip layer it belongs to. The runtime
+ * drives birds, airships, boats and glints from this one plan, so their timing
+ * is composed rather than four independent clocks drifting apart.
+ */
+interface SkyboxAmbientGroupDef {
+	/** The id of a `type: "strip"` layer whose frames draw this group. */
+	layer: string;
+	actors: SkyboxItemDef[];
+}
+
+export interface SkyboxAmbientDef {
+	/** Master loop in milliseconds. All groups share this clock. */
+	loopMs: number;
+	groups: SkyboxAmbientGroupDef[];
+}
 
 export interface SkyboxLayerDef {
 	id: string;
@@ -41,7 +80,7 @@ export interface SkyboxLayerDef {
 	frames?: number;
 	fps?: number;
 	/** Strip only: where the strip's top-left sits in texture space. */
-	items?: { u: number; v: number }[];
+	items?: SkyboxItemDef[];
 	/**
 	 * Strip only: the id of the image layer whose movement this strip shares.
 	 * A waterfall cut into a layer's texture coordinates must follow that
@@ -58,6 +97,8 @@ export interface SkyboxManifest {
 	height: number;
 	/** Art-directed strength of the runtime atmospheric scrim. 1 = the default. */
 	haze?: number;
+	/** One programme for every moving background actor. */
+	ambient?: SkyboxAmbientDef;
 	layers: SkyboxLayerDef[];
 }
 

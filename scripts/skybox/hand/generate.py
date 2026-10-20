@@ -22,9 +22,84 @@ from PIL import Image, ImageDraw
 W, H = 1600, 600
 FALL_W, FALL_H = 48, 240
 FALL_ITEMS = [
-    (280, 356),   # left edge of the strip, top of the fall; mouth is u+24
-    (970, 310),
-    (1416, 292),
+    (212, 350),   # left edge of the strip; the mouth is u+24
+    (476, 350),
+]
+
+BIRD_ITEMS = [
+    {"u": 70, "v": 58, "speedX": 7.5, "bobAmp": 1.2, "bobFreq": 0.9, "phase": 0.0, "flip": False},
+    {"u": 210, "v": 96, "speedX": -9.0, "bobAmp": 1.5, "bobFreq": 1.2, "phase": 1.1, "flip": True},
+    {"u": 340, "v": 74, "speedX": 6.0, "bobAmp": 1.0, "bobFreq": 0.7, "phase": 2.2, "flip": False},
+    {"u": 470, "v": 120, "speedX": -11.0, "bobAmp": 2.0, "bobFreq": 1.4, "phase": 3.3, "flip": True},
+    {"u": 610, "v": 88, "speedX": 8.0, "bobAmp": 1.3, "bobFreq": 1.0, "phase": 4.4, "flip": False},
+    {"u": 760, "v": 145, "speedX": -7.0, "bobAmp": 1.6, "bobFreq": 1.1, "phase": 5.5, "flip": True},
+    {"u": 900, "v": 64, "speedX": 10.0, "bobAmp": 1.1, "bobFreq": 0.8, "phase": 0.7, "flip": False},
+    {"u": 1040, "v": 170, "speedX": -6.0, "bobAmp": 1.8, "bobFreq": 1.3, "phase": 1.8, "flip": True},
+    {"u": 1180, "v": 100, "speedX": 9.0, "bobAmp": 1.4, "bobFreq": 0.95, "phase": 2.9, "flip": False},
+    {"u": 1320, "v": 55, "speedX": -12.0, "bobAmp": 1.2, "bobFreq": 1.25, "phase": 4.0, "flip": True},
+    {"u": 1450, "v": 130, "speedX": 5.0, "bobAmp": 1.0, "bobFreq": 0.75, "phase": 5.1, "flip": False},
+    {"u": 1560, "v": 185, "speedX": -8.0, "bobAmp": 1.7, "bobFreq": 1.15, "phase": 0.3, "flip": True},
+]
+
+ZEPPELIN_ITEMS = [
+    {"u": 300, "v": 112, "speedX": 4.2, "bobAmp": 2.4, "bobFreq": 0.32, "phase": 0.2, "flip": False},
+    {"u": 1300, "v": 70, "speedX": 3.0, "bobAmp": 2.0, "bobFreq": 0.28, "phase": 1.6, "flip": False},
+]
+
+BOAT_ITEMS = [
+    {"u": 160, "v": 536, "speedX": -2.6, "bobAmp": 1.0, "bobFreq": 0.8, "phase": 0.0, "flip": False},
+    {"u": 540, "v": 554, "speedX": -3.8, "bobAmp": 1.2, "bobFreq": 0.9, "phase": 1.4, "flip": False},
+    {"u": 980, "v": 530, "speedX": -2.2, "bobAmp": 0.8, "bobFreq": 0.7, "phase": 2.1, "flip": False},
+    {"u": 1370, "v": 548, "speedX": -4.6, "bobAmp": 1.1, "bobFreq": 1.0, "phase": 3.2, "flip": False},
+]
+
+
+STRIP_SPECS = [
+    {
+        "id": "falls",
+        "factor": 0.18,
+        "manifest_factor": 0.30,
+        "fw": FALL_W,
+        "fh": FALL_H,
+        "frames": 6,
+        "fps": 9,
+        "alpha": 1.0,
+        "align": "mid",
+        "items": [{"u": u, "v": v} for u, v in FALL_ITEMS],
+    },
+    {
+        "id": "boats",
+        "factor": 0.50,
+        "manifest_factor": 0.50,
+        "fw": 32,
+        "fh": 16,
+        "frames": 4,
+        "fps": 4,
+        "alpha": 1.0,
+        "items": BOAT_ITEMS,
+    },
+    {
+        "id": "zeppelin",
+        "factor": 0.10,
+        "manifest_factor": 0.10,
+        "fw": 64,
+        "fh": 28,
+        "frames": 3,
+        "fps": 10,
+        "alpha": 1.0,
+        "items": ZEPPELIN_ITEMS,
+    },
+    {
+        "id": "birds",
+        "factor": 0.06,
+        "manifest_factor": 0.06,
+        "fw": 16,
+        "fh": 8,
+        "frames": 4,
+        "fps": 10,
+        "alpha": 1.0,
+        "items": BIRD_ITEMS,
+    },
 ]
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -177,14 +252,13 @@ def ell_mask(w, h, cx, cy, rx, ry):
 
 
 SKY_STOPS = [
-    (0.00, "#244f7d"),
-    (0.10, "#2f6b98"),
-    (0.23, "#3f88ad"),
-    (0.36, "#5aa6bd"),
-    (0.50, "#78c2c7"),
-    (0.64, "#9ad8cd"),
+    (0.00, "#2f6b98"),
+    (0.14, "#3f88ad"),
+    (0.30, "#5aa6bd"),
+    (0.46, "#78c2c7"),
+    (0.62, "#9ad8cd"),
     (0.78, "#c6ebdc"),
-    (0.92, "#eaf3df"),
+    (0.91, "#eaf3df"),
     (1.00, "#fff3c9"),
 ]
 
@@ -206,7 +280,7 @@ def draw_sky() -> Layer:
         USED.add(c[1])
 
     # sun: a low warm orb and layered ordered-dither glow behind the far city
-    sx, sy = 1168, 344
+    sx, sy = 700, 100
     dist = np.hypot(xx - sx, yy - sy)
     glow_layers = [
         (40, "#fff3c9", 1.00),
@@ -221,53 +295,24 @@ def draw_sky() -> Layer:
     layer.img = Image.fromarray(np.dstack([out, np.full((H, W), 255, np.uint8)]), "RGBA")
     layer.d = ImageDraw.Draw(layer.img)
 
-    # thin high cirrus, hand-plotted, a lighter blue than the sky behind it
-    for cx, cy, length, thick in [
-        (182, 42, 70, 2),
-        (205, 49, 42, 1),
-        (1012, 31, 92, 2),
-        (1048, 37, 48, 1),
-        (1320, 62, 64, 2),
-        (420, 74, 34, 1),
-    ]:
-        layer.rrect(cx, cy, cx + length, cy + thick, thick, C("#78c2c7"))
-        layer.rrect(cx + 8, cy - 2, cx + length - 9, cy, 1, C("#9ad8cd"))
-
-    planet(layer, 452, 150, 91, -17)
-    moon(layer, 1316, 70, 12)
-    moon(layer, 872, 52, 5)
+    # a small ringed planet in the hero sky, and a pale golden-hour sun in the
+    # second screen. Static birds and airships are movers now (strips below).
+    planet(layer, 238, 98, 44, -16)
+    moon(layer, 1008, 58, 7)
 
     # thin high cirrus, hand-plotted; no two of these are the same shape
-    streak(layer, 286, 38, 112, 5, 2)
-    streak(layer, 648, 32, 68, 4, 4)
-    streak(layer, 1004, 57, 134, 6, 1)
-    streak(layer, 1336, 44, 86, 4, 3)
+    streak(layer, 300, 36, 112, 5, 2)
+    streak(layer, 690, 30, 78, 4, 4)
+    streak(layer, 1040, 53, 134, 6, 1)
+    streak(layer, 1340, 42, 86, 4, 3)
 
     # chunky warm cumulus, with real blue gaps between them
-    cloud(layer, 184, 181, 326, 132, 11)
-    cloud(layer, 714, 160, 272, 104, 17)
-    cloud(layer, 624, 84, 126, 54, 7)
-    cloud(layer, 1088, 154, 354, 142, 23)
-    cloud(layer, 1446, 100, 172, 72, 31)
-    cloud(layer, 1532, 202, 232, 94, 37)
-
-    airship(layer, 704, 208, 1.0, 3)
-    airship(layer, 1086, 147, 1.15, 9)
-    airship(layer, 300, 252, 0.55, 2)
-    airship(layer, 1542, 238, 0.7, 7)
-
-    for bx, by, n, s, flip in [
-        (214, 128, 7, 1, 1),
-        (256, 108, 4, 1, -1),
-        (530, 74, 3, 1, 1),
-        (932, 92, 6, 1, -1),
-        (1370, 164, 4, 1, 1),
-        (1180, 243, 3, 1, -1),
-    ]:
-        for i in range(n):
-            bx2 = bx + i * 11 + (i % 3) * 4
-            by2 = by + (i % 2) * 7 + (i // 3) * 4
-            bird(layer, bx2, by2, flip if i % 2 == 0 else -flip)
+    cloud(layer, 86, 190, 292, 116, 11)
+    cloud(layer, 520, 174, 252, 96, 17)
+    cloud(layer, 842, 150, 268, 104, 7)
+    cloud(layer, 1112, 182, 354, 142, 23)
+    cloud(layer, 1452, 104, 176, 72, 31)
+    cloud(layer, 1536, 206, 232, 94, 37)
     return layer
 
 
@@ -523,8 +568,8 @@ def airship(layer: Layer, cx, cy, s, seed):
 
 
 def draw_far() -> Layer:
+    """The haze ridge behind the waterfront: wide roofs, half-domes, no shafts."""
     layer = Layer()
-    rng = random.Random(41)
     far = {
         "top": "#8ea9ae",
         "body": "#7b98a3",
@@ -534,122 +579,74 @@ def draw_far() -> Layer:
     }
     for c in far.values():
         USED.add(c)
+    rng = random.Random(41)
 
-    # the back row: softer, larger masses that read as a city two ridges away
-    for x, w, top, kind in [
-        (-70, 130, 402, "dome"),
-        (40, 90, 428, "cap"),
-        (150, 110, 376, "dome"),
-        (300, 80, 414, "cap"),
-        (520, 120, 392, "dome"),
-        (660, 90, 352, "spire"),
-        (780, 130, 406, "cap"),
-        (980, 100, 374, "dome"),
-        (1120, 120, 398, "cap"),
-        (1280, 100, 360, "spire"),
-        (1430, 120, 404, "dome"),
-        (1560, 100, 380, "cap"),
-    ]:
-        if kind == "dome":
-            layer.rrect(x, top + 20, x + w, 520, 10, C(far["top"]))
-            layer.pieslice(x - 10, top - w // 3, x + w + 10, top + w // 3, 180, 360, C(far["top"]))
-            layer.arc(x - 10, top - w // 3, x + w + 10, top + w // 3, 180, 360, C(far["top"]), 2)
-        elif kind == "spire":
-            layer.polygon([(x + w // 2, top - 44), (x + w, 520), (x, 520)], C(far["top"]))
-            layer.polygon([(x + w // 2, top - 44), (x + w // 2 + 6, 520), (x, 520)], C(far["shade"]))
-        else:
-            layer.rrect(x, top, x + w, 520, min(12, w // 3), C(far["top"]))
-        layer.line((x + 4, 512, x + w - 4, 512), C(far["shade"]))
-
-    def f_tower(x, w, top, style="cap", seed=0):
+    def block(x, w, top, body, shade, roof="flat", seed=0):
         r = random.Random(seed)
-        base = 560
-        body = C(far["body"])
-        if style == "needle":
-            layer.polygon([(x, base), (x + w, base), (x + w * 0.62, top + 18), (x + w * 0.42, top)], body)
-            layer.line((x + w * 0.44, top + 22, x + w * 0.44, base - 8), C(far["shade"]), width=2)
-            layer.line((x + w * 0.6, top + 24, x + w * 0.6, base - 8), C(far["top"]), width=1)
-            layer.line((x + w * 0.44, top + 22, x + w * 0.55, top - 10), C(far["dark"]))
-        else:
-            rad = w // 2 if style in ("cap", "dome") else min(4, w // 3)
-            layer.rrect(x, top, x + w, base, rad, body)
-            layer.rrect(x + 1, top + 2, x + int(w * 0.3), base, rad, C(far["shade"]))
-            layer.line((x + w - 3, top + max(8, rad), x + w - 3, base - 2), C(far["top"]), width=2)
-            if style == "dome":
-                layer.pieslice(x - 3, top - w // 3, x + w + 3, top + w // 3, 180, 360, C(far["shade"]))
-                layer.arc(x - 3, top - w // 3, x + w + 3, top + w // 3, 180, 360, C(far["top"]), 2)
-            elif style == "spire":
-                layer.polygon(
-                    [(x + w * 0.5, top - 30), (x + w * 0.5 + 4, top + 2), (x + w * 0.5 - 4, top + 2)],
-                    C(far["dark"]),
-                )
-        # haze-broken window rows, only in the low band
-        if top > 360:
-            for wy in range(top + 26, 470, 19):
-                for wx in range(x + 8, x + w - 5, 15):
-                    if r.random() < 0.30:
-                        layer.rect(wx, wy, wx + 2, wy + 4, C(far["deep"] if r.random() < 0.3 else far["dark"]))
-        # little rooftop antenna
-        if r.random() < 0.35:
-            ax = x + w // 2
-            layer.line((ax, top - 8, ax, top + 2), C(far["dark"]))
-            layer.point(ax, top - 9, C(far["top"]))
+        layer.rrect(x, top, x + w, 512, min(10, w // 4), C(body))
+        layer.rrect(x, top, x + max(8, w // 4), 512, min(10, w // 4), C(shade))
+        layer.line((x + 4, top + 4, x + w - 4, top + 4), C(far["top"]))
+        if roof == "dome":
+            rx = max(18, w // 3)
+            ry = max(8, rx // 3)
+            layer.pieslice(x + w // 2 - rx, top - ry * 2, x + w // 2 + rx, top + ry, 180, 360, C(body))
+            layer.arc(x + w // 2 - rx, top - ry * 2, x + w // 2 + rx, top + ry, 180, 360, C(far["top"]), 2)
+            layer.line((x + w // 2 - rx, top, x + w // 2 + rx, top), C(shade), width=2)
+        elif roof == "garden":
+            layer.rect(x + 4, top - 3, x + w - 4, top + 1, C(far["shade"]))
+            layer.line((x + 6, top - 3, x + w - 6, top - 3), C(far["top"]))
+            for px in range(x + 10, x + w - 8, 18):
+                layer.point(px, top - 5, C(far["top"]))
+                layer.point(px + 1, top - 4, C(far["shade"]))
+        elif roof == "awning":
+            layer.line((x + 4, top - 1, x + w - 4, top - 1), C(far["deep"]), width=2)
+            for px in range(x + 6, x + w - 6, 10):
+                layer.point(px, top + 1, C(far["deep"]))
+        # tiny far windows, sparse and low contrast
+        for wy in range(max(top + 18, 448), 504, 26):
+            for wx in range(x + 8, x + w - 8, 24):
+                if r.random() < 0.22:
+                    layer.rect(wx, wy, wx + 1, wy + 3, C(far["deep"] if r.random() < 0.5 else far["dark"]))
+        # occasional rooftop tree / pergola
+        if r.random() < 0.4 and w > 60:
+            layer.line((x + w - 16, top - 12, x + w - 16, top), C(far["shade"]))
+            layer.ellipse(x + w - 24, top - 22, x + w - 6, top - 8, fill=C(far["shade"]))
+            layer.point(x + w - 16, top - 21, C(far["body"]))
 
-    # distant block cluster, kept pale and mostly low
-    for x, w, top, style, s in [
-        (-30, 74, 420, "cap", 1),
-        (52, 46, 452, "cap", 2),
-        (104, 58, 382, "dome", 3),
-        (168, 26, 346, "needle", 4),
-        (202, 54, 430, "cap", 5),
-        (258, 42, 393, "dome", 6),
-        (306, 36, 358, "needle", 7),
-        (350, 66, 411, "cap", 8),
-        (424, 34, 376, "spire", 9),
-        (468, 62, 402, "dome", 10),
-        (540, 48, 435, "cap", 11),
-        (596, 70, 384, "cap", 12),
-        (674, 30, 356, "spire", 13),
-        (712, 58, 423, "dome", 14),
-        (778, 84, 390, "cap", 15),
-        (872, 42, 365, "needle", 16),
-        (922, 64, 414, "dome", 17),
-        (996, 38, 348, "spire", 18),
-        (1040, 72, 398, "cap", 19),
-        (1120, 54, 429, "dome", 20),
-        (1182, 34, 372, "needle", 21),
-        (1224, 70, 407, "cap", 22),
-        (1304, 44, 389, "dome", 23),
-        (1356, 52, 434, "cap", 24),
-        (1416, 36, 356, "spire", 25),
-        (1460, 78, 401, "dome", 26),
-        (1546, 62, 372, "needle", 27),
+    # a sparse low waterfront: skyline islands with sky between them, so the
+    # arch openings read as air and distance instead of a blue wall
+    for x, w, top, roof, seed in [
+        (-40, 250, 446, "dome", 1),
+        (260, 210, 454, "flat", 2),
+        (520, 260, 440, "garden", 3),
+        (840, 220, 452, "dome", 4),
+        (1120, 240, 442, "flat", 5),
+        (1400, 230, 454, "garden", 6),
     ]:
-        f_tower(x, w, top, style, 100 + s)
+        block(x, w, top, far["top"], far["body"], roof, 100 + seed)
+    for x, w, top, roof, seed in [
+        (-20, 120, 486, "awning", 11),
+        (150, 90, 480, "flat", 12),
+        (330, 130, 490, "dome", 13),
+        (520, 80, 482, "garden", 14),
+        (660, 140, 486, "awning", 15),
+        (850, 90, 478, "flat", 16),
+        (1000, 120, 490, "dome", 17),
+        (1200, 90, 482, "garden", 18),
+        (1360, 120, 488, "awning", 19),
+        (1530, 80, 480, "flat", 20),
+    ]:
+        block(x, w, top, far["body"], far["shade"], roof, 200 + seed)
 
-    # small roof gardens and antennae keep the haze from becoming a blockout
-    for x, y, s in [(134, 378, 3), (382, 414, 2), (620, 388, 3), (1082, 350, 2), (1364, 392, 3), (1522, 376, 2)]:
-        for i in range(4):
-            layer.ellipse(x + i * 4 - 3, y - 4 - (i % 2), x + i * 4 + 3, y + 1, fill=C(far["body"]))
-            layer.point(x + i * 4, y - 4 - (i % 2), C(far["top"]))
-        layer.line((x + 6, y + 1, x + 6, y + 8), C(far["shade"]))
-
-    # a distant viaduct, pale, with three arches, a soft horizontal counterpoint.
-    x0, x1, yy = 760, 1060, 462
-    layer.rect(x0, yy, x1, yy + 7, C(far["body"]))
-    layer.line((x0, yy, x1, yy), C(far["top"]), width=1)
-    for ax in range(x0 + 18, x1 - 10, 62):
-        layer.line((ax, yy + 7, ax, yy + 62), C(far["shade"]), width=6)
-        layer.line((ax + 1, yy + 7, ax + 1, yy + 40), C(far["top"]))
-    # haze layers: tiny dither bands that pull the base of the city back
-    dither_rect(layer, 0, 474, 1600, 492, far["top"], 0.16, 4)
-    dither_rect(layer, 0, 492, 1600, 512, far["shade"], 0.10, 2)
+    # a pale far waterline, painted only where the arches open onto it
+    # a pale far waterline and a little haze on the roof edge
+    layer.rect(0, 500, 1600, 512, C(far["shade"]))
+    layer.line((0, 500, 1600, 500), C(far["top"]), width=2)
+    for x in range(0, 1600, 9):
+        if (x * 5) % 7 < 3:
+            layer.point(x, 504, C(far["top"]))
+    dither_rect(layer, 0, 466, 1600, 476, far["top"], 0.08, 3)
     return layer
-
-
-# ---------------------------------------------------------------------------
-# mid city
-
 
 CREAM = {
     "body": "#f3e0bb",
@@ -1464,636 +1461,604 @@ def mid_close_row(layer: Layer):
                 layer.point(px, top - 1, C("#68a963"))
 
 
-def draw_mid() -> Layer:
-    layer = Layer()
-    rng = random.Random(9)
-    mid_far_row(layer)
-    mid_close_row(layer)
+# ---------------------------------------------------------------------------
+# waterfront mid layer
 
-    # --- hero view -------------------------------------------------------
-    # a low turret crosses the seam, so the wrap is a deliberate overlap
-    ceramic_tower(
-        layer,
-        -30,
-        438,
-        48,
-        dome="cap",
-        balconies=(512,),
-        windows=((500, 1, 1),),
-        seed=100,
-    )
-
-    # the tall left tower, fully inside the hero crop now
-    ceramic_tower(
-        layer,
-        8,
-        278,
-        92,
-        dome="onion",
-        balconies=(364, 442, 526),
-        windows=((338, 2, 2), (416, 2, 2), (566, 2, 1)),
-        lit_windows=(510,),
-        seed=1,
-        flag=True,
-    )
-
-    # a glazed stairwell up the sunlit side of the tower
-    layer.rrect(68, 318, 82, 438, 6, C("#5aa6bd"))
-    layer.rrect(70, 320, 80, 436, 5, C("#78c2c7"))
-    for gy in range(328, 436, 13):
-        layer.line((69, gy, 81, gy), C(CREAM["light"]))
-        layer.point(73, gy - 4, C("#c6ebdc"))
-    layer.line((67, 318, 67, 438), C(CREAM["brass"]), width=2)
-    layer.line((83, 318, 83, 438), C(CREAM["brass"]), width=2)
-    # the tall tower gets a real front door and a sun mosaic
-    arched_window(layer, 34, 374, 18, 34, lit=True)
-    layer.line((30, 408, 56, 408), C(CREAM["brass"]), width=2)
-    for px in (32, 40, 48):
-        layer.ellipse(px - 2, 404, px + 2, 409, fill=C("#478a58"))
-        layer.point(px, 404, C("#8dc46f"))
-    sun_mural(layer, 26, 464, 28, 24)
-
-    # low glasshouse on the left
-    greenhouse(layer, 76, 470, 112, 118, seed=2)
-
-    # the long aqueduct: its source is the left tower, and its mouth feeds the
-    # hero waterfall. Three open arches make it read as a structure, not a bar.
-    mx, my = aqueduct(layer, 100, 374, 304, 356, [116, 176, 240, 298], mouth="right", seed=4)
-    assert (mx, my) == (304, 356), (mx, my)
-    # a low anchor turret under the channel
-    ceramic_tower(
-        layer,
-        232,
-        438,
-        48,
-        dome="flat",
-        balconies=(498,),
-        windows=((488, 1, 1),),
-        lit_windows=(552,),
-        seed=3,
-    )
-    wind_turbine(layer, 252, 472, 520, 26, 0.35, 31)
-
-    # central conservatory
-    conservatory(layer, 416, seed=5)
-
-    # a big glazed bay on the left of the twin capsules
-    arched_window(layer, 522, 454, 18, 34, lit=False)
-    layer.line((518, 452, 544, 452), C(CREAM["brass"]), width=2)
-    for px in (520, 528, 540):
-        layer.ellipse(px - 2, 446, px + 2, 451, fill=C("#478a58"))
-        layer.point(px, 446, C("#8dc46f"))
-
-    # twin capsule homes between the conservatory and the big tree
-    ceramic_tower(
-        layer,
-        512,
-        424,
-        58,
-        dome="cap",
-        balconies=(474, 548),
-        windows=((506, 2, 1), (548, 2, 1)),
-        lit_windows=(586,),
-        seed=6,
-    )
-    ceramic_tower(
-        layer,
-        568,
-        452,
-        48,
-        dome="flat",
-        balconies=(516,),
-        windows=((548, 1, 1),),
-        seed=7,
-    )
-    solar_panel(layer, 574, 438, 36, 10, seed=8, tilt=4)
-    curved_bridge(layer, 500, 590, 424, 7, 9)
-
-    # giant tree, the right-hand landmark
-    big_tree(layer, 704, 590, 260, 310, seed=10)
-    # a low root-side pavilion and a pool
-    layer.rrect(752, 548, 816, 592, 8, C(CREAM["stone"]))
-    layer.rrect(756, 550, 812, 588, 6, C(CREAM["stone_dark"]))
-    layer.rect(758, 554, 810, 560, C(CREAM["water"]))
-    for i in range(8):
-        layer.point(762 + i * 6, 557, C(CREAM["water_hi"]))
-    layer.ellipse(766, 568, 774, 574, fill=C("#478a58"))
-    layer.point(770, 568, C("#f49bb8"))
-
-    # --- second screen ---------------------------------------------------
-    # needle tower with a halo ring
-    needle_tower(layer, 886, 292, seed=12)
-    # long aqueduct and the second fall
-    layer.rrect(940, 402, 1004, 596, 8, C(CREAM["stone"]))
-    layer.rrect(944, 406, 1000, 590, 6, C(CREAM["shade"]))
-    for wy in range(432, 560, 26):
-        porthole(layer, 972, wy, 4, lit=(wy == 484))
-    # -- clean span over the stadium shoulder
-    mx2, my2 = aqueduct(layer, 914, 336, 994, 310, [924, 958, 990], mouth="right", seed=14)
-    assert (mx2, my2) == (994, 310), (mx2, my2)
-
-    # stadium / botanical arcade
-    stadium(layer, 1044, seed=15)
-    solar_roof(layer, 1128, 470, 118, seed=16)
-    wind_turbine(layer, 1164, 356, 470, 29, 1.1, 32)
-    wind_turbine(layer, 1212, 402, 486, 21, 2.5, 33)
-
-    # smaller tree with an open treehouse balcony
-    big_tree(layer, 1304, 590, 204, 240, seed=17, treehouse_=False)
-    hanging_balcony(layer, 1286, 430, 54, seed=18)
-
-    # aqueduct and the third fall from the observatory
-    ceramic_tower(
-        layer,
-        1502,
-        300,
-        76,
-        dome="onion",
-        balconies=(382, 468, 548),
-        windows=((436, 2, 2), (520, 2, 1)),
-        lit_windows=(574,),
-        seed=19,
-        flag=True,
-    )
-    mx3, my3 = aqueduct(layer, 1440, 292, 1502, 314, [1446, 1470, 1500], mouth="left", seed=20)
-    assert (mx3, my3) == (1440, 292), (mx3, my3)
-    sun_mural(layer, 1518, 410, 26, 22)
-    arched_window(layer, 1524, 466, 16, 30, lit=False)
-
-    # low foreground rooftops across the bottom, with gardens and solar kit
-    bottom_rooftops(layer, rng)
-    mid_extras(layer, rng)
-
-    # vines and laundry between the towers: the lived-in layer
-    for vx, vy, ln, seed in [
-        (76, 368, 34, 23),
-        (150, 390, 26, 24),
-        (330, 430, 30, 25),
-        (520, 500, 24, 26),
-        (604, 454, 20, 27),
-        (860, 386, 34, 28),
-        (930, 404, 26, 29),
-        (1090, 420, 30, 30),
-        (1240, 402, 24, 31),
-        (1380, 384, 32, 32),
-        (1550, 352, 26, 33),
-    ]:
-        hanging_vine(layer, vx, vy, ln, seed, 6)
-
-    laundry_line(layer, 342, 404, 402, 396, 34)
-    laundry_line(layer, 1100, 414, 1156, 404, 35)
-    return layer
+DECK_Y = 350
+QUAY_Y = 512
+PIERS = [-30, 150, 330, 510, 690, 870, 1050, 1230, 1410, 1610]
+FALL_MOUTHS = [236, 500]
 
 
-def greenhouse(layer: Layer, x, y, w, h, seed=0):
-    # stone stem and glass onion
-    layer.rrect(x + 10, y + h - 32, x + w - 10, y + h, 6, C(CREAM["stone"]))
-    for i in range(6):
-        layer.rect(x + 16 + i * 14, y + h - 26, x + 19 + i * 14, y + h - 4, C(CREAM["stone_dark"]))
-    onion_dome(layer, x + w // 2, y + h - 30, w * 0.46, h * 0.72, glass=True, finial=False, seed=seed)
-    # an open door and a brass rail
-    layer.rrect(x + w // 2 - 7, y + h - 28, x + w // 2 + 7, y + h, 5, C(CREAM["ink"]))
-    layer.rect(x + w // 2 - 5, y + h - 24, x + w // 2 + 5, y + h, C("#ffe08a"))
-    layer.line((x + w // 2, y + h - 24, x + w // 2, y + h), C(CREAM["brass_dark"]))
-    # planter on top and vines
-    layer.rrect(x + 20, y + 4, x + w - 20, y + 12, 3, C(CREAM["stone_dark"]))
-    for px in range(x + 24, x + w - 22, 8):
-        layer.ellipse(px - 2, y - 2, px + 2, y + 6, fill=C("#478a58"))
-        layer.point(px, y - 2, C("#8dc46f"))
-    hanging_vine(layer, x + 22, y + h - 30, 28, seed + 1, 6)
-    hanging_vine(layer, x + w - 22, y + h - 38, 24, seed + 2, 5)
+def half_dome(layer: Layer, cx, base_y, rx, ry, glass=True, seed=0, body="#f3e0bb"):
+    """A broad conservatory half-dome: wider than tall, no finial, no point."""
+    base_y = int(base_y)
+    rx = float(rx)
+    ry = max(4.0, float(ry))
+    apex = base_y - int(ry)
+    for y in range(apex, base_y + 1):
+        t = (base_y - y) / ry
+        rad = rx * math.sqrt(max(0.0, 1.0 - t * t))
+        if rad < 0.7:
+            continue
+        x0, x1 = int(cx - rad), int(cx + rad)
+        if glass:
+            layer.line((x0, y, x1, y), C("#42b2c2"))
+            layer.line((x0, y, int(cx - rad * 0.35), y), C("#2f8ba8"))
+            if t < 0.72:
+                layer.line((int(cx + rad * 0.48), y, int(cx + rad * 0.9), y), C("#66d0cf"))
+        else:
+            layer.line((x0, y, x1, y), C(body))
+            layer.line((x0, y, int(cx - rad * 0.5), y), C(CREAM["shade"]))
+            if rad > 3:
+                layer.line((int(cx + rad * 0.58), y, x1, y), C(CREAM["light"]))
+    # meridian ribs and two horizontal hoops, in cream with a brass edge
+    for f in (-0.74, -0.28, 0.28, 0.74):
+        pts = []
+        for y in range(apex + 2, base_y, 2):
+            t = (base_y - y) / ry
+            rad = rx * math.sqrt(max(0.0, 1.0 - t * t))
+            pts.append((int(cx + f * rad), y))
+        if len(pts) > 1:
+            layer.line(pts, C(CREAM["light"]), width=2)
+            layer.line([(px + 1, py) for px, py in pts], C(CREAM["brass"]))
+    for tr in (0.36, 0.7):
+        yy = apex + int(ry * tr)
+        t = (base_y - yy) / ry
+        rad = rx * math.sqrt(max(0.0, 1.0 - t * t))
+        layer.line((int(cx - rad), yy, int(cx + rad), yy), C(CREAM["light"]), width=2)
+        layer.line((int(cx - rad), yy + 2, int(cx + rad), yy + 2), C(CREAM["brass_dark"]))
+    # a flat collar, planted, never a finial
+    layer.rrect(cx - rx * 0.74, base_y - 7, cx + rx * 0.74, base_y + 4, 3, C(CREAM["body"]))
+    layer.rrect(cx - rx * 0.74, base_y - 7, cx - rx * 0.4, base_y + 4, 3, C(CREAM["shade"]))
+    layer.line((cx - rx * 0.72, base_y - 7, cx + rx * 0.72, base_y - 7), C(CREAM["brass"]), width=2)
+    for px in range(int(cx - rx * 0.65), int(cx + rx * 0.66), 13):
+        layer.ellipse(px - 3, base_y - 12, px + 3, base_y - 5, fill=C("#478a58"))
+        layer.point(px + 1, base_y - 12, C("#8dc46f"))
+        if px % 26 == 0:
+            layer.point(px, base_y - 13, C("#f49bb8"))
 
 
-def conservatory(layer: Layer, cx, seed=0):
-    # tiered drum
-    layer.rrect(cx - 88, 512, cx + 88, 600, 12, C(CREAM["stone"]))
-    layer.rrect(cx - 88, 512, cx - 58, 600, 12, C(CREAM["stone_dark"]))
-    layer.line((cx - 84, 520, cx + 84, 520), C(CREAM["brass"]), width=2)
-    layer.rrect(cx - 100, 478, cx + 100, 536, 14, C(CREAM["body"]))
-    layer.rrect(cx - 96, 480, cx - 58, 532, 12, C(CREAM["shade"]))
-    layer.line((cx - 96, 486, cx + 96, 486), C(CREAM["brass"]), width=2)
-    # arches around the drum
-    for ax in range(cx - 72, cx + 73, 28):
-        arched_window(layer, ax - 6, 542, 12, 26, lit=(ax % 56 == 0))
-    # the big glass onion
-    onion_dome(layer, cx, 486, 82, 176, glass=True, finial=True, seed=seed)
-    # a great rose window on the equator of the dome
-    layer.ellipse(cx - 27, 390, cx + 27, 424, fill=C(CREAM["brass"]))
-    layer.ellipse(cx - 25, 392, cx + 25, 422, fill=C(CREAM["brass_hi"]))
-    layer.ellipse(cx - 22, 395, cx + 22, 419, fill=C("#5aa6bd"))
-    layer.ellipse(cx - 19, 397, cx + 19, 414, fill=C("#78c2c7"))
-    for dx, dy in ((0, -21), (0, 21), (-24, 0), (24, 0)):
-        layer.point(cx + dx, 407 + dy, C("#c6ebdc"))
-    for k in range(8):
-        a = k * math.tau / 8
-        layer.line((cx, 407, cx + int(math.cos(a) * 19), 407 + int(math.sin(a) * 17)), C(CREAM["brass_dark"]))
-    layer.ellipse(cx - 3, 404, cx + 3, 410, fill=C(CREAM["brass"]))
-    layer.point(cx, 406, C(CREAM["brass_hi"]))
-    layer.line((cx - 20, 405, cx - 5, 398), C("#c6ebdc"))
-    layer.line((cx - 20, 409, cx - 3, 402), C("#9ad8cd"))
-    for dx in (-15, -6, 6, 15):
-        layer.point(cx + dx, 395, C(CREAM["brass_dark"]))
-        layer.point(cx + dx, 419, C(CREAM["brass_dark"]))
-    # a ring of hanging gardens under the dome
-    for ax in range(cx - 66, cx + 67, 16):
-        layer.ellipse(ax - 4, 488, ax + 4, 496, fill=C("#478a58"))
-        layer.point(ax + 1, 488, C("#8dc46f"))
-        if ax % 32 == 0:
-            layer.rect(ax - 1, 496, ax, 498, C("#f49bb8"))
-    # banners on the drum, a clock rosette, and lamp niches
-    for i, bx in enumerate((cx - 58, cx - 20, cx + 20, cx + 58)):
-        layer.line((bx, 492, bx, 506), C(CREAM["brass_dark"]))
-        c = "#ff8a4c" if i % 2 == 0 else "#9ad8cd"
-        layer.polygon([(bx + 1, 493), (bx + 9, 496), (bx + 1, 503)], C(c))
-    for dx in (cx - 48, cx + 48):
-        layer.ellipse(dx - 5, 540, dx + 5, 550, fill=C(CREAM["brass"]))
-        layer.ellipse(dx - 4, 541, dx + 4, 549, fill=C(CREAM["light"]))
-        layer.line((dx, 547, dx + 2, 542), C(CREAM["brass_dark"]))
-        layer.point(dx + 2, 542, C("#ff8a4c"))
-    for lx in (cx - 78, cx + 78):
-        layer.rect(lx - 2, 524, lx + 2, 530, C(CREAM["brass"]))
-        layer.rect(lx - 1, 525, lx + 1, 529, C("#ffe08a"))
-    # a flying buttress on each side, thin and graphic
-    for s in (-1, 1):
-        pts = [
-            (cx + s * 78, 470),
-            (cx + s * 112, 500),
-            (cx + s * 118, 548),
-            (cx + s * 114, 548),
-            (cx + s * 106, 506),
-            (cx + s * 76, 478),
-        ]
-        layer.polygon(pts, C(CREAM["stone"]))
-        layer.line(pts[:3], C(CREAM["stone_dark"]))
-    # rooftop finial light and a small pennant
-    layer.ellipse(cx - 3, 284, cx + 3, 290, fill=C(CREAM["brass_hi"]))
-    # an entry stair and a brass door
-    layer.rrect(cx - 16, 552, cx + 16, 600, 6, C(CREAM["stone_dark"]))
-    layer.rrect(cx - 11, 556, cx + 11, 600, 5, C(CREAM["ink"]))
-    layer.rect(cx - 8, 560, cx + 8, 600, C("#ffe08a"))
-    layer.line((cx, 560, cx, 600), C(CREAM["brass_dark"]))
-    for yy in range(566, 598, 8):
-        layer.line((cx - 8, yy, cx + 8, yy), C(CREAM["brass"]))
-    # steps
+def roof_garden(layer: Layer, x, y, w, seed=0, solar=True, laundry=True):
+    rng = random.Random(seed)
+    layer.rect(x, y, x + w, y + 4, C("#d2b07c"))
+    layer.rect(x, y, x + w, y + 1, C(CREAM["light"]))
+    for px in range(x + 6, x + w - 6, 13):
+        layer.ellipse(px - 4, y - 6, px + 4, y + 1, fill=C("#478a58"))
+        layer.ellipse(px - 2, y - 8, px + 2, y, fill=C("#68a963"))
+        layer.point(px + 1, y - 8, C("#8dc46f"))
+        if rng.random() < 0.35:
+            layer.point(px, y - 9, C("#f49bb8"))
+    if solar and w > 70:
+        solar_panel(layer, x + w - 58, y - 12, 44, 9, seed, 2)
+    if laundry and w > 90:
+        layer.line((x + 8, y - 16, x + w - 8, y - 16), C(CREAM["brass_dark"]))
+        for i in range(4):
+            lx = x + 18 + i * (w - 36) // 4
+            c = ["#ff8a4c", "#ffe08a", "#9ad8cd", "#f49bb8"][i % 4]
+            layer.polygon([(lx, y - 16), (lx + 6, y - 16), (lx + 5, y - 9), (lx + 1, y - 9)], C(c))
+
+
+def broad_block(
+    layer: Layer,
+    x,
+    w,
+    top,
+    base=DECK_Y,
+    body="#f3e0bb",
+    shade="#e4c99b",
+    roof="flat",
+    storeys=3,
+    seed=0,
+    solar=True,
+    lit=0.18,
+):
+    rng = random.Random(seed)
+    layer.rrect(x, top, x + w, base, min(10, w // 5), C(body))
+    layer.rrect(x, top, x + max(10, w // 4), base, min(10, w // 5), C(shade))
+    layer.line((x + w - 3, top + 6, x + w - 3, base - 4), C(CREAM["light"]), width=2)
+    # horizontal floor bands: the whole silhouette stays wide
+    for i in range(1, storeys):
+        yy = top + (base - top) * i // storeys
+        layer.line((x + 2, yy, x + w - 2, yy), C(shade), width=2)
+        layer.line((x + 3, yy + 1, x + w - 3, yy + 1), C(CREAM["light"]))
+    # window rows, with awnings and flower boxes on the lower front
+    cols = max(2, (w - 18) // 22)
+    for i in range(storeys):
+        yy = top + 16 + i * (base - top) // storeys
+        for k in range(cols):
+            wx = x + 12 + k * (w - 24) // max(1, cols - 1)
+            lit_win = rng.random() < lit
+            layer.rrect(wx - 4, yy, wx + 4, yy + 13, 4, C(CREAM["brass"]))
+            layer.rrect(wx - 3, yy + 1, wx + 3, yy + 12, 3, C("#5aa6bd"))
+            if lit_win:
+                layer.rrect(wx - 2, yy + 2, wx + 2, yy + 11, 2, C("#ffe08a"))
+                layer.point(wx, yy + 3, C("#fff3c9"))
+            else:
+                layer.rect(wx - 2, yy + 2, wx + 1, yy + 5, C("#78c2c7"))
+                layer.point(wx + 2, yy + 9, C("#c6ebdc"))
+        # balcony rail across the floor, plants and a striped awning
+        if i < storeys - 1 and w > 100:
+            layer.line((x + 6, yy + 16, x + w - 6, yy + 16), C(CREAM["brass"]), width=2)
+            for px in range(x + 8, x + w - 6, 11):
+                layer.line((px, yy + 13, px, yy + 16), C(CREAM["brass_hi"]))
+                if rng.random() < 0.4:
+                    layer.ellipse(px - 2, yy + 10, px + 2, yy + 15, fill=C("#478a58"))
+    # front awning at the base (mostly behind the aqueduct parapet)
+    ax0, ax1 = x + 8, x + w - 8
+    for i in range(max(1, (ax1 - ax0) // 7)):
+        c = "#ff8a4c" if i % 2 == 0 else "#fff2d6"
+        layer.polygon([(ax0 + i * 7, base - 12), (ax0 + i * 7 + 7, base - 12), (ax0 + i * 7 + 5, base - 6), (ax0 + i * 7 + 2, base - 6)], C(c))
+    layer.line((ax0, base - 12, ax1, base - 12), C(CREAM["brass_dark"]))
+    # roof
+    if roof == "garden":
+        roof_garden(layer, x - 4, top - 2, w + 8, seed, solar=solar)
+    elif roof == "barrel":
+        layer.pieslice(x, top - 24, x + w, top + 24, 180, 360, C("#78c2c7"))
+        layer.arc(x, top - 24, x + w, top + 24, 180, 360, C(CREAM["light"]), 2)
+        for k in range(1, 5):
+            gx = x + w * k // 5
+            layer.line((gx, top - 18, gx, top), C(CREAM["brass"]))
+        roof_garden(layer, x + 10, top - 1, w - 20, seed, solar=False, laundry=False)
+    else:
+        layer.rect(x, top - 5, x + w, top + 1, C(CREAM["body"]))
+        layer.line((x - 2, top - 5, x + w + 2, top - 5), C(CREAM["brass"]), width=2)
+        roof_garden(layer, x + 4, top - 4, w - 8, seed, solar=solar)
+    # trailing greenery from the roof, kept off the windows
+    for i in range(max(1, w // 48)):
+        vx = x + 16 + i * 47
+        hanging_vine(layer, vx, top + 4, 18 + i * 3, seed + i, 5)
+
+
+def market_terrace(layer: Layer, x, y, w, seed=0):
+    rng = random.Random(seed)
+    # a low parade of stalls at deck level; horizontal, never a tower
+    layer.rect(x, y, x + w, y + 7, C("#9b6a50"))
+    layer.rect(x, y, x + w, y + 2, C(CREAM["light"]))
+    n = max(1, w // 44)
+    for i in range(n):
+        sx = x + 6 + i * (w - 12) // n
+        sw = (w - 12) // n - 4
+        # striped awning
+        for k in range(max(1, sw // 6)):
+            c = "#ff8a4c" if k % 2 == 0 else "#fff2d6"
+            layer.polygon([(sx + k * 6, y - 14), (sx + k * 6 + 6, y - 14), (sx + k * 6 + 4, y - 8), (sx + k * 6 + 2, y - 8)], C(c))
+        layer.line((sx, y - 14, sx + sw, y - 14), C(CREAM["brass_dark"]))
+        layer.rect(sx + 2, y - 7, sx + sw - 2, y - 5, C("#cfa074"))
+        # crates and a potted plant
+        layer.rrect(sx + 4, y - 4, sx + 11, y + 1, 1, C("#b9855e"))
+        layer.rrect(sx + sw - 12, y - 5, sx + sw - 6, y + 1, 1, C("#9b6a50"))
+        if rng.random() < 0.6:
+            layer.ellipse(sx + sw // 2 - 3, y - 12, sx + sw // 2 + 3, y - 5, fill=C("#478a58"))
+            layer.point(sx + sw // 2, y - 12, C("#8dc46f"))
+
+
+def person(layer: Layer, x, y, seed=0):
+    rng = random.Random(seed)
+    c = rng.choice(["#3b395e", "#8e6bc0", "#a36428", "#2f6c4d"])
+    coat = rng.choice(["#ff8a4c", "#9ad8cd", "#fff2d6", "#d24f4a"])
+    layer.rect(x, y - 5, x + 1, y - 2, C(c))
+    layer.rect(x - 1, y - 8, x + 2, y - 5, C(coat))
+    layer.rect(x, y - 10, x + 1, y - 8, C("#b9855e"))
+    layer.point(x + 1, y - 10, C("#7f5446"))
+    layer.line((x, y - 2, x - 1, y), C(c))
+    layer.line((x + 1, y - 2, x + 2, y), C(c))
+    if rng.random() < 0.3:
+        layer.point(x + 3, y - 6, C("#f49bb8"))
+
+
+def duck(layer: Layer, x, y, seed=0):
+    # a readable little mallard: cream body, brown head, orange bill, wake
+    layer.ellipse(x, y - 4, x + 10, y + 2, fill=C("#f6e6c9"))
+    layer.ellipse(x + 2, y - 5, x + 8, y, fill=C("#fff2d6"))
+    layer.ellipse(x + 7, y - 7, x + 12, y - 2, fill=C("#9b6a50"))
+    layer.point(x + 11, y - 8, C("#ffe08a"))
+    layer.point(x + 12, y - 7, C("#f6b45b"))
+    layer.point(x + 9, y - 7, C("#2d2b4b"))
+    layer.rect(x + 1, y - 1, x + 6, y + 1, C("#e4c99b"))
+    layer.line((x - 4, y + 2, x + 12, y + 2), C("#96e8dc"))
+    layer.point(x - 3, y + 3, C("#c8f7ec"))
+    layer.point(x + 13, y + 1, C("#66d0cf"))
+
+
+def quay_shop(layer: Layer, x, y=QUAY_Y, w=56, seed=0):
+    rng = random.Random(seed)
+    style = seed % 3
+    top = y - (40 if style == 0 else 36 if style == 1 else 42)
+    body = ["#e2b98c", "#cfa074", "#d3a17f"][style]
+    layer.rrect(x, top, x + w, y, 3, C(body))
+    layer.rect(x, top, x + w, top + 3, C("#f3e0bb"))
+    # striped awning in a different colour family per shop
+    awning = [("#ff8a4c", "#fff2d6"), ("#9ad8cd", "#fff2d6"), ("#f49bb8", "#ffe6a1")][style]
+    for i in range(max(1, w // 7)):
+        c = awning[i % 2]
+        layer.polygon([(x + i * 7, top - 7), (x + i * 7 + 7, top - 7), (x + i * 7 + 5, top), (x + i * 7 + 2, top)], C(c))
+    layer.line((x, top - 8, x + w, top - 8), C(CREAM["brass_dark"]))
+    if style == 0:
+        # café: wide warm window, counter, parasol
+        layer.rrect(x + 7, top + 9, x + 29, top + 26, 3, C(CREAM["brass"]))
+        layer.rrect(x + 8, top + 10, x + 28, top + 25, 2, C("#ffe08a"))
+        layer.rect(x + 9, top + 11, x + 17, top + 18, C("#fff3c9"))
+        layer.line((x + 19, top + 11, x + 19, top + 24), C(CREAM["brass_dark"]))
+        layer.rrect(x + 33, top + 10, x + 49, top + 28, 3, C(CREAM["brass"]))
+        layer.rrect(x + 34, top + 11, x + 48, top + 28, 2, C("#2d2b4b"))
+        layer.rect(x + 36, top + 13, x + 46, top + 23, C("#8e6bc0"))
+        layer.point(x + 40, top + 17, C("#ffe08a"))
+        # parasol and a little table
+        layer.line((x + 16, top + 28, x + 16, top + 36), C(CREAM["brass_dark"]))
+        layer.pieslice(x + 7, top + 22, x + 25, top + 32, 180, 360, C("#ff8a4c"))
+        layer.rect(x + 13, top + 32, x + 20, top + 34, C("#9b6a50"))
+        layer.point(x + 16, top + 30, C("#ffe08a"))
+    elif style == 1:
+        # boathouse: wide dark door, ropes, a hanging ring
+        layer.rrect(x + 8, top + 8, x + 44, top + 30, 4, C(CREAM["brass"]))
+        layer.rrect(x + 9, top + 9, x + 43, top + 30, 4, C("#2d2b4b"))
+        for k in range(3):
+            layer.line((x + 13 + k * 10, top + 11, x + 13 + k * 10, top + 28), C("#5aa6bd"))
+        layer.rect(x + 10, top + 22, x + 42, top + 28, C("#5aa6bd"))
+        layer.line((x + 4, top + 12, x + 8, top + 30), C(CREAM["brass_dark"]))
+        layer.ellipse(x + 46, top + 12, x + 52, top + 18, outline=C("#c9852f"))
+        layer.rect(x + 48, top + 25, x + 54, top + 31, C("#ffe08a"))
+    else:
+        # flower shop: two small windows, planters, hanging baskets
+        for k in range(2):
+            wx = x + 7 + k * 20
+            layer.rrect(wx, top + 10, wx + 14, top + 25, 3, C(CREAM["brass"]))
+            layer.rrect(wx + 1, top + 11, wx + 13, top + 24, 2, C("#5aa6bd"))
+            layer.rect(wx + 2, top + 12, wx + 8, top + 17, C("#9ad8cd"))
+        for px in range(x + 5, x + w - 4, 9):
+            layer.ellipse(px - 3, top + 26, px + 3, top + 32, fill=C("#478a58"))
+            layer.point(px, top + 26, C("#8dc46f"))
+            layer.point(px + 1, top + 27, C("#f49bb8"))
+        layer.line((x + w - 8, top, x + w - 8, top + 7), C(CREAM["brass_dark"]))
+        layer.rrect(x + w - 12, top + 7, x + w - 4, top + 14, 2, C("#68a963"))
+    # crates, a person and a hanging sign are common to every shop
+    layer.rrect(x + 4, top + 31, x + 14, top + 39, 1, C("#b9855e"))
+    layer.rrect(x + w - 14, top + 32, x + w - 5, top + 39, 1, C("#9b6a50"))
+    layer.line((x + w - 6, top, x + w - 6, top + 7), C(CREAM["brass_dark"]))
+    layer.rrect(x + w - 10, top + 7, x + w - 1, top + 14, 2, C("#9ad8cd"))
+    layer.point(x + w - 5, top + 10, C("#5aa6bd"))
+    person(layer, x + 22, y - 1, seed + 5)
+
+
+def roof_tree(layer: Layer, cx, base_y, w=30, h=16, seed=0):
+    rng = random.Random(seed)
+    layer.line((cx, base_y, cx + 1, base_y - 12), C("#7f5446"), width=3)
+    layer.line((cx + 1, base_y - 8, cx - 5, base_y - 15), C("#7f5446"))
+    layer.line((cx + 1, base_y - 10, cx + 7, base_y - 16), C("#7f5446"))
+    for i in range(7):
+        ex = cx - w // 2 + i * max(4, w // 7) + rng.randint(-2, 2)
+        ey = base_y - 12 - rng.randint(0, h - 5)
+        layer.ellipse(ex - 7, ey - 5, ex + 7, ey + 5, fill=C("#2f6c4d"))
+        layer.ellipse(ex - 4, ey - 5, ex + 4, ey + 1, fill=C("#478a58"))
+        layer.point(ex + 1, ey - 5, C("#68a963"))
     for i in range(3):
-        layer.rect(cx - 22 - i * 4, 594 + i * 2, cx + 22 + i * 4, 596 + i * 2, C(CREAM["stone"]))
-    layer.ellipse(cx - 1, 292, cx + 1, 294, fill=C("#fff3c9"))
+        layer.point(cx - 8 + i * 8, base_y - h - 1, C("#8dc46f"))
 
 
-def needle_tower(layer: Layer, cx, top, seed=0):
-    # a garden observatory on a tapered ivory needle
-    layer.rrect(cx - 48, 520, cx + 48, 600, 10, C(CREAM["stone"]))
-    layer.rrect(cx - 44, 524, cx + 44, 596, 8, C(CREAM["body"]))
-    layer.rrect(cx - 42, 526, cx - 20, 592, 8, C(CREAM["shade"]))
-    arched_window(layer, cx - 9, 556, 18, 40, lit=True)
-    layer.rrect(cx - 14, 550, cx + 14, 556, 3, C(CREAM["brass"]))
-    for px in (cx - 34, cx + 24):
-        porthole(layer, px, 546, 4, lit=False)
-    # tapered shaft
-    layer.polygon(
-        [(cx - 32, 526), (cx + 32, 526), (cx + 18, top + 36), (cx - 18, top + 36)],
-        C(CREAM["body"]),
-    )
-    layer.polygon(
-        [(cx - 32, 526), (cx - 8, 526), (cx - 7, top + 40), (cx - 18, top + 40)],
-        C(CREAM["shade"]),
-    )
-    layer.line((cx + 12, top + 40, cx + 26, 524), C(CREAM["light"]), width=2)
-    for y in range(top + 56, 520, 34):
-        inset = 18 + (y - top) * 14 // 230
-        layer.line((cx - inset, y, cx + inset, y), C(CREAM["brass"]), width=2)
-        layer.line((cx - inset, y + 2, cx + inset, y + 2), C(CREAM["brass_dark"]))
-        layer.line((cx - inset + 1, y - 1, cx + inset - 1, y - 1), C(CREAM["brass_hi"]))
-    for y, cols in ((380, 2), (430, 3), (482, 3)):
-        window_cluster(layer, cx, y, cols, 1, 13, 12, 3, 0.25, seed + y)
-    # side balcony boxes with trailing plants
-    for y in (404, 458, 508):
-        inset = 18 + (y - top) * 14 // 230
-        layer.line((cx - inset - 4, y + 5, cx + inset + 4, y + 5), C(CREAM["brass"]), width=2)
-        for px in (cx - inset + 2, cx - 4, cx + inset - 8):
-            layer.ellipse(px - 3, y + 6, px + 3, y + 11, fill=C("#478a58"))
-            layer.point(px, y + 6, C("#8dc46f"))
-        hanging_vine(layer, cx - inset, y + 11, 18, seed + y, 5)
-    # observation deck, glass crown and the great brass halo
-    layer.rrect(cx - 42, top + 8, cx + 42, top + 34, 10, C(CREAM["body"]))
-    layer.rect(cx - 40, top + 20, cx + 40, top + 24, C(CREAM["brass"]))
-    for px in range(cx - 34, cx + 36, 11):
-        layer.rect(px, top + 12, px + 6, top + 19, C("#5aa6bd"))
-        layer.point(px + 2, top + 12, C("#c6ebdc"))
-    onion_dome(layer, cx, top + 18, 30, 42, glass=True, finial=True, seed=seed + 2)
-    layer.ellipse(cx - 67, top + 16, cx + 67, top + 44, outline=C(CREAM["brass"]), width=4)
-    layer.arc(cx - 67, top + 16, cx + 67, top + 44, 200, 340, C(CREAM["brass_hi"]), 1)
-    layer.arc(cx - 67, top + 16, cx + 67, top + 44, 20, 160, C(CREAM["brass_dark"]), 2)
-    for px in (cx - 58, cx - 30, cx + 28, cx + 56):
-        layer.rrect(px - 5, top + 36, px + 5, top + 49, 4, C(CREAM["body"]))
-        layer.ellipse(px - 3, top + 32, px + 3, top + 39, fill=C("#478a58"))
-        layer.point(px + 1, top + 32, C("#8dc46f"))
-        if px % 2 == 0:
-            layer.point(px, top + 31, C("#f49bb8"))
-        hanging_vine(layer, px, top + 49, 22, seed + px, 5)
-    # pennants and roof lights
-    for px in (cx - 30, cx + 30):
-        layer.line((px, top + 6, px, top + 22), C(CREAM["brass_dark"]))
-        layer.polygon([(px + 1, top + 7), (px + 9, top + 10), (px + 1, top + 14)], C("#ff8a4c" if px < cx else "#ffe08a"))
-    # a stair spiralling down the shaft
-    for i in range(6):
-        sy = 476 + i * 8
-        layer.rect(cx - 22 + (i % 2) * 3, sy, cx + 4 + (i % 2) * 3, sy + 2, C(CREAM["stone_dark"]))
-        layer.point(cx + 5 + (i % 2) * 3, sy, C(CREAM["brass"]))
+def laundry(layer: Layer, x0, x1, y, seed=0):
+    layer.line((x0, y, x1, y), C(CREAM["brass_dark"]))
+    for i in range(4):
+        x = x0 + (x1 - x0) * (i + 1) // 5
+        c = ["#ff8a4c", "#ffe08a", "#9ad8cd", "#f49bb8"][i]
+        layer.polygon([(x, y), (x + 6, y), (x + 5, y + 8), (x + 1, y + 8)], C(c))
+    layer.point(x0, y - 2, C(CREAM["brass_dark"]))
+    layer.point(x1, y - 2, C(CREAM["brass_dark"]))
 
+
+def parasol(layer: Layer, cx, base_y, r=15, seed=0):
+    rng = random.Random(seed)
+    c1, c2 = [( "#ff8a4c", "#fff2d6"), ("#9ad8cd", "#fff2d6"), ("#f49bb8", "#ffe6a1")][seed % 3]
+    layer.line((cx, base_y, cx, base_y - 16), C(CREAM["brass_dark"]))
+    layer.pieslice(cx - r, base_y - 24, cx + r, base_y - 2, 180, 360, C(c1))
+    for i in range(-2, 3):
+        x = cx + i * r // 3
+        layer.line((cx, base_y - 22, x, base_y - 8), C(c2))
+    layer.arc(cx - r, base_y - 24, cx + r, base_y - 2, 180, 360, C(CREAM["light"]), 2)
+    layer.line((cx - r + 2, base_y - 3, cx + r - 2, base_y - 3), C(CREAM["brass"]))
+    # table and a chair under the shade
+    layer.rect(cx - 4, base_y - 5, cx + 4, base_y - 3, C(CREAM["stone"]))
+    layer.line((cx - 3, base_y - 3, cx - 3, base_y + 2), C(CREAM["stone_dark"]))
+    layer.line((cx + 3, base_y - 3, cx + 3, base_y + 2), C(CREAM["stone_dark"]))
+    layer.point(cx + r + 2, base_y - 1, C(rng.choice(["#f49bb8", "#9ad8cd", "#ffe08a"])))
+
+
+def aqueduct_wall(layer: Layer):
+    """The long horizontal spine: arches, deck, channel and quay walkway."""
+    deck_y, quay_y = DECK_Y, QUAY_Y
+    stone = "#e4c99b"
+    stone_dark = "#cfa074"
+    stone_deep = "#b9855e"
+    # top slab and fascia
+    layer.rect(0, deck_y, 1600, deck_y + 34, C(stone))
+    layer.rect(0, deck_y + 30, 1600, deck_y + 34, C(stone_dark))
+    layer.line((0, deck_y + 34, 1600, deck_y + 34), C(stone_deep), width=2)
+    layer.line((0, deck_y + 1, 1600, deck_y + 1), C(CREAM["light"]), width=2)
+    # piers and arches
+    for i in range(len(PIERS) - 1):
+        px0, px1 = PIERS[i], PIERS[i + 1]
+        j0, j1 = px0 + 18, px1 - 18
+        cx = (j0 + j1) // 2
+        half = max(14, (j1 - j0) // 2)
+        spring = deck_y + 88
+        rise = spring - (deck_y + 36)
+        for x in range(j0, j1 + 1):
+            u = (x - cx) / half
+            arch_y = spring - int(rise * math.sqrt(max(0.0, 1.0 - u * u)))
+            if arch_y > deck_y + 36:
+                layer.rect(x, deck_y + 36, x, arch_y - 1, C(stone))
+            # thick arch ring/soffit
+            layer.rect(x, arch_y, x, arch_y + 4, C(stone_dark))
+            layer.rect(x, arch_y + 4, x, arch_y + 5, C(stone_deep))
+            layer.rect(x, arch_y + 5, x, arch_y + 7, C("#9b6a50"))
+            layer.point(x, arch_y - 1, C(CREAM["light"]))
+        # pier blocks, wide and horizontally banded
+        for px in (px0, px1):
+            layer.rrect(px - 20, deck_y + 30, px + 20, quay_y, 4, C(stone))
+            layer.rrect(px - 20, deck_y + 30, px - 8, quay_y, 4, C(stone_dark))
+            layer.rect(px - 23, deck_y + 30, px + 23, deck_y + 38, C(CREAM["light"]))
+            layer.rect(px - 26, quay_y - 18, px + 26, quay_y, C(stone_dark))
+            for yy in range(deck_y + 46, quay_y - 18, 22):
+                layer.line((px - 18, yy, px + 18, yy), C(stone_dark))
+                layer.point(px, yy + 5, C(stone_deep))
+            layer.rect(px + 18, deck_y + 38, px + 20, quay_y - 18, C(stone_dark))
+            layer.rect(px - 20, deck_y + 38, px - 18, quay_y - 18, C(stone_dark))
+            layer.rect(px - 14, deck_y + 44, px + 14, deck_y + 62, C(stone_dark))
+            layer.rect(px - 12, deck_y + 46, px + 12, deck_y + 60, C(stone))
+            layer.point(px, deck_y + 54, C(CREAM["brass"]))
+        # a keystone and a little garland on the spandrel
+        layer.rect(cx - 2, deck_y + 38, cx + 2, deck_y + 46, C(CREAM["light"]))
+        layer.point(cx, deck_y + 43, C(CREAM["brass"]))
+    # deck water channel and parapet
+    layer.rect(0, deck_y - 6, 1600, deck_y - 1, C("#2f8ba8"))
+    layer.rect(0, deck_y - 5, 1600, deck_y - 3, C("#66d0cf"))
+    for x in range(0, 1600, 7):
+        if (x * 3) % 11 < 3:
+            layer.point(x, deck_y - 4, C("#96e8dc"))
+    layer.rect(0, deck_y - 12, 1600, deck_y - 6, C(stone))
+    layer.line((0, deck_y - 12, 1600, deck_y - 12), C(CREAM["brass"]), width=2)
+    for px in range(8, 1600, 26):
+        layer.line((px, deck_y - 20, px, deck_y - 12), C(CREAM["brass"]))
+        layer.point(px, deck_y - 21, C(CREAM["brass_hi"]))
+    layer.line((0, deck_y - 20, 1600, deck_y - 20), C(CREAM["brass"]), width=2)
+    # hanging gardens off the parapet
+    for px in range(26, 1600, 84):
+        hanging_vine(layer, px, deck_y + 2, 22 + (px % 17), px, 6)
+    # quay walkway and mooring rings at the waterline
+    layer.rect(0, quay_y - 16, 1600, quay_y, C(CREAM["stone"]))
+    layer.rect(0, quay_y - 16, 1600, quay_y - 13, C(CREAM["light"]))
+    layer.rect(0, quay_y - 3, 1600, quay_y, C(stone_deep))
+    for x in range(-4, 1600, 28):
+        layer.rect(x, quay_y - 14, x, quay_y - 3, C(stone_dark))
+    for x in range(14, 1600, 96):
+        layer.ellipse(x - 3, quay_y - 10, x + 3, quay_y - 4, outline=C(CREAM["brass_dark"]))
+        layer.line((x - 2, quay_y - 10, x + 2, quay_y - 4), C(CREAM["brass"]))
+    # waterfall mouths: a broad brass/stone spout at the deck edge
+    for mx in FALL_MOUTHS:
+        layer.rrect(mx - 16, deck_y - 2, mx + 16, deck_y + 7, 3, C(stone_dark))
+        layer.rrect(mx - 14, deck_y - 1, mx + 14, deck_y + 5, 2, C(CREAM["brass"]))
+        layer.rect(mx - 11, deck_y + 5, mx + 11, deck_y + 9, C(CREAM["brass_dark"]))
+        layer.rect(mx - 9, deck_y + 7, mx + 9, deck_y + 10, C(CREAM["water_hi"]))
+    # a broad stair from the deck to the quay, at the right of the hero
+    sx = 720
+    for i in range(12):
+        layer.rect(sx + i * 4, deck_y + 34 + i * 12, sx + 68 + i * 4, deck_y + 41 + i * 12, C(stone))
+        layer.line((sx + i * 4, deck_y + 34 + i * 12, sx + 68 + i * 4, deck_y + 34 + i * 12), C(CREAM["light"]))
+        layer.line((sx + i * 4, deck_y + 41 + i * 12, sx + 68 + i * 4, deck_y + 41 + i * 12), C(stone_dark))
+    # stairs rail
+    layer.line((sx, deck_y + 30, sx + 48, deck_y + 160), C(CREAM["brass_dark"]), width=2)
+    for i in range(5):
+        layer.line((sx + 8 + i * 10, deck_y + 42 + i * 30, sx + 8 + i * 10, deck_y + 52 + i * 30), C(CREAM["brass"]))
+    # decorative frieze, medallions and lamps on the wall face
+    for x in range(10, 1592, 26):
+        layer.rect(x, deck_y + 39, x + 12, deck_y + 47, C(stone_dark))
+        layer.rect(x + 2, deck_y + 41, x + 10, deck_y + 45, C(stone))
+    for i, px in enumerate(PIERS[1:-1]):
+        if i % 2 == 0:
+            layer.ellipse(px - 7, deck_y + 44, px + 7, deck_y + 58, fill=C(CREAM["brass"]))
+            layer.ellipse(px - 5, deck_y + 46, px + 5, deck_y + 56, fill=C(CREAM["brass_hi"]))
+            for k in range(4):
+                a = k * math.tau / 4
+                layer.point(px + int(math.cos(a) * 4), deck_y + 51 + int(math.sin(a) * 4), C(CREAM["brass_dark"]))
+            layer.point(px, deck_y + 51, C("#ff8a4c"))
+        else:
+            layer.line((px, deck_y + 50, px + 12, deck_y + 50), C(CREAM["brass_dark"]))
+            layer.line((px + 12, deck_y + 50, px + 12, deck_y + 58), C(CREAM["brass_dark"]))
+            layer.rect(px + 9, deck_y + 56, px + 15, deck_y + 64, C(CREAM["brass"]))
+            layer.rect(px + 10, deck_y + 57, px + 14, deck_y + 63, C("#ffe08a"))
+            layer.point(px + 12, deck_y + 54, C("#fff3c9"))
+    for vx, ln in ((40, 44), (300, 58), (600, 50), (760, 64), (1000, 46), (1320, 56), (1540, 42)):
+        hanging_vine(layer, vx, deck_y + 2, ln, vx, 7)
+        for k in range(3):
+            layer.ellipse(vx - 5 + k * 4, deck_y + 18 + k * 12, vx + 2 + k * 4, deck_y + 25 + k * 12, fill=C("#478a58"))
+            layer.point(vx - 2 + k * 4, deck_y + 18 + k * 12, C("#8dc46f"))
+
+    # waterfront shopfronts: the bottom band gets the life, the wall stays open
+    for i, (sx, sw) in enumerate(((52, 54), (264, 48), (540, 62), (900, 46), (1088, 58), (1278, 52), (1458, 60))):
+        quay_shop(layer, sx, QUAY_Y, sw, 120 + i)
+
+    # quay activity
+    for i, x in enumerate(range(30, 1560, 118)):
+        if i % 3 == 0:
+            person(layer, x, quay_y - 16, 800 + i)
+        elif i % 3 == 1:
+            layer.rrect(x, quay_y - 23, x + 10, quay_y - 16, 2, C("#b9855e"))
+            layer.rrect(x + 2, quay_y - 28, x + 8, quay_y - 23, 1, C("#cfa074"))
+        else:
+            layer.ellipse(x - 3, quay_y - 25, x + 3, quay_y - 18, fill=C("#478a58"))
+            layer.point(x, quay_y - 25, C("#8dc46f"))
 
 
 def rope_bridge(layer: Layer, x0, y0, x1, y1, sag=8, seed=0):
-    rng = random.Random(seed)
     pts = []
     for x in range(x0, x1 + 1):
         t = (x - x0) / max(1, x1 - x0)
         yy = int(y0 * (1 - t) + y1 * t - sag * math.sin(math.pi * t))
         pts.append((x, yy))
     for x, yy in pts:
-        layer.point(x, yy, C(CREAM["brass_dark"]))
-        layer.point(x, yy + 6, C(CREAM["brass_dark"]))
-        if x % 6 == 0:
-            layer.line((x, yy, x, yy + 6), C(CREAM["brass"]))
+        # a continuous wooden deck, a handrail and a rope net below
+        layer.rect(x, yy + 2, x, yy + 4, C("#9b6a50"))
+        layer.rect(x, yy + 2, x, yy + 2, C("#cfa074"))
+        if x % 2 == 0:
+            layer.point(x, yy - 4, C(CREAM["brass_dark"]))
+        if x % 8 == 0:
+            layer.line((x, yy - 4, x, yy + 2), C(CREAM["brass_dark"]))
+            layer.line((x, yy + 4, x, yy + 7), C(CREAM["brass_dark"]))
         if x % 4 == 0:
-            layer.rect(x, yy + 2, x + 3, yy + 3, C(CREAM["stone_dark"]))
+            layer.rect(x, yy + 3, x + 2, yy + 4, C("#e4c99b"))
     for i in range(3):
         vx = x0 + (x1 - x0) * (i + 1) // 4
         vy = pts[vx - x0][1]
-        hanging_vine(layer, vx, vy + 4, 12 + i * 4, seed + i, 4)
+        hanging_vine(layer, vx, vy + 4, 10 + i * 4, seed + i, 4)
 
 
-def parasol(layer: Layer, cx, base_y, r=15, seed=0):
-    layer.line((cx, base_y, cx, base_y - 14), C(CREAM["brass_dark"]))
-    layer.pieslice(cx - r, base_y - 22, cx + r, base_y - 4, 180, 360, C("#ff8a4c"))
-    for i in range(-2, 3):
-        x = cx + i * r // 3
-        layer.line((cx, base_y - 20, x, base_y - 8), C("#ffe08a" if i % 2 else "#fff2d6"))
-    layer.arc(cx - r, base_y - 22, cx + r, base_y - 4, 180, 360, C(CREAM["light"]), 2)
-    layer.line((cx - r + 2, base_y - 5, cx + r - 2, base_y - 5), C(CREAM["brass"]))
-    # a tiny table and a chair
-    layer.rect(cx - 5, base_y - 5, cx + 5, base_y - 3, C(CREAM["stone"]))
-    layer.line((cx - 4, base_y - 3, cx - 4, base_y + 2), C(CREAM["stone_dark"]))
-    layer.line((cx + 4, base_y - 3, cx + 4, base_y + 2), C(CREAM["stone_dark"]))
-    layer.point(cx + 8, base_y - 1, C("#f49bb8"))
+def tree_hut(layer: Layer, cx, y, seed=0):
+    # a low flat-roofed lookout with a deck, not a tower
+    layer.rrect(cx - 32, y, cx + 32, y + 20, 5, C("#cfa074"))
+    layer.rrect(cx - 30, y + 2, cx + 30, y + 18, 4, C("#e2b98c"))
+    layer.rrect(cx - 38, y + 18, cx + 38, y + 24, 2, C("#9b6a50"))
+    layer.line((cx - 38, y + 18, cx + 38, y + 18), C(CREAM["brass"]), width=2)
+    layer.rect(cx - 8, y + 5, cx + 8, y + 17, C("#2d2b4b"))
+    layer.rect(cx - 6, y + 7, cx + 6, y + 15, C("#ffe08a"))
+    layer.rect(cx - 6, y + 7, cx - 2, y + 15, C("#fff3c9"))
+    for px in range(cx - 28, cx + 30, 11):
+        layer.line((px, y, px, y + 5), C("#7f5446"))
+        layer.point(px, y - 1, C(CREAM["brass_hi"]))
+    # little awning, window box and roof plants
+    for i in range(9):
+        c = "#ff8a4c" if i % 2 == 0 else "#fff2d6"
+        layer.polygon([(cx - 34 + i * 8, y - 8), (cx - 34 + i * 8 + 8, y - 8), (cx - 34 + i * 8 + 6, y - 2), (cx - 34 + i * 8 + 2, y - 2)], C(c))
+    for px in range(cx - 26, cx + 28, 9):
+        layer.ellipse(px - 3, y - 5, px + 3, y + 1, fill=C("#478a58"))
+        layer.point(px + 1, y - 5, C("#8dc46f"))
+        if px % 18 == 0:
+            layer.point(px, y - 6, C("#f49bb8"))
+    # rope ladder, deck rail and a lantern
+    for i in range(8):
+        layer.line((cx - 22, y + 24 + i * 4, cx - 22, y + 27 + i * 4), C(CREAM["brass_dark"]))
+        layer.line((cx - 22, y + 27 + i * 4, cx - 13, y + 27 + i * 4), C("#7f5446"))
+    for px in range(cx - 32, cx + 33, 10):
+        layer.line((px, y + 18, px, y + 23), C(CREAM["brass"]))
+    lantern(layer, cx + 29, y + 24)
+    lantern(layer, cx - 30, y + 24)
 
 
-def side_pod(layer: Layer, x, y, seed=0):
-    layer.rrect(x, y, x + 26, y + 20, 8, C(CREAM["body"]))
-    layer.rrect(x + 1, y + 1, x + 10, y + 19, 8, C(CREAM["shade"]))
-    layer.ellipse(x + 11, y + 5, x + 22, y + 16, fill=C(CREAM["brass"]))
-    layer.ellipse(x + 12, y + 6, x + 21, y + 15, fill=C(CREAM["ink"]))
-    layer.rect(x + 14, y + 8, x + 18, y + 13, C("#ffe08a"))
-    layer.rrect(x + 5, y + 20, x + 21, y + 25, 2, C(CREAM["stone_dark"]))
-    for px in (x + 7, x + 12, x + 17):
-        layer.ellipse(px - 2, y + 17, px + 2, y + 21, fill=C("#478a58"))
-    hanging_vine(layer, x + 4, y + 25, 16, seed, 4)
+def draw_mid() -> Layer:
+    layer = Layer()
+    rng = random.Random(9)
+    # ---- city behind the aqueduct ---------------------------------------
+    # left: a broad three-storey garden block, cut by the seam on purpose
+    broad_block(layer, -34, 214, 232, body="#f3e0bb", shade="#e4c99b", roof="garden", storeys=3, seed=1, solar=True)
+    broad_block(layer, 156, 96, 268, body="#cfa074", shade="#9b6a50", roof="flat", storeys=2, seed=2, solar=False)
+    # a low market/warehouse bay under the tree's left shoulder
+    broad_block(layer, 252, 108, 300, body="#e2b98c", shade="#cfa074", roof="barrel", storeys=1, seed=3, solar=False)
+    wind_turbine(layer, 112, 200, 232, 20, 0.8, 38)
+    market_terrace(layer, 262, DECK_Y, 96, 31)
 
+    # central giant tree; the trunk is broad and the crown spreads above the
+    # deck, not a lollipop
+    big_tree(layer, 392, DECK_Y, 312, 196, seed=10, treehouse_=False)
+    # two visible limbs below the crown, so the trunk is not a bare pole
+    for bx, by, tx, ty in ((392, 300, 330, 272), (392, 312, 452, 282), (392, 326, 360, 340)):
+        layer.line((bx, by, tx, ty), C("#7f5446"), width=6)
+        layer.line((bx, by + 1, tx, ty + 1), C("#9b6a50"), width=2)
+    for tx, ty in ((330, 272), (452, 282), (360, 340)):
+        for i in range(5):
+            layer.ellipse(tx - 8 + i * 4, ty - 7 - (i % 2) * 3, tx + 2 + i * 4, ty + 3, fill=C("#2f6c4d"))
+            layer.point(tx - 4 + i * 4, ty - 7 - (i % 2) * 3, C("#68a963"))
+    tree_hut(layer, 344, 238, 33)
+    rope_bridge(layer, 184, 252, 318, 248, 7, 44)
+    # lanterns and a swing in the crown
+    for px, py in ((300, 228), (470, 236), (420, 214)):
+        lantern(layer, px, py)
+    # small market pavilions around the root terrace
+    broad_block(layer, 236, 92, 324, body="#e2b98c", shade="#cfa074", roof="flat", storeys=1, seed=4, solar=False, lit=0.1)
+    market_terrace(layer, 236, DECK_Y, 92, 32)
+    market_terrace(layer, 440, DECK_Y, 70, 33)
 
-def telescope_dome(layer: Layer, cx, base_y=600, seed=0):
-    layer.rrect(cx - 32, 500, cx + 32, base_y, 10, C(CREAM["stone"]))
-    layer.rrect(cx - 28, 504, cx + 28, 596, 8, C(CREAM["body"]))
-    layer.rrect(cx - 26, 506, cx - 8, 592, 6, C(CREAM["shade"]))
-    for y in (526, 560, 586):
-        window_cluster(layer, cx, y, 2, 1, 14, 12, 3, 0.5, seed + y)
-    layer.ellipse(cx - 34, 464, cx + 34, 516, fill=C(CREAM["body"]))
-    layer.pieslice(cx - 30, 456, cx + 30, 512, 180, 360, C("#78c2c7"))
-    layer.arc(cx - 30, 456, cx + 30, 512, 180, 360, C(CREAM["light"]), 2)
-    for f in (-0.62, -0.28, 0.1, 0.46, 0.78):
-        layer.line((cx, 466, cx + int(28 * f), 500), C(CREAM["light"]))
-    layer.line((int(cx - 29), 500, int(cx + 29), 500), C(CREAM["brass"]), width=3)
-    # telescope barrel, aiming up and left at the sky
-    layer.line((cx + 4, 470, cx - 34, 436), C(CREAM["brass_dark"]), width=7)
-    layer.line((cx + 2, 468, cx - 33, 435), C(CREAM["brass"]), width=5)
-    layer.line((cx + 1, 467, cx - 32, 434), C(CREAM["brass_hi"]), width=2)
-    layer.ellipse(cx - 41, 428, cx - 29, 441, fill=C(CREAM["brass_dark"]))
-    layer.ellipse(cx - 39, 430, cx - 31, 439, fill=C("#9ad8cd"))
-    layer.ellipse(cx + 1, 466, cx + 8, 474, fill=C(CREAM["brass"]))
-    # little tripod and railing
-    layer.line((cx - 10, 472, cx - 16, 494), C(CREAM["brass_dark"]))
-    layer.line((cx + 10, 472, cx + 16, 494), C(CREAM["brass_dark"]))
-    for px in range(cx - 28, cx + 29, 9):
-        layer.point(px, 496, C(CREAM["brass_hi"]))
-    curve_planter(layer, cx - 30, 470, 8, seed)
+    # right: a wide low conservatory with a glass half-dome
+    broad_block(layer, 512, 280, 330, body="#f3e0bb", shade="#e4c99b", roof="flat", storeys=1, seed=5, solar=False)
+    half_dome(layer, 650, 326, 132, 74, glass=True, seed=6)
+    layer.rrect(506, 326, 534, 350, 3, C(CREAM["body"]))
+    layer.rrect(770, 320, 802, 350, 3, C(CREAM["body"]))
+    # plants inside the glass and a lit entrance arcade at its feet
+    for i, px in enumerate(range(566, 742, 22)):
+        layer.rrect(px - 5, 316, px + 5, 326, 2, C("#9b6a50"))
+        layer.ellipse(px - 8, 303 + (i % 2) * 3, px + 8, 320, fill=C("#2f6c4d"))
+        layer.ellipse(px - 5, 302 + (i % 2) * 3, px + 4, 315, fill=C("#478a58"))
+        layer.point(px + 2, 302 + (i % 2) * 3, C("#8dc46f"))
+        if i % 3 == 0:
+            layer.point(px, 306, C("#f49bb8"))
+    for ax in range(536, 780, 34):
+        if 624 <= ax <= 664:
+            continue
+        arched_window(layer, ax, 328, 12, 20, lit=(ax % 68 == 0))
+    layer.rrect(628, 318, 672, 350, 6, C(CREAM["brass"]))
+    layer.rrect(631, 321, 669, 350, 5, C("#2d2b4b"))
+    layer.rrect(635, 325, 665, 350, 4, C("#ffe08a"))
+    layer.line((650, 325, 650, 350), C(CREAM["brass_dark"]))
+    market_terrace(layer, 520, DECK_Y, 260, 34)
+    # a rooftop wind catcher on the left edge of the conservatory roof
+    wind_turbine(layer, 538, 300, 326, 19, 0.4, 35)
 
+    # ---- second screen ---------------------------------------------------
+    broad_block(layer, 812, 174, 236, body="#f3e0bb", shade="#e4c99b", roof="garden", storeys=3, seed=7)
+    broad_block(layer, 982, 128, 292, body="#cfa074", shade="#9b6a50", roof="flat", storeys=2, seed=8, solar=False)
+    broad_block(layer, 1106, 168, 308, body="#e2b98c", shade="#cfa074", roof="barrel", storeys=1, seed=9, solar=False)
+    broad_block(layer, 1122, 160, 252, body="#f3e0bb", shade="#e4c99b", roof="garden", storeys=3, seed=11)
+    market_terrace(layer, 1130, DECK_Y, 120, 36)
+    # a medium tree, broad and low
+    big_tree(layer, 1352, DECK_Y, 196, 146, seed=12, treehouse_=False)
+    broad_block(layer, 1442, 158, 240, body="#cfa074", shade="#9b6a50", roof="flat", storeys=2, seed=13, solar=True)
+    half_dome(layer, 1518, 326, 58, 34, glass=True, seed=14)
+    market_terrace(layer, 1450, DECK_Y, 140, 37)
+    wind_turbine(layer, 1212, 220, 254, 24, 1.5, 36)
+    wind_turbine(layer, 886, 194, 236, 18, 2.7, 37)
 
-def curve_planter(layer: Layer, x, y, w, seed=0):
-    layer.rrect(x, y, x + w * 4, y + 4, 2, C(CREAM["stone_dark"]))
-    for i in range(3):
-        px = x + 3 + i * 8
-        layer.ellipse(px - 2, y - 4, px + 2, y + 1, fill=C("#478a58"))
-        layer.point(px, y - 4, C("#8dc46f"))
+    roof_tree(layer, 52, 232, 34, 18, 51)
+    roof_tree(layer, 930, 236, 32, 17, 52)
+    roof_tree(layer, 1480, 240, 30, 16, 53)
+    laundry(layer, 188, 252, 222, 54)
+    laundry(layer, 1200, 1280, 236, 55)
 
+    # ---- long horizontal aqueduct / quay --------------------------------
+    aqueduct_wall(layer)
 
-def conservatory_terrace(layer: Layer, cx):
-    # the grand entrance and terrace, drawn after the rooftops so the hero
-    # landmark keeps its feet
-    layer.rrect(cx - 78, 548, cx + 78, 600, 6, C(CREAM["stone"]))
-    layer.rrect(cx - 74, 548, cx + 74, 560, 6, C(CREAM["body"]))
-    layer.line((cx - 74, 549, cx + 74, 549), C(CREAM["brass"]), width=2)
-    # three arches, lit from inside
-    arched_window(layer, cx - 40, 522, 18, 32, lit=True)
-    arched_window(layer, cx + 22, 522, 18, 32, lit=True)
-    layer.rrect(cx - 15, 516, cx + 15, 560, 8, C(CREAM["brass"]))
-    layer.rrect(cx - 12, 519, cx + 12, 560, 7, C(CREAM["ink"]))
-    layer.rrect(cx - 9, 523, cx + 9, 560, 6, C("#ffe08a"))
-    layer.line((cx, 523, cx, 560), C(CREAM["brass_dark"]))
-    layer.line((cx - 9, 536, cx + 9, 536), C(CREAM["brass"]))
-    # sunburst over the door
-    layer.ellipse(cx - 8, 498, cx + 8, 514, fill=C(CREAM["brass"]))
-    layer.ellipse(cx - 6, 500, cx + 6, 512, fill=C(CREAM["brass_hi"]))
-    for dx, dy in ((-11, 0), (11, 0), (0, -11), (0, 11), (-8, -8), (8, -8), (-8, 8), (8, 8)):
-        layer.point(cx + dx, 506 + dy, C(CREAM["brass_hi"]))
-    # steps and balustrade
-    for i in range(3):
-        layer.rect(cx - 28 - i * 4, 588 + i * 4, cx + 28 + i * 4, 590 + i * 4, C(CREAM["stone"]))
-    for px in range(cx - 70, cx + 71, 12):
-        layer.line((px, 556, px, 568), C(CREAM["brass"]))
-        layer.point(px, 555, C("#ffe08a"))
-    layer.line((cx - 70, 558, cx + 70, 558), C(CREAM["brass"]), width=2)
-    # potted trees flanking the stair
-    for px in (cx - 62, cx + 62):
-        layer.rrect(px - 7, 558, px + 7, 574, 3, C(CREAM["stone_dark"]))
-        layer.ellipse(px - 12, 534, px + 12, 560, fill=C("#478a58"))
-        layer.ellipse(px - 6, 528, px + 8, 552, fill=C("#68a963"))
-        layer.point(px + 2, 530, C("#8dc46f"))
-        layer.point(px - 1, 536, C("#f49bb8"))
-    # a fountain at the foot of the steps
-    layer.ellipse(cx - 16, 570, cx + 16, 588, fill=C(CREAM["stone_dark"]))
-    layer.ellipse(cx - 13, 572, cx + 13, 583, fill=C("#42b2c2"))
-    layer.ellipse(cx - 8, 566, cx + 8, 576, fill=C(CREAM["stone"]))
-    layer.ellipse(cx - 6, 568, cx + 6, 574, fill=C("#66d0cf"))
-    layer.rect(cx - 1, 560, cx + 1, 570, C(CREAM["brass"]))
-    layer.point(cx, 558, C("#c8f7ec"))
-    for i in range(3):
-        layer.point(cx - 10 - i * 3, 584 - i, C("#96e8dc"))
-        layer.point(cx + 10 + i * 3, 584 - i, C("#96e8dc"))
+    # parasols and market life on the terrace
+    for i, (px, pr) in enumerate(((258, 16), (468, 14), (548, 15), (770, 17), (875, 13), (1150, 15), (1462, 14))):
+        parasol(layer, px, DECK_Y - 1, pr, 90 + i)
+    for i, px in enumerate((226, 292, 430, 500, 612, 704, 806, 1032, 1246, 1412)):
+        person(layer, px, DECK_Y - 3, 950 + i)
+    person(layer, 270, 246, 960)
+    for px in range(22, 1600, 63):
+        if px % 2 == 0:
+            layer.rrect(px - 3, DECK_Y - 12, px + 4, DECK_Y - 4, 2, C("#9b6a50"))
+            layer.ellipse(px - 3, DECK_Y - 19, px + 4, DECK_Y - 11, fill=C("#478a58"))
+            layer.point(px + 1, DECK_Y - 19, C("#8dc46f"))
+            if px % 3 == 0:
+                layer.point(px, DECK_Y - 20, C("#f49bb8"))
+    layer.line((688, 544, 712, 544), C("#ffe6a1"))
+    layer.line((684, 562, 704, 562), C("#ffd37a"))
+    layer.line((694, 580, 710, 580), C("#ffe6a1"))
+    bird(layer, 344, 230, 1)
+    bird(layer, 890, 242, -1)
 
-
-def mid_extras(layer: Layer, rng: random.Random):
-    conservatory_terrace(layer, 416)
-    # side capsules that make the towers feel assembled, not extruded
-    side_pod(layer, 94, 486, 61)
-    side_pod(layer, 1572, 500, 62)
-    # moss and vines on the long aqueduct's piers
-    for vx, vy, ln, sd in [(120, 412, 20, 72), (180, 402, 28, 73), (244, 398, 24, 74), (292, 390, 18, 75)]:
-        hanging_vine(layer, vx, vy, ln, sd, 5, dark=True)
-
-    # the rope bridge from the twin towers to the treehouse
-    rope_bridge(layer, 606, 432, 668, 446, 7, 63)
-    # pergola on the mid tower roof
-    for px in (556, 600):
-        layer.line((px, 420, px, 444), C(CREAM["brass_dark"]))
-    layer.line((552, 420, 604, 420), C(CREAM["brass"]), width=2)
-    for px in range(556, 604, 7):
-        layer.ellipse(px - 3, 414, px + 3, 421, fill=C("#478a58"))
-        layer.point(px + 1, 414, C("#8dc46f"))
-    hanging_vine(layer, 560, 422, 20, 64, 5)
-    # market awnings and parasols on the low roofs
-    for cx, base, r, seed in [
-        (274, 544, 15, 65),
-        (566, 542, 12, 66),
-        (884, 548, 14, 67),
-        (1136, 548, 16, 68),
-        (1188, 542, 12, 69),
-        (1462, 544, 14, 70),
-    ]:
-        parasol(layer, cx, base, r, seed)
-    # a telescope dome in the gap before the right tower
-    telescope_dome(layer, 1382, 600, 71)
-    # bunting between the conservatory and the twin towers
-    for i in range(5):
-        x = 500 + i * 14
-        y = 476 + (i % 2) * 3
-        layer.polygon([(x, y), (x + 8, y + 1), (x + 2, y + 6)], C("#ff8a4c" if i % 2 else "#ffe08a"))
-    layer.line((500, 474, 584, 476), C(CREAM["brass_dark"]))
-    # birds perched on architecture, not just in the sky
-    bird(layer, 690, 454, 1)
-    bird(layer, 158, 374, -1)
-    bird(layer, 920, 330, 1)
-
-    # a little cat on the low roofline (3 px of personality)
-    layer.rect(1218, 548, 1221, 551, C("#ff8a4c"))
-    layer.rect(1218, 546, 1219, 548, C("#ff8a4c"))
-    layer.point(1220, 546, C("#ff8a4c"))
-    layer.line((1221, 550, 1224, 547), C("#ff8a4c"))
-    # potted plants and crates in alleys
-    for x, y in [(250, 566), (284, 566), (632, 570), (900, 570), (1160, 566), (1436, 568)]:
-        layer.rrect(x, y, x + 9, y + 10, 2, C(CREAM["stone_dark"]))
-        layer.rrect(x + 1, y - 5, x + 8, y + 2, 3, C("#478a58"))
-        layer.point(x + 4, y - 6, C("#8dc46f"))
-        layer.point(x + 6, y - 5, C("#f49bb8"))
-
-
-def stadium(layer: Layer, cx, seed=0):
-    # a long glass arcade with a botanical dome
-    layer.rrect(cx - 72, 492, cx + 72, 596, 10, C(CREAM["stone"]))
-    layer.rrect(cx - 66, 462, cx + 66, 520, 10, C(CREAM["body"]))
-    for ax in range(cx - 54, cx + 55, 22):
-        arched_window(layer, ax - 6, 478, 12, 22, lit=(ax % 44 == 0))
-    onion_dome(layer, cx, 462, 62, 92, glass=True, finial=False, seed=seed)
-    for px in range(cx - 50, cx + 51, 12):
-        layer.ellipse(px - 3, 456, px + 3, 462, fill=C("#478a58"))
-        layer.point(px, 456, C("#8dc46f"))
-    # pennant poles
-    for px in (cx - 60, cx + 58):
-        layer.line((px, 404, px, 454), C(CREAM["brass_dark"]))
-        layer.polygon([(px + 1, 406), (px + 10, 409), (px + 1, 413)], C("#ffe08a" if px < cx else "#ff8a4c"))
-
-
-def solar_roof(layer: Layer, x, y, w, seed=0):
-    layer.rrect(x, y, x + w, 596, 8, C(CREAM["stone"]))
-    layer.rrect(x + 4, y + 4, x + w - 4, 590, 6, C(CREAM["shade"]))
-    for wx in range(x + 10, x + w - 8, 18):
-        porthole(layer, wx, y + 26, 3, lit=False)
-    for i in range(3):
-        solar_panel(layer, x + 8 + i * 36, y - 12, 30, 12, seed + i, 3)
-    layer.rrect(x + 8, y - 4, x + w - 8, y + 2, 2, C(CREAM["brass"]))
-    # a little stair down to the street
-    for i in range(5):
-        layer.rect(x + w - 20 - i * 3, 550 + i * 5, x + w - 6, 552 + i * 5, C(CREAM["stone"]))
-
-
-def hanging_balcony(layer: Layer, x, y, w, seed=0):
-    layer.rrect(x, y, x + w, y + 8, 3, C(CREAM["stone"]))
-    layer.line((x + 2, y + 8, x + w - 2, y + 8), C(CREAM["stone_dark"]), width=2)
-    for px in range(x + 4, x + w - 3, 7):
-        layer.line((px, y - 6, px, y), C(CREAM["brass"]))
-    for px in range(x + 5, x + w - 3, 8):
-        layer.ellipse(px - 3, y - 8, px + 3, y + 1, fill=C("#478a58"))
-        layer.point(px + 1, y - 8, C("#8dc46f"))
-    hanging_vine(layer, x + 8, y + 8, 24, seed, 6)
-    hanging_vine(layer, x + w - 12, y + 8, 18, seed + 1, 4)
-    if w > 46:
-        lantern(layer, x + w - 4, y - 12)
-
-
-def laundry_line(layer: Layer, x0, y0, x1, y1, seed=0):
-    rng = random.Random(seed)
-    layer.line((x0, y0, x1, y1), C(CREAM["brass_dark"]))
-    n = 5
-    for i in range(n):
-        t = (i + 0.6) / (n + 0.4)
-        x = int(x0 + (x1 - x0) * t)
-        y = int(y0 + (y1 - y0) * t)
-        w = rng.randint(4, 7)
-        h = rng.randint(5, 8)
-        c = rng.choice(["#ff8a4c", "#ffe08a", "#9ad8cd", "#f49bb8", "#c6ebdc"])
-        layer.polygon([(x, y), (x + w, y), (x + w - 1, y + h), (x + 1, y + h)], C(c))
-        layer.point(x, y, C(CREAM["brass_dark"]))
-
-
-def bottom_rooftops(layer: Layer, rng: random.Random):
-    # A dense but low foreground rank of roofs.  Everything above y=540 stays
-    # pale; the darkest shapes are kept in the bottom 40 px.
-    x = -20
-    while x < 1620:
-        w = rng.randint(56, 130)
-        top = rng.randint(528, 566)
-        if rng.random() < 0.5:
-            layer.rrect(x, top, x + w, 600, rng.randint(3, 9), C(CREAM["stone"]))
-            layer.rrect(x, top, x + w, 600, 3, C(CREAM["stone"]))
-            layer.rect(x, top, x + w, top + 4, C(CREAM["stone_dark"]))
-            layer.line((x + 4, top + 1, x + w - 4, top + 1), C("#e2b98c"))
-            # windows
-            for wx in range(x + 12, x + w - 10, 24):
-                if rng.random() < 0.6:
-                    arched_window(layer, wx, top + 18, 8, 16, lit=rng.random() < 0.4)
-        else:
-            # a garden roof or a water tank
-            layer.rrect(x, top, x + w, 600, 6, C(CREAM["body"]))
-            layer.rect(x, top, x + w, top + 3, C(CREAM["brass"]))
-            for px in range(x + 8, x + w - 6, 11):
-                shrub(layer, px, top + 1, 14, 12, seed=rng.randint(0, 99), flowers=rng.random() < 0.4)
-            if rng.random() < 0.5:
-                tx = x + w - 24
-                layer.rect(tx, top - 26, tx + 14, top + 4, C(CREAM["stone_dark"]))
-                layer.rect(tx + 2, top - 24, tx + 12, top + 2, C(CREAM["stone"]))
-                layer.rect(tx, top - 28, tx + 14, top - 24, C("#9b6a50"))
-                layer.line((tx + 3, top - 2, tx + 3, top + 2), C(CREAM["stone_dark"]))
-        # solar panels and turbine platforms here and there
-        if rng.random() < 0.32 and w > 76:
-            solar_panel(layer, x + w // 2 - 16, top - 12, 32, 10, rng.randint(0, 99), 3)
-        if rng.random() < 0.2 and w > 90:
-            wind_turbine(layer, x + w - 22, top - 30, top + 2, 15, rng.random() * 6, rng.randint(0, 99))
-        x += w + rng.randint(-8, 8)
-    # cables, awnings, market cloth: 1 px details for the bottom band
-    for i in range(14):
-        cx = rng.randint(20, 1580)
-        cy = rng.randint(556, 590)
-        layer.line((cx, cy, cx + rng.randint(10, 30), cy - rng.randint(0, 6)), C(CREAM["brass_dark"]))
-        for k in range(3):
-            layer.rect(cx + 4 + k * 7, cy + 1, cx + 9 + k * 7, cy + 4, C(rng.choice(["#ff8a4c", "#ffe08a", "#9ad8cd"])))
-    for i in range(18):
-        x0 = rng.randint(0, 1560)
-        y0 = rng.randint(548, 570)
-        layer.ellipse(x0, y0, x0 + rng.randint(4, 9), y0 + rng.randint(4, 10), fill=C(rng.choice(["#2f6c4d", "#478a58"])))
-        layer.point(x0 + 2, y0, C("#68a963"))
-
-
-# ---------------------------------------------------------------------------
-# falls strip
-
+    # rooftop life along the whole terrace
+    for x in range(60, 1560, 180):
+        if (x // 180) % 3 == 0:
+            person(layer, x, DECK_Y - 22, 900 + x)
+    for x in range(120, 1500, 210):
+        if (x // 210) % 2 == 0:
+            layer.ellipse(x - 4, DECK_Y - 29, x + 4, DECK_Y - 22, fill=C("#478a58"))
+            layer.point(x, DECK_Y - 29, C("#8dc46f"))
+    # cables and bunting between roofs
+    for x0, x1, y in ((196, 252, 274), (790, 812, 268), (1280, 1338, 262), (1580, 1620, 258)):
+        layer.line((x0, y, x1, y - 3), C(CREAM["brass_dark"]))
+        for i in range(3):
+            fx = x0 + (x1 - x0) * (i + 1) // 4
+            layer.polygon([(fx, y - 1), (fx + 5, y), (fx + 1, y + 4)], C("#ff8a4c" if i % 2 == 0 else "#ffe08a"))
+    # ducks and a few boats are in the near/mover layers, not here
+    return layer
 
 def draw_falls() -> Image.Image:
     strip = Image.new("RGBA", (FALL_W * 6, FALL_H), (0, 0, 0, 0))
@@ -2220,114 +2185,263 @@ def draw_falls() -> Image.Image:
 # near framing
 
 
+def draw_birds_strip() -> Image.Image:
+    fw, fh, n = 16, 8, 4
+    strip = Image.new("RGBA", (fw * n, fh), (0, 0, 0, 0))
+    wing_rows = [1, 4, 6, 4]
+    for f in range(n):
+        img = Image.new("RGBA", (fw, fh), (0, 0, 0, 0))
+        d = ImageDraw.Draw(img)
+        wy = wing_rows[f]
+        body = C("#3b395e")
+        hi = C("#4c4a72")
+        # wings: two strokes, body and tail; one pixel of light on the near wing
+        d.line((2, wy, 6, 4), fill=body)
+        d.line((6, 4, 8, 4), fill=body)
+        d.line((8, 4, 13, wy), fill=body)
+        d.point((6, 4), fill=hi)
+        d.point((9, 4), fill=hi)
+        d.point((8, 5), fill=body)
+        d.point((8, 6), fill=body)
+        # beak/tail marks at 1px
+        d.point((14, max(0, wy - 1)), fill=body)
+        d.point((1, max(0, wy - 1)), fill=body)
+        if f % 2 == 0:
+            d.point((7, 3), fill=hi)
+        strip.paste(img, (f * fw, 0))
+    return strip
+
+
+def draw_zeppelin_strip() -> Image.Image:
+    fw, fh, n = 64, 28, 3
+    strip = Image.new("RGBA", (fw * n, fh), (0, 0, 0, 0))
+    for f in range(n):
+        img = Image.new("RGBA", (fw, fh), (0, 0, 0, 0))
+        d = ImageDraw.Draw(img)
+        # broad horizontal envelope, cream with brass ribs
+        d.ellipse((10, 4, 54, 18), fill=C("#f3e0bb"))
+        d.ellipse((12, 5, 45, 13), fill=C("#fff2d6"))
+        d.ellipse((12, 13, 53, 18), fill=C("#e4c99b"))
+        for x in (20, 29, 38, 47):
+            d.line((x, 5, x, 17), fill=C("#c9852f"))
+        d.line((12, 5, 42, 5), fill=C("#fff2d6"))
+        d.ellipse((50, 8, 57, 15), fill=C("#f7c85f"))
+        # tail fins, no spike: two horizontal wedges
+        d.polygon([(12, 11), (3, 6), (6, 12), (12, 13)], fill=C("#ff8a4c"))
+        d.polygon([(12, 14), (4, 19), (7, 14)], fill=C("#d24f4a"))
+        # gondola and warm windows
+        d.rounded_rectangle((23, 17, 39, 23), radius=3, fill=C("#c9852f"))
+        d.rectangle((25, 19, 37, 21), fill=C("#8e6bc0"))
+        for x in (27, 31, 35):
+            d.point((x, 20), fill=C("#ffe08a"))
+        d.line((25, 17, 23, 14), fill=C("#a36428"))
+        d.line((37, 17, 39, 14), fill=C("#a36428"))
+        # pennant on a short mast
+        d.line((31, 17, 31, 8), fill=C("#a36428"))
+        flutter = [0, 1, -1][f]
+        d.polygon([(32, 8 + flutter), (40, 10 + flutter * 2), (32, 12 + flutter)], fill=C("#ffe08a"))
+        d.point((35, 10 + flutter), fill=C("#ffd37a"))
+        # propeller at the stern: three frames of a spinning blur
+        if f == 0:
+            d.line((8, 12, 8, 21), fill=C("#e4a73f"))
+            d.point((8, 11), fill=C("#f7c85f"))
+        elif f == 1:
+            d.line((6, 15, 11, 18), fill=C("#e4a73f"))
+            d.line((9, 12, 8, 17), fill=C("#f7c85f"))
+        else:
+            d.line((5, 17, 12, 16), fill=C("#e4a73f"))
+            d.point((10, 14), fill=C("#f7c85f"))
+        d.point((56, 12), fill=C("#f7c85f"))
+        strip.paste(img, (f * fw, 0))
+    return strip
+
+
+def draw_boats_strip() -> Image.Image:
+    fw, fh, n = 32, 16, 4
+    strip = Image.new("RGBA", (fw * n, fh), (0, 0, 0, 0))
+    for f in range(n):
+        img = Image.new("RGBA", (fw, fh), (0, 0, 0, 0))
+        d = ImageDraw.Draw(img)
+        # wake and reflection belong to the strip so the boat is never a sticker
+        d.line((2, 13, 29, 13), fill=C("#96e8dc"))
+        d.line((5, 15, 26, 15), fill=C("#66d0cf"))
+        d.line((1, 11, 27, 11), fill=C("#c8f7ec"))
+        for x in (4, 9, 15, 21, 27):
+            d.point((x, 14), fill=C("#effff4"))
+        # hull, bow left, stern right
+        d.polygon([(2, 9), (6, 12), (27, 12), (25, 8), (7, 8)], fill=C("#7f5446"))
+        d.polygon([(3, 9), (7, 11), (26, 11), (24, 9)], fill=C("#9b6a50"))
+        d.line((4, 9, 24, 9), fill=C("#cfa074"))
+        # canopy, cabin and a pilot
+        d.rectangle((10, 4, 24, 9), fill=C("#f3e0bb"))
+        d.line((10, 4, 24, 4), fill=C("#fff2d6"))
+        d.line((10, 4, 10, 9), fill=C("#c9852f"))
+        d.line((24, 4, 24, 9), fill=C("#c9852f"))
+        d.rectangle((13, 5, 20, 8), fill=C("#5aa6bd"))
+        d.rectangle((14, 5, 17, 7), fill=C("#9ad8cd"))
+        d.rectangle((21, 3, 22, 5), fill=C("#ff8a4c"))
+        d.point((22, 2), fill=C("#8e6bc0"))
+        # oar sweeps through four positions, so no two frames are identical
+        oars = [
+            ((8, 7), (2, 13), (1, 15)),
+            ((8, 7), (4, 14), (3, 16)),
+            ((8, 7), (6, 15), (5, 16)),
+            ((8, 7), (4, 14), (2, 13)),
+        ]
+        (ax, ay), (bx, by), (cx2, cy2) = oars[f]
+        d.line((ax, ay, bx, by), fill=C("#c9852f"))
+        d.line((bx, by, cx2, cy2), fill=C("#e4a73f"))
+        # a tiny ripple travels along the hull
+        d.point((8 + f * 4, 13), fill=C("#effff4"))
+        # tiny lantern and cargo
+        d.point((26, 7), fill=C("#ffe08a"))
+        d.rectangle((8, 6, 9, 8), fill=C("#f49bb8"))
+        strip.paste(img, (f * fw, 0))
+    return strip
+
+
+
+
 def draw_near() -> Layer:
+    """Canal, quay edge, reflections, docks and foreground water life."""
     layer = Layer()
     rng = random.Random(123)
-    # A real foreground parapet rather than a flat stripe: three shallow
-    # terraces, a garden pool, and dense foliage only at the screen edges.
-    layer.rrect(-10, 584, 1610, 600, 0, C("#7f5446"))
-    layer.rect(-10, 584, 1610, 588, C("#9b6a50"))
-    layer.rect(-10, 580, 1610, 584, C("#b9855e"))
-    layer.rect(-10, 576, 1610, 580, C("#cfa074"))
-    layer.rect(-10, 596, 1610, 600, C("#2f6c4d"))
+    surface = QUAY_Y
+    # the hard waterline, then four broad depth bands
+    layer.rect(0, surface, W, H, C("#2f8ba8"))
+    layer.rect(0, surface, W, surface + 10, C("#42b2c2"))
+    layer.rect(0, surface + 10, W, surface + 28, C("#2f8ba8"))
+    layer.rect(0, surface + 28, W, 576, C("#2b6c8b"))
+    layer.rect(0, 576, W, H, C("#2f8ba8"))
+    dither_rect(layer, 0, surface + 8, W, surface + 14, "#42b2c2", 0.5, 2)
+    dither_rect(layer, 0, surface + 24, W, surface + 32, "#2b6c8b", 0.4, 4)
+    dither_rect(layer, 0, 570, W, 578, "#2b6c8b", 0.35, 6)
+    layer.line((0, surface, W, surface), C("#c8f7ec"))
+    layer.line((0, surface + 1, W, surface + 1), C("#96e8dc"))
+    layer.line((0, surface + 2, W, surface + 2), C("#66d0cf"))
 
-    # stone joints and moss on the parapet
-    for x in range(-4, 1604, 18):
-        layer.rect(x, 584, x, 595, C("#7f5446"))
-        if (x * 7) % 11 < 4:
-            layer.point(x + 3, 580, C("#68a963"))
-            layer.point(x + 4, 579, C("#8dc46f"))
-    for x in range(0, 1600, 9):
-        layer.rect(x, 591, x + 3, 592, C("#7f5446"))
-        layer.point(x + 1, 590, C("#9b6a50"))
-    # shallow trefoil niches along the parapet face, with moss and tiny flowers
-    for x in range(18, 1580, 46):
-        layer.rrect(x, 586, x + 24, 600, 8, C("#7f5446"))
-        layer.rrect(x + 3, 588, x + 21, 600, 6, C("#9b6a50"))
-        layer.point(x + 12, 588, C("#b9855e"))
-        if x % 92 == 18:
-            layer.rect(x + 8, 590, x + 15, 591, C("#68a963"))
-            layer.point(x + 10, 589, C("#8dc46f"))
-        else:
-            layer.point(x + 11, 592, C("#e4a73f"))
+    # reflections: a broken colour pool at the wall, then a few soft trails
+    reflect = [
+        (10, 150, "#e4c99b"),
+        (160, 300, "#cfa074"),
+        (300, 470, "#478a58"),
+        (470, 560, "#9ad8cd"),
+        (560, 790, "#f3e0bb"),
+        (820, 1000, "#e4c99b"),
+        (1030, 1240, "#e2b98c"),
+        (1280, 1420, "#478a58"),
+        (1440, 1590, "#e4c99b"),
+    ]
+    for x0, x1, c in reflect:
+        # a soft, dithered band right under the quay
+        for x in range(x0, x1, 3):
+            if BAYER8[(x + 3) % 8, (x // 3) % 8] < 0.32:
+                layer.point(x, surface + 4 + (x % 5), C(c))
+        for x in range(x0, x1, 5):
+            if BAYER8[(x + 5) % 8, (x // 2) % 8] < 0.18:
+                layer.point(x, surface + 10 + (x % 7), C("#96e8dc"))
+        # a handful of long, interrupted trails
+        for x in range(x0 + 4, x1, 19 + (x0 % 7)):
+            if (x * 7 + x0) % 11 < 6:
+                y0 = surface + 9 + (x % 9)
+                length = 12 + (x * 3) % 28
+                for y in range(y0, min(590, y0 + length), 5):
+                    if (x + y) % 7 < 5:
+                        layer.rect(x, y, x + 1, y + 3, C(c))
+                layer.point(x + 1, min(592, y0 + length), C("#66d0cf"))
+    # ripples and glints
+    for i in range(58):
+        x = rng.randint(0, 1595)
+        y = rng.randint(surface + 4, 594)
+        length = rng.randint(4, 22)
+        c = rng.choice(["#66d0cf", "#96e8dc", "#c8f7ec", "#eaf3df"])
+        layer.line((x, y, min(1599, x + length), y), C(c))
+        if rng.random() < 0.5:
+            layer.point(x + length + 1, y - 1, C("#c8f7ec"))
+    for i in range(24):
+        x = rng.randint(0, 1590)
+        y = rng.randint(surface + 6, 592)
+        layer.point(x, y, C("#ffe6a1"))
+        layer.point(x + 1, y, C("#ffd37a"))
 
-    # a shallow reflecting pool, low enough to keep the conservatory's
-    # entrance and the falls' landing visible
-    layer.ellipse(292, 570, 486, 610, fill=C("#7f5446"))
-    layer.ellipse(296, 572, 482, 606, fill=C("#9b6a50"))
-    layer.ellipse(300, 574, 478, 602, fill=C("#2f8ba8"))
-    layer.ellipse(304, 577, 474, 598, fill=C("#42b2c2"))
-    layer.ellipse(310, 580, 468, 592, fill=C("#66d0cf"))
-    layer.line((316, 580, 462, 580), C("#96e8dc"))
+    # ducks: three tiny, readable, low-contrast water residents
+    for x, y, s in ((302, 574, 11), (864, 586, 12), (1304, 568, 13)):
+        duck(layer, x, y, s)
+        layer.line((x - 4, y + 2, x + 10, y + 2), C("#96e8dc"))
+        layer.line((x - 2, y + 4, x + 7, y + 4), C("#66d0cf"))
+
+    # left foreground dock: wide planks and short posts, a working quay
+    layer.rrect(-12, 538, 198, 600, 3, C("#7f5446"))
+    layer.rect(-12, 538, 198, 542, C("#9b6a50"))
+    layer.rect(-12, 542, 198, 546, C("#b9855e"))
+    for y in range(548, 600, 9):
+        layer.rect(-12, y, 198, y + 1, C("#7f5446"))
+        for x in range(0, 195, 22):
+            if (x + y) % 3 == 0:
+                layer.point(x, y + 3, C("#9b6a50"))
+    for x in (6, 44, 96, 148, 188):
+        layer.rect(x - 3, 526, x + 3, 600, C("#7f5446"))
+        layer.rect(x - 3, 526, x, 600, C("#9b6a50"))
+        layer.rect(x - 5, 522, x + 5, 528, C("#b9855e"))
+        layer.point(x, 522, C("#cfa074"))
+    # crates, rope coil and a lantern
+    layer.rrect(16, 548, 40, 566, 2, C("#cfa074"))
+    layer.rrect(22, 538, 40, 550, 2, C("#b9855e"))
+    layer.line((18, 552, 38, 552), C("#9b6a50"))
+    layer.ellipse(62, 552, 78, 562, outline=C(CREAM["brass_dark"]))
+    layer.ellipse(65, 554, 75, 560, outline=C(CREAM["brass"]))
+    layer.rect(112, 552, 128, 560, C("#9b6a50"))
+    layer.line((112, 556, 128, 556), C("#7f5446"))
+    layer.line((170, 526, 170, 538), C(CREAM["brass_dark"]))
+    lantern(layer, 170, 538)
+    # a moored dinghy and a patient fisher at the end of the pier
+    layer.polygon([(108, 548), (114, 555), (140, 555), (144, 548)], fill=C("#7f5446"))
+    layer.polygon([(110, 549), (116, 553), (138, 553), (142, 549)], fill=C("#cfa074"))
+    layer.line((108, 548, 144, 548), C("#f3e0bb"))
+    layer.line((114, 553, 138, 553), C("#9b6a50"))
+    layer.line((144, 549, 154, 544), C("#e4a73f"))
+    layer.rect(120, 550, 126, 552, C("#9ad8cd"))
+    layer.line((112, 556, 140, 556), C("#96e8dc"))
+    person(layer, 170, 538, 970)
+    layer.line((172, 530, 188, 516), C("#7f5446"))
+    layer.line((188, 516, 188, 546), C("#96e8dc"))
+    layer.rect(187, 544, 189, 546, C("#ff8a4c"))
+    layer.point(188, 543, C("#ffe08a"))
+
+    # a few potted plants at the dock end
+    for px in (156, 180):
+        layer.rrect(px - 3, 546, px + 3, 554, 1, C("#9b6a50"))
+        layer.ellipse(px - 5, 538, px + 5, 547, fill=C("#478a58"))
+        layer.point(px + 1, 538, C("#8dc46f"))
+    # gentle reeds at the very left, not a dark silhouette
+    for i in range(7):
+        rx = 4 + i * 5
+        layer.line((rx, 552, rx + rng.randint(-2, 2), 532 - (i % 3) * 3), C("#2f6c4d"))
+        layer.point(rx + 1, 540 - (i % 3) * 3, C("#68a963"))
+    # right foreground: a short stone stair into the canal
+    layer.rrect(1504, 550, 1600, 600, 2, C("#7f5446"))
+    for i in range(4):
+        layer.rect(1512 + i * 8, 550 + i * 6, 1596, 556 + i * 6, C("#b9855e"))
+        layer.line((1512 + i * 8, 550 + i * 6, 1596, 550 + i * 6), C("#cfa074"))
+    for i in range(4):
+        layer.rect(1570 - i * 6, 572 + i * 4, 1600, 576 + i * 4, C("#9b6a50"))
+    layer.line((1520, 548, 1520, 532), C(CREAM["brass_dark"]))
+    lantern(layer, 1520, 532)
+    for px in (1556, 1584):
+        layer.rrect(px - 3, 548, px + 3, 556, 1, C("#9b6a50"))
+        layer.ellipse(px - 5, 540, px + 5, 549, fill=C("#478a58"))
+        layer.point(px, 540, C("#8dc46f"))
+    # a couple of buoys and floating leaves
+    for x, y in ((168, 560), (736, 524), (1112, 582), (1450, 532)):
+        layer.ellipse(x, y, x + 5, y + 3, fill=C("#f6b45b"))
+        layer.point(x + 2, y - 1, C("#ffe08a"))
+        layer.point(x + 4, y + 1, C("#ff8a4c"))
     for i in range(9):
-        lx = 318 + i * 17
-        layer.ellipse(lx - 4, 584, lx + 5, 590, fill=C("#478a58"))
-        layer.point(lx + 1, 584, C("#68a963"))
-        if i % 3 == 0:
-            layer.rect(lx + 2, 582, lx + 4, 583, C("#ffd2e0"))
-    # koi and a little fountain jet
-    layer.rect(356, 585, 359, 586, C("#ff8a4c"))
-    layer.point(360, 584, C("#ff8a4c"))
-    layer.rect(424, 582, 427, 583, C("#ffd37a"))
-    layer.line((386, 588, 386, 566), C("#c8f7ec"))
-    layer.line((385, 578, 381, 574), C("#c8f7ec"))
-    layer.line((387, 578, 391, 574), C("#c8f7ec"))
-    for px in (300, 430, 460):
-        layer.line((px, 578, px - 1, 552), C("#2f6c4d"))
-        for k in range(3):
-            layer.line((px - 1, 558 + k * 7, px - 5, 555 + k * 7), C("#478a58"))
-        layer.point(px - 2, 550, C("#f49bb8"))
-
-    # brass rail and hanging lanterns over the right-hand garden
-    for px in range(500, 708, 16):
-        layer.line((px, 548, px, 586), C("#a36428"))
-        layer.line((px + 1, 548, px + 1, 586), C("#e4a73f"))
-        layer.point(px, 547, C("#ffe08a"))
-    layer.line((500, 550, 708, 550), C("#e4a73f"), width=2)
-    layer.line((500, 548, 708, 548), C("#ffe08a"))
-    for lx in (536, 620, 690):
-        lantern(layer, lx, 558)
-
-    # a tiny water garden, a favourite foreground detail
-    layer.rrect(720, 570, 796, 598, 4, C("#7f5446"))
-    layer.rect(724, 574, 792, 594, C("#2f8ba8"))
-    layer.rect(726, 576, 790, 580, C("#42b2c2"))
-    for i in range(5):
-        layer.ellipse(730 + i * 12, 582, 738 + i * 12, 588, fill=C("#478a58"))
-        layer.point(733 + i * 12, 582, C("#68a963"))
-        if i == 2:
-            layer.rect(744, 580, 746, 581, C("#ffd2e0"))
-
-    # hero left: a big planter and a cloudy bush
-    foreground_planter(layer, 8, 592, 142, seed=1)
-    foreground_planter(layer, 744, 598, 118, seed=2)
-    # second screen framing
-    foreground_planter(layer, 980, 600, 96, seed=3)
-    foreground_planter(layer, 1466, 594, 158, seed=4)
-    foreground_planter(layer, 1584, 598, 96, seed=5)
-
-    # edges of the frame: tall, dark, leafy; the middle stays low
-    for x, base, scale, seed in [
-        (54, 578, 1.5, 11),
-        (108, 586, 1.0, 12),
-        (804, 582, 1.2, 13),
-        (884, 590, 0.8, 14),
-        (1512, 586, 1.35, 15),
-        (1578, 592, 1.0, 16),
-    ]:
-        fern(layer, x, base, scale, seed)
-    lantern(layer, 130, 536)
-    lantern(layer, 770, 544)
-    lantern(layer, 1538, 548)
-
-    # hanging vine curtains from the parapet, short so they never reach the
-    # play band.
-    for i in range(22):
-        x = rng.randint(0, 1599)
-        y = 548 + rng.randint(0, 14)
-        hanging_vine(layer, x, y, rng.randint(8, 26), 400 + i, 4)
+        x = rng.randint(0, 1590)
+        y = rng.randint(surface + 3, 596)
+        layer.rect(x, y, x + 2, y + 1, C("#68a963"))
+        layer.point(x + 1, y, C("#8dc46f"))
     return layer
-
 
 def leaf(layer: Layer, x, y, length, width, angle, dark=("#235342", "#2f6c4d", "#478a58")):
     """A single pointed leaf, plotted as a hard-edged five-point polygon."""
@@ -2470,53 +2584,76 @@ def fern(layer: Layer, x, base, scale, seed=0):
 # composition, manifest, review sheets
 
 
-def compose(layers, falls_frame=0, cam_x=0, width=800, panel_offset=0):
-    """Draw one 800px view with the contract's parallax factors."""
-    factors = {"sky": 0.015, "far": 0.06, "mid": 0.18, "falls": 0.18, "near": 0.50}
-    view = Image.new("RGBA", (width, H), (0, 0, 0, 0))
-    for ident in ("sky", "far", "mid"):
-        src = layers[ident]
-        off = int(cam_x * factors[ident]) % W
-        # sample a wrapped strip
-        if off + width <= W:
-            part = src.crop((off, 0, off + width, H))
-        else:
-            part = Image.new("RGBA", (width, H))
-            part.alpha_composite(src.crop((off, 0, W, H)), (0, 0))
-            part.alpha_composite(src.crop((0, 0, width - (W - off), H)), (W - off, 0))
-        view.alpha_composite(part, (0, 0))
-        if ident == "mid":
-            # waterfall sprites sit on the mid layer's clock
-            off_f = int(cam_x * factors["falls"]) % W
-            strip = layers["falls"]
-            for u, v in FALL_ITEMS:
-                sx = (u - off_f) % W
-                if sx < width:
-                    frame = strip.crop((falls_frame * FALL_W, 0, (falls_frame + 1) * FALL_W, FALL_H))
-                    if sx + FALL_W > width:
-                        view.alpha_composite(frame.crop((0, 0, width - sx, FALL_H)), (sx, v))
-                        view.alpha_composite(frame.crop((width - sx, 0, FALL_W, FALL_H)), (0, v))
-                    else:
-                        view.alpha_composite(frame, (sx, v))
-    off = int(cam_x * factors["near"]) % W
+def sample_image(src: Image.Image, cam_x: int, factor: float, width: int) -> Image.Image:
+    off = int(cam_x * factor) % W
+    out = Image.new("RGBA", (width, H), (0, 0, 0, 0))
     if off + width <= W:
-        part = layers["near"].crop((off, 0, off + width, H))
+        out.alpha_composite(src.crop((off, 0, off + width, H)), (0, 0))
     else:
-        part = Image.new("RGBA", (width, H))
-        part.alpha_composite(layers["near"].crop((off, 0, W, H)), (0, 0))
-        part.alpha_composite(layers["near"].crop((0, 0, width - (W - off), H)), (W - off, 0))
-    view.alpha_composite(part, (0, 0))
+        first = W - off
+        out.alpha_composite(src.crop((off, 0, W, H)), (0, 0))
+        out.alpha_composite(src.crop((0, 0, width - first, H)), (first, 0))
+    return out
+
+
+def with_alpha(frame: Image.Image, alpha: float) -> Image.Image:
+    if alpha >= 0.999:
+        return frame
+    a = np.array(frame.convert("RGBA")).copy()
+    a[..., 3] = (a[..., 3].astype(np.float32) * alpha).astype(np.uint8)
+    return Image.fromarray(a, "RGBA")
+
+
+def composite_strip(view: Image.Image, img: Image.Image, spec, cam_x: int, width: int, frame_index: int):
+    fw, fh = spec["fw"], spec["fh"]
+    frame = img.crop((frame_index * fw, 0, (frame_index + 1) * fw, fh))
+    frame = with_alpha(frame, spec.get("alpha", 1.0))
+    off = int(cam_x * spec["factor"]) % W
+    for item in spec["items"]:
+        sx = (item["u"] - off) % W
+        bob = item.get("bobAmp", 0.0) * math.sin(item.get("phase", 0.0))
+        y = int(round(item["v"] + bob))
+        if sx >= width and width < W:
+            continue
+        piece = frame
+        if item.get("flip"):
+            piece = piece.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+        if width >= W:
+            # full-panorama review: wrap the item at the 1600 seam
+            if sx + fw <= W:
+                view.alpha_composite(piece, (sx, y))
+            else:
+                first = W - sx
+                view.alpha_composite(piece.crop((0, 0, first, fh)), (sx, y))
+                view.alpha_composite(piece.crop((first, 0, fw, fh)), (0, y))
+        else:
+            if sx + fw <= width:
+                view.alpha_composite(piece, (sx, y))
+            elif sx < width:
+                view.alpha_composite(piece.crop((0, 0, width - sx, fh)), (sx, y))
+
+
+def compose(layers, falls_frame=0, cam_x=0, width=800, mover_frame=0):
+    """One view, with image parallax and the mover strips at t=0."""
+    view = Image.new("RGBA", (width, H), (0, 0, 0, 0))
+    factors = {"sky": 0.015, "far": 0.06, "mid": 0.18, "near": 0.50}
+    for ident in ("sky", "far", "mid"):
+        view.alpha_composite(sample_image(layers[ident], cam_x, factors[ident], width), (0, 0))
+    composite_strip(view, layers["falls"], STRIP_SPECS[0], cam_x, width, falls_frame)
+    view.alpha_composite(sample_image(layers["near"], cam_x, factors["near"], width), (0, 0))
+    for spec in STRIP_SPECS[1:]:
+        composite_strip(view, layers[spec["id"]], spec, cam_x, width, mover_frame)
     return view
 
 
 def contact_sheet(layers, falls_frame=3):
-    return compose(layers, falls_frame=falls_frame, cam_x=0, width=W)
+    return compose(layers, falls_frame=falls_frame, cam_x=0, width=W, mover_frame=0)
 
 
 def preview_three(layers):
     panels = []
     for i, cam in enumerate((0, 800, 1600)):
-        p = compose(layers, falls_frame=1, cam_x=cam, width=800)
+        p = compose(layers, falls_frame=1, cam_x=cam, width=800, mover_frame=0)
         panels.append(p)
     out = Image.new("RGBA", (2400, H), (36, 79, 125, 255))
     for i, p in enumerate(panels):
@@ -2562,32 +2699,31 @@ def draw_micro_text(img, x, y, text, colour, scale=2):
                             img.putpixel((x + (i * 4 + gx) * scale + ox, y + gy * scale + oy), colour)
 
 
+def draw_strip_readonly(out: Image.Image, img: Image.Image, spec, frame_index: int, base: int = 0):
+    fw, fh = spec["fw"], spec["fh"]
+    frame = img.crop((frame_index * fw, 0, (frame_index + 1) * fw, fh))
+    frame = with_alpha(frame, spec.get("alpha", 1.0))
+    for item in spec["items"]:
+        x = item["u"] + base
+        y = int(round(item["v"] + item.get("bobAmp", 0.0) * math.sin(item.get("phase", 0.0))))
+        out.alpha_composite(frame, (x, y))
+
+
 def tile_check(layers):
     out = Image.new("RGBA", (W * 2, H), (0, 0, 0, 0))
-    out.alpha_composite(layers["sky"], (0, 0))
-    out.alpha_composite(layers["sky"], (W, 0))
-    for ident in ("far", "mid", "near"):
+    for ident in ("sky", "far", "mid", "near"):
         out.alpha_composite(layers[ident], (0, 0))
         out.alpha_composite(layers[ident], (W, 0))
-    frame = layers["falls"].crop((FALL_W, 0, 2 * FALL_W, FALL_H))
-    for u, v in FALL_ITEMS:
-        out.alpha_composite(frame, (u, v))
-        out.alpha_composite(frame, (u + W, v))
+    draw_strip_readonly(out, layers["falls"], STRIP_SPECS[0], 1, 0)
+    draw_strip_readonly(out, layers["falls"], STRIP_SPECS[0], 1, W)
+    for spec in STRIP_SPECS[1:]:
+        draw_strip_readonly(out, layers[spec["id"]], spec, 0, 0)
+        draw_strip_readonly(out, layers[spec["id"]], spec, 0, W)
     return out
 
 
 def seam_zoom(layers):
-    # one 3x composite seam crop, nearest-neighbour
-    comp = Image.new("RGBA", (3200, H), (0, 0, 0, 0))
-    comp.alpha_composite(layers["sky"], (0, 0))
-    comp.alpha_composite(layers["sky"], (W, 0))
-    for ident in ("far", "mid", "near"):
-        comp.alpha_composite(layers[ident], (0, 0))
-        comp.alpha_composite(layers[ident], (W, 0))
-    frame = layers["falls"].crop((FALL_W, 0, 2 * FALL_W, FALL_H))
-    for u, v in FALL_ITEMS:
-        comp.alpha_composite(frame, (u, v))
-        comp.alpha_composite(frame, (u + W, v))
+    comp = tile_check(layers)
     return comp.crop((W - 90, 0, W + 90, H)).resize((180 * 3, H * 3), Image.Resampling.NEAREST)
 
 
@@ -2595,72 +2731,89 @@ def manifest(layers):
     def version(path: Path):
         return hashlib.sha256(path.read_bytes()).hexdigest()[:12]
 
-    sky_v = version(OUT / "sky.png")
-    far_v = version(OUT / "far.png")
-    mid_v = version(OUT / "mid.png")
-    falls_v = version(OUT / "falls.png")
-    near_v = version(OUT / "near.png")
-    return {
-        "name": "hand",
-        "title": "Solarpunk Noon — Hand-Painted",
-        "width": W,
-        "height": H,
-        # The hand city is darker behind the spawn than the voxel one, so it
-        # needs a slightly stronger atmospheric lift to match the flat sky's
-        # value separation. See specs/skybox.md and scripts/readability-probe.ts.
-        "haze": 1.3,
-        "layers": [
-            {
-                "id": "sky",
-                "type": "image",
-                "src": "assets/skybox/hand/sky.png",
-                "version": sky_v,
-                "factor": 0.015,
-                "driftX": 0.6,
-                "alpha": 1,
-            },
-            {
-                "id": "far",
-                "type": "image",
-                "src": "assets/skybox/hand/far.png",
-                "version": far_v,
-                "factor": 0.06,
-            },
-            {
-                "id": "mid",
-                "type": "image",
-                "src": "assets/skybox/hand/mid.png",
-                "version": mid_v,
-                "factor": 0.18,
-            },
-            {
+    image_layers = [
+        ("sky", "assets/skybox/hand/sky.png", 0.015, {"driftX": 0.6, "alpha": 1}),
+        ("far", "assets/skybox/hand/far.png", 0.06, {}),
+        ("mid", "assets/skybox/hand/mid.png", 0.18, {}),
+        ("falls", "assets/skybox/hand/falls.png", 0.30, {}),
+        ("near", "assets/skybox/hand/near.png", 0.50, {"alpha": 0.6}),
+    ]
+    layers_out = []
+    for ident, src, factor, extra in image_layers:
+        if ident == "falls":
+            spec = STRIP_SPECS[0]
+            layer = {
                 "id": "falls",
                 "type": "strip",
-                "src": "assets/skybox/hand/falls.png",
-                "version": falls_v,
-                "factor": 0.30,
-                "frameW": FALL_W,
-                "frameH": FALL_H,
-                "frames": 6,
-                "fps": 9,
+                "src": src,
+                "version": version(OUT / "falls.png"),
+                "factor": factor,
+                "frameW": spec["fw"],
+                "frameH": spec["fh"],
+                "frames": spec["frames"],
+                "fps": spec["fps"],
                 "align": "mid",
-                "items": [{"u": u, "v": v} for u, v in FALL_ITEMS],
-            },
-            {
-                "id": "near",
+                "items": [{"u": it["u"], "v": it["v"]} for it in spec["items"]],
+            }
+        else:
+            layer = {
+                "id": ident,
                 "type": "image",
-                "src": "assets/skybox/hand/near.png",
-                "version": near_v,
-                "factor": 0.50,
-                # The near foliage is the closest thing to the floor and would
-                # otherwise sit in the fighter's value band at full strength.
-                # 20% keeps the framing and lets the pale mid city carry the
-                # silhouette. This is a readability constant, not a mood.
-                "alpha": 0.2,
-            },
-        ],
-    }
+                "src": src,
+                "version": version(OUT / f"{ident}.png"),
+                "factor": factor,
+                **extra,
+            }
+        layers_out.append(layer)
 
+    for spec in STRIP_SPECS[1:]:
+        items = []
+        for it in spec["items"]:
+            items.append(
+                {
+                    "u": it["u"],
+                    "v": it["v"],
+                    "speedX": it["speedX"],
+                    "bobAmp": it["bobAmp"],
+                    "bobFreq": it["bobFreq"],
+                    "phase": it["phase"],
+                    "flip": it["flip"],
+                }
+            )
+        layer = {
+            "id": spec["id"],
+            "type": "strip",
+            "src": f"assets/skybox/hand/{spec['id']}.png",
+            "version": version(OUT / f"{spec['id']}.png"),
+            "factor": spec["manifest_factor"],
+            "frameW": spec["fw"],
+            "frameH": spec["fh"],
+            "frames": spec["frames"],
+            "fps": spec["fps"],
+            "items": items,
+        }
+        if spec.get("alpha", 1.0) < 1.0:
+            layer["alpha"] = spec["alpha"]
+        layers_out.append(layer)
+
+    ambient_groups = [
+        {"layer": layer["id"], "actors": layer["items"]}
+        for layer in layers_out
+        if layer["id"] in {"birds", "zeppelin", "boats"}
+    ]
+    return {
+        "name": "hand",
+        "title": "Solarpunk Waterfront — Hand-Painted",
+        "width": W,
+        "height": H,
+        # The waterfront is a bright, pale city; 1.2 is enough atmospheric
+        # lift without bleaching the cream. See specs/skybox.md.
+        "haze": 1.4,
+        # One programme, one clock: the flock, the airship and the boats are
+        # actors in the same timeline, not three independent animations.
+        "ambient": {"loopMs": 400000, "groups": ambient_groups},
+        "layers": layers_out,
+    }
 
 def sanitize_transparency(im: Image.Image) -> Image.Image:
     """Keep the RGB of invisible pixels inside the palette.
@@ -2681,7 +2834,11 @@ def verify_dimensions(paths):
         "mid.png": (1600, 600),
         "falls.png": (288, 240),
         "near.png": (1600, 600),
+        "boats.png": (128, 16),
+        "zeppelin.png": (192, 28),
+        "birds.png": (64, 8),
         "contact.png": (1600, 600),
+        "preview-3screens.png": (2400, 600),
     }
     for name, (w, h) in expected.items():
         im = Image.open(paths[name])
@@ -2697,7 +2854,19 @@ def main():
     mid = draw_mid()
     falls = draw_falls()
     near = draw_near()
-    layers = {"sky": sky.img, "far": far.img, "mid": mid.img, "falls": falls, "near": near.img}
+    birds = draw_birds_strip()
+    zeppelin = draw_zeppelin_strip()
+    boats = draw_boats_strip()
+    layers = {
+        "sky": sky.img,
+        "far": far.img,
+        "mid": mid.img,
+        "falls": falls,
+        "near": near.img,
+        "birds": birds,
+        "zeppelin": zeppelin,
+        "boats": boats,
+    }
 
     contact = contact_sheet(layers, falls_frame=3).convert("RGB")
     preview = preview_three(layers)
@@ -2707,6 +2876,9 @@ def main():
     sanitize_transparency(mid.img).save(OUT / "mid.png")
     sanitize_transparency(falls).save(OUT / "falls.png")
     sanitize_transparency(near.img).save(OUT / "near.png")
+    sanitize_transparency(birds).save(OUT / "birds.png")
+    sanitize_transparency(zeppelin).save(OUT / "zeppelin.png")
+    sanitize_transparency(boats).save(OUT / "boats.png")
     contact.save(OUT / "contact.png")
     preview.save(OUT / "preview-3screens.png")
 
@@ -2720,38 +2892,43 @@ def main():
         (OUT / "NOTES.md").write_text(notes.read_text())
 
     verify_dimensions({name: OUT / name for name in (
-        "sky.png", "far.png", "mid.png", "falls.png", "near.png", "contact.png"
+        "sky.png", "far.png", "mid.png", "falls.png", "near.png",
+        "boats.png", "zeppelin.png", "birds.png", "contact.png", "preview-3screens.png",
     )})
 
     # palette audit: every pixel must be transparent or a palette colour
     allowed = set(PAL.values())
-    for name in ("sky.png", "far.png", "mid.png", "near.png"):
+    for name in ("sky.png", "far.png", "mid.png", "near.png", "falls.png", "birds.png", "zeppelin.png", "boats.png"):
         im = Image.open(OUT / name).convert("RGBA")
         a = np.array(im)
         opaque = a[..., 3] > 0
         colours = {tuple(int(v) for v in px[:3]) for px in a[opaque][::7]}
         bad = colours - allowed
         assert not bad, (name, list(bad)[:10])
-    strip = Image.open(OUT / "falls.png").convert("RGBA")
-    a = np.array(strip)
-    opaque = a[..., 3] > 0
-    bad = {tuple(int(v) for v in px[:3]) for px in a[opaque][::5]} - allowed
-    assert not bad, ("falls", list(bad)[:10])
+        assert set(np.unique(a[..., 3])) <= {0, 255}, (name, "non-binary alpha")
 
     # seam continuity: compare the last column to the first; the join is a
-    # wrap, so they should be neighbours, not identical.  A hard seam shows up
+    # wrap, so they should be neighbours, not identical. A hard seam shows up
     # as a jump much larger than the typical adjacent-column delta.
     for name in ("sky.png", "far.png", "mid.png", "near.png"):
         a = np.array(Image.open(OUT / name).convert("RGBA")).astype(int)
-        c0 = a[:, 0, :]
-        c1 = a[:, 1, :]
-        cl = a[:, -2, :]
-        cw = a[:, -1, :]
+        c0, c1 = a[:, 0, :], a[:, 1, :]
+        cl, cw = a[:, -2, :], a[:, -1, :]
         d0 = np.abs(cw - c0).mean()
         dn = np.abs(c1 - c0).mean()
         dlast = np.abs(cw - cl).mean()
         assert d0 < 60, (name, d0, dn, dlast)
         print(f"seam {name}: wrap={d0:.1f} neighbour={dn:.1f} last-pair={dlast:.1f}")
+
+    # every strip must actually animate; the falls loop must be even
+    for spec in STRIP_SPECS:
+        a = np.array(Image.open(OUT / f"{spec['id']}.png").convert("RGBA")).astype(int)
+        frames = [a[:, i * spec["fw"]:(i + 1) * spec["fw"]] for i in range(spec["frames"])]
+        deltas = [float(np.abs(frames[(i + 1) % spec["frames"]] - frames[i]).mean()) for i in range(spec["frames"])]
+        print(f"strip {spec['id']}: frame deltas {[round(d, 1) for d in deltas]}")
+        assert max(deltas) > 0.2, spec["id"]
+        if spec["id"] == "falls":
+            assert max(deltas) - min(deltas) < 5.0, deltas
 
     total = len(USED)
     print(f"wrote {OUT} ({total} palette colours used)")

@@ -28,7 +28,7 @@ import { chromium } from "playwright";
 
 const BASE = "http://localhost:8084";
 const SHOTS = ".playwright-mcp/readability";
-const VARIANTS = ["off", "voxel", "hand"] as const;
+const VARIANTS = ["off", "stage", "voxel", "hand"] as const;
 
 interface Metrics {
 	pixels: number;

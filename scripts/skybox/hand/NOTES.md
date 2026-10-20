@@ -1,8 +1,13 @@
-# Hand-painted solarpunk skybox
+# Hand-painted solarpunk waterfront
 
 `?sky=hand` — a 1600×600 parallax panorama drawn one deliberate pixel at a
 time with Pillow + numpy. No upscaling, no anti-aliasing, no colour outside
 `art/skybox/palette.json`.
+
+The silhouette language is deliberately **horizontal**: a long aqueduct/terrace,
+broad low blocks, half-domes, a giant tree and a canal. There are no onion
+domes, pointed spires, finials, minarets or shaft-and-bulb towers. The only
+vertical masts are the requested wind turbines, and they are roof-sized.
 
 ## Regenerate
 
@@ -20,202 +25,205 @@ sky.png               1600x600  opaque   parallax 0.015, driftX 0.6
 far.png               1600x600  alpha    parallax 0.06
 mid.png               1600x600  alpha    parallax 0.18
 falls.png              288x240   alpha    parallax 0.30, six 48x240 frames, 9 fps
-near.png              1600x600  alpha    parallax 0.50
+near.png              1600x600  alpha    parallax 0.50, alpha 0.6
+boats.png              128x16    alpha    4 frames, 4 fps, parallax 0.50
+zeppelin.png           192x28    alpha    3 frames, 10 fps, parallax 0.10
+birds.png               64x8     alpha    4 frames, 10 fps, parallax 0.06
 contact.png           1600x600  RGB      flattened review image
 preview-3screens.png  2400x600  RGB      camera x = 0, 800, 1600
 ```
 
-The strip carries `"align": "mid"`. The contract's own runtime resolves a
-strip's factor through `align` (see `specs/skybox.md` and
-`src/game/render/skyboxAssets.ts`), so the water follows the aqueduct exactly
-as the camera moves. Its nominal `factor` remains the contracted `0.30`; the
-preview uses the resolved `mid` factor of `0.18`.
+`NOTES.md` is copied into the variant directory by the generator as well, as
+the contract asks.
 
-The manifest also carries the two readability hand-offs described in
-`specs/skybox.md`: `"haze": 1.3` (the pale screen grade through the combat band)
-and `"alpha": 0.2` on the near layer (so the dark framing foliage cannot sit in
-the fighter's value band at full strength). The contact and preview images below
-are **raw-layer review composites** — they intentionally show the art at full
-opacity, before the runtime grade, so the drawing can be judged on its own.
+### Manifest and motion
 
-Other artefacts live in `scripts/skybox/hand/review/` (not loaded by the game):
-`tiled-2x.png` and `seam-zoom.png` are the two seam checks, kept so the join
-can be audited without re-rendering.
+- `"haze": 1.4` and `"alpha": 0.6` on `near` are the readability hand-offs
+  described in `specs/skybox.md`. The near layer is bright water and quay, not
+  dark foliage, so it can carry much more than the old 0.2; 0.6 keeps the
+  waterfront visible while softening the dark dock at the spawn corner.
+- `falls` carries `"align": "mid"` and nominal `factor: 0.30`; the runtime
+  resolves it to the mid layer's 0.18 so the water stays glued to its spouts.
+  Its items are pure `{u, v}`: no `speedX`, no bob.
+- `boats`, `zeppelin` and `birds` are mover strips. Every item has `u`, `v`,
+  `speedX`, `bobAmp`, `bobFreq`, `phase` and `flip`.
+  - **Boats** (4): `speedX` −2.2 … −4.6, `bobAmp` 0.8–1.2, `bobFreq` 0.7–1.0.
+    The art faces left, so no item is flipped.
+  - **Zeppelin** (2): `speedX` 4.2 / 3.0, `bobAmp` 2.4 / 2.0,
+    `bobFreq` 0.32 / 0.28, at `(300,112)` and `(1300,70)`.
+  - **Birds** (12): `speedX` −12 … +10, `bobAmp` 1–2, `bobFreq` 0.7–1.4,
+    heights 55–185. Negative-speed birds are mirrored with `flip`.
+- There is no `ambient` block: the runtime's strip items are the motion plan.
+  The falls keep their own frame loop; the movers use the global strip clock.
 
 ## Composition map
 
-The hero crop is **x 0–800**. Everything below is in the shared 1600×600 texture
-coordinate space.
+The hero crop is **x 0–800**, and it is composed as one waterfront view.
 
-### Sky (y 0–180 is the detail band)
+### Sky (y 0–180)
 
-- 8×8 Bayer-dithered gradient from indigo `#244f7d` to cream `#fff3c9`.
-- Ringed gas giant at (452, 150), radius 91; a warm banded sphere with a gold
-  ring, a front/back ring split, and a narrow ring shadow.
-- A low sun at (1168, 344) with a tight ordered-dither halo, mostly hidden by
-  the city so the light reads as late morning.
-- Two small moons in the blue gaps at (1316, 70) and (872, 52).
-- Six stacked-lobe cumulus banks, each with a warm cream top rim, warm
-  `#e9c9a2`/`#d3a17f` undersides, and smile-shaped lobe shadows. The biggest
-  banks frame the planet at x 21–347 and x 578–850; the second screen has a
-  bank at 911–1265, a high bank at 1360–1532 and one that wraps the seam at
-  1416–1600 / 0–48.
-- Four tiny airships, bird flocks, and four thin cirrus ribbons.
+- Bright golden-hour 8×8 Bayer gradient: indigo-blue `#2f6b98` at the top to
+  warm cream `#fff3c9` at the horizon.
+- Small ringed planet at (238, 98), radius 44, and a warm sun at (700, 100)
+  with an ordered-dither halo. One small moon at (1008, 58).
+- Six chunky cumulus banks, each with a warm top rim and warm
+  `#e9c9a2`/`#d3a17f` undersides. The hero has a cloud on the left, a cloud
+  around the sun, and a big bank crossing the right edge.
+- **No static airships or birds remain in `sky.png`.** They are movers.
 
-### Far (pale skyline, y ~330–512)
+### Far (sparse low skyline, y ~440–512)
 
-- A back ridge of large pale domes and spires, then a closer row of about 28
-  rounded towers, domed roofs, roof gardens and antennae.
-- A soft aqueduct/viaduct line at y 462 with pale round arches.
-- Only `farCity` colours (`#8ea9ae` … `#4b657e`), so the layer reads as haze.
+- A low, hazy waterfront ridge of broad blocks, flat roofs and shallow
+  half-domes in `farCity` colours. It is deliberately low so the aqueduct's
+  arch openings read as sky and distance, not a blue wall.
+- A tiny pale far waterline at the bottom of the layer. No spires, no towers.
 
-### Mid (the city, the middle band kept lower-contrast)
+### Mid (the waterfront)
 
-Hero view:
+- **The aqueduct/terrace is the spine.** A cream stone wall runs the full
+  1600 px with nine wide bays, 40 px piers and open arches. The deck is at
+  y 350, the quay at y 512. The arches crown at ~384 and spring at ~438; the
+  openings are open to the far skyline. A water channel and a brass-railed
+  parapet run along the top.
+- **Hero, left:** a broad three-storey block (x −34…180, top 232) with a
+  roof garden, solar panel, laundry and a small roof tree; a lower warm-stone
+  wing at 156…252. A wind turbine sits on the tall roof. A rope footbridge
+  runs from the roof edge to the giant tree.
+- **Hero, centre:** the giant tree at cx 392, rooted behind the wall. Its crown
+  spans roughly x 230–555 and y 122–263. A flat-roofed tree hut, awning,
+  lanterns, a swing, visible limbs and vines hang in and under the crown.
+  A low barrel-roof warehouse and market terraces sit at its feet.
+- **Hero, right:** a wide low conservatory block (x 518…782) carrying a
+  **half-dome** 264 px wide and 74 px tall, with four cream/brass ribs, two
+  hoops, teal glass, interior plants and a lit central entrance. This is the
+  only large dome in the hero, and it is wider than it is tall.
+- **Deck life:** parasols, flower boxes, potted plants, benches, people,
+  laundry, market awnings, solar panels, turbines and roof trees. The quay has
+  **seven varied shopfronts** — a café with parasol, a boathouse and a flower
+  shop among them — plus crates, rings and more people.
+- **Second screen (x 800–1600):** broad garden blocks, a low barrel-roof
+  warehouse, a second broad tree, a low glasshouse, roof turbines, laundry,
+  shops and parasols. No vertical tower.
+- **Falls:** two mouths at x 236 and x 500. The strip items are
+  `{u: 212, v: 350}` and `{u: 476, v: 350}`. Both empty into the canal.
 
-- A turret crosses the seam at x −30 so the wrap reads as architecture, not a
-  cut. The tall left tower is fully visible at x 8–100, with a teal glazed
-  stairwell, an arched lit entrance, a sun mosaic, balcony gardens and an onion
-  cap with a pennant.
-- A long cream-and-brass aqueduct runs from the left tower at (100, 374) down to
-  the hero fall mouth at (304, 356); cream arches, a water-filled channel and
-  hanging moss.
-- The conservatory at x 298–534: a tiered sandstone drum, a glass onion with
-  cream/brass ribs, a brass rose window, banners, a fountain terrace, a lit
-  triple entrance and a finial.
-- Twin capsule homes at 512 and 568, connected by a curved footbridge, a glass
-  bay, a roof pergola and a rope bridge to the treehouse.
-- The giant tree at cx 704: three crown clumps, a visible trunk and limbs, a
-  brass-roofed treehouse with a balcony, ladder, chimney and lanterns, hanging
-  vines, and a root-side pool pavilion.
-- Around them: the three-storey skyline row, sandstone middle-distance row,
-  bottom rooftops with solar panels, turbines, market parasols and crates.
+### Near (water, quay and foreground)
 
-Second screen (x 800–1600):
+- The canal starts at a **hard waterline at y 512** and fills to the bottom.
+  Four horizontal depth bands (`#42b2c2` → `#2f8ba8` → `#2b6c8b` → deeper)
+  with ordered-dither transitions.
+- Reflections are a broken colour pool at the wall plus interrupted vertical
+  trails under the city and tree; long lazy ripple lines cross the canal.
+- Three mallards with wakes, floating leaves and buoys.
+- The left foreground is a timber pier at x 0–198 (short posts, planks,
+  crates, a rope coil, a lantern, a moored dinghy and a fisher with a rod).
+- The right foreground is a short stone stair into the water with a lantern.
+- `alpha: 0.6` in the manifest. The contact/preview sheets show the raw layer
+  at full strength for art review.
 
-- A needle observatory at 886 with a glass crown, a wide brass halo, hanging
-  garden pods, a spiral stair and a three-arch base.
-- Fall two at (970, 310), fed by a cream aqueduct from the needle tower; a
-  botanical stadium/arcade at 1044; a solar roof and two turbines at 1128–1240.
-- A smaller giant tree at 1304 with a balcony, then an ogee-domed telescope
-  observatory at 1382 with its brass barrel aimed up-left.
-- Fall three at (1416, 292), fed from the tall right-hand tower at 1502; that
-  tower has a sun mosaic, arch window, gardens and a flag.
+### Movers (draw order after near)
 
-### Falls
+- `boats.png`: four small left-facing canal boats, oar sweep and wake included
+  in the strip. `u/v`: (160,536), (540,554), (980,530), (1370,548).
+- `zeppelin.png`: two small cream/brass airships with a spinning propeller
+  (three frames) and a fluttering pennant at (300,112) and (1300,70).
+- `birds.png`: twelve tiny indigo gulls flapping through the sky at 55–185 px.
 
-- `items` are the strip's top-left corners in mid space:
-  - `{u: 280, v: 356}` — mouth at (304, 356), the hero fall.
-  - `{u: 970, v: 310}` — mouth at (994, 310).
-  - `{u: 1416, v: 292}` — mouth at (1440, 292).
-- The strip is a 48-wide ribbon: foam crest, a teal body with a snaking edge,
-  fixed vertical ribbons that shift eight pixels per frame, a 48-pixel stream
-  period (6 × 8 = 48, so the sixth frame wraps into the first), and an ordered
-  dither mist at the basin. No alpha fades, so every edge stays hard.
-
-### Near (framing the bottom, never the feet)
-
-- A sandstone parapet with trefoil niches, moss and flowers along y 576–600.
-- An oval reflecting pool at x 292–486 with koi, lilies and a fountain jet.
-- A brass rail and hanging lanterns at x 500–708.
-- Large foreground planters at 8, 744, 980, 1466 and 1584; pointed leaf clusters,
-  long architectural leaves, vines and lanterns. The tallest foliage lives at
-  the screen edges (roughly y 470 at the very corners), while the centre of the
-  parapet stays low so the ground line at y 568 is visually clear.
-- In the game this layer runs at `alpha: 0.2` by the readability contract. The
-  raw pixels are deliberately dark and contrasty so that the faint runtime
-  layer still frames the bottom; the contact sheet shows them at full strength.
-- A little water garden at 720–796 and a glasshouse/eaves detail in the
-  skyline above.
-
-## Palette decisions
+## Palette and silhouette decisions
 
 - Every drawn RGB value is in `art/skybox/palette.json`; the render uses **56**
-  of its colours. Transparent pixels are also given a palette RGB (sky indigo)
-  so even a naive all-pixel audit sees no pure black.
-- Sky: ordered dithering only (8×8 Bayer), never a blend. Each adjacent pair of
-  gradient stops is mixed by threshold, which keeps the retro breakup.
-- Aerial perspective: far = `farCity`; middle = warm `cityCream`/`cityStone` plus
-  sandstone; near = the darkest greens and stone shadows. Detail rises toward
-  the bottom, contrast falls toward the horizon.
-- Brass is the connective tissue: aqueduct edges, balcony rails, window rims,
-  dome ribs, airship gondolas, treehouse roof and the telescope. Orange/red is
-  reserved for awnings, pennants, flowers and the cat.
-- Water is `#2f8ba8`/`#42b2c2`/`#66d0cf` with `#c8f7ec`/`#effff4` foam; it is
-  deliberately cooler than the cream city.
-- No anti-aliasing and no feathered alpha: every pixel is either transparent or
-  a palette colour at alpha 255. The only ordered dithering in the layers is
-  the sky gradient, cloud/canopy volume, and waterfall mist.
+  colours. Transparent pixels are given a palette RGB (sky indigo) so even a
+  naive all-pixel audit sees no pure black.
+- The sky is ordered-dithered (8×8 Bayer), never blended. The move from cool
+  blue to warm cream is what changes the mood from the old night-like top to
+  the reference's daylight.
+- Aerial perspective is in three depths: far = `farCity`; mid = cream/tan
+  sandstone and teal glass; near = saturated water and dark pier timber.
+- Brass is the connective tissue (rails, arch rings, medallions, shop signs,
+  boat fittings, treehouse awning). Orange, coral and pink are reserved for
+  awnings, parasols, flowers and laundry.
+- **Silhouette rules:** broad blocks, horizontal floor bands, flat or rounded
+  roofs, half-domes wider than tall, a horizontal aqueduct. Nothing is a
+  vertical shaft ending in a bulb; no onion dome, minaret, spire or finial.
+  The turbine masts are the only thin verticals and they are explicitly part
+  of the solarpunk kit.
+- No anti-aliasing and no feathered alpha: every pixel is transparent or a
+  palette colour at alpha 255. Ordered dithering appears only in the sky, cloud/canopy volume, the far
+  haze and the water transitions.
 
 ## Iteration history
 
-1. **Blockout.** First render established the hero composition (left tower,
-   aqueduct, conservatory, giant tree) and the five-layer contract. Viewing it
-   exposed four problems: cloud banks were clipped flat cream slabs with
-   contour-ring shading; the tree canopy swallowed the trunk and read as a
-   green cloud; the waterfalls looked like pale light columns with barcode
-   stripes; and the facades were sparse cream rectangles. The near layer was a
-   flat wall of circle-bushes.
-2. **Clouds and tree.** Rebuilt clouds from stacked lobe masks with a padded
-   patch, per-column warm top rim, lower-half shadow smiles and a right-side
-   cast shadow. Split the tree into three crown clumps, exposed the trunk,
-   added limbs, a proper treehouse and vines. Replaced the flat near wall with
-   a parapet, a reflecting pool, leaf polygons and hanging vines. Rebuilt the
-   skyline in three depths (far haze, pale cream row, sandstone middle row).
-3. **Water and skyline.** Thickened the aqueduct deck and gave it a real water
-   channel and cream arches. Redesigned the falls three times: first to remove
-   full-width brightness bars, then to broaden the mist and crest, and finally
-   to replace the remaining barcode with vertical ribbons, a snaking body and
-   a rounded foam crown. Added the needle observatory, the telescope dome, the
-   conservatory terrace, the rose window, market parasols, side pods, rope
-   bridge, bunting and the cat.
-4. **Finish pass.** Tightened the sun halo, added moons in clear sky, reduced
-   cloud/canopy speckle, added tree limbs at the canopy underside, repositioned
-   the treehouse below the crown, and introduced the near pond and trefoil
-   parapet. Checked the seam with a 2× tile and a 3× seam crop; verified the
-   manifest, hashes, dimensions and palette.
+1. **Silhouette rewrite.** Replaced the tower-and-dome city with a horizontal
+   waterfront: a full-width aqueduct/terrace, broad low blocks, a giant tree, a
+   half-dome conservatory, shops at the quay, a canal, a pier and boats.
+   Removed the static sky birds and airships and introduced the boat, zeppelin
+   and bird mover strips.
+2. **Arch depth and daylight.** The first waterfront had the far city filling
+   the arch openings like a blue wall. Lowered the far layer to a sparse low
+   skyline, removed the checkerboard haze overlay, opened the arches to sky,
+   moved the sun into the hero crop, and added the quay shops, wall medallions,
+   lamps, vines, parasols, roof trees and laundry. Darkened the conservatory
+   glass and reduced its ribs from six to four so it reads as a glasshouse
+   rather than a birdcage.
+3. **Water and human scale.** Rebuilt water reflections from blocky bars into
+   a colour pool with interrupted vertical trails and long ripples. Removed
+   the optional `water.png` mover strip: at 1× its glints read as a dotted
+   grid across the canal. Added ducks, a moored dinghy, a fisher, more people,
+   the rope bridge, the tree hut awning, perched birds and the roof trees.
+   Fixed the boat strip so every frame has a distinct oar sweep; fixed the
+   falls loop so all six transitions are even.
+4. **Finish pass.** Moved the zeppelin into a clear blue gap, gave it pennant
+   flutter, added the sun glints on the water, tuned the shop variety and
+   reduced the far roof sawtooth. Re-ran the seam, palette, animation and
+   manifest checks.
 
 ## Verification performed
 
-- `sips -g pixelWidth -g pixelHeight` on all seven outputs; `falls.png` is
-  288×240 and every panorama is 1600×600.
+- Dimensions checked with `sips` and Pillow:
+  - sky/far/mid/near 1600×600, contact 1600×600, preview 2400×600
+  - falls 288×240
+  - boats 128×16, zeppelin 192×28, birds 64×8
 - `manifest.json` parsed; every `src` resolves; every `version` matches the
-  file's SHA-256 first 12; all fall items lie inside the panorama and their
-  strip footprint stays inside it. The readability fields (`haze: 1.3`,
-  `near.alpha: 0.2`) are present and match `specs/skybox.md`.
-- Full-pixel palette audit (not sampled) over sky/far/mid/near/falls: zero
-  off-palette RGB values. Alpha is only 0 or 255.
-- Seam metrics (mean RGBA delta between column 1599 and column 0, compared with
-  a normal adjacent pair):
-  - sky 7.3 vs 7.3
-  - far 0.1 vs 0.1
-  - mid 1.4 vs 1.8
-  - near 0.6 vs 0.4
-  There is no discontinuity: the differences are at the level of ordinary
-  neighbouring columns.
-- `tiled-2x.png` and `seam-zoom.png` inspected by eye; the seam runs through the
-  two seam turrets, a shared bunting line and a continuous cloud, and the near
-  bushes join without a step.
-- `contact.png` and `preview-3screens.png` inspected by eye at 1× and 2–4×
-  crops. The preview shows the expected parallax ordering: near foliage slides
-  twice as far as mid, the far skyline barely moves, and the sky is nearly
-  locked.
+  file's SHA-256 first 12; every item stays inside 1600×600; each strip's
+  `frameW`/`frameH`/`frames`/`fps` match the generated sheet.
+- Full-pixel palette audit on every layer and strip: zero off-palette RGB
+  values; alpha is only 0 or 255.
+- Seam metrics (mean RGBA delta between column 1599 and column 0, compared
+  with a normal adjacent pair):
+  - sky 6.7 vs 6.8
+  - far 0.1 vs 0.2
+  - mid 0.4 vs 3.8 (the wrap is not a jump; the whole width shares the deck
+    and quay bands, so the seam is quieter than ordinary interior columns)
+  - near 0.4 vs 1.2
+- `tiled-2x.png` and `seam-zoom.png` inspected by eye. The seam runs through
+  the full-width aqueduct band, the water, and the seam-spanning pier, with
+  no visible join.
+- Strip frame deltas (mean RGBA difference per transition):
+  - falls ≈ 20.6–21.8, uniform around the loop
+  - boats ≈ 1.9–2.4
+  - zeppelin ≈ 1.1–1.2
+  - birds ≈ 12.2–14.2
+- `contact.png` and `preview-3screens.png` inspected at 1× and 2×. The preview
+  shows the near water moving twice as far as mid, the far ridge barely moving
+  and the sky nearly locked.
 
 ## Known weaknesses / next moves
 
-- The middle band still has a lot of large cream and green mass (the
-  conservatory and the tree). Contrast is deliberately low and detail is kept
-  near the edges, but a readability probe should have the final say.
-- The far skyline is intentionally soft; some of its towers are still boxy
-  silhouettes rather than fully drawn buildings.
-- The three waterfalls reuse one strip. Their mouths align exactly, but the
-  hero fall and the two far falls have identical silhouettes.
-- The canopy is a stylised clump tree; its 1px leaf specks read at 2× more than
-  at 1×. A future pass could hand-place more leaf clumps at the silhouette.
-- The near foliage is dark by design, but the far-left spawn corner is the one
-  place where a dark fighter may sit against a dark bush. The runtime fades the
-  near layer to 20% to protect that case; the bright rim highlights keep the
-  raw art readable in the review sheet.
-- The hero crop cuts the left dome by a few pixels and the right tree/near
-  planter at x 800. That is the tiling composition, not a bad seam; moving the
-  camera start would show the same art.
+- The aqueduct wall is long and repeats nine bays; the shops, medallions,
+  lamps and parasols are what break it up. More per-bay variation would be the
+  next density pass.
+- The far skyline is intentionally sparse; through the arches it reads as a
+  low hazy waterfront, not a fully detailed city.
+- The conservatory is a broad glazed half-dome, not a fully resolved Victorian
+  frame; its glass panels are deliberately simple.
+- Water reflections are stylised vertical trails, not a physically mirrored
+  canal. Boats and zeppelins are small at 1×.
+- The near layer is bright water and quay, so `alpha: 0.6` was chosen instead
+  of the old dark-foliage 0.2. The readability probe should confirm it; if the
+  dark left-hand pier is still too strong at the spawn, lower it to 0.7 before
+  touching the art.
+- Both waterfalls reuse one 48×240 strip; their mouths align but the
+  silhouettes are identical.
+- The contact and preview are raw-layer review composites. In the game the
+  runtime applies `haze: 1.4` and `near.alpha: 0.6`, so the water and quay are
+  slightly lighter and fainter than the review sheet.

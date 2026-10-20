@@ -22,6 +22,7 @@ import {
 	type LoadedSkyboxLayer,
 	layerFactor,
 	loadedSkybox,
+	type SkyboxAmbientDef,
 	type SkyChoice,
 	skyboxChoice,
 } from "./skyboxAssets";
@@ -53,6 +54,10 @@ export interface SkyboxDebugState {
 		shift: number;
 		drift: number;
 	}[];
+	/** Strip items with their own motion — birds, airships, boats. */
+	movers: { id: string; x: number; y: number; speedX: number }[];
+	/** The single background-animation programme, if the candidate has one. */
+	ambient: { loopMs: number; groups: number; actors: number } | null;
 }
 
 interface ImageView {
@@ -66,17 +71,25 @@ interface ImageView {
 	height: number;
 }
 
-interface FallItem {
+interface StripItem {
 	u: number;
 	v: number;
+	speedX: number;
+	bobAmp: number;
+	bobFreq: number;
+	phase: number;
+	flip: boolean;
 	copies: [Sprite, Sprite];
+	/** Last drawn screen position, for the probe. */
+	lastX: number;
+	lastY: number;
 }
 
 interface StripView {
 	def: LoadedSkyboxLayer;
 	order: number;
 	factor: number;
-	items: FallItem[];
+	items: StripItem[];
 	lastFrame: number;
 }
 
@@ -140,6 +153,7 @@ export class Skybox {
 	private readonly panoramaW: number;
 	private readonly panoramaH: number;
 	private readonly haze: number;
+	private readonly ambient: SkyboxAmbientDef | null;
 	private elapsedMs = 0;
 	private fallFrame = 0;
 	private cameraX = 0;
@@ -152,6 +166,7 @@ export class Skybox {
 		this.panoramaW = loaded?.manifest.width ?? view.width;
 		this.panoramaH = loaded?.manifest.height ?? view.height;
 		this.haze = Math.max(0, Math.min(2, loaded?.manifest.haze ?? 1));
+		this.ambient = loaded?.manifest.ambient ?? null;
 		parent.addChild(this.root);
 
 		if (!loaded) {
@@ -170,6 +185,7 @@ export class Skybox {
 			if (def.type === "strip") {
 				const frames = def.slices;
 				if (!frames?.length) continue;
+				const group = this.ambient?.groups.find((g) => g.layer === def.id);
 				const strip: StripView = {
 					def,
 					order: this.images.length + this.strips.length,
@@ -177,15 +193,27 @@ export class Skybox {
 					items: [],
 					lastFrame: -1,
 				};
-				for (const item of def.items ?? []) {
+				for (const item of group?.actors ?? def.items ?? []) {
 					const a = new Sprite(frames[0]);
 					const b = new Sprite(frames[0]);
 					for (const s of [a, b]) {
 						s.anchor.set(0);
 						s.alpha = def.alpha ?? 1;
+						if (item.flip) s.scale.x = -1;
 						this.root.addChild(s);
 					}
-					strip.items.push({ u: item.u, v: item.v, copies: [a, b] });
+					strip.items.push({
+						u: item.u,
+						v: item.v,
+						speedX: item.speedX ?? 0,
+						bobAmp: item.bobAmp ?? 0,
+						bobFreq: item.bobFreq ?? 0,
+						phase: item.phase ?? 0,
+						flip: item.flip ?? false,
+						copies: [a, b],
+						lastX: 0,
+						lastY: 0,
+					});
 				}
 				this.strips.push(strip);
 				continue;
@@ -299,13 +327,19 @@ export class Skybox {
 		for (const strip of this.strips) {
 			const frames = strip.def.slices;
 			if (!frames?.length) continue;
+			// One plan, one clock: every actor in the ambient programme is
+			// sampled at the same point in time, so a flock, an airship and a
+			// boat cannot drift into unrelated timings. The panorama wrap is
+			// the loop; forcing a separate loopMs reset would teleport a bird
+			// whose speed does not divide the panorama.
+			const clockMs = this.elapsedMs;
 			const fps = strip.def.fps ?? 8;
-			const frame = Math.floor(this.elapsedMs / (1000 / fps)) % frames.length;
+			const frame = Math.floor(clockMs / (1000 / fps)) % frames.length;
 			const frameTexture = frames[frame];
 			if (!frameTexture) continue;
 			if (frame !== strip.lastFrame) {
 				strip.lastFrame = frame;
-				if (strip === this.strips[0]) this.fallFrame = frame;
+				if (strip.def.id === "falls") this.fallFrame = frame;
 				for (const item of strip.items) {
 					const [a, b] = item.copies;
 					a.texture = frameTexture;
@@ -315,20 +349,29 @@ export class Skybox {
 
 			const shift = wrap(cameraX * strip.factor, W);
 			const y = cameraY * (1 - strip.factor);
+			const t = clockMs / 1000;
 			for (const item of strip.items) {
 				// The item names its position in the city's texture space, so
-				// its wrap is the panorama's wrap, not the screen's.
-				const screenX = wrap(item.u - shift, W);
-				const x0 = cameraX + screenX;
-				const x1 = x0 - W;
+				// its wrap is the panorama's wrap, not the screen's. A mover
+				// adds its own travel and bob on top of the layer's parallax.
+				const moved = item.speedX * t;
+				const screenX = wrap(item.u + moved - shift, W);
+				const bob =
+					item.bobAmp *
+					Math.sin(t * item.bobFreq * Math.PI * 2 + item.phase);
 				const w = strip.def.frameW ?? 0;
+				const offset = item.flip ? w : 0;
+				const x0 = cameraX + screenX + offset;
+				const x1 = x0 - W;
 				const [a, b] = item.copies;
 				a.x = x0;
 				b.x = x1;
-				a.y = y + item.v;
-				b.y = y + item.v;
+				a.y = y + item.v + bob;
+				b.y = y + item.v + bob;
 				a.visible = screenX + w > 0 && screenX < viewW;
 				b.visible = screenX - W + w > 0 && screenX - W < viewW;
+				item.lastX = screenX;
+				item.lastY = item.v + bob;
 			}
 		}
 	}
@@ -361,11 +404,33 @@ export class Skybox {
 				shift,
 				drift,
 			}));
+		const movers = this.strips.flatMap((s) =>
+			s.items
+				.filter((item) => item.speedX !== 0)
+				.map((item) => ({
+					id: s.def.id,
+					x: Math.round(item.lastX),
+					y: Math.round(item.lastY),
+					speedX: item.speedX,
+				})),
+		);
+		const ambient = this.ambient
+			? {
+					loopMs: this.ambient.loopMs,
+					groups: this.ambient.groups.length,
+					actors: this.ambient.groups.reduce(
+						(n, group) => n + group.actors.length,
+						0,
+					),
+				}
+			: null;
 		return {
 			variant: loadedSkybox()?.variant ?? skyboxChoice(),
 			loaded: this.images.length > 0 || this.strips.length > 0,
 			layers: this.images.length + this.strips.length,
-			animatedFalls: this.strips.reduce((n, s) => n + s.items.length, 0),
+			animatedFalls: this.strips
+				.filter((s) => s.def.id === "falls")
+				.reduce((n, s) => n + s.items.length, 0),
 			frame: this.fallFrame,
 			elapsedMs: Math.round(this.elapsedMs),
 			shift: first ? Math.round(first.shift) : 0,
@@ -374,6 +439,8 @@ export class Skybox {
 			haze: this.haze,
 			imageWidth: first?.copies[0]?.width ?? 0,
 			imageScale: first?.copies[0]?.scale.x ?? 0,
+			movers,
+			ambient,
 			order,
 		};
 	}

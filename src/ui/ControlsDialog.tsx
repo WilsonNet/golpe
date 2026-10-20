@@ -58,10 +58,11 @@ const DECKS: { value: DeckSetting; label: string }[] = [
 	{ value: "off", label: "Off" },
 ];
 
-/** The two skybox candidates, and the old gradient for a plain read. */
+/** The stage candidates, the earlier art studies, and the plain gradient. */
 const SKIES: { value: SkyChoice; label: string }[] = [
+	{ value: "stage", label: "Stage" },
+	{ value: "hand", label: "Waterfront" },
 	{ value: "voxel", label: "Voxel" },
-	{ value: "hand", label: "Painted" },
 	{ value: "off", label: "Plain" },
 ];
 
@@ -235,11 +236,12 @@ export function ControlsDialog({ onClose }: { onClose: () => void }) {
 					</div>
 				</div>
 				<p className="gd-setting-hint">
-					The parallax city behind the arena. <strong>Voxel</strong> is the
-					pre-rendered 3D city; <strong>Painted</strong> is the finer pixel-art
-					city; <strong>Plain</strong> keeps the old gradient. It applies from
-					the next match; a <strong>?sky=</strong> link chooses the candidate
-					when the page loads.
+					The background behind the arena. <strong>Stage</strong> is the calm,
+					Smash-style waterfront built for readability; <strong>Waterfront</strong>{" "}
+					and <strong>Voxel</strong> are the earlier, busier art studies;{" "}
+					<strong>Plain</strong> keeps the old gradient. It applies from the next
+					match; a <strong>?sky=</strong> link chooses the candidate when the
+					page loads.
 				</p>
 			</div>
 

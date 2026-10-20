@@ -1,15 +1,197 @@
 {
   "name": "hand",
-  "title": "Solarpunk Noon \u2014 Hand-Painted",
+  "title": "Solarpunk Waterfront \u2014 Hand-Painted",
   "width": 1600,
   "height": 600,
-  "haze": 1.3,
+  "haze": 1.4,
+  "ambient": {
+    "loopMs": 400000,
+    "groups": [
+      {
+        "layer": "boats",
+        "actors": [
+          {
+            "u": 160,
+            "v": 536,
+            "speedX": -2.6,
+            "bobAmp": 1.0,
+            "bobFreq": 0.8,
+            "phase": 0.0,
+            "flip": false
+          },
+          {
+            "u": 540,
+            "v": 554,
+            "speedX": -3.8,
+            "bobAmp": 1.2,
+            "bobFreq": 0.9,
+            "phase": 1.4,
+            "flip": false
+          },
+          {
+            "u": 980,
+            "v": 530,
+            "speedX": -2.2,
+            "bobAmp": 0.8,
+            "bobFreq": 0.7,
+            "phase": 2.1,
+            "flip": false
+          },
+          {
+            "u": 1370,
+            "v": 548,
+            "speedX": -4.6,
+            "bobAmp": 1.1,
+            "bobFreq": 1.0,
+            "phase": 3.2,
+            "flip": false
+          }
+        ]
+      },
+      {
+        "layer": "zeppelin",
+        "actors": [
+          {
+            "u": 300,
+            "v": 112,
+            "speedX": 4.2,
+            "bobAmp": 2.4,
+            "bobFreq": 0.32,
+            "phase": 0.2,
+            "flip": false
+          },
+          {
+            "u": 1300,
+            "v": 70,
+            "speedX": 3.0,
+            "bobAmp": 2.0,
+            "bobFreq": 0.28,
+            "phase": 1.6,
+            "flip": false
+          }
+        ]
+      },
+      {
+        "layer": "birds",
+        "actors": [
+          {
+            "u": 70,
+            "v": 58,
+            "speedX": 7.5,
+            "bobAmp": 1.2,
+            "bobFreq": 0.9,
+            "phase": 0.0,
+            "flip": false
+          },
+          {
+            "u": 210,
+            "v": 96,
+            "speedX": -9.0,
+            "bobAmp": 1.5,
+            "bobFreq": 1.2,
+            "phase": 1.1,
+            "flip": true
+          },
+          {
+            "u": 340,
+            "v": 74,
+            "speedX": 6.0,
+            "bobAmp": 1.0,
+            "bobFreq": 0.7,
+            "phase": 2.2,
+            "flip": false
+          },
+          {
+            "u": 470,
+            "v": 120,
+            "speedX": -11.0,
+            "bobAmp": 2.0,
+            "bobFreq": 1.4,
+            "phase": 3.3,
+            "flip": true
+          },
+          {
+            "u": 610,
+            "v": 88,
+            "speedX": 8.0,
+            "bobAmp": 1.3,
+            "bobFreq": 1.0,
+            "phase": 4.4,
+            "flip": false
+          },
+          {
+            "u": 760,
+            "v": 145,
+            "speedX": -7.0,
+            "bobAmp": 1.6,
+            "bobFreq": 1.1,
+            "phase": 5.5,
+            "flip": true
+          },
+          {
+            "u": 900,
+            "v": 64,
+            "speedX": 10.0,
+            "bobAmp": 1.1,
+            "bobFreq": 0.8,
+            "phase": 0.7,
+            "flip": false
+          },
+          {
+            "u": 1040,
+            "v": 170,
+            "speedX": -6.0,
+            "bobAmp": 1.8,
+            "bobFreq": 1.3,
+            "phase": 1.8,
+            "flip": true
+          },
+          {
+            "u": 1180,
+            "v": 100,
+            "speedX": 9.0,
+            "bobAmp": 1.4,
+            "bobFreq": 0.95,
+            "phase": 2.9,
+            "flip": false
+          },
+          {
+            "u": 1320,
+            "v": 55,
+            "speedX": -12.0,
+            "bobAmp": 1.2,
+            "bobFreq": 1.25,
+            "phase": 4.0,
+            "flip": true
+          },
+          {
+            "u": 1450,
+            "v": 130,
+            "speedX": 5.0,
+            "bobAmp": 1.0,
+            "bobFreq": 0.75,
+            "phase": 5.1,
+            "flip": false
+          },
+          {
+            "u": 1560,
+            "v": 185,
+            "speedX": -8.0,
+            "bobAmp": 1.7,
+            "bobFreq": 1.15,
+            "phase": 0.3,
+            "flip": true
+          }
+        ]
+      }
+    ]
+  },
   "layers": [
     {
       "id": "sky",
       "type": "image",
       "src": "assets/skybox/hand/sky.png",
-      "version": "083672a408a0",
+      "version": "8f84d0eb037e",
       "factor": 0.015,
       "driftX": 0.6,
       "alpha": 1
@@ -18,14 +200,14 @@
       "id": "far",
       "type": "image",
       "src": "assets/skybox/hand/far.png",
-      "version": "d06a10beece0",
+      "version": "acd7236bd1e6",
       "factor": 0.06
     },
     {
       "id": "mid",
       "type": "image",
       "src": "assets/skybox/hand/mid.png",
-      "version": "7769853278e9",
+      "version": "066f4109315a",
       "factor": 0.18
     },
     {
@@ -41,16 +223,12 @@
       "align": "mid",
       "items": [
         {
-          "u": 280,
-          "v": 356
+          "u": 212,
+          "v": 350
         },
         {
-          "u": 970,
-          "v": 310
-        },
-        {
-          "u": 1416,
-          "v": 292
+          "u": 476,
+          "v": 350
         }
       ]
     },
@@ -58,9 +236,210 @@
       "id": "near",
       "type": "image",
       "src": "assets/skybox/hand/near.png",
-      "version": "1489f6bc0b02",
+      "version": "8ccb37df4b0e",
       "factor": 0.5,
-      "alpha": 0.2
+      "alpha": 0.6
+    },
+    {
+      "id": "boats",
+      "type": "strip",
+      "src": "assets/skybox/hand/boats.png",
+      "version": "430d94c6aaa9",
+      "factor": 0.5,
+      "frameW": 32,
+      "frameH": 16,
+      "frames": 4,
+      "fps": 4,
+      "items": [
+        {
+          "u": 160,
+          "v": 536,
+          "speedX": -2.6,
+          "bobAmp": 1.0,
+          "bobFreq": 0.8,
+          "phase": 0.0,
+          "flip": false
+        },
+        {
+          "u": 540,
+          "v": 554,
+          "speedX": -3.8,
+          "bobAmp": 1.2,
+          "bobFreq": 0.9,
+          "phase": 1.4,
+          "flip": false
+        },
+        {
+          "u": 980,
+          "v": 530,
+          "speedX": -2.2,
+          "bobAmp": 0.8,
+          "bobFreq": 0.7,
+          "phase": 2.1,
+          "flip": false
+        },
+        {
+          "u": 1370,
+          "v": 548,
+          "speedX": -4.6,
+          "bobAmp": 1.1,
+          "bobFreq": 1.0,
+          "phase": 3.2,
+          "flip": false
+        }
+      ]
+    },
+    {
+      "id": "zeppelin",
+      "type": "strip",
+      "src": "assets/skybox/hand/zeppelin.png",
+      "version": "c90fa5f2d39d",
+      "factor": 0.1,
+      "frameW": 64,
+      "frameH": 28,
+      "frames": 3,
+      "fps": 10,
+      "items": [
+        {
+          "u": 300,
+          "v": 112,
+          "speedX": 4.2,
+          "bobAmp": 2.4,
+          "bobFreq": 0.32,
+          "phase": 0.2,
+          "flip": false
+        },
+        {
+          "u": 1300,
+          "v": 70,
+          "speedX": 3.0,
+          "bobAmp": 2.0,
+          "bobFreq": 0.28,
+          "phase": 1.6,
+          "flip": false
+        }
+      ]
+    },
+    {
+      "id": "birds",
+      "type": "strip",
+      "src": "assets/skybox/hand/birds.png",
+      "version": "845c62522553",
+      "factor": 0.06,
+      "frameW": 16,
+      "frameH": 8,
+      "frames": 4,
+      "fps": 10,
+      "items": [
+        {
+          "u": 70,
+          "v": 58,
+          "speedX": 7.5,
+          "bobAmp": 1.2,
+          "bobFreq": 0.9,
+          "phase": 0.0,
+          "flip": false
+        },
+        {
+          "u": 210,
+          "v": 96,
+          "speedX": -9.0,
+          "bobAmp": 1.5,
+          "bobFreq": 1.2,
+          "phase": 1.1,
+          "flip": true
+        },
+        {
+          "u": 340,
+          "v": 74,
+          "speedX": 6.0,
+          "bobAmp": 1.0,
+          "bobFreq": 0.7,
+          "phase": 2.2,
+          "flip": false
+        },
+        {
+          "u": 470,
+          "v": 120,
+          "speedX": -11.0,
+          "bobAmp": 2.0,
+          "bobFreq": 1.4,
+          "phase": 3.3,
+          "flip": true
+        },
+        {
+          "u": 610,
+          "v": 88,
+          "speedX": 8.0,
+          "bobAmp": 1.3,
+          "bobFreq": 1.0,
+          "phase": 4.4,
+          "flip": false
+        },
+        {
+          "u": 760,
+          "v": 145,
+          "speedX": -7.0,
+          "bobAmp": 1.6,
+          "bobFreq": 1.1,
+          "phase": 5.5,
+          "flip": true
+        },
+        {
+          "u": 900,
+          "v": 64,
+          "speedX": 10.0,
+          "bobAmp": 1.1,
+          "bobFreq": 0.8,
+          "phase": 0.7,
+          "flip": false
+        },
+        {
+          "u": 1040,
+          "v": 170,
+          "speedX": -6.0,
+          "bobAmp": 1.8,
+          "bobFreq": 1.3,
+          "phase": 1.8,
+          "flip": true
+        },
+        {
+          "u": 1180,
+          "v": 100,
+          "speedX": 9.0,
+          "bobAmp": 1.4,
+          "bobFreq": 0.95,
+          "phase": 2.9,
+          "flip": false
+        },
+        {
+          "u": 1320,
+          "v": 55,
+          "speedX": -12.0,
+          "bobAmp": 1.2,
+          "bobFreq": 1.25,
+          "phase": 4.0,
+          "flip": true
+        },
+        {
+          "u": 1450,
+          "v": 130,
+          "speedX": 5.0,
+          "bobAmp": 1.0,
+          "bobFreq": 0.75,
+          "phase": 5.1,
+          "flip": false
+        },
+        {
+          "u": 1560,
+          "v": 185,
+          "speedX": -8.0,
+          "bobAmp": 1.7,
+          "bobFreq": 1.15,
+          "phase": 0.3,
+          "flip": true
+        }
+      ]
     }
   ]
 }
