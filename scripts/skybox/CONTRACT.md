@@ -217,8 +217,9 @@ public/assets/skybox/<variant>/
 - `version` is the first 12 hex chars of the file's SHA-256. The runtime appends
   `?v=<version>` so a regenerated asset can never be paired with a stale PNG.
 - `haze` is an optional strength multiplier for the runtime background grade
-  (default `1`): a small blur, desaturation and brightness reduction applied to
-  the skybox art only. The actors are above it and get a small brightness lift.
+  (default `1`): a small blur, desaturation, brightness reduction and static
+  film grain applied to the skybox scenery only. The inhabitants sit above the
+  grade, crisp; the actors are above them and get a small brightness lift.
   `Off` bypasses the grade entirely and draws the original plain blue gradient.
 - `u`/`v` on a fall item are texture coordinates in the `mid` layer's space.
 

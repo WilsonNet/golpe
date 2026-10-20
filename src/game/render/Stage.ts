@@ -78,8 +78,8 @@ export class Stage {
 		// as silhouettes; the art's own ink line is enough once the world is
 		// desaturated and blurred.
 		const lift = new ColorMatrixFilter();
-		lift.brightness(1.08, false);
-		lift.saturate(1.06, true);
+		lift.brightness(1.1, false);
+		lift.saturate(1.1, true);
 		this.actors.filters = [lift];
 		root.addChild(this.scroll);
 	}

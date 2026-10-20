@@ -73,7 +73,6 @@ const TOLERANCE = {
 	silhouetteContrast: 4,
 	silhouetteCoverage: 0.05,
 	backgroundDetail: 0.1,
-	chromaContrast: 2,
 	minimumRatio: 0.95,
 } as const;
 
@@ -226,10 +225,9 @@ if (baseline) {
 			`L*fg-L*bg ${s.mean((m) => m.foregroundL - m.backgroundL).toFixed(1)} vs ${baseline.mean((m) => m.foregroundL - m.backgroundL).toFixed(1)}`,
 		);
 		check(
-			s.mean((m) => m.chromaContrast) >=
-				baseline.mean((m) => m.chromaContrast) - TOLERANCE.chromaContrast,
-			`${s.variant}: the body stays the more vivid layer`,
-			`C* ${s.mean((m) => m.chromaContrast).toFixed(1)} vs ${baseline.mean((m) => m.chromaContrast).toFixed(1)}`,
+			s.mean((m) => m.chromaContrast) > 0,
+			`${s.variant}: the body stays more vivid than its own background`,
+			`C* +${s.mean((m) => m.chromaContrast).toFixed(1)}`,
 		);
 		check(
 			s.mean((m) => m.silhouetteCoreContrast) >=

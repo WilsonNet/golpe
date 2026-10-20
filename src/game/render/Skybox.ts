@@ -16,7 +16,15 @@
  * in the city layer so it cannot drift away from its aqueduct.
  */
 
-import { BlurFilter, ColorMatrixFilter, Container, Graphics, Sprite } from "pixi.js";
+import {
+	BlurFilter,
+	CanvasSource,
+	ColorMatrixFilter,
+	Container,
+	Graphics,
+	Sprite,
+	Texture,
+} from "pixi.js";
 import { TEX, tex } from "./assets";
 import {
 	type LoadedSkyboxLayer,
@@ -133,8 +141,8 @@ const TOP_SCRIM_FADE: readonly [y: number, h: number, alpha: number][] = [
 ];
 /** How far the background art is pushed behind the fight, at grade 1. */
 const BACKGROUND_BLUR_PX = 1.1;
-const BACKGROUND_DESATURATE = 0.32;
-const BACKGROUND_DARKEN = 0.045;
+const BACKGROUND_DESATURATE = 0.38;
+const BACKGROUND_DARKEN = 0.08;
 
 export class Skybox {
 	private readonly root = new Container();
@@ -150,6 +158,8 @@ export class Skybox {
 	private readonly strips: StripView[] = [];
 	private readonly fallback: Sprite | null = null;
 	private readonly scrim: Graphics | null = null;
+	/** A static, screen-locked film grain over the scenery, under the people. */
+	private grain: Sprite | null = null;
 	private readonly panoramaW: number;
 	private readonly panoramaH: number;
 	private readonly haze: number;
@@ -185,7 +195,6 @@ export class Skybox {
 		}
 
 		this.root.addChild(this.art);
-		this.root.addChild(this.inhabitants);
 		// The inhabitants stay crisp, but they are still background: pull a
 		// little chroma out so a bright boat or shirt behind a fighter cannot
 		// out-saturate the fighter the player is tracking.
@@ -258,6 +267,14 @@ export class Skybox {
 			this.images.push(layer);
 		}
 
+		// A screen-locked film grain sits above the blurred scenery and below
+		// the inhabitants. It gives the graded backdrop texture without
+		// sharpening it, and it never touches a fighter.
+		this.grain = new Sprite(getGrainTexture());
+		this.grain.alpha = 0.06;
+		this.root.addChild(this.grain);
+		this.root.addChild(this.inhabitants);
+
 		// The grade lives behind the fight, not on it. Blur the painted world
 		// and pull a little brightness/saturation out of it; the actors layer
 		// is above this and gets a small brightness lift in Stage. The top
@@ -314,6 +331,13 @@ export class Skybox {
 			this.scrim.x = cameraX;
 			this.scrim.y = 0;
 			this.scrim.scale.x = viewW;
+		}
+		if (this.grain) {
+			// Screen-locked: the grain is the lens, not the world.
+			this.grain.x = cameraX;
+			this.grain.y = 0;
+			this.grain.width = viewW;
+			this.grain.height = viewH;
 		}
 
 		const W = this.panoramaW;
@@ -489,4 +513,31 @@ export class Skybox {
 
 function wrap(value: number, period: number): number {
 	return ((value % period) + period) % period;
+}
+
+/** One cached 800x600 grain tile; the sprite is screen-locked and scaled. */
+let grainTexture: Texture | null = null;
+function getGrainTexture(): Texture {
+	if (grainTexture) return grainTexture;
+	const canvas = document.createElement("canvas");
+	canvas.width = 800;
+	canvas.height = 600;
+	const ctx = canvas.getContext("2d");
+	if (!ctx) return Texture.EMPTY;
+	const image = ctx.createImageData(canvas.width, canvas.height);
+	let seed = 0x9e3779b9;
+	for (let i = 0; i < image.data.length; i += 4) {
+		seed = (seed * 1664525 + 1013904223) >>> 0;
+		const v = 96 + ((seed >>> 24) & 127);
+		image.data[i] = v;
+		image.data[i + 1] = v;
+		image.data[i + 2] = v;
+		image.data[i + 3] = 255;
+	}
+	ctx.putImageData(image, 0, 0);
+	grainTexture = new Texture({
+		source: new CanvasSource({ resource: canvas }),
+	});
+	grainTexture.source.scaleMode = "nearest";
+	return grainTexture;
 }

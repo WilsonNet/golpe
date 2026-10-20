@@ -158,22 +158,22 @@ That is the classic value failure Game Developer's value analysis describes.
 The fix is a **background grade** and a **foreground lift**, not a pale wash
 over everything:
 
-1. **The background recedes.** A `BlurFilter` (1.1px) and a `ColorMatrixFilter`
+1. **The background recedes.** A `BlurFilter` (1.1px), a `ColorMatrixFilter`
    (a little less brightness and saturation, scaled by the manifest's `haze`)
-   sit on the skybox's `art` container — between the painted scenery and the
-   arena. The sky, city, water and falls soften with it. The **inhabitants** —
-   the looping people, walkers, birds, zeppelin and boats — sit in a separate
-   crisp container just above the grade, with only a small chroma reduction so
-   a bright shirt or boat cannot out-saturate the fighter. Both layers are
-   below the fighters and platforms, which stay crisp.
+   and a static screen-locked **film grain** sit on the skybox's scenery. The
+   sky, city, water and falls soften, darken and gain a fine texture. The
+   **inhabitants** — the looping people, walkers, birds, zeppelin and boats —
+   sit in a separate crisp container just above the grade, with only a small
+   chroma reduction so a bright shirt or boat cannot out-saturate the fighter.
+   Both layers are below the fighters and platforms, which stay crisp.
 2. **The near layer is bright, not black.** The quay/water layer uses
    `"alpha": 0.6`; it can carry more than the old dark-foliage layer because it
    is a bright canal, not a bush in the fighter's value band.
 3. **The fighters are the bright layer.** The actors container gets a small
-   `ColorMatrixFilter` lift (brightness 1.08, saturation 1.06). The old dark
+   `ColorMatrixFilter` lift (brightness 1.1, saturation 1.1). The old dark
    `OutlineFilter` is gone — it was the thing making the roster read as
    silhouettes. The art's own ink line is the outline; the background is now
-   softer and quieter than the body, which is the separation cue.
+   softer, darker and quieter than the body, which is the separation cue.
 
 A faint top scrim (0..160, max 0.08) exists only so the HUD panel keeps its
 contrast. It is not the old dark band.
@@ -203,15 +203,16 @@ body covers. It measures:
 The gates describe this house style, not the old pale-sky look. The body must
 not collapse into the background (`min ΔL* ≥ 6`), must not be **more** darkened
 relative to the background than the flat-sky control (signed `L*fg - L*bg`), and
-must remain the more vivid layer (`chromaContrast`). The silhouette, coverage,
-detail budget and a "not lost" luminance ratio (≥0.95) still hold. In a
-representative run the control is L* 58.0 / 82.2 (signed -24.5, ΔL* 24.3,
-chroma contrast 23.5, core ΔE 50.3, coverage 86%, detail 0.08); the Waterfront
-is 56.6 / 66.1 (signed -9.6, ΔL* 9.6, chroma contrast 22.2, core ΔE 52.3,
-coverage 97%, detail 0.06). The Waterfront's body is **9.6 darker** than its
-background versus **24.5** for the old sky: it is the bright, crisp, vivid layer
-over a blurred, desaturated world. The exact values move with where the fight
-leaves the body, so the probe gates on the same-run control.
+must remain more vivid than its own background (positive `chromaContrast`). The
+silhouette, coverage, detail budget and a "not lost" luminance ratio (≥0.95)
+still hold. In a representative run the control is L* 58.0 / 82.2 (signed
+-24.2, ΔL* 24.2, chroma contrast ~23, core ΔE 57.6, coverage 88%, detail
+0.03); the Waterfront is 57.7 / 69.9 (signed -12.2, ΔL* 12.2, chroma contrast
++14.3, core ΔE 60.2, coverage 98%, detail 0.05). The Waterfront's body is
+**12.2 darker** than its background versus **24.2** for the old sky: it is the
+bright, crisp, vivid layer over a blurred, desaturated, slightly darkened and
+grained world. The exact values move with where the fight leaves the body, so
+the probe gates on the same-run control.
 
 The WCAG 3:1 figure is a UI guideline (Xbox XAG 102), not a sprite threshold.
 The old sky itself is ~1.7:1 and the Waterfront ~1.1:1 in relative luminance;

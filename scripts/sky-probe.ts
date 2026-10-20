@@ -178,9 +178,10 @@ for (const variant of VARIANTS) {
 		falls && mid ? `falls=${falls.factor} mid=${mid.factor}` : "no falls",
 	);
 
-	// The waterfall clock must advance even if the fight is still.
+	// The waterfall clock must advance even if the fight is still. 2.3s also
+	// guarantees at least one loop-frame change at the quay's 6-8 fps.
 	const t0 = first.elapsedMs;
-	await page.waitForTimeout(1600);
+	await page.waitForTimeout(2300);
 	const second = (await page.evaluate(() =>
 		window.__skyboxDebug?.(),
 	)) as DebugState | null;
@@ -229,9 +230,7 @@ for (const variant of VARIANTS) {
 	// detection, so a zero-length `press` can fall entirely between ticks.
 	await page.bringToFront();
 	const a = (await page.evaluate(() => window.__skyboxDebug?.())) as DebugState;
-	const cameraA = (await page.evaluate(
-		() => window.__gameState?.().cameraX ?? 0,
-	)) as number;
+	const cameraA = a.cameraX;
 	await page.keyboard.down("KeyD");
 	for (let i = 0; i < 16; i++) {
 		await page.keyboard.down("Space");
@@ -242,9 +241,10 @@ for (const variant of VARIANTS) {
 	await page.keyboard.up("KeyD");
 	await page.waitForTimeout(250);
 	const b = (await page.evaluate(() => window.__skyboxDebug?.())) as DebugState;
-	const cameraB = (await page.evaluate(
-		() => window.__gameState?.().cameraX ?? 0,
-	)) as number;
+	// Read the camera from the same snapshot as the layer shifts. The follow
+	// camera is still settling after the walk; a separate `__gameState` read a
+	// frame later used to report a 3px parallax "error" that was only lag.
+	const cameraB = b.cameraX;
 	const dc = cameraB - cameraA;
 	const W = b.panoramaWidth;
 
