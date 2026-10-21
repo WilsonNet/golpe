@@ -20,33 +20,67 @@ body {
     height: 100dvh;
     overflow: hidden;
     display: flex;
+    /* `safe` because a zoomed-in arena is deliberately larger than the page:
+       plain centring would put half the overflow above and left of the
+       scrollable origin, where no scroll can reach it. The plain value first is
+       the fallback for browsers without safe alignment. */
     justify-content: center;
+    justify-content: safe center;
     align-items: center;
+    align-items: safe center;
+}
+
+/* Browser zoom has pinned the arena larger than the page (see
+   `src/ui/fitArena.ts`). It becomes a scroll container, the way any zoomed page
+   does — the only way to reach the part of the arena off screen. Never active
+   at the fitted size, so normal play never grows a scrollbar. */
+#app.is-zoomed {
+    overflow: auto;
 }
 
 #game-container {
     /* Relative so the fight HUD can overlay the canvas rectangle: the HUD is
-       inset:0 against this box, which shrink-wraps the letterboxed canvas. */
+       inset:0 against this box, and its container units (1cqw = 8 logical px)
+       are only honest if this box **is** the canvas rectangle. */
     position: relative;
     display: flex;
     justify-content: center;
     align-items: center;
-    max-width: 100%;
-    max-height: 100%;
-    min-height: 0;
+
+    /* **The box is the largest 4:3 rectangle that fits the page.** The game is
+       authored at 800x600 and never distorts, so the ratio is stated once and
+       the height is the axis that runs out first on a normal window. `75vw` is
+       the same constraint for a window taller than it is wide; `100%` is the
+       page's own height.
+
+       This rule is the first paint and the on-screen deck's layout. On a page
+       without the deck `src/ui/fitArena.ts` pins the same box in CSS pixels,
+       because a viewport-sized box would re-fit at every zoom level and leave
+       Ctrl/Cmd +/- with nothing to change (see that file).
+
+       **The cap is what keeps a big monitor sane.** 1200px is 2x the authored
+       600; the arena stops growing there and the page shows background around
+       it. */
+    --arena-max-height: 1200px;
+    height: min(100%, 75vw, var(--arena-max-height));
+    width: auto;
+    aspect-ratio: 4 / 3;
+    /* Sized by the rule above, never stretched or squashed by the flex page.
+       `safe` for the same reason `#app` uses it: at a zoomed-in size the box is
+       larger than the window, and plain centring would hide the top of it above
+       the scrollable origin. */
+    flex: none;
+    align-self: center;
+    align-self: safe center;
 }
 
-/* The game is authored at 800x600 and stays 4:3 whatever it is shown on.
-   Constraining *both* axes is what keeps it that way: a replaced element given
-   a max width and a max height scales down proportionally, whereas the old
-   `width: 100%` let a short window crop the arena off the bottom — which on a
-   phone in portrait is most of it. */
 #game-container canvas {
     display: block;
-    width: auto;
-    height: auto;
-    max-width: 100%;
-    max-height: 100%;
+    /* Exactly the box, not "a size that happens to fit inside it": the HUD
+       overlays this rectangle, and a canvas letterboxed in a larger box would
+       put every HUD element off the arena. */
+    width: 100%;
+    height: 100%;
     touch-action: none;
 }
 

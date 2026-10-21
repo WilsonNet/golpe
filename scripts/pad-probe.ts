@@ -559,6 +559,47 @@ async function run() {
 		);
 	};
 
+	// The arena is the largest 4:3 box the window allows, and the HUD overlays
+	// exactly that box. Sizing used to come from the canvas's *intrinsic* pixels
+	// (800 x devicePixelRatio), which made the same game too big on a retina
+	// laptop and too small on a plain monitor, and its percentage max-height
+	// never resolved against an auto-height parent — so a short window cropped
+	// the arena instead of scaling it.
+	const layout = await page.evaluate(() => {
+		const canvas = document.querySelector("canvas");
+		const box = document.getElementById("game-container");
+		if (!canvas || !box) throw new Error("no canvas box");
+		const c = canvas.getBoundingClientRect();
+		const b = box.getBoundingClientRect();
+		return {
+			canvas: { x: c.x, y: c.y, width: c.width, height: c.height },
+			box: { width: b.width, height: b.height },
+			window: { width: window.innerWidth, height: window.innerHeight },
+			scrollWidth: document.documentElement.scrollWidth,
+		};
+	});
+	const shortAxis = Math.min(
+		layout.window.height,
+		layout.window.width * (3 / 4),
+	);
+	check(
+		"the arena is a 4:3 box over the whole HUD box",
+		Math.abs(layout.canvas.width / layout.canvas.height - 4 / 3) < 0.01 &&
+			Math.abs(layout.canvas.width - layout.box.width) < 0.5 &&
+			Math.abs(layout.canvas.height - layout.box.height) < 0.5,
+		`${Math.round(layout.canvas.width)}x${Math.round(layout.canvas.height)}`,
+	);
+	check(
+		"and it fills the short axis without leaving the window",
+		Math.abs(layout.canvas.height - shortAxis) < 1 &&
+			layout.canvas.x >= -0.5 &&
+			layout.canvas.y >= -0.5 &&
+			layout.canvas.x + layout.canvas.width <= layout.window.width + 1 &&
+			layout.canvas.y + layout.canvas.height <= layout.window.height + 1 &&
+			layout.scrollWidth <= layout.window.width,
+		`${Math.round(layout.canvas.width)}x${Math.round(layout.canvas.height)} in ${layout.window.width}x${layout.window.height}`,
+	);
+
 	// ---- the scheme is a choice, and it starts on the mouse ----
 	const initial = await inputState(page);
 	check(
@@ -830,6 +871,53 @@ async function run() {
 		"the scheme survives a reload",
 		(await inputState(page)).scheme === "controller",
 		"",
+	);
+
+	// ---- native zoom scales the pinned arena ----
+	//
+	// A viewport-sized box re-fits at every zoom level, so Ctrl/Cmd +/- fills the
+	// window exactly as before and reads as broken. A zoom is emulated the way a
+	// browser performs it: the CSS viewport shrinks while the physical viewport
+	// (CSS size x devicePixelRatio) stays put. The pinned box keeps its CSS size,
+	// which means zoom in grows it past the window and scrolls.
+	const beforeZoom = await page.evaluate(() => {
+		const box = document.getElementById("game-container");
+		if (!box) throw new Error("no canvas box");
+		const rect = box.getBoundingClientRect();
+		return { width: rect.width, height: rect.height };
+	});
+	const cdp = await ctx.newCDPSession(page);
+	const dpr = await page.evaluate(() => window.devicePixelRatio || 1);
+	await cdp.send("Emulation.setDeviceMetricsOverride", {
+		width: Math.round(900 / 1.25),
+		height: Math.round(900 / 1.25),
+		deviceScaleFactor: dpr * 1.25,
+		mobile: false,
+	});
+	await page.waitForTimeout(300);
+	const zoomed = await page.evaluate(() => {
+		const box = document.getElementById("game-container");
+		const app = document.getElementById("app");
+		if (!box || !app) throw new Error("no canvas box");
+		const rect = box.getBoundingClientRect();
+		return {
+			width: rect.width,
+			height: rect.height,
+			scrollable:
+				app.scrollWidth > app.clientWidth ||
+				app.scrollHeight > app.clientHeight,
+			zoomedClass: app.classList.contains("is-zoomed"),
+			innerWidth: window.innerWidth,
+			innerHeight: window.innerHeight,
+		};
+	});
+	check(
+		"browser zoom scales the arena instead of re-fitting it",
+		Math.abs(zoomed.width - beforeZoom.width) < 1 &&
+			Math.abs(zoomed.height - beforeZoom.height) < 1 &&
+			zoomed.zoomedClass &&
+			zoomed.scrollable,
+		`${Math.round(zoomed.width)}x${Math.round(zoomed.height)} in ${zoomed.innerWidth}x${zoomed.innerHeight}`,
 	);
 
 	if (errors.length) check("no page errors", false, errors.join(" | "));

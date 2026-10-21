@@ -913,11 +913,28 @@ not made of kills.
   control proves the geometry, the pointer capture and the layout too — the same
   argument as `controls-probe.ts` pressing real keys rather than calling
   `Input`.
-- **On a phone, the layout is the feature.** A 4:3 canvas and a control deck have
-  to both fit a portrait screen with no horizontal scroll, and the canvas has to
-  keep its aspect ratio doing it — which is why sizing lives in the stylesheet
-  with `max-width` *and* `max-height`, and why Pixi's inline `autoDensity` sizes
-  are cleared. `width: 100%` alone lets a short window crop the arena away.
+- **The arena box is the largest 4:3 rectangle that fits the page, and
+  `public/style.css` plus `src/ui/fitArena.ts` own that size.** Not the canvas's
+  intrinsic size: Pixi's backing store is 800 x `devicePixelRatio`, which the
+  browser treats as CSS pixels once the inline `autoDensity` sizes are cleared —
+  1600x1200 on a retina laptop and 800x600 on a plain one, the same game reading
+  "too big" on one machine and "too small" on the next. The old `max-height:
+  100%` did not save it either: the parent's height was auto, so the percentage
+  resolved to nothing and a short window cropped the arena instead of shrinking
+  it. The box is `inset:0` for the HUD, so its container units are the arena's
+  logical pixels. On a phone it is full-width in portrait and the deck takes the
+  rest; in landscape the deck floats over the letterbox margins.
+- **The box is pinned in CSS pixels, because browser zoom must scale it.** A box
+  sized in `vw`/`dvh` re-fits at every zoom level: the arena fills the window
+  exactly as it did at 100%, so Ctrl/Cmd +/- changes nothing a player can see and
+  reads as broken. The fit is therefore calculated on boot and on a *window*
+  resize, and a zoom is told apart from a resize by the physical viewport (CSS
+  size x `devicePixelRatio`), which a zoom leaves unchanged. Zoomed in, the
+  arena is deliberately larger than the page and `#app` becomes a scroll
+  container (`is-zoomed`); zoomed out it letterboxes. `--arena-max-height`
+  (1200px, 2x the authored 600) caps the fitted size, so a 4K monitor does not
+  turn a 4:3 game into a wall. `scripts/pad-probe.ts` measures the fit on a
+  desktop window and on a phone.
 - **A setting a player cannot undo is a trap.** The on-screen gamepad is reached
   by a setting and left by the Esc menu, and a phone has no Escape key — so the
   deck carries its own menu button. Anything that can only be turned on needs the

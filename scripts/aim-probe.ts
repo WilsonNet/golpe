@@ -23,6 +23,7 @@ import type { Browser, Page } from "playwright";
  *   tsx scripts/aim-probe.ts --mode=offline
  */
 import { chromium } from "playwright";
+import { randomUUID } from "node:crypto";
 
 const BASE_URL = process.env.GOLPE_URL ?? "http://localhost:8084";
 
@@ -324,10 +325,13 @@ async function runOne(browser: Browser, dpr: number) {
 	// shots this probe needs to see leave — half the runs used to fail for reasons
 	// that had nothing to do with aim. An empty room removes the noise and none of
 	// the netcode: it is still served, predicted and reconciled.
+	// `bots=0` is also the launch key: the bare page is the root menu now, and a
+	// probe that never boots a match measures a menu. A fresh room per run keeps
+	// two dprs from landing in the same fight.
 	const url =
 		MODE === "offline"
 			? `${BASE_URL}/?offline=true&mute=1`
-			: `${BASE_URL}/?mute=1`;
+			: `${BASE_URL}/?bots=0&room=${randomUUID()}&mute=1`;
 	await page.goto(url);
 	await waitForGame(page);
 	// A human-controlled client is asked for a name before it connects, and the

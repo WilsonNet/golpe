@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useRef } from "react";
 import { type GameHandle, startGame } from "./game/app";
+import { keepArenaFitted } from "./ui/fitArena";
 
 /**
  * Boot requests, run strictly one at a time.
@@ -26,6 +27,9 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
 		if (!host) return;
 
 		let disposed = false;
+		// The box is pinned in CSS pixels so browser zoom scales it; the
+		// stylesheet's viewport sizing is the first paint and the deck layout.
+		const stopFit = keepArenaFitted(host);
 
 		bootChain = bootChain.then(async () => {
 			if (disposed) return;
@@ -39,6 +43,7 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
 
 		return () => {
 			disposed = true;
+			stopFit();
 			bootChain = bootChain.then(() => {
 				gameRef.current?.destroy();
 				gameRef.current = null;

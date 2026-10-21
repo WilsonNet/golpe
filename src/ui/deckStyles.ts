@@ -39,8 +39,10 @@ export const DECK_CSS = `
    player cannot see — and on a 390px-wide screen, 20px of padding is 5% of the
    fight. The screen goes edge to edge and the shell starts where it ends. */
 #app:has(.gg-deck) #game-container {
-	flex: 0 1 auto;
-	min-height: 0;
+	/* A full-width box in portrait; the base rule's 75vw height is then
+	   exactly its 4:3 partner. None, not shrink: a squashed height with a
+	   pinned width is the one thing that would distort the arena. */
+	flex: none;
 	width: 100%;
 	display: flex;
 	align-items: center;
@@ -396,10 +398,17 @@ export const DECK_CSS = `
 @media (orientation: landscape) {
 	#app:has(.gg-deck) {
 		flex-direction: row;
+		/* The arena is a sized 4:3 box, not a stretched column of the page. */
+		justify-content: center;
 	}
 	#app:has(.gg-deck) #game-container {
-		flex: 1 1 auto;
-		height: 100%;
+		/* The base rule already fits the shorter axis — 100dvh tall, 4:3 wide.
+		   None, not flex: 1: growing to the row's full width would stretch the
+		   canvas (and the HUD's container units) with it. */
+		flex: none;
+		/* Undo the portrait rule's full-width box: here the height sets the
+		   width through the 4:3 ratio, and the deck floats over the margins. */
+		width: auto;
 		padding: 0;
 	}
 	.gg-deck {
