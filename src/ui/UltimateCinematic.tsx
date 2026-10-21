@@ -23,23 +23,8 @@
 import { useEffect, useRef, useState } from "react";
 import { EventBus } from "../game/EventBus";
 import type { HeroId } from "../game/simulation/Heroes";
+import { MOTIF_CHILDREN, ULTIMATE_CARDS } from "./ultimateCards";
 import { ULTIMATE_CSS } from "./ultimateStyles";
-
-/** Each hero's ultimate, as its card names it. */
-const ULT_NAME: Record<HeroId, string> = {
-	lia: "Black Hole",
-	anands: "Dragon Thrust",
-	jeffs: "Death Blossom",
-	ibiriki: "Rupture",
-};
-
-/** The card's one line under the name. */
-const ULT_LINE: Record<HeroId, string> = {
-	lia: "Gravity has a winner",
-	anands: "Nothing stops a line",
-	jeffs: "The storm is coming",
-	ibiriki: "Do not move",
-};
 
 interface CastEvent {
 	casterId: string;
@@ -50,29 +35,6 @@ interface CastEvent {
 	mine: boolean;
 	/** The freeze length the server declared. Drives the timer bar. */
 	durationMs: number;
-}
-
-/**
- * A stable hue per fighter, so two casters in one match are not the same
- * portrait.
- *
- * Every fighter uses the same sprite sheet — there is one character — so
- * without this the cutscene would be identical whoever cast it, and the one
- * question it exists to answer ("who") would be left entirely to the nameplate.
- * Hashed from the server id rather than the name, because the id is what is
- * stable: a name can be deduplicated into `Wilson (2)` after the fact.
- */
-function hueFor(id: string): number {
-	let h = 0;
-	for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-	return h % 360;
-}
-
-/** Accent colour to match the portrait's hue, so the frame and the name agree. */
-function accentFor(hue: number): string {
-	// The base accent is a violet at ~268deg; rotating the portrait by `hue`
-	// rotates this with it, which keeps the whole card one colour scheme.
-	return `hsl(${(268 + hue) % 360} 100% 74%)`;
 }
 
 export function UltimateCinematic() {
@@ -121,36 +83,44 @@ export function UltimateCinematic() {
 
 	if (!cast) return null;
 
-	const hue = hueFor(cast.casterId);
+	const card = ULTIMATE_CARDS[cast.hero];
 	const style = {
 		"--vu-ms": `${Math.max(200, cast.durationMs)}ms`,
-		"--vu-hue": `${hue}deg`,
-		"--vu-accent": accentFor(hue),
 	} as React.CSSProperties;
 
 	return (
-		<div className="vu-root" style={style} aria-live="polite">
+		<div
+			className="vu-root"
+			data-hero={cast.hero}
+			style={style}
+			aria-live="polite"
+		>
 			<style>{ULTIMATE_CSS}</style>
 			<div className="vu-void" />
+
+			{/* The hero's own backdrop, drawn in CSS: a collapsing star, a dash
+			    line, a six-petal blast or a bleeding wound. It sits before the
+			    letterbox bars on purpose — Ibiriki's drips read as leaking out
+			    from under the top bar rather than painted on top of it. */}
+			<div
+				className={`vu-motif vu-motif-${card.motif}`}
+				aria-hidden="true"
+			>
+				<div className="vu-motif-inner">
+					{Array.from({ length: MOTIF_CHILDREN[card.motif] }, (_, i) => (
+						<i key={i} />
+					))}
+				</div>
+			</div>
+
 			<div className="vu-bar top" />
 			<div className="vu-bar bottom" />
-
-			{/* The collapsing star, behind the card: three counter-rotating rings
-			    closing on a dark core. Same idea as the in-world accretion disk,
-			    restated at UI scale, so what is about to arrive is legible before
-			    it does. */}
-			<div className="vu-star">
-				<div className="vu-ring a" />
-				<div className="vu-ring b" />
-				<div className="vu-ring c" />
-				<div className="vu-core" />
-			</div>
 
 			<div className="vu-card">
 				<div className="vu-frame">
 					<div className="vu-well">
 						<div className="vu-sweep" />
-						{/* The caster's own character sheet, face-on frame, six times up
+						{/* The caster's own character sheet, face-on frame, four times up
 						    with nearest-neighbour. Real art beats drawn art here because
 						    it can never disagree with the fighter standing on the field. */}
 						<div
@@ -167,8 +137,9 @@ export function UltimateCinematic() {
 				</div>
 
 				<div className="vu-ability">
-					<div className="vu-ability-name">{ULT_NAME[cast.hero]}</div>
-					<div className="vu-ability-sub">{ULT_LINE[cast.hero]}</div>
+					<div className="vu-role">{card.role}</div>
+					<div className="vu-flavor">{card.flavor}</div>
+					<div className="vu-ability-name">{card.shout}</div>
 				</div>
 
 				{/* Empties over exactly the freeze the server declared. The only thing

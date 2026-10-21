@@ -409,8 +409,17 @@ The renderer's job, none of it authoritative:
   arc, it appears only when the hold can actually cast, so an aura on a
   fighter with an empty meter is never shown.
 - **The cinematic**: the caster's portrait in a frame, their name on a plate
-  under it, the ability title, and a collapsing-star motif. Drawn by the React
-  overlay, because it is a dialog and the canvas is the wrong tool for one.
+  under it, who they are, the flavor line in their own voice and the
+  ultimate's name shouted under it — plus a motif that is the ultimate in one
+  shape. **Every hero themes the card**: Lia's violet collapsing star, Anands'
+  teal-and-magenta dash streaks, Jeffs' smoke and six-petal spinner (one petal
+  per pellet), Ibiriki's bleeding wound, whose drips leak from under the
+  letterbox bar. The caster's own colours are never hue-shifted — two casters
+  of the same hero are told apart by the nameplate, which is what it is for.
+  Drawn by the React overlay, because it is a dialog and the canvas is the
+  wrong tool for one. The copy lives beside the component
+  (`src/ui/ultimateCards.ts`), keyed by hero, and the hero select reads the
+  same names so a menu and a card cannot disagree.
 - **The grenade**: a dark core with a violet corona and a trail that falls
   behind it.
 - **The detonation**: a hard white flash, a shockwave ring, a debris burst and a
@@ -435,5 +444,3 @@ The renderer's job, none of it authoritative:
   *What is drawn*) is an exception to the blend-only rule by design: it is a
   boundary marking "this hole will drag you", not a team colour.
 - More than one ultimate. `ultimate` is one action, not a per-character slot.
-- Per-character portraits: every fighter uses the same sheet, so the portrait
-  is tinted by a hash of the fighter's id to keep two casters distinguishable.

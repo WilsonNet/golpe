@@ -3,14 +3,15 @@
  *
  * Shared by the root menu (where the choice becomes the URL's `?hero=`) and
  * the Esc menu (where it becomes a `hero-select` message the match sends to
- * the server). Two cards, one per hero: the sprite is the hero's own sheet
- * blown up with `image-rendering: pixelated`, exactly like the ultimate
- * cinematic's portrait — the sheet is the character, and a card that drew
- * something else would be a card that lied.
+ * the server). One card per hero: the sprite is the hero's own sheet blown up
+ * with `image-rendering: pixelated`, exactly like the ultimate cinematic's
+ * portrait — the sheet is the character, and a card that drew something else
+ * would be a card that lied.
  */
 
 import { HERO_IDS, HEROES, type HeroId } from "../game/simulation/Heroes";
 import { HUD_CSS } from "./hudStyles";
+import { ULTIMATE_CARDS } from "./ultimateCards";
 
 /**
  * The portrait drawing rules shared by the hero select and the root menu's
@@ -33,13 +34,6 @@ export const HERO_SPRITE_CSS = `
 .hp-sprite-jeffs { background-image: url("assets/jeffs-portrait.png"); }
 .hp-sprite-ibiriki { background-image: url("assets/ibiriki-portrait.png"); }
 `;
-
-/** The ultimate's name per hero, so the card never invents one. */
-const ULT_NAMES: Record<string, string> = {
-	"black-hole": "Black Hole",
-	"dragon-thrust": "Dragon Thrust",
-	"death-blossom": "Death Blossom",
-};
 
 const HERO_CSS = `
 ${HERO_SPRITE_CSS}
@@ -116,7 +110,7 @@ function HeroCard({
 			<div className="hp-kit">
 				<b>{def.melee.label}</b> · <b>{def.ranged.label}</b>
 				<br />
-				Ult — {ULT_NAMES[def.ultimate] ?? "?"}
+				Ult — {ULTIMATE_CARDS[hero].name}
 			</div>
 			<div className="hp-blurb">{def.blurb}</div>
 		</button>
