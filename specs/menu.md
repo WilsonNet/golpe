@@ -352,7 +352,11 @@ the URL. The action is the one destructive choice in the UI, so it asks
 - **The menu owns no simulation state** — it is DOM before the match exists.
 - **The server's `/health` endpoint** answers `{ ok, rooms }` with
   `Access-Control-Allow-Origin: *`, so the menu's status line works from any
-  origin the page is served on.
+  origin the page is served on. The menu asks it — and `/rooms` — on the
+  page's own protocol (`https:` in production), via the same
+  `resolveGameEndpoint` + `httpBaseFor` the match uses. A hardcoded `http://`
+  is mixed content on the deployed HTTPS site, which reads as a healthy server
+  being offline and makes quick match skip the room lookup.
 
 ## What is not in the menu
 

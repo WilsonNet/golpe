@@ -51,6 +51,7 @@ import { readStoredHero, storeHero } from "../game/heroPref";
 import { type Action, bindings, codeLabel } from "../game/input/Bindings";
 import type { LaunchParams } from "../game/online/launch";
 import { setPendingPassword } from "../game/online/passwordStore";
+import { httpBaseFor, resolveGameEndpoint } from "../game/online/regions";
 import { ROOM_ID_RE } from "../game/online/room";
 import { MAX_PASSWORD_LENGTH } from "../game/online/types";
 import { MAX_NAME, readStoredName, storeName } from "../game/playerName";
@@ -1013,6 +1014,23 @@ function HowToPlay({ onBack }: { onBack: () => void }) {
 }
 
 /**
+ * The game server the menu should ask.
+ *
+ * `?server=` when a link named one, otherwise the page's own host on the page's
+ * own protocol. Hardcoding `http://` made every check mixed content on the
+ * deployed HTTPS site, so a perfectly healthy server read as offline and quick
+ * match silently skipped its room lookup. The match itself already derives its
+ * endpoint this way (`resolveGameEndpoint` + `httpBaseFor`); the menu must ask
+ * the same question or the two disagree about what is running.
+ */
+function gameServerBase(): string {
+	return httpBaseFor(
+		resolveGameEndpoint(window.location.search, window.location.hostname),
+		window.location.protocol,
+	);
+}
+
+/**
  * Whether the game server on :9208 answers.
  *
  * The one failure a new player can do nothing about is a game that loads with
@@ -1036,10 +1054,9 @@ function ServerStatus() {
 				// player loaded the page from is the address its traffic uses too —
 				// exactly like the game client, which is why the same expression
 				// works here.
-				const res = await fetch(
-					`http://${window.location.hostname}:9208/health`,
-					{ signal: ctrl.signal },
-				);
+				const res = await fetch(`${gameServerBase()}/health`, {
+					signal: ctrl.signal,
+				});
 				window.clearTimeout(timer);
 				if (!cancelled) setStatus(res.ok ? "online" : "offline");
 			} catch {
@@ -1109,7 +1126,7 @@ async function findOpenRoom(): Promise<string | null> {
 	try {
 		const ctrl = new AbortController();
 		const timer = window.setTimeout(() => ctrl.abort(), 2500);
-		const res = await fetch(`http://${window.location.hostname}:9208/rooms`, {
+		const res = await fetch(`${gameServerBase()}/rooms`, {
 			signal: ctrl.signal,
 		});
 		window.clearTimeout(timer);
