@@ -1,5 +1,8 @@
 # golpe on Oracle Cloud (free tier)
 
+**Live: [https://golpe.quest/](https://golpe.quest/)** — one `VM.Standard.E5.Flex`
+in `sa-saopaulo-1`, deployed from the `deploy` branch.
+
 One VM runs two containers:
 
 | container | port | what |

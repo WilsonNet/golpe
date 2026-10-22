@@ -1,5 +1,8 @@
 # golpe
 
+**Play it: [golpe.quest](https://golpe.quest/)** — or read
+[`deploy/oracle/README.md`](deploy/oracle/README.md) to run your own.
+
 A 2D sword-fighting game — GunZ: The Duel's K-Style rebuilt in two dimensions —
 on PixiJS 8 + React, with a custom deterministic AABB physics simulation shared
 verbatim between the client and an authoritative Geckos.io server.

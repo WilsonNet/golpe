@@ -42,7 +42,8 @@ interface DiagnosticReport {
 	ultimateSummary?: unknown;
 	teamSummary?: unknown;
 	reconciliationSummary?: unknown;
-	netSummary?: unknown;
+	/** The wire counters: `snapshots > 0` is the proof the server was there. */
+	netSummary?: { snapshots?: number } | null;
 	collisionSummary?: unknown;
 	penetrationEvents?: unknown[];
 	states?: StateSample[];
@@ -250,9 +251,14 @@ async function onlineRun(browser: Browser, durationMs: number) {
 	report.activity = activitySummary(linesA, report.states);
 	await ctx.close();
 
-	// No reconciliation at all means no snapshots were ever applied: the client
-	// was simulating alone, so the numbers say nothing about the netcode.
-	if (!report.reconciliationSummary) {
+	// No snapshots at all means the client was simulating alone, so the numbers
+	// say nothing about the netcode. No *corrections*, on the other hand, is a
+	// perfectly predicted run — a deterministic client and server can reconcile
+	// zero times — and calling that INVALID hid a clean run behind a false
+	// negative. The wire counter is the authority on whether the server was
+	// there; the reconciliation summary only says whether it had to correct us.
+	const snapshots = report.netSummary?.snapshots ?? 0;
+	if (snapshots === 0) {
 		report.verdict = "INVALID: no server snapshots received";
 	}
 	return report;

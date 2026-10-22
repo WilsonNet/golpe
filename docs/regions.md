@@ -74,10 +74,10 @@ VITE_GOLPE_SERVERS=sa=sa.golpe.gg:9208,us-east=us.golpe.gg:9208,eu=eu.golpe.gg:9
 
 ## Deploying
 
-The live deployment is **one Oracle free-tier VM running two Docker images**,
-shipped by GitHub Actions when — and only when — the `deploy` branch moves.
-The full runbook is [`deploy/oracle/README.md`](../deploy/oracle/README.md);
-the shape is:
+The live deployment is **[golpe.quest](https://golpe.quest/)**, **one Oracle
+free-tier VM in São Paulo running two Docker images**, shipped by GitHub Actions
+when — and only when — the `deploy` branch moves. The full runbook is
+[`deploy/oracle/README.md`](../deploy/oracle/README.md); the shape is:
 
 - **`web`** — Caddy. Serves the Vite client on `443`, terminates TLS for the
   game server's `9208` signalling/HTTP surface, and redirects `80` for ACME.
