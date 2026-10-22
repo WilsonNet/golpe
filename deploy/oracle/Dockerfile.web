@@ -16,6 +16,8 @@ COPY index.html tsconfig.json tsconfig.base.json ./
 COPY vite ./vite
 COPY public ./public
 COPY src ./src
+# The map library: Vite bundles `maps/*/map.json` and each map's card at build time.
+COPY maps ./maps
 RUN pnpm build
 
 FROM caddy:2-alpine
