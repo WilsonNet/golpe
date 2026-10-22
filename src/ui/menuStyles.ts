@@ -111,6 +111,9 @@ export const MENU_CSS = `
    nothing here depends on having read the docs. The section's flex gap spaces
    the stacked buttons; this file's old .gd-menu-list was dead the moment the
    home screen became sections. */
+/* The map maker is a different page, so its item is a link styled as a play item. */
+a.gd-play-item { color: inherit; text-decoration: none; }
+
 .gd-play-item {
 	display: flex;
 	flex-direction: column;

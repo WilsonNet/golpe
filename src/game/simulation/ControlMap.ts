@@ -306,6 +306,7 @@ export function applyControlWorld(target: World): World {
 	target.bottom = next.bottom;
 	target.platforms = next.platforms;
 	target.spawnPoints = next.spawnPoints;
+	delete target.source;
 	return target;
 }
 

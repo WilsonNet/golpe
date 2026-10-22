@@ -391,6 +391,7 @@ export function ServerBrowser({
 											freezeTime: undefined,
 											capTime: undefined,
 											screens: undefined,
+											map: null,
 											password: null,
 											isPrivate: false,
 										})

@@ -43,6 +43,7 @@
     "dev:herdr:logs": "tsx scripts/dev-herdr.ts logs",
     "diagnose": "tsx scripts/diagnose.ts",
     "deathmatch": "tsx scripts/deathmatch-probe.ts",
+    "map:pr": "tsx scripts/map-pr.ts",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json && tsc -p tsconfig.scripts.json && tsc -p tsconfig.directory.json",
     "verify": "pnpm run typecheck && pnpm run test && pnpm run build && pnpm run knip"
   },

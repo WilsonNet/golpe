@@ -2,6 +2,7 @@ import geckos from "@geckos.io/client";
 import type { PotgAnnounce } from "../potg/types";
 import type { HeroId } from "../simulation/Heroes";
 import type { MatchMode } from "../simulation/Teams";
+import type { TilemapSpec } from "../simulation/Tilemap";
 import type { TrainingConfigMsg, TrainingStateMsg } from "../training/types";
 import { NetSim } from "./NetSim";
 import {
@@ -56,7 +57,12 @@ export interface OnlineHandlers {
 	/** The clock ran out with a capture in progress. */
 	onControlOvertime: (msg: ControlOvertimeMsg) => void;
 	/** Seated, in the room the server actually put us in. */
-	onSeated: (roomId: string, screens: number, mode: MatchMode) => void;
+	onSeated: (
+		roomId: string,
+		screens: number,
+		mode: MatchMode,
+		map: TilemapSpec | null,
+	) => void;
 	/** The room asked for is full of humans. Nothing more will arrive. */
 	onRoomFull: (roomId: string) => void;
 	/**
@@ -81,6 +87,14 @@ export interface JoinOptions {
 	room?: string;
 	/** Play this room against server-hosted bots instead of waiting for humans. */
 	solo?: boolean;
+	/**
+	 * An authored map (`?map=`), resolved to its spec on this client.
+	 *
+	 * Creator-only like `screens`: the server sanitises it, builds the room's
+	 * world from it, and sends the sanitised copy back in the `match` message —
+	 * which is what every client, the creator included, then simulates.
+	 */
+	map?: TilemapSpec;
 	/** The second slot is a scriptable dummy rather than a bot. */
 	training?: boolean;
 	/**
@@ -242,6 +256,7 @@ export class OnlineManager {
 						? {}
 						: { timeLimitMs: join.timeLimitMs }),
 					...(join.screens === undefined ? {} : { screens: join.screens }),
+					...(join.map === undefined ? {} : { map: join.map }),
 					...(join.ultCharge === undefined
 						? {}
 						: { ultCharge: join.ultCharge }),
@@ -272,7 +287,12 @@ export class OnlineManager {
 			if (msg?.youId) this._myId = msg.youId;
 			if (msg?.roomId) {
 				this._roomId = msg.roomId;
-				handlers.onSeated(msg.roomId, msg.screens ?? 1, msg.mode ?? "ffa");
+				handlers.onSeated(
+					msg.roomId,
+					msg.screens ?? 1,
+					msg.mode ?? "ffa",
+					msg.map ?? null,
+				);
 			}
 			handlers.onStatus("");
 		});

@@ -8,6 +8,11 @@ import {
 	type MatchMode,
 	TDM_MIN_SCREENS,
 } from "../src/game/simulation/Teams.js";
+import {
+	mapScreens,
+	sanitizeTilemap,
+	type TilemapSpec,
+} from "../src/game/simulation/Tilemap.js";
 import { ULT_MAX_CAP } from "../src/game/simulation/Ultimate.js";
 import { MS_PER_SECOND } from "../src/game/simulation/units.js";
 import {
@@ -17,6 +22,7 @@ import {
 	CP_SCREENS,
 } from "../src/tweakables/control.js";
 import { GameRoom } from "./GameRoom.js";
+import { handleGithub } from "./github.js";
 import { cleanPassword } from "./RoomPassword.js";
 
 /** Lowest and highest TCP/UDP port this process may bind. */
@@ -243,6 +249,13 @@ interface JoinMsg {
 	 * this flag says so or not.
 	 */
 	private?: unknown;
+	/**
+	 * An authored map from the map maker. **Creator-only and untrusted**: it is
+	 * sanitised (`sanitizeTilemap`) before a world is built from it, and the
+	 * sanitised copy — never the bytes that arrived — is what every client is
+	 * sent back.
+	 */
+	map?: unknown;
 }
 
 function clamp(
@@ -313,6 +326,30 @@ function roomScreens(msg: JoinMsg, mode: MatchMode): number {
 	return mode === "tdm" ? Math.max(asked, TDM_MIN_SCREENS) : asked;
 }
 
+/**
+ * The authored map a new room plays on, or null for the generated arena.
+ *
+ * Control points has its own map and ignores this. Team deathmatch needs its
+ * three-screen floor — two spawn screens and ground between them — and a map
+ * narrower than that cannot be widened without inventing geometry, so it is
+ * refused there and the room plays the classic arena instead.
+ */
+function roomMap(msg: JoinMsg, mode: MatchMode): TilemapSpec | null {
+	if (mode === "5cp" || msg.map === undefined) return null;
+	const map = sanitizeTilemap(msg.map);
+	if (!map) {
+		console.log("[MATCH] Ignored an unreadable map");
+		return null;
+	}
+	if (mode === "tdm" && mapScreens(map) < TDM_MIN_SCREENS) {
+		console.log(
+			`[MATCH] Map "${map.meta?.name}" is too narrow for team deathmatch`,
+		);
+		return null;
+	}
+	return map;
+}
+
 /** Create a room and register it. Its rules and size are fixed here, for good. */
 function createRoom(
 	id: string,
@@ -321,6 +358,7 @@ function createRoom(
 		timeLimitMs?: number;
 		fillTarget?: number;
 		screens?: number;
+		map?: TilemapSpec | null;
 		startUltCharge?: number;
 		mode?: MatchMode;
 		freezeTimeMs?: number;
@@ -339,7 +377,7 @@ function createRoom(
 			? ", private"
 			: "";
 	console.log(
-		`[MATCH] Created room ${id} (${room.mode}, fill ${room.fillTarget}, ${room.world.screens} screens${privacy})`,
+		`[MATCH] Created room ${id} (${room.mode}, fill ${room.fillTarget}, ${room.world.screens} screens${privacy}${room.map ? `, map "${room.map.meta?.name}"` : ""})`,
 	);
 	return room;
 }
@@ -366,6 +404,7 @@ function seated(room: GameRoom, channel: ServerChannel) {
 			youId: String(channel.id),
 			screens: room.world.screens,
 			mode: room.mode,
+			...(room.map ? { map: room.map } : {}),
 		},
 		RELIABLE,
 	);
@@ -465,6 +504,7 @@ io.onConnection((channel) => {
 				// Always passed, unlike the rest: a team room has a floor on its
 				// arena, so "the client said nothing" is still a decision to make.
 				screens: roomScreens(msg, mode),
+				map: roomMap(msg, mode),
 				...(msg.ultCharge === undefined
 					? {}
 					: { startUltCharge: clampUltCharge(msg.ultCharge) }),
@@ -618,6 +658,7 @@ httpServer.on("request", (req, res) => {
 				playerCount: room.playerCount,
 				humanCount: room.humanCount,
 				screens: room.world.screens,
+				map: room.map?.meta?.name ?? null,
 				region: REGION,
 			}))
 			.sort((a, b) => b.playerCount - a.playerCount);
@@ -648,6 +689,9 @@ httpServer.on("request", (req, res) => {
 		res.end(clip.body ?? "");
 		return;
 	}
+
+	// The map maker's GitHub sign-in relay. See `github.ts`.
+	if (handleGithub(req, res)) return;
 
 	res.writeHead(HTTP_NOT_FOUND);
 	res.end();

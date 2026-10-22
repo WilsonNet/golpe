@@ -62,6 +62,7 @@ import {
 import { HUD_EVENTS, type HudState } from "./hud";
 import { Input } from "./input/Input";
 import { inputSettings } from "./input/Scheme";
+import { resolveMap } from "./maps/library";
 import { parseLaunchParams } from "./online/launch";
 import { OnlineSession } from "./online/OnlineSession";
 import { consumePendingPassword } from "./online/passwordStore";
@@ -106,9 +107,9 @@ import {
 } from "./render/PlatformArt";
 import { RootedFx } from "./render/RootedFx";
 import { Shadows } from "./render/Shadows";
-import { Skybox } from "./render/Skybox";
 import { SpritePool } from "./render/SpritePool";
 import type { Stage } from "./render/Stage";
+import { type Backdrop, createBackdrop } from "./render/ThemeSky";
 import { tileStyleChoice } from "./render/tileStyle";
 import { UltAimLine } from "./render/UltAimLine";
 import {
@@ -177,6 +178,14 @@ import {
 	type TeamId,
 	teamName,
 } from "./simulation/Teams";
+import {
+	applyTilemapWorld,
+	mapKey,
+	type TilemapSpec,
+	themeOf,
+	tilemapFromWorld,
+	worldFromTilemap,
+} from "./simulation/Tilemap";
 import { sound } from "./sound/facade";
 import { TrainingRoom } from "./training/TrainingRoom";
 
@@ -289,6 +298,12 @@ function aiClientName(): string {
 	return `AI-${n}`;
 }
 
+/** Which map a room plays — see `Match.arenaKey`. */
+function arenaKeyOf(mode: MatchMode, map: TilemapSpec | null): string {
+	if (mode === "5cp") return "control";
+	return map ? `map:${mapKey(map)}` : "classic";
+}
+
 export class Match {
 	private readonly world: GameWorld = createWorld();
 	private readonly queries: Queries;
@@ -302,18 +317,24 @@ export class Match {
 	 */
 	private readonly arena: World = buildWorld(1);
 	/**
-	 * Whether `arena` currently holds the control map rather than the classic
-	 * one. Width cannot answer this — `screens === 5` is true of both — so the
-	 * seat correction keys on this flag.
+	 * Which map `arena` currently holds: `classic`, `control`, or `map:<key>`
+	 * for an authored map. Width cannot answer this — `screens === 5` is true
+	 * of the control line, a five-screen classic arena and any five-screen
+	 * authored map — so the seat correction keys on this.
 	 */
-	private arenaIsControl = false;
+	private arenaKey = "classic";
+	/**
+	 * The authored map this client asked for (`?map=`), resolved to a spec.
+	 * Sent in the join; the server's sanitised copy is what is then played.
+	 */
+	private readonly launchMap: TilemapSpec | null;
 	/** Logical view size (`app.screen`), for camera clamping. */
 	private readonly view: { readonly width: number; readonly height: number };
 	/**
 	 * The parallax backdrop, rebuilt with the arena because it is a child of
 	 * `stage.background` and a rebuilt arena owns that container.
 	 */
-	private skybox: Skybox | undefined;
+	private skybox: Backdrop | undefined;
 	/** The stable hook identity, so a destroyed match cannot delete its successor's. */
 	private readonly skyboxHook = () => this.skybox?.debugState() ?? null;
 	private skyboxUnsubscribe: (() => void) | undefined;
@@ -485,15 +506,23 @@ export class Match {
 			rawScreens === undefined
 				? 1
 				: Math.max(1, Math.min(rawScreens, MAX_SCREENS));
+		// `?map=` is an authored map — built now, before connecting, for the same
+		// reason the control line is. A practice room has its own arena.
+		this.launchMap =
+			wantsControl || launch.training || launch.tutorial
+				? null
+				: resolveMap(launch.map);
 		this.arena = wantsControl
 			? buildControlWorld()
-			: buildWorld(
-					wantsTeams ? Math.max(askedScreens, TDM_MIN_SCREENS) : askedScreens,
-				);
+			: this.launchMap
+				? worldFromTilemap(this.launchMap)
+				: buildWorld(
+						wantsTeams ? Math.max(askedScreens, TDM_MIN_SCREENS) : askedScreens,
+					);
 		// Which map this is, remembered. Width is not identity: a classic arena
 		// five screens wide and the control map share `screens === 5` and differ
 		// everywhere else, so the seat correction below has to compare *this*.
-		this.arenaIsControl = wantsControl;
+		this.arenaKey = arenaKeyOf(wantsControl ? "5cp" : "ffa", this.launchMap);
 		this.view = screen;
 		// `?hero=` picks who this client plays before the room exists. Invalid
 		// values fall back to the default rather than failing to boot.
@@ -1391,7 +1420,7 @@ export class Match {
 					this.scheduleVictoryWindow();
 					if (this.victoryWindowOver) this.beginPendingPotg();
 				},
-				onSeated: (roomId, screens, mode) => {
+				onSeated: (roomId, screens, mode, map) => {
 					// The room decides the mode as it decides the id and the size. A
 					// client that joined a team room by link learns it here.
 					this.mode = mode;
@@ -1414,18 +1443,25 @@ export class Match {
 					// arena at `?screen=5` and the control map are both five screens
 					// wide and share no geometry, so keying on the width left exactly
 					// that client predicting against the wrong colliders forever.
-					const wantsControl = mode === "5cp";
-					if (wantsControl !== this.arenaIsControl) {
-						if (wantsControl) applyControlWorld(this.arena);
+					//
+					// An authored map is the same argument again: the room's map
+					// arrives in this message, so a joiner who followed a link to a
+					// map room builds it here without ever having seen the file.
+					const key = arenaKeyOf(mode, map);
+					if (key !== this.arenaKey) {
+						if (mode === "5cp") applyControlWorld(this.arena);
+						else if (map) applyTilemapWorld(this.arena, map);
 						else applyWorld(this.arena, screens);
-						this.arenaIsControl = wantsControl;
+						this.arenaKey = key;
 						this.redrawArena();
 						console.log(
-							wantsControl
+							mode === "5cp"
 								? "[ONLINE] room arena rebuilt as the control map"
-								: `[ONLINE] room arena resized to ${screens} screens`,
+								: map
+									? `[ONLINE] room arena rebuilt as the map "${map.meta?.name}"`
+									: `[ONLINE] room arena resized to ${screens} screens`,
 						);
-					} else if (!wantsControl && screens !== this.arena.screens) {
+					} else if (key === "classic" && screens !== this.arena.screens) {
 						applyWorld(this.arena, screens);
 						this.redrawArena();
 						console.log(`[ONLINE] room arena resized to ${screens} screens`);
@@ -1499,6 +1535,7 @@ export class Match {
 			...(this.freezeTime === undefined ? {} : { freezeTime: this.freezeTime }),
 			...(this.capTime === undefined ? {} : { capTime: this.capTime }),
 			screens: this.arena.screens,
+			...(this.launchMap ? { map: this.launchMap } : {}),
 			// The hero is a per-client choice: it rides the join like the name.
 			hero: this.hero,
 			...(this.botHero === null ? {} : { botHero: this.botHero }),
@@ -2786,7 +2823,11 @@ export class Match {
 			this.arena,
 			tileStyleChoice(),
 		);
-		this.skybox = new Skybox(this.stage.background, this.view);
+		this.skybox = createBackdrop(
+			this.stage.background,
+			this.view,
+			themeOf(tilemapFromWorld(this.arena)),
+		);
 		// The camera may already be scrolled when a room corrects its width;
 		// position the fresh backdrop before the next frame can show it at 0.
 		this.skybox.update(
@@ -2821,7 +2862,11 @@ export class Match {
 	 */
 	private refreshSkybox() {
 		this.skybox?.destroy();
-		this.skybox = new Skybox(this.stage.background, this.view);
+		this.skybox = createBackdrop(
+			this.stage.background,
+			this.view,
+			themeOf(tilemapFromWorld(this.arena)),
+		);
 		this.skybox.update(
 			this.stage.cameraX,
 			this.stage.cameraY,

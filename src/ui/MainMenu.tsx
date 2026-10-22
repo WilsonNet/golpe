@@ -49,6 +49,7 @@ import { useEffect, useState } from "react";
 import { lessonsOf, progressOf, tutorialFor } from "../game/campaign";
 import { readStoredHero, storeHero } from "../game/heroPref";
 import { type Action, bindings, codeLabel } from "../game/input/Bindings";
+import { LIBRARY } from "../game/maps/library";
 import type { LaunchParams } from "../game/online/launch";
 import { setPendingPassword } from "../game/online/passwordStore";
 import { httpBaseFor, resolveGameEndpoint } from "../game/online/regions";
@@ -57,6 +58,7 @@ import { MAX_PASSWORD_LENGTH } from "../game/online/types";
 import { MAX_NAME, readStoredName, storeName } from "../game/playerName";
 import { HERO_IDS, HEROES, type HeroId } from "../game/simulation/Heroes";
 import type { MatchMode } from "../game/simulation/Teams";
+import { mapScreens } from "../game/simulation/Tilemap";
 import { CP_SCREENS } from "../tweakables/control";
 import { ULT_MAX_CAP } from "../tweakables/ultimate";
 import { ControlsDialog } from "./ControlsDialog";
@@ -90,6 +92,8 @@ interface HostSettings {
 	mode: MatchMode;
 	/** Arena width in 800px screens. A team room floors this at 3. */
 	screens: number;
+	/** A library map's id (`maps/<id>/`), or null for the classic arena. */
+	map: string | null;
 	/** Opponents to seat. */
 	bots: number;
 	/** Keep the room topped up to N fighters, bots as ballast. 0 = off. */
@@ -125,6 +129,7 @@ interface HostSettings {
 const DEFAULT_SETTINGS: HostSettings = {
 	mode: "ffa",
 	screens: 1,
+	map: null,
 	bots: 0,
 	fill: 0,
 	scoreLimit: SCORE_LIMIT_FFA,
@@ -157,6 +162,7 @@ const NOTHING: LaunchParams = {
 	freezeTime: undefined,
 	capTime: undefined,
 	screens: undefined,
+	map: null,
 	password: null,
 	isPrivate: false,
 };
@@ -314,6 +320,17 @@ export function MainMenu({
 										The training room: a scriptable dummy and its menu.
 									</span>
 								</button>
+								<a
+									className="gd-play-item"
+									href="?mapmaker=true"
+									data-testid="menu-mapmaker"
+								>
+									<strong>Map maker</strong>
+									<span>
+										Build an arena, test it against bots, and send it to the
+										game as a pull request.
+									</span>
+								</a>
 							</div>
 
 							{/* The release's other message: this is a public project. Last
@@ -547,9 +564,20 @@ function HostForm({
 	// is not a width at all: five screens, one point per screen, is the map.
 	const isControl = settings.mode === "5cp";
 	const minScreens = settings.mode === "tdm" ? 3 : 1;
+	// A library map is its own width; one too narrow for teams cannot be
+	// widened, so picking team deathmatch drops it back to the classic arena.
+	const libraryMap = isControl
+		? null
+		: (LIBRARY.find(
+				(m) =>
+					m.id === settings.map &&
+					(settings.mode !== "tdm" || mapScreens(m.spec) >= minScreens),
+			) ?? null);
 	const screens = isControl
 		? CP_SCREENS
-		: Math.max(minScreens, Math.min(settings.screens, 8));
+		: libraryMap
+			? mapScreens(libraryMap.spec)
+			: Math.max(minScreens, Math.min(settings.screens, 8));
 
 	const commit = () => {
 		const password = settings.password.trim().slice(0, MAX_PASSWORD_LENGTH);
@@ -563,7 +591,8 @@ function HostForm({
 			...NOTHING,
 			hero,
 			mode: settings.mode,
-			screens,
+			screens: libraryMap ? undefined : screens,
+			map: libraryMap?.id ?? null,
 			bots: settings.bots,
 			fill: settings.fill > 0 ? settings.fill : undefined,
 			scoreLimit: settings.scoreLimit,
@@ -581,7 +610,7 @@ function HostForm({
 		? `5 control points · first side to ${settings.scoreLimit} captures · ${formatMinutes(settings.timeLimitSec)}${settings.bots > 0 ? ` · ${settings.bots} bots` : ""}${isPrivate ? " · private" : ""}${settings.password.trim() !== "" ? " · passworded" : ""}`
 		: settings.mode === "tdm"
 			? `Team deathmatch · ${screens} screens · first side to ${settings.scoreLimit} rounds · ${settings.timeLimitSec}s of play per round fight, ${settings.freezeTime}s freezetime${settings.bots > 0 ? ` · ${settings.bots} bots` : ""}${isPrivate ? " · private" : ""}${settings.password.trim() !== "" ? " · passworded" : ""}`
-			: `Deathmatch · ${screens} ${screens === 1 ? "screen" : "screens"} · first to ${settings.scoreLimit} frags, or best score in ${formatMinutes(settings.timeLimitSec)}${settings.bots > 0 ? ` · ${settings.bots} bots` : ""}${isPrivate ? " · private" : ""}${settings.password.trim() !== "" ? " · passworded" : ""}`;
+			: `Deathmatch · ${libraryMap ? `${libraryMap.spec.meta?.name} · ` : ""}${screens} ${screens === 1 ? "screen" : "screens"} · first to ${settings.scoreLimit} frags, or best score in ${formatMinutes(settings.timeLimitSec)}${settings.bots > 0 ? ` · ${settings.bots} bots` : ""}${isPrivate ? " · private" : ""}${settings.password.trim() !== "" ? " · passworded" : ""}`;
 
 	return (
 		<>
@@ -631,10 +660,54 @@ function HostForm({
 						: "Everyone for themselves. First to 21 frags or the best score in five minutes."}
 			</p>
 
+			{isControl || LIBRARY.length === 0 ? null : (
+				<div className="gd-field">
+					<span className="gd-field-label">Arena</span>
+					<div className="gd-choice">
+						<button
+							type="button"
+							className={`gd-chip${libraryMap ? "" : " gd-chip-on"}`}
+							onClick={() => set({ map: null })}
+						>
+							Classic
+						</button>
+						{LIBRARY.map((m) => {
+							const tooNarrow =
+								settings.mode === "tdm" && mapScreens(m.spec) < minScreens;
+							return (
+								<button
+									key={m.id}
+									type="button"
+									disabled={tooNarrow}
+									title={
+										tooNarrow
+											? "Too narrow for team deathmatch"
+											: (m.spec.meta?.description ?? "")
+									}
+									className={`gd-chip${libraryMap?.id === m.id ? " gd-chip-on" : ""}`}
+									onClick={() => set({ map: m.id })}
+								>
+									{m.spec.meta?.name ?? m.id}
+								</button>
+							);
+						})}
+					</div>
+				</div>
+			)}
+
 			{isControl ? (
 				<p className="gd-field-note">
 					The control arena is five screens — one point per screen — so the
 					width is the map, not a setting.
+				</p>
+			) : libraryMap ? (
+				<p className="gd-field-note">
+					{libraryMap.spec.meta?.description ?? ""} {screens}{" "}
+					{screens === 1 ? "screen" : "screens"} wide
+					{libraryMap.spec.meta?.author
+						? ` · by ${libraryMap.spec.meta.author}`
+						: ""}
+					.
 				</p>
 			) : (
 				<div className="gd-field">

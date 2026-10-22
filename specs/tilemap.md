@@ -3,7 +3,7 @@
 **Intent:** the places a fighter stands should look like places, not debugging
 rectangles — and the same collision map must be able to wear a painted skin or
 the original flat competitive skin without a tick changing. The map is data, so
-a future editor can author it; the renderer is the only thing that knows what a
+the map maker can author it ([map-maker.md](map-maker.md)); the renderer is the only thing that knows what a
 tile looks like.
 
 ## Two skins, one collider
@@ -70,6 +70,13 @@ A map is a `TilemapSpec` (`src/game/simulation/Tilemap.ts`):
   runs first, identical runs merged vertically, so a painted floor is one solid
   rather than a wall of cell seams. It is the only collision authority in that
   map; there is no hidden second hitbox layer.
+- **`spawns` is an object layer of fighter positions** (body top-left, like
+  `SpawnPoint`, plus `facing`). An authored map declares its own; a map
+  with none gets one on every standable top, and failing that two on the
+  world's floor — never an empty list for `pickSpawn`.
+- **`theme`** (`waterfront | castle | meadow | snow`, default waterfront)
+  picks the tileset (`<theme>-platforms`) and the backdrop. **`meta`**
+  carries `id` (the `maps/<id>/` slug), `name`, `author`, `description`.
 - **`props` never collide.** A prop names a frame in the tileset's prop atlas;
   the current map places vines under wide ledges only, alternating sides. Props
   are decoration and are not drawn in the Flat style.
@@ -142,13 +149,23 @@ readability gate is still `scripts/readability-probe.ts`: value, chroma,
 silhouette, coverage and background detail are measured against the flat-sky
 control. The tile art must not make the fighter harder to find.
 
+## Authored maps on the wire
+
+An authored map (`?map=<id>`, from the map maker or `maps/`) is **untrusted
+input on the server**. `sanitizeTilemap` parses `unknown`, snaps to the 8px
+cell, clips to the arena, caps the lists (160 platforms, 48 spawns, 160
+props) and refuses a map with no surface. It is **idempotent**, which is what
+lets the creator compare the server's copy (`match.map`) against the map it
+built by `mapKey` and rebuild only when they differ. `worldFromTilemap` builds
+the `World`, keeping the spec in `World.source` for the renderer. Creator-only
+like `?screen=`; ignored by 5CP and the training room; a map under three
+screens is refused for team deathmatch (the room plays the classic arena).
+See [map-maker.md](map-maker.md).
+
 ## Not implemented
 
-- A map editor UI, save/load dialogs and a tile palette. The format, the
-  collision conversion and the renderer are in place; the editor is the next
-  layer.
-- Painting a solid grid in the shipped map. The current arena remains an object
-  layer generated from `Arena.ts`; `solidRectsFromTilemap` is tested against
-  synthetic grids.
+- Painting a solid grid. The map maker places rectangles, and the shipped
+  arena remains an object layer generated from `Arena.ts`;
+  `solidRectsFromTilemap` is tested against synthetic grids only.
 - Slopes, one-way/drop-through platforms, destructible terrain and layered
   background tiles. Every current surface is solid from all sides.

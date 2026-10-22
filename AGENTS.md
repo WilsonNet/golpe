@@ -73,7 +73,8 @@ The live stack, its ports and its first-boot steps are documented in
 | What happens when a match ends? | [`specs/play-of-the-game.md`](specs/play-of-the-game.md) — the reel, the camera edit, then the podium |
 | What should the game sound like, and where does the music come from? | [`specs/audio.md`](specs/audio.md) · [`audio/README.md`](audio/README.md) — MIDI sources, the soundfont per track, the mixer |
 | What is behind the arena, and how is it drawn? | [`specs/skybox.md`](specs/skybox.md) · [`art/skybox/README.md`](art/skybox/README.md) — the hand-painted Waterfront (house style) and its loop / ambient people plans |
-| What does the arena stand on, and how will the map maker work? | [`specs/tilemap.md`](specs/tilemap.md) — the map format, the two platform skins, 9-slice autotiling and the props |
+| What does the arena stand on? | [`specs/tilemap.md`](specs/tilemap.md) — the map format, the two platform skins, 9-slice autotiling and the props |
+| **How do players build maps and send them as PRs?** | [`specs/map-maker.md`](specs/map-maker.md) — `?mapmaker=true`: the editor, the four themes, the play-test against bots, the checks, and Publish (screenshots + a clip) · [`maps/`](maps/README.md) is the library |
 | How do I regenerate the platform art? | `.venv/bin/python scripts/tilesets/generate.py` → `public/assets/tilesets/`; see [`scripts/tilesets/CONTRACT.md`](scripts/tilesets/CONTRACT.md) |
 | What rule will I break if I'm careless? | [`docs/invariants.md`](docs/invariants.md) |
 | Where does this code live, and who owns it? | [`docs/architecture.md`](docs/architecture.md) |
@@ -283,6 +284,16 @@ One line each; the war story behind every one is in
   `knockdownsRecovered`), and an airborne attacker's swing spikes it (the **Insta
   Fall**, `instaFalls`). `armed = paid + recovered + insta-falled` is the
   accounting — `knockdowns` alone cannot tell the arc from a spike out of the air.
+- **An authored map is untrusted input, and `sanitizeTilemap` is the one
+  door.** It rides the join (creator-only, like `?screen=`), the server builds
+  the room from the *sanitised* copy and sends that back in `match.map`; the
+  client rebuilds by `mapKey`, which only works because the sanitiser is
+  idempotent (a property test). A map with no standable top still gets two
+  floor spawns — an empty spawn list crashes `pickSpawn`.
+- **The map maker's play-test is the game, in a frame.** `?map=draft` reads
+  the play-test slot and makes an ordinary room; nothing in `src/ui/mapmaker/`
+  simulates. Its film is `captureStream` → 800×600 canvas → `MediaRecorder`,
+  because the WebGL canvas reads back black outside its own frame.
 - **Changing gravity or jump velocity changes level reachability** — and retunes
   combat, because the uppercut's launch is derived from the jump.
 - **A mode can change the map, not just its width.** `?mode=5cp` plays its own
@@ -367,6 +378,9 @@ tsx scripts/audio-probe.ts                           # the sound loop: music lat
 tsx scripts/sky-probe.ts                             # the Waterfront: loaded, animated, parallax, movers and loops measured
 tsx scripts/readability-probe.ts                     # fighter-vs-background value, silhouette and detail, gated against the old sky
 tsx scripts/tiles-probe.ts                           # platform art: atlas loaded, Art/Flat live, skybox off stays off
+tsx scripts/mapmaker-probe.ts                        # the map maker: edit, theme, checks, play-test vs bots, capture, publish sheet (--save: write maps/)
+pnpm map:pr <id>                                     # open a PR for maps/<id>/ with gh (films it vs bots if media is missing; --dry-run, --record)
+.venv/bin/python scripts/tilesets/themes.py          # regenerate the Castle/Meadow/Snow tilesets (recolours of the Waterfront's tiles)
 python3 scripts/make-audio.py                        # re-render the music loops from their MIDI sources (→ public/audio/)
 python3 scripts/make-potg-art.py                       # regenerate the ceremony's sunburst and medal
 python3 scripts/make-anands-art.py                       # cut Anands' dragon ride from her boards (--legacy: the old board-cut strips, for comparison)
@@ -765,6 +779,16 @@ player count, screens, region, HTTP ping) with filters for search/mode/region
 and sort by ping/players/mode — private and probe rooms never appear.
 **A bot's name begins with `BOT · `** so who to remove is readable on the
 nameplate, not just the scoreboard; a room with no humans in it is reaped.
+
+**`?mapmaker=true` is the map maker** (root menu → Map maker): draw platforms,
+drop spawns and decor, pick one of four themes (Waterfront, Castle, Meadow,
+Snow — a palette over the same tiles plus a procedural backdrop), check it
+live, **Test vs bots** in the real game in a frame, then **Publish** a pull
+request with an overview, play-test screenshots and a 20s clip (GitHub device
+sign-in via the server relay when `GOLPE_GITHUB_CLIENT_ID` is set, a pasted
+token, or Save into this checkout + `pnpm map:pr`). `?map=<id>` plays a map
+from `maps/`; the Host form lists them. See
+[specs/map-maker.md](specs/map-maker.md).
 
 **`?training=true`** opens the training room: a scriptable practice dummy, a DOM
 menu over the canvas, and `window.__training` for agents. No key toggles the

@@ -42,6 +42,7 @@ const NOTHING: LaunchParams = {
 	freezeTime: undefined,
 	capTime: undefined,
 	screens: undefined,
+	map: null,
 	password: null,
 	isPrivate: false,
 };
@@ -129,6 +130,9 @@ const validParams: fc.Arbitrary<LaunchParams> = fc.record({
 	freezeTime: optNum(fc.nat({ max: 60 })),
 	capTime: optNum(fc.integer({ min: 1, max: 30 })),
 	screens: optNum(fc.integer({ min: 1, max: 8 })),
+	map: fc.option(fc.stringMatching(/^[a-z0-9][a-z0-9-]{0,47}$/), {
+		nil: null,
+	}),
 	password: passwordArb,
 	isPrivate: fc.boolean(),
 });
@@ -140,7 +144,7 @@ describe("parseLaunchParams", () => {
 
 	it("reads every field from a full link", () => {
 		const parsed = parseLaunchParams(
-			"?room=abc-123&server=sa.golpe.gg&region=sa&ai=true&online=true&offline=true&training=true&tutorial=true&hero=anands&botHero=lia&bots=3&fill=8&scoreLimit=9&timeLimit=120&ultCharge=50&mode=tdm&freezeTime=2&capTime=5&screen=4&password=hunter2&private=true",
+			"?room=abc-123&server=sa.golpe.gg&region=sa&ai=true&online=true&offline=true&training=true&tutorial=true&hero=anands&botHero=lia&bots=3&fill=8&scoreLimit=9&timeLimit=120&ultCharge=50&mode=tdm&freezeTime=2&capTime=5&screen=4&map=castle-keep&password=hunter2&private=true",
 		);
 		expect(parsed).toEqual({
 			room: "abc-123",
@@ -162,6 +166,7 @@ describe("parseLaunchParams", () => {
 			freezeTime: 2,
 			capTime: 5,
 			screens: 4,
+			map: "castle-keep",
 			password: "hunter2",
 			isPrivate: true,
 		});

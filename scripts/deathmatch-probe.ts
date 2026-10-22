@@ -44,6 +44,8 @@ const BOT_HERO = arg("botHero", "");
 const SERVER = arg("server", "");
 /** `--netsim=40/10/2` shapes the probe client's link: one-way ms / jitter ms / loss %. */
 const NETSIM = arg("netsim", "");
+/** `--map=castle-keep` plays a map from `maps/` — sixteen bots on authored geometry. */
+const MAP = arg("map", "");
 
 function sinkConsole(page: Page, lines: string[] = []): string[] {
 	page.on("console", (msg) => lines.push(msg.text()));
@@ -211,7 +213,8 @@ async function main() {
 		(HERO ? `&hero=${HERO}` : "") +
 		(BOT_HERO ? `&botHero=${BOT_HERO}` : "") +
 		(SERVER ? `&server=${SERVER}` : "") +
-		(NETSIM ? `&netsim=${NETSIM}` : "");
+		(NETSIM ? `&netsim=${NETSIM}` : "") +
+		(MAP ? `&map=${MAP}` : "");
 	console.log(`[PROBE] ${url}`);
 	await page.goto(url);
 	await page.waitForFunction(() => typeof window.__matchState === "function", {

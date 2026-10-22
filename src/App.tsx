@@ -10,6 +10,8 @@ import { ConnectionLost } from "./ui/ConnectionLost";
 import { FightHud } from "./ui/FightHud";
 import { MainMenu } from "./ui/MainMenu";
 import { MatchOver } from "./ui/MatchOver";
+import { MapMaker } from "./ui/mapmaker/MapMaker";
+import { PLAYTEST_EXIT } from "./ui/mapmaker/Playtest";
 import { NamePrompt } from "./ui/NamePrompt";
 import { PauseMenu } from "./ui/PauseMenu";
 import { PlayOfTheGame } from "./ui/PlayOfTheGame";
@@ -63,6 +65,26 @@ function isSlicerMode(): boolean {
 }
 
 /**
+ * The map maker: `?mapmaker=true` shows the editor instead of the game. Like
+ * the slicer it is a page, not a match — its play-test boots the game in a
+ * frame of its own. See specs/map-maker.md.
+ */
+function isMapMakerMode(): boolean {
+	return new URLSearchParams(window.location.search).get("mapmaker") === "true";
+}
+
+/**
+ * This page is the map maker's play-test, inside the editor's frame. Its
+ * "exit" goes back to the editor rather than to a root menu nobody asked for.
+ */
+function isEmbeddedPlaytest(): boolean {
+	return (
+		window.parent !== window &&
+		new URLSearchParams(window.location.search).get("map") === "draft"
+	);
+}
+
+/**
  * The DOM overlay.
  *
  * Everything here is UI the canvas is the wrong tool for — a text field, a
@@ -102,9 +124,24 @@ function App() {
 
 	/** Back to the menu: drop the launch request from the URL, stop the game. */
 	const exitToMenu = () => {
+		if (isEmbeddedPlaytest()) {
+			window.parent.postMessage(
+				{ type: PLAYTEST_EXIT },
+				window.location.origin,
+			);
+			return;
+		}
 		window.history.replaceState(null, "", window.location.pathname);
 		setStarted(false);
 	};
+
+	if (isMapMakerMode()) {
+		return (
+			<div id="app">
+				<MapMaker />
+			</div>
+		);
+	}
 
 	if (isSlicerMode()) {
 		return (

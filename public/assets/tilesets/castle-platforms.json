@@ -1,0 +1,43 @@
+{
+  "name": "castle-platforms",
+  "image": "assets/tilesets/castle-platforms.png",
+  "version": "5546483214e0",
+  "tileWidth": 8,
+  "tileHeight": 8,
+  "tiles": {
+    "topLeft": [0, 0, 8, 8],
+    "topA": [8, 0, 8, 8],
+    "topB": [16, 0, 8, 8],
+    "topRight": [24, 0, 8, 8],
+    "topMoss": [32, 0, 8, 8],
+    "topStone": [40, 0, 8, 8],
+    "midLeft": [0, 8, 8, 8],
+    "fillA": [8, 8, 8, 8],
+    "fillB": [16, 8, 8, 8],
+    "fillC": [24, 8, 8, 8],
+    "midRight": [32, 8, 8, 8],
+    "fillMoss": [40, 8, 8, 8],
+    "fillCrack": [48, 8, 8, 8],
+    "fillTrim": [56, 8, 8, 8],
+    "bottomLeft": [0, 16, 8, 8],
+    "bottomA": [8, 16, 8, 8],
+    "bottomB": [16, 16, 8, 8],
+    "bottomRight": [24, 16, 8, 8],
+    "bottomMoss": [32, 16, 8, 8],
+    "bottomShadow": [40, 16, 8, 8],
+    "bottomTrim": [48, 16, 8, 8]
+  },
+  "props": {
+    "image": "assets/tilesets/castle-props.png",
+    "version": "897af16ba96b",
+    "frames": {
+      "vine": [0, 0, 8, 24],
+      "vineFlower": [8, 0, 8, 24],
+      "planter": [16, 0, 24, 12],
+      "lantern": [40, 0, 8, 16],
+      "crate": [48, 0, 16, 16],
+      "barrel": [0, 24, 14, 16],
+      "flowerBox": [16, 24, 16, 8]
+    }
+  }
+}

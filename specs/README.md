@@ -29,6 +29,7 @@ it.
 | [ultimate.md](ultimate.md) | The black hole grenade: charge, the cinematic freeze, the field, no friendly fire |
 | [arena.md](arena.md) | World bounds, platform layout, reachability rules, spawn points |
 | [tilemap.md](tilemap.md) | The map format and the two platform skins: 9-slice autotiling, solid grids, props, and the map maker's contract |
+| [map-maker.md](map-maker.md) | The map maker: the editor, themes, the play-test against bots, the checks, and publishing a map as a pull request with screenshots and a clip |
 | [skybox.md](skybox.md) | The parallax backdrop: the hand-painted Waterfront, layer factors, animated falls, and how the depth is measured |
 | [deathmatch.md](deathmatch.md) | 16 fighters, frags, respawns, the win condition, names, the podium |
 | [play-of-the-game.md](play-of-the-game.md) | The end-of-match highlight: how a play is scored, how it is recorded, and the camera edit |

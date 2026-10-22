@@ -11,6 +11,7 @@ import type {
 	PlayerIntent,
 } from "../simulation/Physics.js";
 import type { MatchMode, TeamId } from "../simulation/Teams.js";
+import type { TilemapSpec } from "../simulation/Tilemap.js";
 import type { PackedIntent, PackedState } from "./wire.js";
 
 /**
@@ -718,6 +719,12 @@ export interface MatchMessage {
 	 * its own URL, so every client in a room simulates the same geometry.
 	 */
 	screens?: number;
+	/**
+	 * The authored map the room plays on, sanitised by the server — absent for
+	 * the generated arenas. Like `screens`, it is the room's, not the joiner's:
+	 * a client that followed a link to a map room learns the map here.
+	 */
+	map?: TilemapSpec;
 	/**
 	 * Which ruleset the room plays, decided by whoever created it.
 	 *

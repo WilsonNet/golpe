@@ -14,6 +14,8 @@
  * both sides of the wire.
  */
 
+import type { TilemapSpec } from "./Tilemap.js";
+
 export interface Rect {
 	x: number;
 	y: number;
@@ -44,6 +46,12 @@ export interface World {
 	bottom: number;
 	platforms: readonly Rect[];
 	spawnPoints: readonly SpawnPoint[];
+	/**
+	 * The authored map this world was built from, when it was built from one
+	 * (`worldFromTilemap`). Absent for the generated arenas. The simulation
+	 * never reads it — the renderer does, for the map's props and theme.
+	 */
+	source?: TilemapSpec;
 }
 
 export const WORLD_LEFT = 0;
@@ -234,6 +242,7 @@ export function applyWorld(target: World, screens: number): World {
 	target.bottom = next.bottom;
 	target.platforms = next.platforms;
 	target.spawnPoints = next.spawnPoints;
+	delete target.source;
 	return target;
 }
 

@@ -116,6 +116,10 @@ import {
 	teamName,
 } from "../src/game/simulation/Teams.js";
 import {
+	type TilemapSpec,
+	worldFromTilemap,
+} from "../src/game/simulation/Tilemap.js";
+import {
 	RUPTURE_CAST_DAMAGE,
 	RUPTURE_DURATION_MS,
 	RUPTURE_STOMP_MS,
@@ -944,6 +948,13 @@ export class GameRoom {
 	 */
 	readonly world: World;
 
+	/**
+	 * The authored map this room plays on (`?map=`), already sanitised, or null
+	 * for the generated arenas. Sent to every client in the `match` message so a
+	 * joiner by link builds the same world without ever having seen the map.
+	 */
+	readonly map: TilemapSpec | null;
+
 	/** The room's creator — the first human to join. Null until someone does. */
 	private creatorId: string | null = null;
 	/** Who may manage bots mid-match. The creator is always one. */
@@ -956,6 +967,7 @@ export class GameRoom {
 			timeLimitMs?: number;
 			fillTarget?: number;
 			screens?: number;
+			map?: TilemapSpec | null;
 			startUltCharge?: number;
 			mode?: MatchMode;
 			freezeTimeMs?: number;
@@ -1001,12 +1013,16 @@ export class GameRoom {
 			(this.mode === "5cp" ? CP_TIME_LIMIT_MS : TIME_LIMIT_MS);
 		this.fillTarget = Math.max(0, Math.min(rules.fillTarget ?? 0, MAX_PLAYERS));
 		this.botHero = isHeroId(rules.botHero) ? rules.botHero : null;
-		// The mode's map. Control points plays its own five-screen line; every
-		// other mode tiles the classic arena to the requested width.
+		// The mode's map. Control points plays its own five-screen line; an
+		// authored map plays itself; every other room tiles the classic arena to
+		// the requested width.
+		this.map = this.mode === "5cp" ? null : (rules.map ?? null);
 		this.world =
 			this.mode === "5cp"
 				? buildControlWorld()
-				: buildWorld(rules.screens ?? 1);
+				: this.map
+					? worldFromTilemap(this.map)
+					: buildWorld(rules.screens ?? 1);
 		// The line's supply. Only the control mode has packs, and the positions
 		// are the map's (`CONTROL_AMMO_PACKS`), so client and server cannot
 		// disagree about where one floats.

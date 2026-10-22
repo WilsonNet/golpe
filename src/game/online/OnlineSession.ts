@@ -32,6 +32,7 @@ import {
 	type Singularity,
 } from "../simulation/Physics";
 import { hostile, type MatchMode, type TeamId } from "../simulation/Teams";
+import type { TilemapSpec } from "../simulation/Tilemap";
 import { NEUTRAL, TINT, teamTint } from "../teamPalette";
 import type { TrainingConfigMsg, TrainingStateMsg } from "../training/types";
 import { ServerClock } from "./Interpolation";
@@ -247,7 +248,12 @@ export interface OnlineCallbacks {
 	 * what the URL asked for — a latecomer's `?screen=` is ignored, so the world
 	 * must be rebuilt from this number.
 	 */
-	onSeated: (roomId: string, screens: number, mode: MatchMode) => void;
+	onSeated: (
+		roomId: string,
+		screens: number,
+		mode: MatchMode,
+		map: TilemapSpec | null,
+	) => void;
 	/** The room asked for is full of humans. */
 	onRoomFull: (roomId: string) => void;
 	/**
@@ -785,8 +791,8 @@ export class OnlineSession {
 				onRoundLive: (msg) => this.callbacks.onRoundLive(msg),
 				onControlCaptured: (msg) => this.callbacks.onControlCaptured(msg),
 				onControlOvertime: (msg) => this.callbacks.onControlOvertime(msg),
-				onSeated: (roomId, screens, mode) =>
-					this.callbacks.onSeated(roomId, screens, mode),
+				onSeated: (roomId, screens, mode, map) =>
+					this.callbacks.onSeated(roomId, screens, mode, map),
 				onRoomFull: (roomId) => this.callbacks.onRoomFull(roomId),
 				onRoomLocked: (roomId) => this.callbacks.onRoomLocked(roomId),
 				onNet: (msg) => {

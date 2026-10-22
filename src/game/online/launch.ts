@@ -97,6 +97,12 @@ export interface LaunchParams {
 	/** `?screen=N` — how many 800px screens wide the arena is, 1..8. */
 	screens: number | undefined;
 	/**
+	 * `?map=<id>` — an authored map: a slug from the repo's `maps/` library, or
+	 * `draft` for the map maker's play-test slot. Creator-only like `screen`;
+	 * the client resolves it to a spec and the server builds the room from it.
+	 */
+	map: string | null;
+	/**
 	 * `?password=<text>` — the room's password.
 	 *
 	 * Two roles in one parameter, decided by whether the room exists yet: the
@@ -151,6 +157,7 @@ const LAUNCH_KEYS = [
 	"freezeTime",
 	"capTime",
 	"screen",
+	"map",
 	"password",
 	"private",
 ] as const;
@@ -222,9 +229,20 @@ export function parseLaunchParams(search: string): LaunchParams {
 		freezeTime: countParam(params, "freezeTime"),
 		capTime: numberParam(params, "capTime"),
 		screens: numberParam(params, "screen"),
+		map: parseMapParam(params.get("map")),
 		password: parsePassword(params.get("password")),
 		isPrivate: params.get("private") === "true",
 	};
+}
+
+/** A map slug: what `maps/<id>/` may be called, and what `?map=` may name. */
+const MAP_ID_RE = /^[a-z0-9][a-z0-9-]{0,47}$/;
+
+/** The map a URL names, or null when it names none (or nonsense). */
+function parseMapParam(raw: string | null): string | null {
+	if (raw === null) return null;
+	const id = raw.trim().toLowerCase();
+	return MAP_ID_RE.test(id) ? id : null;
 }
 
 /**
@@ -302,6 +320,7 @@ export function serializeLaunchParams(params: LaunchParams): string {
 		url.set("freezeTime", String(params.freezeTime));
 	if (params.capTime !== undefined) url.set("capTime", String(params.capTime));
 	if (params.screens !== undefined) url.set("screen", String(params.screens));
+	if (params.map !== null) url.set("map", params.map);
 	if (params.password !== null) url.set("password", params.password);
 	if (params.isPrivate) url.set("private", "true");
 	return url.toString();

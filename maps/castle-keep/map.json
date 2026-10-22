@@ -1,0 +1,214 @@
+{
+	"format": "golpe-tilemap",
+	"version": 1,
+	"tileSize": 8,
+	"tileset": "castle-platforms",
+	"width": 200,
+	"height": 75,
+	"theme": "castle",
+	"meta": {
+		"id": "castle-keep",
+		"name": "Castle Keep",
+		"author": "golpe",
+		"description": "Twin ramparts around a central keep. Fight for the high tower or hold the walls."
+	},
+	"layers": [
+		{
+			"name": "platforms",
+			"type": "platforms",
+			"objects": [
+				{
+					"x": 0,
+					"y": 568,
+					"w": 1600,
+					"h": 32
+				},
+				{
+					"x": 80,
+					"y": 456,
+					"w": 160,
+					"h": 24
+				},
+				{
+					"x": 304,
+					"y": 368,
+					"w": 128,
+					"h": 24
+				},
+				{
+					"x": 96,
+					"y": 272,
+					"w": 144,
+					"h": 24
+				},
+				{
+					"x": 336,
+					"y": 184,
+					"w": 112,
+					"h": 24
+				},
+				{
+					"x": 560,
+					"y": 472,
+					"w": 32,
+					"h": 96
+				},
+				{
+					"x": 1360,
+					"y": 456,
+					"w": 160,
+					"h": 24
+				},
+				{
+					"x": 1168,
+					"y": 368,
+					"w": 128,
+					"h": 24
+				},
+				{
+					"x": 1360,
+					"y": 272,
+					"w": 144,
+					"h": 24
+				},
+				{
+					"x": 1152,
+					"y": 184,
+					"w": 112,
+					"h": 24
+				},
+				{
+					"x": 1008,
+					"y": 472,
+					"w": 32,
+					"h": 96
+				},
+				{
+					"x": 704,
+					"y": 400,
+					"w": 192,
+					"h": 32
+				},
+				{
+					"x": 736,
+					"y": 248,
+					"w": 128,
+					"h": 24
+				}
+			]
+		},
+		{
+			"name": "spawns",
+			"type": "spawns",
+			"objects": [
+				{
+					"x": 40,
+					"y": 518,
+					"facing": 1
+				},
+				{
+					"x": 160,
+					"y": 406,
+					"facing": 1
+				},
+				{
+					"x": 360,
+					"y": 318,
+					"facing": 1
+				},
+				{
+					"x": 140,
+					"y": 222,
+					"facing": 1
+				},
+				{
+					"x": 380,
+					"y": 134,
+					"facing": 1
+				},
+				{
+					"x": 760,
+					"y": 350,
+					"facing": 1
+				},
+				{
+					"x": 784,
+					"y": 198,
+					"facing": 1
+				},
+				{
+					"x": 640,
+					"y": 518,
+					"facing": 1
+				},
+				{
+					"x": 1528,
+					"y": 518,
+					"facing": -1
+				},
+				{
+					"x": 1408,
+					"y": 406,
+					"facing": -1
+				},
+				{
+					"x": 1208,
+					"y": 318,
+					"facing": -1
+				},
+				{
+					"x": 1428,
+					"y": 222,
+					"facing": -1
+				},
+				{
+					"x": 1188,
+					"y": 134,
+					"facing": -1
+				},
+				{
+					"x": 920,
+					"y": 518,
+					"facing": -1
+				}
+			]
+		},
+		{
+			"name": "props",
+			"type": "props",
+			"objects": [
+				{
+					"type": "lantern",
+					"x": 100,
+					"y": 440
+				},
+				{
+					"type": "lantern",
+					"x": 1492,
+					"y": 440
+				},
+				{
+					"type": "barrel",
+					"x": 720,
+					"y": 384
+				},
+				{
+					"type": "crate",
+					"x": 866,
+					"y": 384
+				},
+				{
+					"type": "vine",
+					"x": 712,
+					"y": 432
+				},
+				{
+					"type": "vine",
+					"x": 880,
+					"y": 432,
+					"flip": true
+				}
+			]
+		}
+	]
+}

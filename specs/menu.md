@@ -94,10 +94,11 @@ stretched: a longer line of text is harder to read, not easier. The other views
 |---|---|---|
 | Quick match (primary) | joins an open room, or `?bots=1` when none | Asks the game server which room is open (`GET /rooms`), joins the busiest one by link, or creates a duel against a single server bot when no room is open — and that duel is itself an open room for the next player. A playtest funnels into one brawl without anyone pasting links. An open room is one with a human in it and a free seat, that is not a probe, a practice session or mid-ceremony. The room link is the bot's seat — friends replace it. |
 | Your fighter (on home) | `golpe.hero`, and `?hero=` on every launch below | Two portrait chips: Lia and Anands, each the fighter's own sheet frame. Picking writes the preference immediately; a commit below carries it. |
-| Host a match | `?mode=…&screen=N&bots=N&scoreLimit=N&timeLimit=N` (+ `fill`, `freezeTime`, `ultCharge`, `private`, `password`) | Every room-creator choice, defaults pre-filled to the server's own defaults. |
+| Host a match | `?mode=…&screen=N` (or `map=<id>`) `&bots=N&scoreLimit=N&timeLimit=N` (+ `fill`, `freezeTime`, `ultCharge`, `private`, `password`) | Every room-creator choice, defaults pre-filled to the server's own defaults. |
 | Join a match | `?room=<id>` | One field accepts the bare id *or* the whole link. |
 | Tutorial (first on the page) | `?tutorial=true&hero=<id>` | The guided course for the picked hero — a live opponent, one lesson at a time, and objectives the simulation has to agree happened. It boots the *training room* with a director in front of it, so it is the practice room's dummy and the practice room's netcode. See [tutorial.md](tutorial.md). |
 | Practice | `?training=true` | The training room, one click away — the same room the tutorial runs in, handed to the player instead of to a lesson script. |
+| Map maker | `?mapmaker=true` | A link, not a launch: the editor is its own page (see [map-maker.md](map-maker.md)). It sits under Practice because building an arena is still play. |
 | How to play | — | The controls reference, **grouped into three sections** (getting around / fighting / the match) and read from the *live* bindings — a hint that lies about the button is worse than no hint. One sentence per row; the advanced tactics point to the Move list, which is where their full cards live. |
 | Move list | — | The Guilty Gear-style command list, for the hero the picker has selected — the same module the Esc menu's *Moves* item opens. |
 | Options | — | The same controls dialog as the Esc menu, so rebinding is possible before the first match. |
@@ -155,6 +156,7 @@ rules are pinned by the URL and cannot drift with a future default change.
 |---|---|---|
 | Mode | Deathmatch | Deathmatch / Team deathmatch / 5 Control Points |
 | Arena width | 1 screen | 1–8; **3 is the floor in a team match**, enforced by the form (the server enforces the same floor). A control room has no width to choose — five screens, one point per screen, is the map |
+| Arena | Classic | The classic arena, or any map in `maps/` (`?map=<id>`). A library map is its own width, so the width field gives way to the map's description; a map under three screens is disabled for team deathmatch, and none applies to 5CP. |
 | Bots to fight | 0 | 0–15 |
 | Frags / rounds / captures to win | 21 / 15 / 3 | 1–999 |
 | Match length | 5 minutes | 1–60 |

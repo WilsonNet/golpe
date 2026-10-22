@@ -15,9 +15,11 @@
 import { type Container, Sprite, type Texture, TilingSprite } from "pixi.js";
 import type { World } from "../simulation/Arena";
 import {
+	type MapTheme,
 	type PlatformObject,
 	type PropObject,
 	TILE_SIZE,
+	themeOf,
 	tilemapFromWorld,
 } from "../simulation/Tilemap";
 import { TEX, tex } from "./assets";
@@ -42,6 +44,8 @@ const BOTTOM_VARIETY_STEP = 9 * TILE;
 
 export interface TilemapDebugState {
 	style: TileStyle;
+	/** The map's theme — which tileset the art style drew with. */
+	theme: MapTheme;
 	artReady: boolean;
 	/** Standable objects in the map. */
 	platforms: number;
@@ -54,6 +58,7 @@ export interface TilemapDebugState {
 
 let last: TilemapDebugState = {
 	style: "art",
+	theme: "waterfront",
 	artReady: false,
 	platforms: 0,
 	props: 0,
@@ -83,6 +88,7 @@ export function drawPlatforms(
 	}
 
 	const map = tilemapFromWorld(world);
+	const theme = themeOf(map);
 	const platforms: PlatformObject[] = [];
 	const props: PropObject[] = [];
 	for (const layer of map.layers) {
@@ -92,12 +98,12 @@ export function drawPlatforms(
 
 	let sprites = 0;
 	let drawnProps = 0;
-	if (style === "art" && tileArtReady()) {
+	if (style === "art" && tileArtReady(theme)) {
 		for (const platform of platforms) {
-			sprites += drawTiledPlatform(arena, platform);
+			sprites += drawTiledPlatform(arena, theme, platform);
 		}
 		for (const prop of props) {
-			if (drawProp(arena, prop)) {
+			if (drawProp(arena, theme, prop)) {
 				sprites++;
 				drawnProps++;
 			}
@@ -106,7 +112,7 @@ export function drawPlatforms(
 		if (style === "art" && !warnedMissingArt) {
 			warnedMissingArt = true;
 			console.warn(
-				"[tiles] Waterfront platform art is unavailable — drawing the flat blocks",
+				`[tiles] ${theme} platform art is unavailable — drawing the flat blocks`,
 			);
 		}
 		for (const platform of platforms) {
@@ -116,11 +122,12 @@ export function drawPlatforms(
 
 	last = {
 		style,
-		artReady: tileArtReady(),
+		theme,
+		artReady: tileArtReady(theme),
 		platforms: platforms.length,
 		props: drawnProps,
 		sprites,
-		tileset: tileArtState(),
+		tileset: tileArtState(theme),
 	};
 	return last;
 }
@@ -142,20 +149,38 @@ function drawFlatPlatform(arena: Container, p: PlatformObject): number {
  * `midW`/`midH` may be less than a tile only for a future map's tiny solid;
  * those fall back to one cropped tile rather than producing negative sizes.
  */
-function drawTiledPlatform(arena: Container, p: PlatformObject): number {
+function drawTiledPlatform(
+	arena: Container,
+	theme: MapTheme,
+	p: PlatformObject,
+): number {
 	const midW = p.w - TILE * 2;
 	const midH = p.h - TILE * 2;
 	if (midW < 0 || midH < 0) {
-		const texture = tileTexture("fillA", Math.max(1, p.w), Math.max(1, p.h));
+		const texture = tileTexture(
+			theme,
+			"fillA",
+			Math.max(1, p.w),
+			Math.max(1, p.h),
+		);
 		return place(arena, texture, p.x, p.y, Math.max(1, p.w), Math.max(1, p.h));
 	}
 
 	let count = 0;
-	count += tileAt(arena, "topLeft", p.x, p.y);
-	count += tileAt(arena, "topRight", p.x + p.w - TILE, p.y);
-	count += tileAt(arena, "bottomLeft", p.x, p.y + p.h - TILE, "left", "bottom");
+	count += tileAt(arena, theme, "topLeft", p.x, p.y);
+	count += tileAt(arena, theme, "topRight", p.x + p.w - TILE, p.y);
 	count += tileAt(
 		arena,
+		theme,
+		"bottomLeft",
+		p.x,
+		p.y + p.h - TILE,
+		"left",
+		"bottom",
+	);
+	count += tileAt(
+		arena,
+		theme,
 		"bottomRight",
 		p.x + p.w - TILE,
 		p.y + p.h - TILE,
@@ -163,27 +188,48 @@ function drawTiledPlatform(arena: Container, p: PlatformObject): number {
 		"bottom",
 	);
 
-	count += tiled(arena, "topA", p.x + TILE, p.y, midW, TILE);
-	count += tiled(arena, "midLeft", p.x, p.y + TILE, TILE, midH);
-	count += tiled(arena, "fillA", p.x + TILE, p.y + TILE, midW, midH);
-	count += tiled(arena, "midRight", p.x + p.w - TILE, p.y + TILE, TILE, midH);
-	count += tiled(arena, "bottomA", p.x + TILE, p.y + p.h - TILE, midW, TILE);
+	count += tiled(arena, theme, "topA", p.x + TILE, p.y, midW, TILE);
+	count += tiled(arena, theme, "midLeft", p.x, p.y + TILE, TILE, midH);
+	count += tiled(arena, theme, "fillA", p.x + TILE, p.y + TILE, midW, midH);
+	count += tiled(
+		arena,
+		theme,
+		"midRight",
+		p.x + p.w - TILE,
+		p.y + TILE,
+		TILE,
+		midH,
+	);
+	count += tiled(
+		arena,
+		theme,
+		"bottomA",
+		p.x + TILE,
+		p.y + p.h - TILE,
+		midW,
+		TILE,
+	);
 
 	// The repeated edges are deliberately broken at tile-aligned intervals.
 	// The overlays are full 8px tiles from the same family, so their top lip
 	// and mortar lines land on the repeated tile's grid rather than across it.
-	count += topVariety(arena, p, midW);
-	count += fillVariety(arena, p, midW, midH);
-	count += bottomVariety(arena, p, midW);
+	count += topVariety(arena, theme, p, midW);
+	count += fillVariety(arena, theme, p, midW, midH);
+	count += bottomVariety(arena, theme, p, midW);
 	return count;
 }
 
-function topVariety(arena: Container, p: PlatformObject, midW: number): number {
+function topVariety(
+	arena: Container,
+	theme: MapTheme,
+	p: PlatformObject,
+	midW: number,
+): number {
 	let count = 0;
 	let index = 0;
 	for (let dx = TOP_VARIETY_STEP; dx + TILE <= midW; dx += TOP_VARIETY_STEP) {
 		const name = index % 3 === 0 ? "topB" : "topMoss";
-		count += tileAt(arena, name, p.x + TILE + dx, p.y);
+		count += tileAt(arena, theme, name, p.x + TILE + dx, p.y);
 		index++;
 	}
 	return count;
@@ -191,6 +237,7 @@ function topVariety(arena: Container, p: PlatformObject, midW: number): number {
 
 function fillVariety(
 	arena: Container,
+	theme: MapTheme,
 	p: PlatformObject,
 	midW: number,
 	midH: number,
@@ -209,7 +256,13 @@ function fillVariety(
 					: index % 2 === 0
 						? "fillB"
 						: "fillC";
-		count += tileAt(arena, name, p.x + TILE + dx, p.y + TILE + row * TILE);
+		count += tileAt(
+			arena,
+			theme,
+			name,
+			p.x + TILE + dx,
+			p.y + TILE + row * TILE,
+		);
 		index++;
 	}
 	return count;
@@ -217,6 +270,7 @@ function fillVariety(
 
 function bottomVariety(
 	arena: Container,
+	theme: MapTheme,
 	p: PlatformObject,
 	midW: number,
 ): number {
@@ -230,6 +284,7 @@ function bottomVariety(
 		const name = index % 2 === 0 ? "bottomMoss" : "bottomB";
 		count += tileAt(
 			arena,
+			theme,
 			name,
 			p.x + TILE + dx,
 			p.y + p.h - TILE,
@@ -243,18 +298,20 @@ function bottomVariety(
 
 function tileAt(
 	arena: Container,
+	theme: MapTheme,
 	name: string,
 	x: number,
 	y: number,
 	alignX: "left" | "right" = "left",
 	alignY: "top" | "bottom" = "top",
 ): number {
-	const texture = tileTexture(name, TILE, TILE, alignX, alignY);
+	const texture = tileTexture(theme, name, TILE, TILE, alignX, alignY);
 	return place(arena, texture, x, y, TILE, TILE);
 }
 
 function tiled(
 	arena: Container,
+	theme: MapTheme,
 	name: string,
 	x: number,
 	y: number,
@@ -262,7 +319,7 @@ function tiled(
 	height: number,
 ): number {
 	if (width <= 0 || height <= 0) return 0;
-	const texture = tileTexture(name, TILE, TILE);
+	const texture = tileTexture(theme, name, TILE, TILE);
 	if (!texture) return 0;
 	const sprite = new TilingSprite({ texture, width, height });
 	sprite.position.set(x, y);
@@ -287,9 +344,13 @@ function place(
 	return 1;
 }
 
-function drawProp(arena: Container, prop: PropObject): boolean {
-	const texture = propTexture(prop.type);
-	const size = propSize(prop.type);
+function drawProp(
+	arena: Container,
+	theme: MapTheme,
+	prop: PropObject,
+): boolean {
+	const texture = propTexture(theme, prop.type);
+	const size = propSize(theme, prop.type);
 	if (!texture || !size) return false;
 	const sprite = new Sprite(texture);
 	sprite.y = prop.y;

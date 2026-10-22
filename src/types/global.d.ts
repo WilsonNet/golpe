@@ -14,8 +14,10 @@
 
 import type { TutorialApi } from "../game/campaign";
 import type { AIState } from "../game/characters/EnemyBrain";
+import type { ReadabilitySnapshot } from "../game/diagnostics/Readability";
 import type { AimReport } from "../game/input/Aim";
 import type { AimScheme, DeckSetting } from "../game/input/Scheme";
+import type { MapIssue } from "../game/maps/checks";
 import type { RosterEntry, TeamStatus } from "../game/online/types";
 import type { PotgPhase } from "../game/potg/Director";
 import type { PotgAnnounce, PotgTrackEntry } from "../game/potg/types";
@@ -27,8 +29,8 @@ import type {
 	Standing,
 } from "../game/simulation/Deathmatch";
 import type { MeleePhase, PlayerPosition } from "../game/simulation/Physics";
-import type { ReadabilitySnapshot } from "../game/diagnostics/Readability";
 import type { MatchMode, TeamId } from "../game/simulation/Teams";
+import type { TilemapSpec } from "../game/simulation/Tilemap";
 import type { AudioKitState } from "../game/sound/engine";
 import type { AudioChannel } from "../game/sound/mixer";
 import type { TrainingApi } from "../game/training/report";
@@ -498,6 +500,19 @@ declare global {
 		 * `scripts/tiles-probe.ts` reads this.
 		 */
 		__tilemapDebug?: () => TilemapDebugState | null;
+		/**
+		 * The map maker (`?mapmaker=true`): the open map, as authored and as
+		 * the server will sanitise it, the live checks, a loader, and the
+		 * overview PNG. `scripts/mapmaker-probe.ts` and `scripts/map-pr.ts`
+		 * read the editor through this rather than through pixels.
+		 */
+		__mapmaker?: {
+			map: () => TilemapSpec;
+			playable: () => TilemapSpec | null;
+			issues: () => MapIssue[];
+			load: (raw: unknown) => boolean;
+			overview: () => Promise<Uint8Array>;
+		};
 		/**
 		 * A pair of renders of the same frame (with and without fighters) plus
 		 * the measured readability metrics. `scripts/readability-probe.ts`

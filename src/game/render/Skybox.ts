@@ -25,6 +25,7 @@ import {
 	Sprite,
 	Texture,
 } from "pixi.js";
+import type { MapTheme } from "../simulation/Tilemap";
 import { TEX, tex } from "./assets";
 import {
 	type LoadedSkyboxLayer,
@@ -39,6 +40,8 @@ import {
 /** What the probe reads. */
 export interface SkyboxDebugState {
 	variant: SkyChoice;
+	/** Set when a themed map's procedural backdrop is drawn instead (`ThemeSky`). */
+	theme?: MapTheme;
 	loaded: boolean;
 	layers: number;
 	animatedFalls: number;
