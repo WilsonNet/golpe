@@ -337,7 +337,9 @@ export function Publish({
 							/>
 						</label>
 						<label className="mm-wide">
-							One line about it <span className="mm-muted">(optional)</span>
+							<span>
+								One line about it <span className="mm-muted">(optional)</span>
+							</span>
 							<input
 								value={map.description}
 								maxLength={200}
@@ -500,7 +502,7 @@ export function Publish({
 									onClick={() => void saveLocal()}
 									data-testid="publish-save-local"
 								>
-									Save into this checkout (then <code>pnpm map:pr</code>)
+									Save into this checkout, then run pnpm map:pr
 								</button>
 							) : null}
 							<button

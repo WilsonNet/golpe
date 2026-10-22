@@ -254,7 +254,14 @@ export function MapMaker() {
 	// never while the play-test frame has the keyboard (it is the game's).
 	useEffect(() => {
 		const onKey = (e: KeyboardEvent) => {
-			if (playing || isTyping(e.target)) return;
+			if (playing) return;
+			// Esc closes a dialog even from inside one of its fields — the
+			// Publish sheet is mostly fields, and focus is usually in one.
+			if (e.key === "Escape" && dialog !== "none") {
+				setDialog("none");
+				return;
+			}
+			if (isTyping(e.target)) return;
 			const mod = e.metaKey || e.ctrlKey;
 			const key = e.key.toLowerCase();
 			if (mod && key === "z") {

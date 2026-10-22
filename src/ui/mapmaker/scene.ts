@@ -60,7 +60,14 @@ export interface SceneOptions {
 	focus: Rect | null;
 }
 
-const HANDLE_PX = 7;
+const HANDLE_PX = 8;
+/**
+ * On-canvas labels, in screen pixels: divided by the zoom so they read the
+ * same at every zoom, and on the editor's 13px secondary step.
+ */
+const LABEL_PX = 13;
+const LABEL_BOX_PX = 19;
+const LABEL_PAD_PX = 5;
 const FLAT_FILL = "#3d7a4a";
 const FLAT_EDGE = "#2a5a35";
 const SPAWN_FILL = "rgba(255, 209, 102, 0.28)";
@@ -117,9 +124,9 @@ export function drawScene(
 	ctx.setLineDash([]);
 	if (opts.labels) {
 		ctx.fillStyle = "rgba(255,255,255,0.55)";
-		ctx.font = `${12 / zoom}px monospace`;
+		ctx.font = `${LABEL_PX / zoom}px monospace`;
 		for (let s = 0; s * SCREEN_W < W; s++) {
-			ctx.fillText(`SCREEN ${s + 1}`, s * SCREEN_W + 8 / zoom, 16 / zoom);
+			ctx.fillText(`SCREEN ${s + 1}`, s * SCREEN_W + 10 / zoom, 20 / zoom);
 		}
 	}
 
@@ -195,13 +202,22 @@ export function drawScene(
 		if (opts.labels) {
 			ctx.fillStyle = "rgba(0,0,0,0.75)";
 			const label = `${sel.w}×${sel.h}  @ ${sel.x},${sel.y}`;
-			ctx.font = `${11 / zoom}px monospace`;
+			ctx.font = `${LABEL_PX / zoom}px monospace`;
 			const tw = ctx.measureText(label).width;
-			const ly =
-				sel.y - 18 / zoom < 0 ? sel.y + sel.h + 4 / zoom : sel.y - 18 / zoom;
-			ctx.fillRect(sel.x, ly, tw + 8 / zoom, 15 / zoom);
+			const above = sel.y - (LABEL_BOX_PX + 4) / zoom;
+			const ly = above < 0 ? sel.y + sel.h + 4 / zoom : above;
+			ctx.fillRect(
+				sel.x,
+				ly,
+				tw + (LABEL_PAD_PX * 2) / zoom,
+				LABEL_BOX_PX / zoom,
+			);
 			ctx.fillStyle = "#fff";
-			ctx.fillText(label, sel.x + 4 / zoom, ly + 11 / zoom);
+			ctx.fillText(
+				label,
+				sel.x + LABEL_PAD_PX / zoom,
+				ly + (LABEL_BOX_PX - 5) / zoom,
+			);
 		}
 	}
 
@@ -321,9 +337,9 @@ function drawSpawn(
 	ctx.fill();
 	if (n !== null) {
 		ctx.fillStyle = "#1b1b24";
-		ctx.font = `bold ${10}px monospace`;
+		ctx.font = "bold 12px monospace";
 		ctx.textAlign = "center";
-		ctx.fillText(String(n), cx, y + 14);
+		ctx.fillText(String(n), cx, y + 15);
 		ctx.textAlign = "start";
 	}
 	ctx.globalAlpha = 1;
@@ -351,16 +367,20 @@ function drawGhost(
 		ctx.lineWidth = 1.5 / zoom;
 		ctx.strokeRect(r.x, r.y, r.w, r.h);
 		ctx.fillStyle = "rgba(0,0,0,0.75)";
-		ctx.font = `${11 / zoom}px monospace`;
+		ctx.font = `${LABEL_PX / zoom}px monospace`;
 		const label = `${r.w}×${r.h}`;
 		ctx.fillRect(
 			r.x + r.w + 4 / zoom,
 			r.y + r.h + 4 / zoom,
-			ctx.measureText(label).width + 8 / zoom,
-			15 / zoom,
+			ctx.measureText(label).width + (LABEL_PAD_PX * 2) / zoom,
+			LABEL_BOX_PX / zoom,
 		);
 		ctx.fillStyle = "#fff";
-		ctx.fillText(label, r.x + r.w + 8 / zoom, r.y + r.h + 15 / zoom);
+		ctx.fillText(
+			label,
+			r.x + r.w + (4 + LABEL_PAD_PX) / zoom,
+			r.y + r.h + (4 + LABEL_BOX_PX - 5) / zoom,
+		);
 	} else if (ghost.kind === "spawn") {
 		drawSpawn(ctx, ghost.x, ghost.y, ghost.facing, zoom, null, 0.6);
 	} else if (ghost.kind === "prop") {
