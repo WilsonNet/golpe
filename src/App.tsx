@@ -6,6 +6,7 @@ import {
 	serializeLaunchParams,
 } from "./game/online/launch";
 import { installUiSounds, sound } from "./game/sound/facade";
+import { ConnectionLost } from "./ui/ConnectionLost";
 import { FightHud } from "./ui/FightHud";
 import { MainMenu } from "./ui/MainMenu";
 import { MatchOver } from "./ui/MatchOver";
@@ -157,6 +158,7 @@ function App() {
 			<MatchOver />
 			<NamePrompt />
 			<RoomPassword />
+			<ConnectionLost />
 			{/* Last, so it draws over the podium: a player who wants to rebind
 			    something at the end of a match should not have to wait for the next
 			    one to start. */}

@@ -67,6 +67,8 @@ export interface OnlineHandlers {
 	onRoomLocked: (roomId: string) => void;
 	/** The server's view of this client's input stream. Diagnostics only. */
 	onNet: (msg: NetReportMsg) => void;
+	/** The link died without this client asking it to. Nothing more will arrive. */
+	onConnectionLost: () => void;
 }
 
 export interface JoinOptions {
@@ -167,6 +169,8 @@ export class OnlineManager {
 	private _matched = false;
 	private _myId = "";
 	private _roomId = "";
+	/** `disconnect` was asked for, so the close that follows is not a loss. */
+	private closing = false;
 	/** `?netsim=` — a shaped, lossy link for the probes. Null on a real one. */
 	readonly netsim = NetSim.fromLocation();
 
@@ -354,9 +358,13 @@ export class OnlineManager {
 		});
 
 		channel.onDisconnect(() => {
+			const wasSeated = this._matched;
 			this._connected = false;
 			this._matched = false;
 			handlers.onStatus("Disconnected from server");
+			// Only a seat that was lost: a refused join (room full, locked) has
+			// its own prompt, and a deliberate `disconnect` is not a loss.
+			if (wasSeated && !this.closing) handlers.onConnectionLost();
 		});
 	}
 
@@ -412,6 +420,7 @@ export class OnlineManager {
 	}
 
 	disconnect() {
+		this.closing = true;
 		this.channel?.close();
 		this._connected = false;
 		this._matched = false;

@@ -359,6 +359,7 @@ tsx scripts/tutorial-probe.ts --play                 # ...and every drill is pla
 tsx scripts/menu-probe.ts                            # the root menu: every click a URL, boots a match
 tsx scripts/movelist-probe.ts                        # the move list: every preview lands its move on the target dummies
 tsx scripts/dash-probe.ts                            # double-tap dash delivery, at a forced frame rate
+tsx scripts/connection-probe.ts                      # the server dies mid-match: the lost-connection prompt, and Rejoin
 tsx scripts/screens-probe.ts                         # ?screen=N room: spawn spread + follow camera
 tsx scripts/ultimate-probe.ts                        # the black hole: hold to aim, release to cast, freeze, capture
 tsx scripts/potg-probe.ts                            # play of the game: the reel, the camera edit, the podium waiting

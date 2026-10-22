@@ -257,6 +257,8 @@ export interface OnlineCallbacks {
 	 * attempt, not a wait.
 	 */
 	onRoomLocked: (roomId: string) => void;
+	/** The seat was lost mid-match. See `OnlineHandlers.onConnectionLost`. */
+	onConnectionLost: () => void;
 }
 
 /**
@@ -790,6 +792,7 @@ export class OnlineSession {
 				onNet: (msg) => {
 					this.serverLink = msg;
 				},
+				onConnectionLost: () => this.callbacks.onConnectionLost(),
 			},
 			join,
 		);

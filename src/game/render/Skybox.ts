@@ -31,8 +31,8 @@ import {
 	layerFactor,
 	loadedSkybox,
 	type SkyboxAmbientDef,
-	type SkyChoice,
 	type SkyboxLoopsDef,
+	type SkyChoice,
 	skyboxChoice,
 } from "./skyboxAssets";
 
@@ -215,7 +215,10 @@ export class Skybox {
 					items: [],
 					lastFrame: -1,
 				};
-				for (const item of loopGroup?.actors ?? group?.actors ?? def.items ?? []) {
+				for (const item of loopGroup?.actors ??
+					group?.actors ??
+					def.items ??
+					[]) {
 					const a = new Sprite(frames[0]);
 					const b = new Sprite(frames[0]);
 					for (const s of [a, b]) {
@@ -395,8 +398,7 @@ export class Skybox {
 				const moved = item.speedX * t;
 				const screenX = wrap(item.u + moved - shift, W);
 				const bob =
-					item.bobAmp *
-					Math.sin(t * item.bobFreq * Math.PI * 2 + item.phase);
+					item.bobAmp * Math.sin(t * item.bobFreq * Math.PI * 2 + item.phase);
 				const w = strip.def.frameW ?? 0;
 				const offset = item.flip ? w : 0;
 				const x0 = cameraX + screenX + offset;

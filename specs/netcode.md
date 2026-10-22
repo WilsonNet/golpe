@@ -521,7 +521,14 @@ gameplay feature: nothing in the simulation knows which region it runs in.
 - Any matchmaking at all. Rooms are addressed by id — see above.
 - Lag compensation / rewind for hit detection (the server hits against present
   positions).
-- Reconnection to an in-progress match.
+- Reconnection to an in-progress match *in place*. A WebRTC seat that drops is
+  released by the server, so a lost seat is answered with a prompt instead
+  (`ConnectionLost`, shown ~7s after the link dies — geckos' ICE timeout):
+  **Rejoin** reboots from the URL, which still names the room, and seats a fresh
+  fighter there if the match is still running. Before it, the match froze under
+  "Disconnected from server" with nothing to press. Measured by
+  `scripts/connection-probe.ts`, which kills a private server under a live
+  client.
 - Input delay as a rollback smoothing option, and input decay on carried-forward
   intent. Both are standard and neither was needed at the measured error.
 - Interest management. Every fighter is in every snapshot, which is correct for

@@ -1450,6 +1450,13 @@ export class Match {
 					}
 					console.log(`[ONLINE] room ${roomId}`);
 				},
+				onConnectionLost: () => {
+					// Nothing reconnects a WebRTC seat; the server has already let
+					// it go. The prompt offers the one honest answer — boot again
+					// from the URL, which still names this room.
+					EventBus.emit("connection-lost", undefined as never);
+					console.log("[ONLINE] connection lost");
+				},
 				onRoomFull: (roomId) => {
 					EventBus.emit(HUD_EVENTS.status, "That room is full.");
 					console.log(`[ONLINE] room ${roomId} is full`);
