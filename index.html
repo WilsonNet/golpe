@@ -1,8 +1,11 @@
 <!doctype html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
     <!-- `user-scalable=no` and `viewport-fit=cover` are what make this playable
          on a phone: pinch-zoom on a d-pad is a lost exchange, a double tap meant
          to be two slashes must not zoom the page, and the deck has to reach the
@@ -10,9 +13,70 @@
     <meta name="viewport"
         content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#14121c" />
+    <meta name="color-scheme" content="dark" />
     <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="golpe" />
+    <meta name="application-name" content="golpe" />
+    <meta name="format-detection" content="telephone=no" />
     <link rel="stylesheet" href="/style.css">
-    <title>golpe</title>
+
+    <!-- Primary SEO -->
+    <title>golpe — online 2D swordfighting</title>
+    <meta name="description"
+        content="Free online 2D swordfighting: GunZ's K-Style rebuilt in two dimensions. Dash, chain, parry and cast ultimates in your browser. No install — the link is the invitation." />
+    <meta name="author" content="Wilson Neto" />
+    <meta name="keywords"
+        content="golpe, 2D fighting game, sword fighting game, online fighting game, browser game, GunZ K-Style, multiplayer sword game, free browser game, fighting game no download" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <link rel="canonical" href="https://golpe.gg/" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="golpe" />
+    <meta property="og:title" content="golpe — online 2D swordfighting" />
+    <meta property="og:description"
+        content="Free online 2D swordfighting: GunZ's K-Style rebuilt in two dimensions. Dash, chain, parry and cast ultimates in your browser. No install — the link is the invitation." />
+    <meta property="og:url" content="https://golpe.gg/" />
+    <meta property="og:image" content="https://golpe.gg/assets/og-image.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt"
+        content="golpe — a 2D swordfight in a painted waterfront arena, with fighters duelling under the HUD." />
+    <meta property="og:locale" content="en_US" />
+
+    <!-- Twitter / X -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="golpe — online 2D swordfighting" />
+    <meta name="twitter:description"
+        content="Free online 2D swordfighting: GunZ's K-Style rebuilt in two dimensions. Dash, chain, parry and cast ultimates in your browser. No install — the link is the invitation." />
+    <meta name="twitter:image" content="https://golpe.gg/assets/og-image.jpg" />
+    <meta name="twitter:image:alt"
+        content="golpe — a 2D swordfight in a painted waterfront arena, with fighters duelling under the HUD." />
+
+    <!-- Structured data -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "VideoGame",
+        "name": "golpe",
+        "url": "https://golpe.gg/",
+        "description": "Free online 2D swordfighting: GunZ's K-Style rebuilt in two dimensions. Dash, chain, parry and cast ultimates in your browser.",
+        "image": "https://golpe.gg/assets/og-image.jpg",
+        "genre": ["Fighting", "Action", "Platformer"],
+        "gamePlatform": ["Web browser"],
+        "playMode": ["SinglePlayer", "MultiPlayer"],
+        "applicationCategory": "Game",
+        "operatingSystem": "Any (web browser)",
+        "numberOfPlayers": { "@type": "QuantitativeValue", "minValue": 1, "maxValue": 16 },
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "author": { "@type": "Person", "name": "Wilson Neto" },
+        "sameAs": ["https://github.com/WilsonNet/golpe"],
+        "inLanguage": "en"
+    }
+    </script>
 </head>
 
 <body>
@@ -20,4 +84,5 @@
     <script type="module" src="/src/main.tsx"></script>
 
 </body>
+
 </html>

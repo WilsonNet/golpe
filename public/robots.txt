@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /potg/
+
+Sitemap: https://golpe.gg/sitemap.xml
