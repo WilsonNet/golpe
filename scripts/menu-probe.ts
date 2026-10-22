@@ -1,4 +1,4 @@
-import { launchBrowser } from "./browser";
+import { gameServerUrl, launchBrowser } from "./browser";
 
 /**
  * Drive the root menu the way a player would, and prove it cannot lie.
@@ -15,7 +15,9 @@ import { launchBrowser } from "./browser";
 const BASE = process.env.GOLPE_URL ?? "http://localhost:8084";
 
 /** The game server's room list — the same address the menu's status line checks. */
-const ROOMS_URL = `http://${new URL(BASE).hostname}:9208/rooms`;
+const ROOMS_URL = process.env.GOLPE_SERVER
+	? `${gameServerUrl()}/rooms`
+	: `http://${new URL(BASE).hostname}:9208/rooms`;
 
 /** A launch key the menu must never add on its own. */
 function launchKeys(url: string): string[] {
@@ -53,6 +55,17 @@ const browser = await launchBrowser();
 	await page.waitForSelector(".gd-menu-page", { timeout: 10000 });
 	check("bare URL shows the menu", true);
 	check("menu has no launch keys", launchKeys(page.url()).length === 0);
+	// The game is open source and the menu is the page every player sees: the
+	// repository link must be on it, and must point at the repository.
+	const repoHref = await page
+		.locator(".gd-repo")
+		.getAttribute("href")
+		.catch(() => null);
+	check(
+		"menu links the GitHub repository",
+		repoHref === "https://github.com/WilsonNet/golpe",
+		`href=${repoHref}`,
+	);
 	// The server status line is the feedback the menu exists for — a game that
 	// loads with no server behind it must say so before a match is started.
 	await page.waitForSelector(".gd-server", { timeout: 5000 });

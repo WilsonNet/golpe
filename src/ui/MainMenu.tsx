@@ -64,6 +64,7 @@ import { GraphicsSettings } from "./GraphicsSettings";
 import { HUD_CSS } from "./hudStyles";
 import { MoveList } from "./MoveList";
 import { MENU_CSS } from "./menuStyles";
+import { REPO_URL, RepoLink } from "./RepoLink";
 import { ServerBrowser } from "./ServerBrowser";
 import { SoundMixer } from "./SoundMixer";
 
@@ -224,186 +225,232 @@ export function MainMenu({
 		<div className="gd-menu-page">
 			<style>{HUD_CSS}</style>
 			<style>{MENU_CSS}</style>
-			<div className="gd-card">
-				<h1 className="gd-title">golpe</h1>
-				<p className="gd-sub">
-					A 2D swordfight, online first — the link is the invitation.
-				</p>
+			<div className={`gd-card${view === "home" ? " gd-card-home" : ""}`}>
+				<div className="gd-menu-head">
+					<div>
+						<h1 className="gd-title">golpe</h1>
+						<p className="gd-sub">
+							A 2D swordfight, online first — the link is the invitation.
+						</p>
+					</div>
+					<RepoLink />
+				</div>
 
 				{view === "home" ? (
-					<>
-						{/* First on the page, above Play, because it is the answer to the
+					// Two columns on a big screen — what to do on the left, who you
+					// are and how it works on the right — and the same order stacked
+					// on anything narrower. See `.gd-home` in menuStyles.
+					<div className="gd-home">
+						<div className="gd-home-col">
+							{/* First on the page, above Play, because it is the answer to the
 						    only question a stranger actually has. Everything else on
 						    this screen assumes you already know what a butterfly is. */}
-						<div className="gd-section">
-							<div className="gd-section-head">Start here</div>
-							<button
-								className="gd-play-item gd-play-item-tutorial"
-								type="button"
-								onClick={() => onLaunch({ ...NOTHING, tutorial: true, hero })}
-							>
-								<strong>
-									Tutorial — learn {HEROES[hero].name}
-									{tutorialProgress.done > 0 ? (
-										<span className="gd-badge">
-											{tutorialProgress.done}/{tutorialProgress.total}
-										</span>
-									) : null}
-								</strong>
-								<span>
-									Play every move against a live opponent, one lesson at a time.
-									{tutorialProgress.done > 0
-										? " Your progress is remembered."
-										: ""}
-								</span>
-							</button>
-						</div>
-
-						<div className="gd-section">
-							<div className="gd-section-head">Play</div>
-							<button
-								className="gd-play-item gd-play-item-primary"
-								type="button"
-								onClick={quickMatch}
-							>
-								<strong>Quick match</strong>
-								<span>
-									{quickBusy
-										? "Finding an open room…"
-										: "Join an open room, or start a duel against a bot — your room link is ready to share."}
-								</span>
-							</button>
-							<div className="gd-two">
+							<div className="gd-section">
+								<div className="gd-section-head">Start here</div>
 								<button
-									className="gd-play-item"
+									className="gd-play-item gd-play-item-tutorial"
 									type="button"
-									onClick={() => setView("host")}
+									onClick={() => onLaunch({ ...NOTHING, tutorial: true, hero })}
 								>
-									<strong>Host a match</strong>
+									<strong>
+										Tutorial — learn {HEROES[hero].name}
+										{tutorialProgress.done > 0 ? (
+											<span className="gd-badge">
+												{tutorialProgress.done}/{tutorialProgress.total}
+											</span>
+										) : null}
+									</strong>
 									<span>
-										Choose the mode, arena and rules, then share the link.
+										Play every move against a live opponent, one lesson at a
+										time.
+										{tutorialProgress.done > 0
+											? " Your progress is remembered."
+											: ""}
 									</span>
 								</button>
-								<button
-									className="gd-play-item"
-									type="button"
-									onClick={() => setView("join")}
-								>
-									<strong>Join a match</strong>
-									<span>Enter a room id or a link someone sent you.</span>
-								</button>
 							</div>
-							<button
-								className="gd-play-item"
-								type="button"
-								onClick={() => onLaunch({ ...NOTHING, training: true, hero })}
-							>
-								<strong>Practice</strong>
-								<span>The training room: a scriptable dummy and its menu.</span>
-							</button>
-						</div>
 
-						<div className="gd-section">
-							<div className="gd-section-head">Your fighter</div>
-							<div className="gd-hero-pick">
-								{HERO_IDS.map((id) => (
+							<div className="gd-section">
+								<div className="gd-section-head">Play</div>
+								<button
+									className="gd-play-item gd-play-item-primary"
+									type="button"
+									onClick={quickMatch}
+								>
+									<strong>Quick match</strong>
+									<span>
+										{quickBusy
+											? "Finding an open room…"
+											: "Join an open room, or start a duel against a bot — your room link is ready to share."}
+									</span>
+								</button>
+								<div className="gd-two">
 									<button
-										key={id}
+										className="gd-play-item"
 										type="button"
-										className={`gd-hero-chip${hero === id ? " gd-hero-chip-on" : ""}`}
-										aria-pressed={hero === id}
-										onClick={() => {
-											setHero(id);
-											storeHero(id);
-										}}
+										onClick={() => setView("host")}
 									>
-										<span
-											className={`hp-sprite hp-sprite-${id}`}
-											aria-hidden="true"
-										/>
-										<span className="gd-hero-chip-meta">
-											<span className="gd-hero-chip-name">
-												{HEROES[id].name}
-											</span>
-											<span className="gd-hero-chip-kit">
-												{HEROES[id].melee.label} · {HEROES[id].ranged.label}
-											</span>
+										<strong>Host a match</strong>
+										<span>
+											Choose the mode, arena and rules, then share the link.
 										</span>
 									</button>
-								))}
+									<button
+										className="gd-play-item"
+										type="button"
+										onClick={() => setView("join")}
+									>
+										<strong>Join a match</strong>
+										<span>Enter a room id or a link someone sent you.</span>
+									</button>
+								</div>
+								<button
+									className="gd-play-item"
+									type="button"
+									onClick={() => onLaunch({ ...NOTHING, training: true, hero })}
+								>
+									<strong>Practice</strong>
+									<span>
+										The training room: a scriptable dummy and its menu.
+									</span>
+								</button>
 							</div>
-							<div className="gd-name-row">
-								<label htmlFor="gd-name">Fighter name</label>
-								<input
-									id="gd-name"
-									className="gd-input"
-									value={name}
-									maxLength={MAX_NAME}
-									placeholder="your name"
-									autoComplete="off"
-									spellCheck={false}
-									onChange={(e) => {
-										setName(e.target.value);
-										storeName(e.target.value.trim().slice(0, MAX_NAME));
-									}}
-								/>
+
+							{/* The release's other message: this is a public project. Last
+							    in the play column so it never outranks playing, and on a
+							    big screen it fills the space the shorter column leaves. */}
+							<div className="gd-section">
+								<div className="gd-section-head">Open source</div>
+								<p className="gd-oss-blurb">
+									golpe is free and MIT-licensed — the game, the server, the art
+									pipeline and every probe that measures it are on GitHub.
+								</p>
+								<div className="gd-two">
+									<a
+										className="gd-play-item"
+										href={REPO_URL}
+										target="_blank"
+										rel="noopener noreferrer"
+									>
+										<strong>Read the code</strong>
+										<span>Star it, fork it, send a pull request.</span>
+									</a>
+									<a
+										className="gd-play-item"
+										href={`${REPO_URL}/issues`}
+										target="_blank"
+										rel="noopener noreferrer"
+									>
+										<strong>Report a bug</strong>
+										<span>Found something broken? Open an issue.</span>
+									</a>
+								</div>
 							</div>
-							<p className="gd-hero-blurb">{HEROES[hero].blurb}</p>
 						</div>
 
-						<div className="gd-section">
-							<div className="gd-section-head">Learn &amp; settings</div>
-							<button
-								className="gd-play-item"
-								type="button"
-								onClick={() => setView("howto")}
-							>
-								<strong>How to play</strong>
-								<span>Movement, the sword chain, and the ultimate.</span>
-							</button>
-							<div className="gd-two">
-								<button
-									className="gd-play-item"
-									type="button"
-									onClick={() => setView("moves")}
-								>
-									<strong>Move list</strong>
-									<span>
-										Every command for {HEROES[hero].name} — stats and a live
-										preview.
-									</span>
-								</button>
-								<button
-									className="gd-play-item"
-									type="button"
-									onClick={() => setView("controls")}
-								>
-									<strong>Options</strong>
-									<span>Aiming scheme, on-screen gamepad, rebinding.</span>
-								</button>
+						<div className="gd-home-col">
+							<div className="gd-section">
+								<div className="gd-section-head">Your fighter</div>
+								<div className="gd-hero-pick">
+									{HERO_IDS.map((id) => (
+										<button
+											key={id}
+											type="button"
+											className={`gd-hero-chip${hero === id ? " gd-hero-chip-on" : ""}`}
+											aria-pressed={hero === id}
+											onClick={() => {
+												setHero(id);
+												storeHero(id);
+											}}
+										>
+											<span
+												className={`hp-sprite hp-sprite-${id}`}
+												aria-hidden="true"
+											/>
+											<span className="gd-hero-chip-meta">
+												<span className="gd-hero-chip-name">
+													{HEROES[id].name}
+												</span>
+												<span className="gd-hero-chip-kit">
+													{HEROES[id].melee.label} · {HEROES[id].ranged.label}
+												</span>
+											</span>
+										</button>
+									))}
+								</div>
+								<div className="gd-name-row">
+									<label htmlFor="gd-name">Fighter name</label>
+									<input
+										id="gd-name"
+										className="gd-input"
+										value={name}
+										maxLength={MAX_NAME}
+										placeholder="your name"
+										autoComplete="off"
+										spellCheck={false}
+										onChange={(e) => {
+											setName(e.target.value);
+											storeName(e.target.value.trim().slice(0, MAX_NAME));
+										}}
+									/>
+								</div>
+								<p className="gd-hero-blurb">{HEROES[hero].blurb}</p>
 							</div>
-							<div className="gd-two">
+
+							<div className="gd-section">
+								<div className="gd-section-head">Learn &amp; settings</div>
 								<button
 									className="gd-play-item"
 									type="button"
-									onClick={() => setView("graphics")}
+									onClick={() => setView("howto")}
 								>
-									<strong>Graphics</strong>
-									<span>Skybox on or off — the low-distraction setting.</span>
+									<strong>How to play</strong>
+									<span>Movement, the sword chain, and the ultimate.</span>
 								</button>
-								<button
-									className="gd-play-item"
-									type="button"
-									onClick={() => setView("sound")}
-								>
-									<strong>Sound</strong>
-									<span>
-										Master, music and effects — set the mix before you play.
-									</span>
-								</button>
+								<div className="gd-two">
+									<button
+										className="gd-play-item"
+										type="button"
+										onClick={() => setView("moves")}
+									>
+										<strong>Move list</strong>
+										<span>
+											Every command for {HEROES[hero].name} — stats and a live
+											preview.
+										</span>
+									</button>
+									<button
+										className="gd-play-item"
+										type="button"
+										onClick={() => setView("controls")}
+									>
+										<strong>Options</strong>
+										<span>Aiming scheme, on-screen gamepad, rebinding.</span>
+									</button>
+								</div>
+								<div className="gd-two">
+									<button
+										className="gd-play-item"
+										type="button"
+										onClick={() => setView("graphics")}
+									>
+										<strong>Graphics</strong>
+										<span>Skybox on or off — the low-distraction setting.</span>
+									</button>
+									<button
+										className="gd-play-item"
+										type="button"
+										onClick={() => setView("sound")}
+									>
+										<strong>Sound</strong>
+										<span>
+											Master, music and effects — set the mix before you play.
+										</span>
+									</button>
+								</div>
 							</div>
 						</div>
-					</>
+					</div>
 				) : null}
 
 				{view === "host" ? (
@@ -435,7 +482,8 @@ export function MainMenu({
 					<>
 						<h2 className="gd-title">Graphics</h2>
 						<p className="gd-sub">
-							Visual comfort. Sky and platform choices apply immediately in a match.
+							Visual comfort. Sky and platform choices apply immediately in a
+							match.
 						</p>
 						<GraphicsSettings onClose={() => setView("home")} />
 					</>

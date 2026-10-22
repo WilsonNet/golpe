@@ -653,6 +653,111 @@ export const MENU_CSS = `
 	}
 }
 
+/* ---- the header: the name, the line, and the repository ----
+   The game is open source, and this is the one page every player sees, so the
+   repository sits in the header beside the title rather than in a footer. It is
+   a quiet pill — the gold is for playing — with the star count as its badge. */
+.gd-menu-head {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 16px;
+}
+.gd-repo {
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 4px;
+	padding: 7px 10px 7px 12px;
+	border: 1px solid rgba(255, 255, 255, 0.22);
+	border-radius: 999px;
+	background: #000;
+	color: rgba(255, 255, 255, 0.88);
+	font-size: 12px;
+	text-decoration: none;
+	white-space: nowrap;
+	transition: border-color 120ms, background 120ms;
+}
+.gd-repo:hover,
+.gd-repo:focus-visible {
+	border-color: rgba(255, 209, 102, 0.7);
+	background: rgba(255, 209, 102, 0.06);
+	outline: none;
+}
+.gd-repo-mark {
+	flex: none;
+}
+.gd-repo-star {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding-left: 8px;
+	border-left: 1px solid rgba(255, 255, 255, 0.18);
+	color: #ffd166;
+}
+.gd-repo-count {
+	padding: 1px 7px;
+	border-radius: 999px;
+	background: rgba(255, 209, 102, 0.14);
+	color: #ffd166;
+	font-weight: bold;
+}
+
+/* The open-source section's links are play items that happen to be anchors. */
+a.gd-play-item {
+	text-decoration: none;
+}
+.gd-oss-blurb {
+	margin: 0;
+	font-size: 12px;
+	line-height: 1.5;
+	color: rgba(255, 255, 255, 0.7);
+}
+
+/* ---- the big screen ----
+   A 620px column in the middle of a 1920px monitor is a phone layout with a
+   lot of wallpaper. From 1100px the home view becomes two columns — what to do
+   on the left, who you are and how it works on the right — so the whole home
+   screen fits a laptop's height without scrolling; past 1800px (a 1440p or 4K
+   desktop) it is zoomed rather than stretched, because a wider line of text is
+   harder to read, not easier. Other views keep the single column: a form is a
+   column. Stacked, the second column's first section keeps the 24px rhythm. */
+.gd-home-col + .gd-home-col {
+	margin-top: 24px;
+}
+@media (min-width: 1100px) {
+	.gd-menu-page .gd-card.gd-card-home {
+		max-width: 1120px;
+		padding: 30px 40px;
+	}
+	.gd-home {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		column-gap: 40px;
+		align-items: start;
+	}
+	.gd-home-col + .gd-home-col {
+		margin-top: 0;
+	}
+}
+/* A 1280x800 laptop: the two columns fit, the padding is what spills. */
+@media (min-width: 1100px) and (max-height: 860px) {
+	.gd-menu-page .gd-card.gd-card-home {
+		padding: 18px 40px;
+	}
+}
+@media (min-width: 1800px) and (min-height: 1000px) {
+	.gd-menu-page .gd-card {
+		zoom: 1.2;
+	}
+}
+@media (min-width: 2400px) and (min-height: 1300px) {
+	.gd-menu-page .gd-card {
+		zoom: 1.5;
+	}
+}
+
 /* ---- the phone ----
    This block lives last so nothing later can override it: an earlier @media
    here was silently beaten by the base rules that followed it, and the
@@ -668,6 +773,14 @@ export const MENU_CSS = `
 	.gd-two,
 	.gd-hero-pick {
 		grid-template-columns: 1fr;
+	}
+	/* The pill drops under the title rather than squeezing it. */
+	.gd-menu-head {
+		flex-direction: column;
+		gap: 0;
+	}
+	.gd-repo {
+		margin: 0 0 16px;
 	}
 }
 

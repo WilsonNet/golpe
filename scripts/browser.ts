@@ -20,13 +20,56 @@ export const GPU_ARGS = [
 	"--use-angle=gl",
 ];
 
-export function launchBrowser(
+export async function launchBrowser(
 	options: Parameters<typeof chromium.launch>[0] = {},
 ): Promise<Browser> {
-	return chromium.launch({
+	const browser = await chromium.launch({
 		...options,
 		args: [...GPU_ARGS, ...(options.args ?? [])],
 	});
+	const server = process.env.GOLPE_SERVER;
+	if (server) redirectGameServer(browser, server);
+	return browser;
+}
+
+/**
+ * Point every page's `localhost:9208` at `GOLPE_SERVER` instead.
+ *
+ * `?server=` is a launch key, so a probe of the *menu* cannot carry it — and a
+ * menu reads the game server's health from the page's own host. Routing the
+ * requests (health, rooms, the WebRTC signalling POSTs) moves every probe to a
+ * dev server on another port without touching one of them; the data channel's
+ * UDP port is negotiated by ICE from that server, so it follows on its own.
+ */
+function redirectGameServer(browser: Browser, server: string) {
+	const route = async (ctx: BrowserContext) => {
+		await ctx.route(/^http:\/\/localhost:9208\//, async (r) => {
+			const url = r.request().url().replace("localhost:9208", server);
+			try {
+				await r.fulfill({ response: await r.fetch({ url }) });
+			} catch {
+				// The page closed mid-request — nothing left to answer.
+				await r.abort().catch(() => {});
+			}
+		});
+		return ctx;
+	};
+	const newContext = browser.newContext.bind(browser);
+	browser.newContext = async (...args) => route(await newContext(...args));
+	browser.newPage = async (...args) => {
+		const ctx = await browser.newContext(...args);
+		const page = await ctx.newPage();
+		page.on("close", () => void ctx.close());
+		return page;
+	};
+}
+
+/**
+ * The game server a probe's *own* (Node-side) requests should reach — the
+ * page's are routed by `launchBrowser`.
+ */
+export function gameServerUrl(): string {
+	return `http://${process.env.GOLPE_SERVER ?? "localhost:9208"}`;
 }
 
 /**
