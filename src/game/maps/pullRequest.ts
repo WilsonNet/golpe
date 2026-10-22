@@ -14,9 +14,10 @@
  *   preview.webm|mp4  one play-test clip against bots
  */
 
-import { SCREEN_W } from "../simulation/Arena";
+import { SCREEN_W, WORLD_BOTTOM } from "../simulation/Arena";
 import { TDM_MIN_SCREENS } from "../simulation/Teams";
 import {
+	mapRows,
 	mapScreens,
 	propsFromTilemap,
 	solidRectsFromTilemap,
@@ -133,7 +134,7 @@ export function prBody(
 		"| | |",
 		"|---|---|",
 		`| **Theme** | ${theme} |`,
-		`| **Size** | ${screens} screen${screens === 1 ? "" : "s"} (${screens * SCREEN_W}×600) |`,
+		`| **Size** | ${screens} screen${screens === 1 ? "" : "s"}${mapRows(map) > 1 ? ` × ${mapRows(map)} rows` : ""} (${screens * SCREEN_W}×${mapRows(map) * WORLD_BOTTOM}) |`,
 		`| **Platforms** | ${solidRectsFromTilemap(map).length} |`,
 		`| **Spawns** | ${spawnsFromTilemap(map).length} |`,
 		`| **Props** | ${propsFromTilemap(map).length} |`,

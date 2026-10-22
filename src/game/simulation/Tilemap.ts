@@ -297,16 +297,18 @@ function solidLayerRects(layer: SolidLayer, tileSize: number): Rect[] {
 
 /** One map screen in cells: 800px / 8px. */
 const SCREEN_CELLS = SCREEN_W / TILE_SIZE;
-/** The arena's height in cells: 600px / 8px. Maps are exactly one screen tall. */
+/** One map screen's height in cells: 600px / 8px. A map is 1–MAX_MAP_ROWS of them. */
 export const MAP_HEIGHT_CELLS = WORLD_BOTTOM / TILE_SIZE;
+/** Upper bound on a map's rows of screens: a vertical map is at most four screens tall. */
+export const MAX_MAP_ROWS = 4;
 /**
  * Caps on what a map may carry. Generous for a hand-made map, and small
- * enough that the whole map rides in one reliable message (a full map is
- * well under 16KB of JSON).
+ * enough that the whole map rides in one reliable message (a map at every cap
+ * is under 48KB of JSON — `Tilemap.test.ts` measures it).
  */
-export const MAX_MAP_PLATFORMS = 160;
+export const MAX_MAP_PLATFORMS = 256;
 export const MAX_MAP_SPAWNS = 48;
-export const MAX_MAP_PROPS = 160;
+export const MAX_MAP_PROPS = 512;
 /** Thinner than a tile is not a surface anybody can see or stand on. */
 const MIN_PLATFORM_SIZE = TILE_SIZE;
 const MAX_TEXT = 80;
@@ -322,6 +324,14 @@ export function mapScreens(map: TilemapSpec): number {
 	return Math.max(
 		1,
 		Math.min(MAX_SCREENS, Math.round(map.width / SCREEN_CELLS)),
+	);
+}
+
+/** How many 600px screens tall a map is. */
+export function mapRows(map: TilemapSpec): number {
+	return Math.max(
+		1,
+		Math.min(MAX_MAP_ROWS, Math.round(map.height / MAP_HEIGHT_CELLS)),
 	);
 }
 
@@ -350,7 +360,11 @@ export function propsFromTilemap(map: TilemapSpec): PropObject[] {
  * fighter fits on, facing the middle. A map is still playable before its
  * author has placed a single spawn — the editor's checks nag, the game plays.
  */
-function autoSpawns(platforms: readonly Rect[], right: number): SpawnPoint[] {
+function autoSpawns(
+	platforms: readonly Rect[],
+	right: number,
+	bottom: number,
+): SpawnPoint[] {
 	const out: SpawnPoint[] = [];
 	for (const p of platforms) {
 		if (p.w < PLAYER_WIDTH || p.y - PLAYER_HEIGHT < WORLD_TOP) continue;
@@ -365,7 +379,7 @@ function autoSpawns(platforms: readonly Rect[], right: number): SpawnPoint[] {
 	// a quarter in from each end, so even this map is never a spawn-on-spawn.
 	// If a solid sits there too, the first tick depenetrates — a bad landing,
 	// never an empty spawn list for `pickSpawn` to index.
-	const floorY = WORLD_BOTTOM - PLAYER_HEIGHT - SPAWN_CLEARANCE_PX;
+	const floorY = bottom - PLAYER_HEIGHT - SPAWN_CLEARANCE_PX;
 	return [
 		{ x: Math.round(right / FLOOR_SPAWN_DIVISOR), y: floorY, facing: 1 },
 		{
@@ -392,6 +406,7 @@ function rectsTouch(a: Rect, b: Rect): boolean {
 export function worldFromTilemap(map: TilemapSpec): World {
 	const screens = mapScreens(map);
 	const right = screens * SCREEN_W;
+	const bottom = mapRows(map) * WORLD_BOTTOM;
 	const platforms = solidRectsFromTilemap(map);
 	const declared = spawnsFromTilemap(map);
 	return {
@@ -399,9 +414,10 @@ export function worldFromTilemap(map: TilemapSpec): World {
 		left: WORLD_LEFT,
 		top: WORLD_TOP,
 		right,
-		bottom: WORLD_BOTTOM,
+		bottom,
 		platforms,
-		spawnPoints: declared.length > 0 ? declared : autoSpawns(platforms, right),
+		spawnPoints:
+			declared.length > 0 ? declared : autoSpawns(platforms, right, bottom),
 		source: map,
 	};
 }
@@ -477,6 +493,7 @@ interface RawMap {
 	version?: unknown;
 	tileSize?: unknown;
 	width?: unknown;
+	height?: unknown;
 	layers?: unknown;
 	theme?: unknown;
 	meta?: unknown;
@@ -523,6 +540,15 @@ export function sanitizeTilemap(raw: unknown): TilemapSpec | null {
 	if (widthCells === null) return null;
 	const screens = clamp(Math.round(widthCells / SCREEN_CELLS), 1, MAX_SCREENS);
 	const right = screens * SCREEN_W;
+	// A map with no `height` is one screen tall, which is every map before
+	// vertical maps existed.
+	const heightCells = finite(m.height) ?? MAP_HEIGHT_CELLS;
+	const rows = clamp(
+		Math.round(heightCells / MAP_HEIGHT_CELLS),
+		1,
+		MAX_MAP_ROWS,
+	);
+	const bottom = rows * WORLD_BOTTOM;
 	const layers = Array.isArray(m.layers) ? m.layers : [];
 
 	const platforms: PlatformObject[] = [];
@@ -540,9 +566,9 @@ export function sanitizeTilemap(raw: unknown): TilemapSpec | null {
 				const h = finite(o.h);
 				if (x === null || y === null || w === null || h === null) continue;
 				const x0 = clamp(snap(x), 0, right);
-				const y0 = clamp(snap(y), 0, WORLD_BOTTOM);
+				const y0 = clamp(snap(y), 0, bottom);
 				const x1 = clamp(snap(x + w), 0, right);
-				const y1 = clamp(snap(y + h), 0, WORLD_BOTTOM);
+				const y1 = clamp(snap(y + h), 0, bottom);
 				if (x1 - x0 < MIN_PLATFORM_SIZE || y1 - y0 < MIN_PLATFORM_SIZE)
 					continue;
 				platforms.push({ x: x0, y: y0, w: x1 - x0, h: y1 - y0 });
@@ -557,7 +583,7 @@ export function sanitizeTilemap(raw: unknown): TilemapSpec | null {
 				props.push({
 					type,
 					x: clamp(Math.round(x), 0, right),
-					y: clamp(Math.round(y), 0, WORLD_BOTTOM),
+					y: clamp(Math.round(y), 0, bottom),
 					...(o.flip === true ? { flip: true } : {}),
 				});
 			}
@@ -569,7 +595,7 @@ export function sanitizeTilemap(raw: unknown): TilemapSpec | null {
 				if (x === null || y === null) continue;
 				spawns.push({
 					x: clamp(Math.round(x), 0, right - PLAYER_WIDTH),
-					y: clamp(Math.round(y), 0, WORLD_BOTTOM - PLAYER_HEIGHT),
+					y: clamp(Math.round(y), 0, bottom - PLAYER_HEIGHT),
 					facing:
 						finite(o.facing) !== null && (o.facing as number) < 0 ? -1 : 1,
 				});
@@ -595,7 +621,7 @@ export function sanitizeTilemap(raw: unknown): TilemapSpec | null {
 		tileSize: TILE_SIZE,
 		tileset: tilesetForTheme(theme),
 		width: screens * SCREEN_CELLS,
-		height: MAP_HEIGHT_CELLS,
+		height: rows * MAP_HEIGHT_CELLS,
 		theme,
 		meta: {
 			id,

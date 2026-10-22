@@ -12,7 +12,13 @@
  * Art/Flat in the Esc menu must not lose the skybox, camera or fighters.
  */
 
-import { type Container, Sprite, type Texture, TilingSprite } from "pixi.js";
+import {
+	AnimatedSprite,
+	type Container,
+	Sprite,
+	type Texture,
+	TilingSprite,
+} from "pixi.js";
 import type { World } from "../simulation/Arena";
 import {
 	type MapTheme,
@@ -25,6 +31,7 @@ import {
 import { TEX, tex } from "./assets";
 import type { TileStyle } from "./tileStyle";
 import {
+	propAnimation,
 	propSize,
 	propTexture,
 	type TileArtState,
@@ -41,6 +48,8 @@ const FILL_VARIETY_STEP = 6 * TILE;
 const FILL_VARIETY_ROWS = 3;
 /** Underside detail. */
 const BOTTOM_VARIETY_STEP = 9 * TILE;
+/** AnimatedSprite counts frames in 60fps ticks: one tick is this many ms. */
+const FRAME_MS_AT_60FPS = 1000 / 60;
 
 export interface TilemapDebugState {
 	style: TileStyle;
@@ -51,6 +60,8 @@ export interface TilemapDebugState {
 	platforms: number;
 	/** Prop objects actually drawn. */
 	props: number;
+	/** Of those, the animated ones (flags, torches, birds). */
+	animatedProps: number;
 	/** Display objects added to the arena container. */
 	sprites: number;
 	tileset: TileArtState;
@@ -62,6 +73,7 @@ let last: TilemapDebugState = {
 	artReady: false,
 	platforms: 0,
 	props: 0,
+	animatedProps: 0,
 	sprites: 0,
 	tileset: tileArtState(),
 };
@@ -98,14 +110,17 @@ export function drawPlatforms(
 
 	let sprites = 0;
 	let drawnProps = 0;
+	let animatedProps = 0;
 	if (style === "art" && tileArtReady(theme)) {
 		for (const platform of platforms) {
 			sprites += drawTiledPlatform(arena, theme, platform);
 		}
 		for (const prop of props) {
-			if (drawProp(arena, theme, prop)) {
+			const drawn = drawProp(arena, theme, prop);
+			if (drawn) {
 				sprites++;
 				drawnProps++;
+				if (drawn === "animated") animatedProps++;
 			}
 		}
 	} else {
@@ -126,6 +141,7 @@ export function drawPlatforms(
 		artReady: tileArtReady(theme),
 		platforms: platforms.length,
 		props: drawnProps,
+		animatedProps,
 		sprites,
 		tileset: tileArtState(theme),
 	};
@@ -348,11 +364,23 @@ function drawProp(
 	arena: Container,
 	theme: MapTheme,
 	prop: PropObject,
-): boolean {
+): false | "still" | "animated" {
 	const texture = propTexture(theme, prop.type);
 	const size = propSize(theme, prop.type);
 	if (!texture || !size) return false;
-	const sprite = new Sprite(texture);
+	const anim = propAnimation(theme, prop.type);
+	let sprite: Sprite;
+	if (anim) {
+		// Presentation only — a flapping bird is never simulated. Each prop
+		// starts on a frame picked from where it stands, so a row of torches
+		// flickers out of step without anything random in the draw.
+		const animated = new AnimatedSprite(anim.textures);
+		animated.animationSpeed = FRAME_MS_AT_60FPS / anim.ms;
+		animated.gotoAndPlay((prop.x * 7 + prop.y * 13) % anim.textures.length);
+		sprite = animated;
+	} else {
+		sprite = new Sprite(texture);
+	}
 	sprite.y = prop.y;
 	if (prop.flip) {
 		sprite.scale.x = -1;
@@ -361,5 +389,5 @@ function drawProp(
 		sprite.x = prop.x;
 	}
 	arena.addChild(sprite);
-	return true;
+	return anim ? "animated" : "still";
 }

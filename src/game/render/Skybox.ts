@@ -324,10 +324,17 @@ export class Skybox {
 		this.elapsedMs += dtMs;
 		this.cameraX = cameraX;
 		const dt = dtMs / 1000;
+		// The panorama is one screen tall. On a map taller than a screen the
+		// camera scrolls down, and the sky rides with it — locked to the screen
+		// vertically, so a climb never scrolls past the painted sky into void.
+		// A camera above the world (the replay's letterbox overhang) keeps the
+		// old vertical parallax.
+		const lockY = Math.max(0, cameraY);
+		const overY = Math.min(0, cameraY);
 
 		if (this.fallback) {
 			this.fallback.x = cameraX;
-			this.fallback.y = 0;
+			this.fallback.y = lockY;
 			this.fallback.width = Math.max(viewW, this.fallback.texture.width);
 			this.fallback.height = Math.max(this.panoramaH, viewH);
 			return;
@@ -335,13 +342,13 @@ export class Skybox {
 
 		if (this.scrim) {
 			this.scrim.x = cameraX;
-			this.scrim.y = 0;
+			this.scrim.y = lockY;
 			this.scrim.scale.x = viewW;
 		}
 		if (this.grain) {
 			// Screen-locked: the grain is the lens, not the world.
 			this.grain.x = cameraX;
-			this.grain.y = 0;
+			this.grain.y = lockY;
 			this.grain.width = viewW;
 			this.grain.height = viewH;
 		}
@@ -356,7 +363,7 @@ export class Skybox {
 				if (!sprite) continue;
 				const x = cameraX - shift + i * W;
 				sprite.x = x;
-				sprite.y = 0;
+				sprite.y = lockY;
 				// A copy is visible only while its panorama intersects the
 				// viewport. The third copy exists for the pathological case
 				// (a preview zoomed far enough out to see more than one tile).
@@ -392,7 +399,7 @@ export class Skybox {
 			}
 
 			const shift = wrap(cameraX * strip.factor, W);
-			const y = cameraY * (1 - strip.factor);
+			const y = lockY + overY * (1 - strip.factor);
 			const t = clockMs / 1000;
 			for (const item of strip.items) {
 				// The item names its position in the city's texture space, so

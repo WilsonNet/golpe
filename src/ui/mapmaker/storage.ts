@@ -23,7 +23,10 @@ export function loadMaps(): EditorMap[] {
 		const raw = window.localStorage.getItem(MAPS_KEY);
 		const list = raw ? (JSON.parse(raw) as EditorMap[]) : [];
 		return Array.isArray(list)
-			? list.filter((m) => m && typeof m.localId === "string")
+			? list
+					.filter((m) => m && typeof m.localId === "string")
+					// Maps saved before vertical maps have no rows: one screen tall.
+					.map((m) => ({ ...m, rows: m.rows ?? 1 }))
 			: [];
 	} catch {
 		return [];

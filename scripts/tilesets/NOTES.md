@@ -19,7 +19,7 @@ files plus two QA-only images:
 
 ```
 public/assets/tilesets/waterfront-platforms.png     64x24   version 975e22046d00
-public/assets/tilesets/waterfront-props.png         64x48   version a2a28e3fb7a6
+public/assets/tilesets/waterfront-props.png         256x216 version (see the JSON) — 125 props, 161 frames
 public/assets/tilesets/waterfront-platforms.json    frames + SHA-256 versions
 public/assets/tilesets/waterfront-preview.png       320x80  1x Art card
 
@@ -97,7 +97,7 @@ lines up with the side caps.
 All 21 named tiles are exactly 8x8; the three unused atlas cells (row 0
 columns 6–7 and row 2 column 7) are transparent.
 
-### Props (64x48)
+### Props (64x48 — the original seven; see "Props: the map maker's catalogue" below)
 
 - `vine` (8x24) — a leafy strand, top at y=0, stem at x=4, 2–3px leaves and a
   pale tip.
@@ -200,3 +200,21 @@ maker's furniture.
   `public/assets/tilesets/**`. No game code, collision data or simulation was
   changed, and no game/probe run was performed here. The asset is ready for
   `tsx scripts/tiles-probe.ts` and the Graphics Art/Flat switch.
+
+## Props: the map maker's catalogue (2026-10)
+
+The seven original props became a catalogue of 125 (161 frames with
+animation) in `props.py`, in seven categories. Iteration notes:
+
+- Drawn with a small key-grid kit (`G`) rather than string maps for most
+  props: a lit `ball` (dark crescent, mid, highlight) plus an auto-outline
+  gives every round thing the same pixel-art read in a line of code.
+- The first arched window cut its arch twice (once from the frame, once from
+  the glass) and left a slab; the arch is one `inside()` predicate now, and
+  the glass is the frame inset by it.
+- Themes recolour props for free because every pixel is a key; the Snow
+  theme's moss keys are ice, so its trees and bushes come out frosted — kept,
+  it reads as winter.
+- Gate: `dress.test.ts` checks every catalogue prop exists in every theme's
+  atlas at the catalogue's size and frame count; the palette audit covers the
+  new keys.

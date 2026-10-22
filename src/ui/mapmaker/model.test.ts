@@ -8,12 +8,14 @@ import {
 	fromSpec,
 	historyOf,
 	mapWidth,
+	mapHeight,
 	mirrorLeftToRight,
 	newMap,
 	playableSpec,
 	propAt,
 	redo,
 	resize,
+	resizeRows,
 	spawnAt,
 	TEMPLATES,
 	toSpec,
@@ -27,14 +29,18 @@ describe("templates", () => {
 		fc.constantFrom(...TEMPLATES.map((t) => t.id)),
 		fc.constantFrom("waterfront", "castle", "meadow", "snow" as const),
 		fc.integer({ min: 1, max: 8 }),
-	])("every template is playable at every width", (id, theme, screens) => {
-		const spec = playableSpec(newMap(id, theme, screens));
-		expect(spec).not.toBeNull();
-		const errors = checkMap(spec as NonNullable<typeof spec>).filter(
-			(i) => i.level === "error",
-		);
-		expect(errors).toEqual([]);
-	});
+		fc.integer({ min: 1, max: 4 }),
+	])(
+		"every template is playable at every width and height",
+		(id, theme, screens, rows) => {
+			const spec = playableSpec(newMap(id, theme, screens, "T", rows));
+			expect(spec).not.toBeNull();
+			const errors = checkMap(spec as NonNullable<typeof spec>).filter(
+				(i) => i.level === "error",
+			);
+			expect(errors).toEqual([]);
+		},
+	);
 });
 
 describe("the editor's map", () => {
@@ -64,6 +70,35 @@ describe("the editor's map", () => {
 		expect(propAt(map, "vine", 400, 400).y).toBe(328);
 		const crate = propAt(map, "crate", 400, 400);
 		expect(crate.y + 16).toBe(568);
+	});
+
+	it("mounts a window on the face below the lip, and floats a bird where it is put", () => {
+		const { map } = addPlatform(newMap("blank", "castle", 1), {
+			x: 296,
+			y: 200,
+			w: 200,
+			h: 96,
+		});
+		// Clicked near the top edge: kept below the walkable lip.
+		const w = propAt(map, "windowLit", 300, 201);
+		expect(w.x).toBeGreaterThanOrEqual(296);
+		expect(w.y).toBe(208);
+		// Clicked past the bottom: kept inside the face.
+		const low = propAt(map, "windowLit", 400, 294);
+		expect(low.y + 14).toBeLessThanOrEqual(296);
+		const bird = propAt(map, "birdFlying", 600, 100);
+		expect(bird.x + 6).toBe(600);
+		expect(bird.y).toBeLessThan(100);
+	});
+
+	it("a taller map grows upward: the floor stays the floor", () => {
+		const map = newMap("classic", "castle", 1);
+		const tall = resizeRows(map, 3);
+		expect(mapHeight(tall)).toBe(1800);
+		expect(tall.platforms.some((p) => p.y + p.h === 1800)).toBe(true);
+		expect(playableSpec(tall)?.height).toBe(225);
+		const back = resizeRows(tall, 1);
+		expect(toSpec(back).layers).toEqual(toSpec(map).layers);
 	});
 
 	test.prop([fc.integer({ min: 1, max: 8 })])(

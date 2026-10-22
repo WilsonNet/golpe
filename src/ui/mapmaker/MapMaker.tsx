@@ -31,12 +31,27 @@ import { checkMap, type MapIssue } from "../../game/maps/checks";
 import { LIBRARY } from "../../game/maps/library";
 import { THEME_SKY } from "../../game/render/ThemeSky";
 import { PLAYER_WIDTH, type Rect } from "../../game/simulation/Arena";
+import { PROP_CATALOG, propDef } from "../../game/maps/props";
 import { HERO_IDS, HEROES } from "../../game/simulation/Heroes";
 import { TDM_MIN_SCREENS } from "../../game/simulation/Teams";
-import { MAP_THEMES, type MapTheme } from "../../game/simulation/Tilemap";
-import { HUD_CSS } from "../hudStyles";
-import { cssColor, drawPropArt, loadArt, platformArt } from "./art2d";
 import {
+	MAP_THEMES,
+	MAX_MAP_ROWS,
+	type MapTheme,
+} from "../../game/simulation/Tilemap";
+import { HUD_CSS } from "../hudStyles";
+import { cssColor, loadArt, platformArt } from "./art2d";
+import { ATTACH_HINT, DecorDrawer, visibleProps } from "./DecorDrawer";
+import {
+	DRESS_STYLES,
+	type DressStyle,
+	dressCount,
+	dressMap,
+	dressPlatform,
+	undressPlatform,
+} from "./dress";
+import {
+	type Brush,
 	type CanvasApi,
 	EditorCanvas,
 	isTyping,
@@ -55,6 +70,7 @@ import {
 	fromSpec,
 	type History,
 	historyOf,
+	mapHeight,
 	mapWidth,
 	mirrorLeftToRight,
 	moveRect,
@@ -65,6 +81,7 @@ import {
 	redo,
 	removeObject,
 	resize,
+	resizeRows,
 	type Selection,
 	TEMPLATES,
 	THEME_LABELS,
@@ -116,7 +133,7 @@ const TOOLS: {
 		label: "Decor",
 		key: "D",
 		icon: "✿",
-		hint: "Click to place decoration — vines hang, the rest stand",
+		hint: "Click to place · drag to paint with Row or Scatter · select a platform to Prettify it",
 	},
 	{
 		id: "erase",
@@ -156,6 +173,10 @@ export function MapMaker() {
 	const [selection, setSelection] = useState<Selection | null>(null);
 	const [tool, setTool] = useState<Tool>("select");
 	const [propType, setPropType] = useState(PROP_TYPES[0]?.type ?? "vine");
+	const [brush, setBrush] = useState<Brush>("stamp");
+	const [decorCategory, setDecorCategory] = useState("all");
+	/** Bumped on every Prettify press, so pressing again re-rolls. */
+	const [dressSeed, setDressSeed] = useState(() => Date.now() % 100000);
 	const [grid, setGrid] = useState(true);
 	const [reach, setReach] = useState(false);
 	const [flat, setFlat] = useState(false);
@@ -244,6 +265,27 @@ export function MapMaker() {
 		apply(updateObject(map, selection, { x: r.x, y: r.y }));
 	};
 
+	// Scatter mixes the category of the prop in hand.
+	const nextProp = () => {
+		const cat = propDef(propType)?.category;
+		const pool = PROP_CATALOG.filter((p) => p.category === cat);
+		return pool[Math.floor(Math.random() * pool.length)]?.type ?? propType;
+	};
+
+	const cycleProp = (step: number) => {
+		const list = visibleProps(decorCategory, "");
+		const i = list.findIndex((p) => p.type === propType);
+		const next = list[(i + step + list.length) % list.length];
+		if (next) setPropType(next.type);
+	};
+
+	const prettify = (style: DressStyle) => {
+		if (selection?.kind !== "platform") return;
+		const seed = dressSeed + 1;
+		setDressSeed(seed);
+		apply(dressPlatform(map, selection.id, style, seed));
+	};
+
 	const play = () => {
 		setReturnTo(dialog === "publish" ? "publish" : "none");
 		setDialog("none");
@@ -294,6 +336,8 @@ export function MapMaker() {
 				removeSelected();
 			} else if (key === "escape") setSelection(null);
 			else if (key === "f") flip();
+			else if (key === "[" && tool === "prop") cycleProp(-1);
+			else if (key === "]" && tool === "prop") cycleProp(1);
 			else if (key === "g") setGrid((g) => !g);
 			else if (key === "r") setReach((r) => !r);
 			else if (key === "t") setDialog("test");
@@ -329,6 +373,7 @@ export function MapMaker() {
 				const blob = await renderOverview(map);
 				return new Uint8Array(await blob.arrayBuffer());
 			},
+			view: () => canvas.current?.view() ?? null,
 		};
 	});
 
@@ -384,7 +429,11 @@ export function MapMaker() {
 						/>
 					))}
 				</fieldset>
-				<fieldset className="mm-group mm-width" aria-label="Width in screens">
+				<fieldset
+					className="mm-group mm-width"
+					aria-label="Width in screens"
+					title="Width, in 800px screens"
+				>
 					<button
 						type="button"
 						className="mm-icon"
@@ -394,15 +443,39 @@ export function MapMaker() {
 					>
 						−
 					</button>
-					<span data-testid="mapmaker-screens">
-						{map.screens} screen{map.screens === 1 ? "" : "s"}
-					</span>
+					<span data-testid="mapmaker-screens">{map.screens} wide</span>
 					<button
 						type="button"
 						className="mm-icon"
 						disabled={map.screens >= 8}
 						onClick={() => apply(resize(map, map.screens + 1))}
 						title="Wider"
+					>
+						+
+					</button>
+				</fieldset>
+				<fieldset
+					className="mm-group mm-width"
+					aria-label="Height in rows of screens"
+					title="Height, in rows of 600px screens"
+				>
+					<button
+						type="button"
+						className="mm-icon"
+						disabled={map.rows <= 1}
+						onClick={() => apply(resizeRows(map, map.rows - 1))}
+						title="Shorter — removes the top row"
+					>
+						−
+					</button>
+					<span data-testid="mapmaker-rows">{map.rows} tall</span>
+					<button
+						type="button"
+						className="mm-icon"
+						disabled={map.rows >= MAX_MAP_ROWS}
+						onClick={() => apply(resizeRows(map, map.rows + 1))}
+						title="Taller — adds a row of screens on top, so the map climbs"
+						data-testid="mapmaker-rows-add"
 					>
 						+
 					</button>
@@ -450,7 +523,7 @@ export function MapMaker() {
 					disabled={!spec}
 					data-testid="mapmaker-test"
 				>
-					▶ Test with bots & friends
+					▶ Test<span className="mm-wide-only"> with bots & friends</span>
 				</button>
 				<button
 					type="button"
@@ -551,25 +624,25 @@ export function MapMaker() {
 					</button>
 				</nav>
 
+				{tool === "prop" ? (
+					<DecorDrawer
+						theme={map.theme}
+						propType={propType}
+						onPick={setPropType}
+						brush={brush}
+						onBrush={setBrush}
+						category={decorCategory}
+						onCategory={setDecorCategory}
+					/>
+				) : null}
+
 				<main className="mm-stage">
-					{tool === "prop" ? (
-						<div className="mm-palette" role="toolbar" aria-label="Decorations">
-							{PROP_TYPES.map((p) => (
-								<PropButton
-									key={p.type}
-									theme={map.theme}
-									type={p.type}
-									label={p.label}
-									active={propType === p.type}
-									onPick={() => setPropType(p.type)}
-								/>
-							))}
-						</div>
-					) : null}
 					<EditorCanvas
 						map={map}
 						tool={tool}
 						propType={propType}
+						brush={brush}
+						nextProp={nextProp}
 						selection={selection}
 						issues={issues}
 						grid={grid}
@@ -612,7 +685,7 @@ export function MapMaker() {
 					<Minimap
 						map={map}
 						view={view}
-						onPan={(x) => canvas.current?.setPan(x)}
+						onPan={(x, y) => canvas.current?.setPan(x, y)}
 					/>
 				</main>
 
@@ -632,11 +705,20 @@ export function MapMaker() {
 								onDuplicate={duplicate}
 								onFlip={flip}
 							/>
-						) : (
+						) : null}
+						{selection?.kind === "platform" && selected ? (
+							<Prettify
+								count={dressCount(map, selection.id)}
+								onDress={prettify}
+								onClear={() => apply(undressPlatform(map, selection.id))}
+							/>
+						) : null}
+						{!(selection && selected) ? (
 							<div className="mm-mapinfo">
 								<p className="mm-muted">
-									{mapWidth(map)}×600 · {map.platforms.length} platforms ·{" "}
-									{map.spawns.length} spawns · {map.props.length} decorations
+									{mapWidth(map)}×{mapHeight(map)} · {map.platforms.length}{" "}
+									platforms · {map.spawns.length} spawns · {map.props.length}{" "}
+									decorations
 								</p>
 								<button
 									type="button"
@@ -651,8 +733,34 @@ export function MapMaker() {
 									with the better ground. This copies the left half onto the
 									right.
 								</p>
+								<button
+									type="button"
+									className="mm-btn"
+									onClick={() => {
+										const seed = dressSeed + 1;
+										setDressSeed(seed);
+										apply(dressMap(map, seed));
+									}}
+									title="Dress every platform with windows, plants, lights and birds picked for the theme — press again to re-roll"
+									data-testid="mapmaker-prettify-map"
+								>
+									✨ Prettify the whole map
+								</button>
+								{map.props.length > 0 ? (
+									<button
+										type="button"
+										className="mm-btn mm-danger"
+										onClick={() => apply({ ...map, props: [] })}
+										title="Remove every decoration (undo brings them back)"
+									>
+										Clear all decor
+									</button>
+								) : null}
+								<p className="mm-muted small">
+									Select a platform to dress it one style at a time.
+								</p>
 							</div>
-						)}
+						) : null}
 					</section>
 
 					<section className="mm-panel mm-checks" data-testid="mapmaker-checks">
@@ -792,41 +900,47 @@ function ThemeSwatch({
 	);
 }
 
-function PropButton({
-	theme,
-	type,
-	label,
-	active,
-	onPick,
+/** Dress the selected platform: one button per style, pressed again to re-roll. */
+function Prettify({
+	count,
+	onDress,
+	onClear,
 }: {
-	theme: MapTheme;
-	type: string;
-	label: string;
-	active: boolean;
-	onPick: () => void;
+	count: number;
+	onDress: (style: DressStyle) => void;
+	onClear: () => void;
 }) {
-	const ref = useRef<HTMLCanvasElement>(null);
-	const [ready, setReady] = useState(false);
-	useEffect(() => {
-		void loadArt(theme).then(() => setReady(true));
-	}, [theme]);
-	// biome-ignore lint/correctness/useExhaustiveDependencies: redraw once the art has loaded.
-	useEffect(() => {
-		const ctx = ref.current?.getContext("2d");
-		if (!ctx) return;
-		ctx.clearRect(0, 0, 24, 24);
-		ctx.imageSmoothingEnabled = false;
-		drawPropArt(ctx, theme, type, 0, 0);
-	}, [theme, type, ready]);
 	return (
-		<button
-			type="button"
-			className={`mm-prop ${active ? "on" : ""}`}
-			onClick={onPick}
-			title={label}
-		>
-			<canvas ref={ref} width={24} height={24} />
-		</button>
+		<div className="mm-prettify" data-testid="mapmaker-prettify">
+			<h4>✨ Prettify</h4>
+			<div className="mm-dress-grid">
+				{DRESS_STYLES.map((d) => (
+					<button
+						key={d.id}
+						type="button"
+						className="mm-dress"
+						onClick={() => onDress(d.id)}
+						title={d.hint}
+						data-testid={`dress-${d.id}`}
+					>
+						<span aria-hidden="true">{d.icon}</span>
+						{d.label}
+					</button>
+				))}
+			</div>
+			<p className="mm-muted small">
+				Each style dresses the top, the face or the underside; press again to
+				re-roll it.{" "}
+				{count > 0
+					? `${count} decoration${count === 1 ? "" : "s"} on this platform.`
+					: ""}
+			</p>
+			{count > 0 ? (
+				<button type="button" className="mm-btn mm-danger" onClick={onClear}>
+					Strip its decor
+				</button>
+			) : null}
+		</div>
 	);
 }
 
@@ -871,6 +985,12 @@ function Inspector({
 					</>
 				) : null}
 			</div>
+			{kind === "prop" ? (
+				<p className="mm-muted small">
+					{propDef((object as EProp).type)?.label ?? (object as EProp).type} —{" "}
+					{ATTACH_HINT[propDef((object as EProp).type)?.attach ?? "stand"]}.
+				</p>
+			) : null}
 			{kind === "spawn" ? (
 				<p className="mm-muted small">
 					Faces {(object as ESpawn).facing > 0 ? "right →" : "← left"}. A
@@ -917,15 +1037,16 @@ function Minimap({
 }: {
 	map: EditorMap;
 	view: View | null;
-	onPan: (x: number) => void;
+	onPan: (x: number, y: number) => void;
 }) {
 	const ref = useRef<HTMLCanvasElement>(null);
 	const W = mapWidth(map);
+	const H = mapHeight(map);
 	useEffect(() => {
 		const c = ref.current;
 		const ctx = c?.getContext("2d");
 		if (!c || !ctx) return;
-		const scale = c.width / W;
+		const scale = c.height / H;
 		const sky = THEME_SKY[map.theme];
 		ctx.fillStyle = cssColor(sky[1] ?? 0);
 		ctx.fillRect(0, 0, c.width, c.height);
@@ -950,17 +1071,21 @@ function Minimap({
 				(view.height / view.zoom) * scale,
 			);
 		}
-	}, [map, view, W]);
+	}, [map, view, W, H]);
 	return (
 		<canvas
 			ref={ref}
 			className="mm-minimap"
-			width={Math.round((W / 600) * 128)}
+			width={Math.round((W / H) * 128)}
 			height={128}
 			onPointerDown={(e) => {
 				const r = e.currentTarget.getBoundingClientRect();
 				const x = ((e.clientX - r.left) / r.width) * W;
-				onPan(x - (view ? view.width / view.zoom / 2 : 400));
+				const y = ((e.clientY - r.top) / r.height) * H;
+				onPan(
+					x - (view ? view.width / view.zoom / 2 : 400),
+					y - (view ? view.height / view.zoom / 2 : 300),
+				);
 			}}
 			title="Click to jump there"
 		/>
@@ -1014,6 +1139,9 @@ function NewMapDialog({
 	const [template, setTemplate] = useState("classic");
 	const [theme, setTheme] = useState<MapTheme>("castle");
 	const [screens, setScreens] = useState(1);
+	const [rows, setRows] = useState<number | null>(null);
+	const picked = TEMPLATES.find((t) => t.id === template);
+	const shownRows = rows ?? picked?.rows ?? 1;
 	const [name, setName] = useState("");
 	return (
 		<Modal title="New map" onClose={onClose} wide>
@@ -1023,7 +1151,10 @@ function NewMapDialog({
 						key={t.id}
 						type="button"
 						className={`mm-card ${template === t.id ? "on" : ""}`}
-						onClick={() => setTemplate(t.id)}
+						onClick={() => {
+							setTemplate(t.id);
+							setRows(null);
+						}}
 					>
 						<TemplatePreview templateId={t.id} theme={theme} />
 						<b>{t.label}</b>
@@ -1068,6 +1199,21 @@ function NewMapDialog({
 						))}
 					</select>
 				</label>
+				<label>
+					Height
+					<select
+						value={shownRows}
+						onChange={(e) => setRows(Number(e.target.value))}
+						data-testid="mapmaker-new-rows"
+					>
+						{Array.from({ length: MAX_MAP_ROWS }, (_, i) => i + 1).map((n) => (
+							<option key={n} value={n}>
+								{n} row{n === 1 ? "" : "s"}
+								{n > 1 ? " · vertical" : ""}
+							</option>
+						))}
+					</select>
+				</label>
 			</div>
 			<div className="mm-row end">
 				<button type="button" className="mm-btn" onClick={onClose}>
@@ -1078,7 +1224,13 @@ function NewMapDialog({
 					className="mm-btn mm-btn-primary"
 					onClick={() =>
 						onCreate(
-							newMap(template, theme, screens, name.trim() || "Untitled map"),
+							newMap(
+								template,
+								theme,
+								screens,
+								name.trim() || "Untitled map",
+								shownRows,
+							),
 						)
 					}
 				>
@@ -1105,12 +1257,16 @@ function TemplatePreview({
 		const sky = THEME_SKY[theme];
 		ctx.fillStyle = cssColor(sky[2] ?? 0);
 		ctx.fillRect(0, 0, c.width, c.height);
-		const s = c.width / 800;
+		// A tall template is shown whole, narrower, centred.
+		const H = mapHeight(m);
+		const s = Math.min(c.width / 800, c.height / H);
+		ctx.translate((c.width - 800 * s) / 2, 0);
 		ctx.fillStyle = "#2f4a36";
 		for (const p of m.platforms)
 			ctx.fillRect(p.x * s, p.y * s, p.w * s, Math.max(1, p.h * s));
 		ctx.fillStyle = "#ffd166";
 		for (const sp of m.spawns) ctx.fillRect(sp.x * s, sp.y * s, 3, 4);
+		ctx.setTransform(1, 0, 0, 1, 0, 0);
 	}, [templateId, theme]);
 	return (
 		<canvas ref={ref} width={160} height={120} className="mm-card-preview" />
@@ -1162,7 +1318,8 @@ function LibraryDialog({
 							<b>{m.name}</b>
 							<span className="mm-muted">
 								{THEME_LABELS[m.theme]} · {m.screens} screen
-								{m.screens === 1 ? "" : "s"} · edited{" "}
+								{m.screens === 1 ? "" : "s"}
+								{(m.rows ?? 1) > 1 ? ` × ${m.rows} rows` : ""} · edited{" "}
 								{new Date(m.updatedAt).toLocaleString()}
 							</span>
 						</button>

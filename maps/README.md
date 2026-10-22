@@ -12,6 +12,9 @@ maps/<id>/
   preview.webm        a play-test clip against bots
 ```
 
+A map is 1–8 screens wide and 1–4 rows of screens tall — a tall map is a
+climb, and the follow camera scrolls vertically in it.
+
 `?map=<id>` boots straight into one (e.g. `/?map=castle-keep&bots=5`).
 
 To contribute a map: build it, press **Test vs bots**, then **Publish**. From a

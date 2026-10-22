@@ -24,6 +24,7 @@ import {
 import {
 	MAP_HEIGHT_CELLS,
 	MAX_MAP_PLATFORMS,
+	MAX_MAP_ROWS,
 	MAX_MAP_PROPS,
 	MAX_MAP_SPAWNS,
 	type MapTheme,
@@ -33,9 +34,11 @@ import {
 	type TilemapSpec,
 	tilesetForTheme,
 } from "../../game/simulation/Tilemap";
+import { PROP_CATALOG, propDef } from "../../game/maps/props";
 
 export const GRID = TILE_SIZE;
-export const MAP_H = WORLD_BOTTOM;
+/** One row of screens, in px. A map is `rows` of them. */
+export const SCREEN_H = WORLD_BOTTOM;
 
 export interface EPlatform extends Rect {
 	id: string;
@@ -64,6 +67,8 @@ export interface EditorMap {
 	description: string;
 	theme: MapTheme;
 	screens: number;
+	/** Rows of screens, stacked: 1 is the classic one-screen-tall arena. */
+	rows: number;
 	platforms: EPlatform[];
 	spawns: ESpawn[];
 	props: EProp[];
@@ -76,27 +81,8 @@ export interface Selection {
 	id: string;
 }
 
-/** Every prop the tilesets carry, with how it attaches. */
-export const PROP_TYPES: readonly {
-	type: string;
-	label: string;
-	/** Hangs from a ceiling (a vine) rather than standing on a floor. */
-	hangs: boolean;
-	w: number;
-	h: number;
-}[] = [
-	{ type: "vine", label: "Vine", hangs: true, w: 8, h: 24 },
-	{ type: "vineFlower", label: "Flowering vine", hangs: true, w: 8, h: 24 },
-	{ type: "lantern", label: "Lantern", hangs: false, w: 8, h: 16 },
-	{ type: "crate", label: "Crate", hangs: false, w: 16, h: 16 },
-	{ type: "barrel", label: "Barrel", hangs: false, w: 14, h: 16 },
-	{ type: "planter", label: "Planter", hangs: false, w: 24, h: 12 },
-	{ type: "flowerBox", label: "Flower box", hangs: false, w: 16, h: 8 },
-];
-
-function propDef(type: string) {
-	return PROP_TYPES.find((p) => p.type === type) ?? PROP_TYPES[0];
-}
+/** Every prop the tilesets carry, in the palette's order. */
+export const PROP_TYPES = PROP_CATALOG;
 
 export const THEME_LABELS: Record<MapTheme, string> = {
 	waterfront: "Waterfront",
@@ -117,6 +103,10 @@ export function snap(n: number): number {
 
 export function mapWidth(map: EditorMap): number {
 	return map.screens * SCREEN_W;
+}
+
+export function mapHeight(map: EditorMap): number {
+	return (map.rows ?? 1) * SCREEN_H;
 }
 
 /** A URL- and folder-safe slug from a name. */
@@ -142,7 +132,7 @@ export function toSpec(map: EditorMap): TilemapSpec {
 		tileSize: TILE_SIZE,
 		tileset: tilesetForTheme(map.theme),
 		width: map.screens * (SCREEN_W / TILE_SIZE),
-		height: MAP_HEIGHT_CELLS,
+		height: (map.rows ?? 1) * MAP_HEIGHT_CELLS,
 		theme: map.theme,
 		meta: {
 			id: map.slug,
@@ -210,6 +200,13 @@ export function fromSpec(spec: TilemapSpec, localId = uid("m")): EditorMap {
 			1,
 			Math.min(MAX_SCREENS, Math.round(spec.width / (SCREEN_W / TILE_SIZE))),
 		),
+		rows: Math.max(
+			1,
+			Math.min(
+				MAX_MAP_ROWS,
+				Math.round((spec.height ?? MAP_HEIGHT_CELLS) / MAP_HEIGHT_CELLS),
+			),
+		),
 		platforms,
 		spawns,
 		props,
@@ -225,7 +222,7 @@ export function spawnRect(s: { x: number; y: number }): Rect {
 	return { x: s.x, y: s.y, w: PLAYER_WIDTH, h: PLAYER_HEIGHT };
 }
 
-export function propRect(p: EProp): Rect {
+export function propRect(p: { type: string; x: number; y: number }): Rect {
 	const def = propDef(p.type);
 	return { x: p.x, y: p.y, w: def?.w ?? 8, h: def?.h ?? 8 };
 }
@@ -251,16 +248,17 @@ export function rectFrom(x0: number, y0: number, x1: number, y1: number): Rect {
 /** Keep a rect on the grid and inside the map. */
 export function clampRect(r: Rect, map: EditorMap): Rect {
 	const W = mapWidth(map);
+	const H = mapHeight(map);
 	let x0 = Math.max(0, Math.min(W, snap(r.x)));
-	let y0 = Math.max(0, Math.min(MAP_H, snap(r.y)));
+	let y0 = Math.max(0, Math.min(H, snap(r.y)));
 	let x1 = Math.max(0, Math.min(W, snap(r.x + r.w)));
-	let y1 = Math.max(0, Math.min(MAP_H, snap(r.y + r.h)));
+	let y1 = Math.max(0, Math.min(H, snap(r.y + r.h)));
 	if (x1 - x0 < GRID) {
 		if (x1 >= W) x0 = x1 - GRID;
 		else x1 = x0 + GRID;
 	}
 	if (y1 - y0 < GRID) {
-		if (y1 >= MAP_H) y0 = y1 - GRID;
+		if (y1 >= H) y0 = y1 - GRID;
 		else y1 = y0 + GRID;
 	}
 	return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
@@ -277,7 +275,7 @@ export function moveRect(
 	return {
 		...r,
 		x: Math.max(0, Math.min(W - r.w, snap(r.x + dx))),
-		y: Math.max(0, Math.min(MAP_H - r.h, snap(r.y + dy))),
+		y: Math.max(0, Math.min(mapHeight(map) - r.h, snap(r.y + dy))),
 	};
 }
 
@@ -291,7 +289,7 @@ function surfaceBelow(
 	x1: number,
 	y: number,
 ): number {
-	let best = MAP_H;
+	let best = mapHeight(map);
 	for (const p of map.platforms) {
 		if (x1 <= p.x || x0 >= p.x + p.w) continue;
 		if (p.y >= y && p.y < best) best = p.y;
@@ -331,7 +329,53 @@ export function spawnAt(map: EditorMap, x: number, y: number): ESpawn {
 	};
 }
 
-/** A prop dropped at a point: hung from the ceiling above or stood on the floor below. */
+/** The smallest platform under a point — the one a wall prop mounts on. */
+function platformAt(
+	map: EditorMap,
+	x: number,
+	y: number,
+): EPlatform | null {
+	let best: EPlatform | null = null;
+	for (const p of map.platforms) {
+		if (!inRect(x, y, p)) continue;
+		if (!best || p.w * p.h < best.w * best.h) best = p;
+	}
+	return best;
+}
+
+/**
+ * Where a wall prop sits on its platform: inside the face, centred on the
+ * point, and below the walkable lip (the top tile row) whenever the face is
+ * tall enough to leave it showing — a window over the moss reads as a hole
+ * in the floor.
+ */
+export function mountOnFace(
+	host: Rect,
+	w: number,
+	h: number,
+	cx: number,
+	cy: number,
+): { x: number; y: number } {
+	const lip = host.h - h >= GRID ? GRID : Math.max(0, host.h - h);
+	const x =
+		w >= host.w
+			? Math.round(host.x + (host.w - w) / 2)
+			: Math.max(host.x, Math.min(host.x + host.w - w, Math.round(cx - w / 2)));
+	const y =
+		h >= host.h - lip
+			? host.y + lip
+			: Math.max(
+					host.y + lip,
+					Math.min(host.y + host.h - h, Math.round(cy - h / 2)),
+				);
+	return { x, y };
+}
+
+/**
+ * A prop dropped at a point, by how it attaches: stood on the surface below,
+ * hung from the ceiling above, mounted on the platform under the cursor, or
+ * left in the air exactly there.
+ */
 export function propAt(
 	map: EditorMap,
 	type: string,
@@ -342,13 +386,26 @@ export function propAt(
 	const w = def?.w ?? 8;
 	const h = def?.h ?? 8;
 	const W = mapWidth(map);
+	const H = mapHeight(map);
 	const px = Math.max(0, Math.min(W - w, Math.round(x - w / 2)));
-	if (def?.hangs) {
-		const ceiling = ceilingAbove(map, px, px + w, y);
-		return { id: uid("r"), type, x: px, y: ceiling ?? Math.round(y - h / 2) };
+	const free = Math.max(0, Math.min(H - h, Math.round(y - h / 2)));
+	switch (def?.attach ?? "stand") {
+		case "hang": {
+			const ceiling = ceilingAbove(map, px, px + w, y);
+			return { id: uid("r"), type, x: px, y: ceiling ?? free };
+		}
+		case "wall": {
+			const host = platformAt(map, x, y);
+			const at = host ? mountOnFace(host, w, h, x, y) : { x: px, y: free };
+			return { id: uid("r"), type, ...at };
+		}
+		case "air":
+			return { id: uid("r"), type, x: px, y: free };
+		default: {
+			const floor = surfaceBelow(map, px, px + w, y);
+			return { id: uid("r"), type, x: px, y: floor - h };
+		}
 	}
-	const floor = surfaceBelow(map, px, px + w, y);
-	return { id: uid("r"), type, x: px, y: floor - h };
 }
 
 // ---------------------------------------------------------------------------
@@ -439,7 +496,10 @@ export function updateObject(
 							),
 							y: Math.max(
 								0,
-								Math.min(MAP_H - PLAYER_HEIGHT, Math.round(patch.y ?? s.y)),
+								Math.min(
+									mapHeight(map) - PLAYER_HEIGHT,
+									Math.round(patch.y ?? s.y),
+								),
 							),
 							id: s.id,
 						}
@@ -556,6 +616,36 @@ export function resize(map: EditorMap, screens: number): EditorMap {
 	};
 }
 
+/**
+ * Change the map's height in rows of screens. Rows are added and removed at
+ * the **top**: the floor a map stands on stays the floor, and everything on it
+ * moves down by a screen so the new row opens up above it — a map grows into
+ * a climb. Shrinking drops whatever was in the removed rows.
+ */
+export function resizeRows(map: EditorMap, rows: number): EditorMap {
+	const next = Math.max(1, Math.min(MAX_MAP_ROWS, Math.round(rows)));
+	const current = map.rows ?? 1;
+	if (next === current) return map;
+	const dy = (next - current) * SCREEN_H;
+	const H = next * SCREEN_H;
+	const platforms = map.platforms
+		.map((p) => ({ ...p, y: p.y + dy }))
+		.filter((p) => p.y + p.h > 0)
+		.map((p) => (p.y < 0 ? { ...p, h: p.h + p.y, y: 0 } : p))
+		.filter((p) => p.h >= GRID && p.y < H);
+	return {
+		...map,
+		rows: next,
+		platforms,
+		spawns: map.spawns
+			.map((s) => ({ ...s, y: s.y + dy }))
+			.filter((s) => s.y >= 0),
+		props: map.props
+			.map((p) => ({ ...p, y: p.y + dy }))
+			.filter((p) => p.y >= 0),
+	};
+}
+
 // ---------------------------------------------------------------------------
 // History
 // ---------------------------------------------------------------------------
@@ -618,10 +708,15 @@ export interface Template {
 	id: string;
 	label: string;
 	blurb: string;
-	build: (screens: number) => {
+	build: (
+		screens: number,
+		rows: number,
+	) => {
 		platforms: Rect[];
 		spawns: { x: number; y: number }[];
 	};
+	/** Rows a new map from this template starts with, when not asked. */
+	rows?: number;
 }
 
 const FLOOR_Y = 568;
@@ -631,6 +726,9 @@ const floor = (W: number): Rect => ({
 	w: W,
 	h: WORLD_BOTTOM - FLOOR_Y,
 });
+/** Every template draws one row; a taller map stands it on the bottom row. */
+const onBottomRow = <T extends { y: number }>(rows: number, list: T[]): T[] =>
+	list.map((o) => ({ ...o, y: o.y + (rows - 1) * SCREEN_H }));
 const standOn = (x: number, top: number) => ({
 	x,
 	y: top - PLAYER_HEIGHT - SPAWN_CLEARANCE_PX,
@@ -741,6 +839,46 @@ export const TEMPLATES: readonly Template[] = [
 			return { platforms, spawns };
 		},
 	},
+	{
+		id: "climb",
+		label: "Sky tower",
+		blurb: "Three screens tall: a zig-zag climb to a summit arena.",
+		rows: 3,
+		build: (screens, rows) => {
+			const W = screens * SCREEN_W;
+			const H = rows * SCREEN_H;
+			const platforms: Rect[] = [{ ...floor(W), y: H - 32 }];
+			const spawns: { x: number; y: number }[] = [];
+			// A ledge every 112px of height — inside one jump (136px) — walking
+			// side to side, so the climb is a route and not a ladder.
+			const RISE = 112;
+			for (let s = 0; s < screens; s++) {
+				const ox = s * SCREEN_W;
+				spawns.push(standOn(ox + 120, H - 32), standOn(ox + 648, H - 32));
+				let y = H - 32 - RISE;
+				for (let i = 0; y > 160; i++, y -= RISE) {
+					const ledge: Rect = {
+						x: ox + (i % 2 === 0 ? 96 : 472),
+						y,
+						w: 232,
+						h: 24,
+					};
+					platforms.push(ledge);
+					if (i % 3 === 2) spawns.push(standOn(ledge.x + 100, y));
+				}
+				// The summit, one rise above the last ledge: a wide bridge with
+				// two lookout perches either side of it.
+				const top = y;
+				platforms.push(
+					{ x: ox + 200, y: top, w: 400, h: 24 },
+					{ x: ox + 32, y: top + 56, w: 96, h: 24 },
+					{ x: ox + 672, y: top + 56, w: 96, h: 24 },
+				);
+				spawns.push(standOn(ox + 384, top));
+			}
+			return { platforms, spawns };
+		},
+	},
 ];
 
 export function newMap(
@@ -748,9 +886,22 @@ export function newMap(
 	theme: MapTheme,
 	screens: number,
 	name = "Untitled map",
+	rowsAsked?: number,
 ): EditorMap {
 	const template = TEMPLATES.find((t) => t.id === templateId) ?? TEMPLATES[0];
-	const built = template?.build(screens) ?? { platforms: [], spawns: [] };
+	const rows = Math.max(
+		1,
+		Math.min(MAX_MAP_ROWS, rowsAsked ?? template?.rows ?? 1),
+	);
+	const raw = template?.build(screens, rows) ?? { platforms: [], spawns: [] };
+	// Templates authored a row tall are stood on the bottom row of a taller map.
+	const built =
+		template?.rows === undefined
+			? {
+					platforms: onBottomRow(rows, raw.platforms),
+					spawns: onBottomRow(rows, raw.spawns),
+				}
+			: raw;
 	const W = screens * SCREEN_W;
 	return {
 		localId: uid("m"),
@@ -760,6 +911,7 @@ export function newMap(
 		description: "",
 		theme,
 		screens,
+		rows,
 		platforms: built.platforms.map((p) => ({ ...p, id: uid("p") })),
 		spawns: built.spawns.map((s) => ({
 			...s,

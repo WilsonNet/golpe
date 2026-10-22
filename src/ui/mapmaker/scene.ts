@@ -22,7 +22,8 @@ import {
 	boundsOf,
 	type EditorMap,
 	GRID,
-	MAP_H,
+	mapHeight,
+	SCREEN_H,
 	mapWidth,
 	propRect,
 	type Selection,
@@ -83,6 +84,7 @@ export function drawScene(
 	opts: SceneOptions,
 ): void {
 	const W = mapWidth(map);
+	const H = mapHeight(map);
 	const { zoom } = view;
 	ctx.save();
 	ctx.imageSmoothingEnabled = false;
@@ -100,15 +102,17 @@ export function drawScene(
 
 	// Sky: the theme's stops as 8px bands, like the backdrop's.
 	const stops = THEME_SKY[map.theme];
-	for (let y = 0; y < MAP_H; y += GRID) {
-		const t = (y / MAP_H) * (stops.length - 1);
+	// The game's backdrop is locked to the screen, so every row of a tall map
+	// sees the same sky behind it: the bands repeat per row.
+	for (let y = 0; y < H; y += GRID) {
+		const t = ((y % SCREEN_H) / SCREEN_H) * (stops.length - 1);
 		const i = Math.min(stops.length - 2, Math.floor(t));
 		ctx.fillStyle = cssColor(mix(stops[i] ?? 0, stops[i + 1] ?? 0, t - i));
 		// One pixel of overlap: at a fractional zoom abutting bands leave a seam.
 		ctx.fillRect(0, y, W, GRID + 1);
 	}
 
-	if (opts.grid) drawGrid(ctx, W, zoom);
+	if (opts.grid) drawGrid(ctx, W, H, zoom);
 
 	// Screen seams: the unit the game is authored in, and the unit a team
 	// match spawns by.
@@ -118,15 +122,26 @@ export function drawScene(
 	for (let x = SCREEN_W; x < W; x += SCREEN_W) {
 		ctx.beginPath();
 		ctx.moveTo(x, 0);
-		ctx.lineTo(x, MAP_H);
+		ctx.lineTo(x, H);
+		ctx.stroke();
+	}
+	for (let y = SCREEN_H; y < H; y += SCREEN_H) {
+		ctx.beginPath();
+		ctx.moveTo(0, y);
+		ctx.lineTo(W, y);
 		ctx.stroke();
 	}
 	ctx.setLineDash([]);
 	if (opts.labels) {
 		ctx.fillStyle = "rgba(255,255,255,0.55)";
 		ctx.font = `${LABEL_PX / zoom}px monospace`;
-		for (let s = 0; s * SCREEN_W < W; s++) {
-			ctx.fillText(`SCREEN ${s + 1}`, s * SCREEN_W + 10 / zoom, 20 / zoom);
+		const rows = H / SCREEN_H;
+		for (let r = 0; r < rows; r++) {
+			for (let s = 0; s * SCREEN_W < W; s++) {
+				const label =
+					rows > 1 ? `SCREEN ${s + 1} · ROW ${rows - r}` : `SCREEN ${s + 1}`;
+				ctx.fillText(label, s * SCREEN_W + 10 / zoom, r * SCREEN_H + 20 / zoom);
+			}
 		}
 	}
 
@@ -226,7 +241,7 @@ export function drawScene(
 	// The map's edge, so the end of the world is never a surprise.
 	ctx.strokeStyle = "rgba(255,209,102,0.7)";
 	ctx.lineWidth = 2 / zoom;
-	ctx.strokeRect(0, 0, W, MAP_H);
+	ctx.strokeRect(0, 0, W, H);
 	ctx.restore();
 }
 
@@ -234,7 +249,12 @@ function sameSel(a: Selection | null, b: Selection | null): boolean {
 	return !!a && !!b && a.kind === b.kind && a.id === b.id;
 }
 
-function drawGrid(ctx: CanvasRenderingContext2D, W: number, zoom: number) {
+function drawGrid(
+	ctx: CanvasRenderingContext2D,
+	W: number,
+	H: number,
+	zoom: number,
+) {
 	// Fine cells only when they are big enough to aim at; the 32px grid always.
 	const fine = zoom >= 1.5;
 	ctx.lineWidth = 1 / zoom;
@@ -243,9 +263,9 @@ function drawGrid(ctx: CanvasRenderingContext2D, W: number, zoom: number) {
 		ctx.strokeStyle = "rgba(255,255,255,0.06)";
 		for (let x = 0; x <= W; x += GRID) {
 			ctx.moveTo(x, 0);
-			ctx.lineTo(x, MAP_H);
+			ctx.lineTo(x, H);
 		}
-		for (let y = 0; y <= MAP_H; y += GRID) {
+		for (let y = 0; y <= H; y += GRID) {
 			ctx.moveTo(0, y);
 			ctx.lineTo(W, y);
 		}
@@ -255,9 +275,9 @@ function drawGrid(ctx: CanvasRenderingContext2D, W: number, zoom: number) {
 	ctx.strokeStyle = "rgba(255,255,255,0.12)";
 	for (let x = 0; x <= W; x += GRID * 4) {
 		ctx.moveTo(x, 0);
-		ctx.lineTo(x, MAP_H);
+		ctx.lineTo(x, H);
 	}
-	for (let y = 0; y <= MAP_H; y += GRID * 4) {
+	for (let y = 0; y <= H; y += GRID * 4) {
 		ctx.moveTo(0, y);
 		ctx.lineTo(W, y);
 	}
@@ -280,7 +300,7 @@ function drawReach(
 		opts.selection?.kind === "platform" ? boundsOf(map, opts.selection) : null;
 	const surfaces: Rect[] = sel
 		? [sel]
-		: map.platforms.filter((p) => p.y + p.h >= MAP_H - GRID * 6);
+		: map.platforms.filter((p) => p.y + p.h >= mapHeight(map) - GRID * 6);
 	for (const s of surfaces) {
 		const reach = 240;
 		const x = Math.max(0, s.x - reach);
@@ -386,7 +406,7 @@ function drawGhost(
 	} else if (ghost.kind === "prop") {
 		ctx.globalAlpha = 0.7;
 		if (!drawPropArt(ctx, map.theme, ghost.type, ghost.x, ghost.y)) {
-			const r = propRect({ id: "", type: ghost.type, x: ghost.x, y: ghost.y });
+			const r = propRect(ghost);
 			ctx.fillStyle = "#c9852f";
 			ctx.fillRect(r.x, r.y, r.w, r.h);
 		}
@@ -437,15 +457,16 @@ function mix(a: number, b: number, t: number): number {
  */
 export async function renderOverview(map: EditorMap): Promise<Blob> {
 	const W = mapWidth(map);
+	const H = mapHeight(map);
 	const canvas = document.createElement("canvas");
 	canvas.width = W;
-	canvas.height = MAP_H;
+	canvas.height = H;
 	const ctx = canvas.getContext("2d");
 	if (!ctx) throw new Error("no 2d context");
 	drawScene(
 		ctx,
 		map,
-		{ zoom: 1, panX: 0, panY: 0, width: W, height: MAP_H },
+		{ zoom: 1, panX: 0, panY: 0, width: W, height: H },
 		{
 			grid: false,
 			reach: false,

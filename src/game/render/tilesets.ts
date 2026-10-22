@@ -31,6 +31,8 @@ interface TilesetManifest {
 		image: string;
 		version?: string;
 		frames: Record<string, FrameTuple>;
+		/** Animated props: their frame names, in order, and ms per frame. */
+		anims?: Record<string, { frames: string[]; ms: number }>;
 	};
 }
 
@@ -154,6 +156,19 @@ export function propTexture(theme: MapTheme, name: string): Texture | null {
 	if (!set || !frame) return null;
 	const [x, y, w, h] = frame;
 	return tileCache(set, `prop:${name}`, set.props, x, y, w, h);
+}
+
+/** An animated prop's frames and timing, or null for a still one. */
+export function propAnimation(
+	theme: MapTheme,
+	name: string,
+): { textures: Texture[]; ms: number } | null {
+	const anim = loaded.get(theme)?.manifest.props.anims?.[name];
+	if (!anim) return null;
+	const textures = anim.frames
+		.map((f) => propTexture(theme, f))
+		.filter((t): t is Texture => t !== null);
+	return textures.length > 1 ? { textures, ms: anim.ms } : null;
 }
 
 /** The frame size of a prop, for flipping around its own axis. */

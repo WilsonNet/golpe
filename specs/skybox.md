@@ -51,9 +51,14 @@ image never repeats vertically (a city repeated above the sky reads as a bug).
 - **A waterfall follows the layer it falls out of.** An `align` on the strip
   resolves its factor through that layer; a strip with its own factor peels
   away from its own aqueduct as soon as the camera moves.
-- **No vertical parallax in a match.** The world is exactly one screen tall,
-  so the camera never moves vertically; the backdrop stays anchored to the
-  arena's floor. The Move list's preview camera does move vertically, and the
+- **No vertical parallax in a match.** The backdrop is one screen tall. On a
+  one-row map the camera never moves vertically and the backdrop stays
+  anchored to the arena's floor; on a **vertical map** (rows of screens, see
+  [map-maker.md](map-maker.md)) the camera scrolls down and the backdrop is
+  **locked to the screen vertically** (`lockY = max(0, cameraY)`, in both
+  `Skybox` and `ThemeSky`), so a climb never scrolls past the painted sky into
+  void. A camera above the world (the replay's letterbox overhang) keeps the
+  old behaviour. The Move list's preview camera does move vertically, and the
   backdrop follows it world-anchored.
 - **The scenery is blurred and graded; the inhabitants and actors are crisp.**
   The blur and colour matrix sit on the skybox's `art` container. The looping

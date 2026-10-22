@@ -336,7 +336,7 @@ class ThemeSky {
 
 	update(
 		cameraX: number,
-		_cameraY: number,
+		cameraY: number,
 		dtMs: number,
 		viewW: number,
 		viewH: number,
@@ -344,6 +344,10 @@ class ThemeSky {
 		this.elapsedMs += dtMs;
 		this.cameraX = cameraX;
 		const t = this.elapsedMs / 1000;
+		// Locked to the screen vertically on a map taller than one, exactly
+		// like the Waterfront: the backdrop is one screen tall.
+		const lockY = Math.max(0, cameraY);
+		this.root.y = lockY;
 
 		this.sky.x = cameraX;
 		this.sky.y = 0;

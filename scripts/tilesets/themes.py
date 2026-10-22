@@ -86,17 +86,6 @@ PROP_OVERRIDES: dict[str, dict[str, str]] = {
 }
 
 
-PROP_BUILDERS = {
-    "vine": lambda: gen.make_vine(False),
-    "vineFlower": lambda: gen.make_vine(True),
-    "planter": gen.make_planter,
-    "lantern": gen.make_lantern,
-    "crate": gen.make_crate,
-    "barrel": gen.make_barrel,
-    "flowerBox": gen.make_flower_box,
-}
-
-
 def rgb(hex_: str) -> tuple[int, int, int]:
     return tuple(int(hex_[i : i + 2], 16) for i in (1, 3, 5))  # type: ignore[return-value]
 
@@ -133,10 +122,7 @@ def main() -> None:
         recolour(PROP_OVERRIDES[theme])
         # `generate.py` draws its props once, at import, in Waterfront colours;
         # redraw them under the theme's keys before packing the atlas.
-        gen.PROPS = {
-            name: (frame, PROP_BUILDERS[name]())
-            for name, (frame, _) in gen.PROPS.items()
-        }
+        gen.PROPS, gen.PROP_ANIMS, _ = gen.build_props()
         props = gen.make_prop_atlas()
 
         platform_path = gen.OUT_DIR / f"{theme}-platforms.png"
@@ -155,6 +141,7 @@ def main() -> None:
                 "image": f"assets/tilesets/{theme}-props.png",
                 "version": gen.sha12(props_path),
                 "frames": {n: f for n, (f, _) in gen.PROPS.items()},
+                "anims": gen.PROP_ANIMS,
             },
         }
         json_path = gen.OUT_DIR / f"{theme}-platforms.json"

@@ -62,6 +62,12 @@ A map is a `TilemapSpec` (`src/game/simulation/Tilemap.ts`):
   choose another size, but the tileset's cell and the map cell must agree.
 - **`width`/`height` are in cells**, origin top-left, Y down. They bound a grid
   layer and the editor's canvas; object coordinates remain world pixels.
+  `width` is 1–8 screens of 100 cells; **`height` is 1–4 rows of 75 cells**
+  (`MAX_MAP_ROWS`) — a map taller than one screen is a **vertical map**, and
+  its world's `bottom` is `rows × 600`. A map with no `height` is one row
+  (every map before vertical maps). The simulation already reads
+  `world.bottom` everywhere (floor clamp, bullet and grenade out-of-bounds,
+  the follow camera), so a tall world needs no simulation change.
 - **`platforms` is an object layer of rectangles.** Each object *is* a collider.
   The current arena is converted from `Arena.ts` by `tilemapFromWorld`, so the
   renderer already consumes the format rather than a private layout.
@@ -78,8 +84,12 @@ A map is a `TilemapSpec` (`src/game/simulation/Tilemap.ts`):
   picks the tileset (`<theme>-platforms`) and the backdrop. **`meta`**
   carries `id` (the `maps/<id>/` slug), `name`, `author`, `description`.
 - **`props` never collide.** A prop names a frame in the tileset's prop atlas;
-  the current map places vines under wide ledges only, alternating sides. Props
-  are decoration and are not drawn in the Flat style.
+  the classic arena places vines under wide ledges only, alternating sides.
+  Props are decoration, are not drawn in the Flat style, and never enter the
+  simulation. An **animated** prop (a flag, a torch, a bird) lists its frames
+  under the manifest's `props.anims` (`{ frames, ms }`) and is drawn as an
+  `AnimatedSprite` whose first frame is picked from its position, so a row of
+  torches flickers out of step with nothing random in the draw.
 - A map has **one collision source**: either platform objects or solid cells.
   A future validator should reject a map that carries both with overlapping
   intent.
@@ -128,9 +138,17 @@ is a second autotile strategy, not a change to this one.
 - `tiles`: named 8x8 frames — `topLeft`, `topA/B`, `topRight`, `midLeft`,
   `fillA/B/C`, `fillMoss`, `fillCrack`, `midRight`, `bottomLeft`,
   `bottomA/B`, `bottomMoss`, `bottomShadow`, `bottomRight`.
-- `props`: named frames of any size — vines, planters, a lantern, a crate, a
-  barrel, a flower box. The current map uses only the vines; the rest are map
-  maker furniture.
+- `props`: named frames of any size, shelf-packed into a 256px-wide atlas
+  (`<theme>-props.png`), plus `anims` for the animated ones. **The catalogue
+  is `scripts/tilesets/props.py`**: every prop's name, label, category
+  (nature, town, windows & walls, lights & fire, hanging, critters, sky),
+  **attach rule** (`stand`, `hang`, `wall`, `air`) and pixels, drawn in
+  palette *keys* so each theme recolours it. `generate.py` writes the
+  Waterfront atlas **and `src/game/maps/propCatalog.json`** — the editor's
+  palette and placement rules — so a prop's name and size exist in one place.
+  `themes.py` redraws the same catalogue under each theme's keys.
+  `dress.test.ts` fails if any catalogue prop is missing from any theme's
+  atlas or its size disagrees.
 - `version` is the first 12 hex characters of the PNG's SHA-256 and is appended
   to the image URL. A cached atlas beside a new JSON crops every tile at the
   wrong rect — the same trap the packed hero sheets hit.
@@ -153,8 +171,10 @@ control. The tile art must not make the fighter harder to find.
 
 An authored map (`?map=<id>`, from the map maker or `maps/`) is **untrusted
 input on the server**. `sanitizeTilemap` parses `unknown`, snaps to the 8px
-cell, clips to the arena, caps the lists (160 platforms, 48 spawns, 160
-props) and refuses a map with no surface. It is **idempotent**, which is what
+cell, clips to the arena (its width *and* its rows), caps the lists (256
+platforms, 48 spawns, 512 props — a map at every cap is under 48KB of JSON,
+measured by `Tilemap.test.ts`, so it still rides one reliable message) and
+refuses a map with no surface. It is **idempotent**, which is what
 lets the creator compare the server's copy (`match.map`) against the map it
 built by `mapKey` and rebuild only when they differ. `worldFromTilemap` builds
 the `World`, keeping the spec in `World.source` for the renderer. Creator-only

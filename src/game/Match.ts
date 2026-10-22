@@ -1657,6 +1657,7 @@ export class Match {
 				: this.bullets.count,
 			worldScreens: this.arena.screens,
 			worldWidth: this.arena.right,
+			worldHeight: this.arena.bottom,
 			cameraX: this.stage.cameraX,
 			cameraY: this.stage.cameraY,
 		});

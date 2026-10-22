@@ -16,6 +16,7 @@
 
 import { useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { MapIssue } from "../../game/maps/checks";
+import { propDef } from "../../game/maps/props";
 import type { Rect } from "../../game/simulation/Arena";
 import { artReady, loadArt } from "./art2d";
 import {
@@ -27,7 +28,7 @@ import {
 	type EditorMap,
 	GRID,
 	inRect,
-	MAP_H,
+	mapHeight,
 	mapWidth,
 	moveRect,
 	propAt,
@@ -50,6 +51,14 @@ import {
 
 export type Tool = "select" | "platform" | "spawn" | "prop" | "erase" | "pan";
 
+/**
+ * How the Decor tool lays props down. A click always places one; a drag
+ * paints — a tidy **row** of the same prop edge to edge (a fence, a terrace of
+ * windows), or a **scatter** with uneven gaps that mixes the category (a
+ * flowerbed, a flock).
+ */
+export type Brush = "stamp" | "row" | "scatter";
+
 /** A click without a drag drops a ledge this size — the classic arena's. */
 const DEFAULT_LEDGE = { w: 128, h: 24 };
 const MIN_ZOOM = 0.15;
@@ -64,13 +73,16 @@ export interface CanvasApi {
 	frame(r: Rect): void;
 	zoomBy(factor: number): void;
 	view(): View;
-	setPan(panX: number): void;
+	setPan(panX: number, panY?: number): void;
 }
 
 interface Props {
 	map: EditorMap;
 	tool: Tool;
 	propType: string;
+	brush: Brush;
+	/** The prop the next stroke of a scatter places — the parent mixes. */
+	nextProp: () => string;
 	selection: Selection | null;
 	issues: readonly MapIssue[];
 	grid: boolean;
@@ -114,7 +126,16 @@ type Gesture =
 			handle: Handle;
 			start: Rect;
 	  }
-	| { kind: "erase"; before: EditorMap; map: EditorMap };
+	| { kind: "erase"; before: EditorMap; map: EditorMap }
+	| {
+			kind: "paint";
+			before: EditorMap;
+			map: EditorMap;
+			lastX: number;
+			lastY: number;
+			step: number;
+			last: string | null;
+	  };
 
 /** The topmost object under a world point: spawns over props over platforms. */
 function hitTest(
@@ -167,6 +188,8 @@ export function EditorCanvas(props: Props) {
 		map,
 		tool,
 		propType,
+		brush,
+		nextProp,
 		selection,
 		issues,
 		grid,
@@ -224,23 +247,26 @@ export function EditorCanvas(props: Props) {
 			...v,
 			zoom: Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, v.zoom)),
 			panX: Math.max(-marginX, Math.min(W - marginX, v.panX)),
-			panY: Math.max(-marginY, Math.min(MAP_H - marginY, v.panY)),
+			panY: Math.max(-marginY, Math.min(mapHeight(map) - marginY, v.panY)),
 		};
 	};
 
 	const fitView = (v: View): View => {
 		const W = mapWidth(map);
-		// Fit the height first — a map is one screen tall — unless that leaves
-		// a one-screen map wider than the canvas.
+		const H = mapHeight(map);
+		// Fit the height first — up to a screen and a half of it — unless that
+		// leaves a one-screen map wider than the canvas. A tall map opens on
+		// its bottom row, where the floor and usually the spawns are.
 		const zoom = Math.min(
-			(v.height - 24) / MAP_H,
+			(v.height - 24) / Math.min(H, SCREEN_FIT_H),
 			(v.width - 24) / Math.min(W, SCREEN_FIT_W),
 		);
+		const visibleH = v.height / zoom;
 		return {
 			...v,
 			zoom,
 			panX: W <= v.width / zoom ? -(v.width / zoom - W) / 2 : 0,
-			panY: -(v.height / zoom - MAP_H) / 2,
+			panY: H <= visibleH ? -(visibleH - H) / 2 : H - visibleH + 12 / zoom,
 		};
 	};
 
@@ -270,7 +296,7 @@ export function EditorCanvas(props: Props) {
 	useEffect(() => {
 		userMoved.current = false;
 		setView((v) => fitView(v));
-	}, [map.localId, map.screens]);
+	}, [map.localId, map.screens, map.rows]);
 
 	useEffect(() => {
 		onView(view);
@@ -351,9 +377,9 @@ export function EditorCanvas(props: Props) {
 			});
 		},
 		view: () => view,
-		setPan: (panX: number) => {
+		setPan: (panX: number, panY?: number) => {
 			userMoved.current = true;
-			setView((v) => clampView({ ...v, panX }));
+			setView((v) => clampView({ ...v, panX, panY: panY ?? v.panY }));
 		},
 	}));
 
@@ -400,7 +426,7 @@ export function EditorCanvas(props: Props) {
 	};
 
 	const placementGhost = (x: number, y: number): Ghost | null => {
-		if (x < 0 || x > mapWidth(map) || y < 0 || y > MAP_H) return null;
+		if (x < 0 || x > mapWidth(map) || y < 0 || y > mapHeight(map)) return null;
 		if (tool === "spawn") {
 			const s = spawnAt(map, x, y);
 			return { kind: "spawn", x: s.x, y: s.y, facing: s.facing };
@@ -521,8 +547,22 @@ export function EditorCanvas(props: Props) {
 		}
 		if (tool === "prop") {
 			if (x < 0 || x > mapWidth(map)) return;
-			const r = addProp(map, propAt(map, propType, x, y));
-			if (r.id) onCommit(r.map, map, { kind: "prop", id: r.id });
+			const type = brush === "scatter" ? nextProp() : propType;
+			const r = addProp(map, propAt(map, type, x, y));
+			if (brush === "stamp") {
+				if (r.id) onCommit(r.map, map, { kind: "prop", id: r.id });
+				return;
+			}
+			gesture.current = {
+				kind: "paint",
+				before: map,
+				map: r.map,
+				lastX: x,
+				lastY: y,
+				step: strokeStep(type, brush),
+				last: r.id,
+			};
+			onPreview(r.map);
 			return;
 		}
 		if (tool === "erase") {
@@ -608,6 +648,35 @@ export function EditorCanvas(props: Props) {
 			);
 			return;
 		}
+		if (g.kind === "paint") {
+			// Lay a prop every `step` of travel, on the line from the last one,
+			// so a fast stroke leaves no gaps.
+			let next = g;
+			let d = Math.hypot(x - next.lastX, y - next.lastY);
+			while (d >= next.step) {
+				const t = next.step / d;
+				const px = next.lastX + (x - next.lastX) * t;
+				const py = next.lastY + (y - next.lastY) * t;
+				const type = brush === "scatter" ? nextProp() : propType;
+				const r = addProp(next.map, propAt(next.map, type, px, py));
+				next = {
+					...next,
+					map: r.map,
+					lastX: px,
+					lastY: py,
+					step: strokeStep(type, brush),
+					last: r.id ?? next.last,
+				};
+				if (!r.id) break;
+				d = Math.hypot(x - next.lastX, y - next.lastY);
+			}
+			if (next !== g) {
+				gesture.current = next;
+				onPreview(next.map);
+			}
+			setGhost(placementGhost(x, y));
+			return;
+		}
 		if (g.kind === "erase") {
 			const hit = hitTest(g.map, x, y, 2 / view.zoom);
 			if (hit) {
@@ -674,6 +743,8 @@ export function EditorCanvas(props: Props) {
 		}
 		if (g.kind === "erase" && g.map !== g.before)
 			onCommit(g.map, g.before, null);
+		if (g.kind === "paint")
+			onCommit(g.map, g.before, g.last ? { kind: "prop", id: g.last } : null);
 	};
 
 	const zoomAbout = (clientX: number, clientY: number, nextZoom: number) => {
@@ -760,8 +831,17 @@ export function EditorCanvas(props: Props) {
 	);
 }
 
+/** How far a stroke travels between two props: edge to edge, or loosely. */
+function strokeStep(type: string, brush: Brush): number {
+	const w = propDef(type)?.w ?? 8;
+	if (brush === "row") return w + 2;
+	return w + 6 + Math.random() * 28;
+}
+
 /** Fit a wide map to roughly one and a half screens, not to a sliver. */
 const SCREEN_FIT_W = 1200;
+/** ...and a tall map to a screen and a half of height. */
+const SCREEN_FIT_H = 900;
 
 export function isTyping(target: EventTarget | null): boolean {
 	const el = target as HTMLElement | null;

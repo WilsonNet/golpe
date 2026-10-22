@@ -16,15 +16,16 @@ loop short.
 1. **It starts with a map.** A first visit opens the classic arena in the
    Castle theme, already playable, with a five-step strip (draw, spawn, theme,
    test, publish). Templates (Blank floor, Classic arena, Twin towers, Sky
-   islands) live behind **New**.
+   islands, **Sky tower** — three rows tall) live behind **New**, with a
+   width and a height.
 2. **Editing** is the Tiled/Figma shape: tools on the left (Select, Platform,
    Spawn, Decor, Erase, Hand — V/P/S/D/E/H), the canvas in the middle, the
    inspector and the checks on the right, the whole map as a minimap strip.
    - Platforms are drawn as rectangles snapped to the **8px map cell**; a click
      without a drag drops a 128×24 ledge (the classic arena's).
-   - Spawns and standing decorations **drop onto the surface under the
-     cursor**; vines **hang from the ceiling above it**. A spawn is drawn as
-     the 32×48 fighter it is, with its facing.
+   - Spawns **drop onto the surface under the cursor**, drawn as the 32×48
+     fighter they are, with their facing. Decorations attach by their own
+     rule (see *Decorations*).
    - Select drags to move, handles resize, empty space pans. Space-drag, the
      middle button and the wheel pan; ⌘/Ctrl-wheel and pinch zoom.
    - Undo/redo (⌘Z / ⇧⌘Z), one step per gesture. Duplicate (⌘D), nudge
@@ -34,7 +35,8 @@ loop short.
    - **Reach** (R) shades how high a jump (136px) and a double jump rise from
      the selected platform.
    - **Width** is 1–8 screens; growing extends a full-width floor, shrinking
-     drops what no longer fits. Height is always one screen (600px).
+     drops what no longer fits.
+   - **Height** is 1–4 rows of screens (see *Vertical maps*).
 3. **Themes** are swatches in the top bar — Waterfront, Castle, Meadow, Snow
    (see *Themes* below). Switching is instant and never moves a collider.
 4. **Test with bots & friends** (T) boots the real game on the map in a frame: 0–15 bots,
@@ -46,6 +48,76 @@ loop short.
 Autosave is continuous (`localStorage`, `golpe:mapmaker:maps`); **My maps** is
 the library (open, duplicate, delete, import/export `.json`, and remix any map
 already in the game).
+
+## Decorations
+
+The Decor tool (D) opens a **drawer** beside the tool rail — the canvas stays
+fully visible — built like an asset browser, because a catalogue of 125
+props does not fit a floating strip:
+
+- **Search first** (`/` focuses it, Enter takes the first match), then
+  **category tabs** with counts — Nature, Town, Windows & walls, Lights &
+  fire, Hanging, Critters, Sky — and **Recently used** on top, because a map
+  is dressed with a handful of props used many times (`localStorage`,
+  `golpe:mapmaker:recentProps`).
+- Every thumbnail is the **real art in the map's theme**, scaled to its cell
+  in whole pixels; a teal dot marks an animated prop. The footer names the
+  prop in hand, its size and how it attaches. `[` / `]` step through props.
+- **Brushes**: **Stamp** (a click places one), **Row** (a drag lays the prop
+  edge to edge — a fence, a terrace of windows) and **Scatter** (a drag
+  sprinkles the whole category with uneven gaps — a flowerbed, a flock). A
+  stroke is **one undo step**.
+
+**Every prop attaches by its catalogue rule** (`propCatalog.json`, generated
+from `scripts/tilesets/props.py` — see [tilemap.md](tilemap.md)):
+
+| Attach | Placement | Examples |
+|---|---|---|
+| `stand` | bottom row on the surface under the cursor | bushes, trees, crates, birds perched, lamp posts |
+| `hang` | top row on the ceiling above the cursor | vines, banners, bunting, lanterns, icicles, bats |
+| `wall` | mounted on the platform under the cursor, inside it, **below the walkable lip** when the face has room | windows, doors, clocks, torches, ivy |
+| `air` | exactly where it was clicked | flying birds, flocks, balloons, clouds, the moon |
+
+Animated props (flags, fire, birds, the birdcage's canary) animate in the
+game; the editor draws their first frame. Nothing about a decoration is ever
+simulated.
+
+### Prettify
+
+A selected platform gets a **✨ Prettify** panel: Windows, Birds, Greenery,
+Lights, Festive, and **Surprise me**. A platform has three slots — its
+**top** (things stand on it), its **face** (things mount on it) and its
+**underside** (things hang from it). Each style writes some of them and first
+clears what is already in *those* slots of *that* platform, so styles compose
+(windows, then birds) and pressing a style again **re-rolls** it. Windows lay
+rows and columns across the face — a tall block becomes a building, with a
+clock or a sign in the middle of a wide one — and lit and dark panes mix.
+Picks lean on the theme: gulls and portholes on the Waterfront, banners,
+crows and stained glass in the Castle, rabbits and sunflowers in the Meadow,
+penguins, icicles and snowmen in the Snow.
+
+**✨ Prettify the whole map** (the map panel) runs Surprise me on every
+platform and puts a few birds and clouds in the open sky. **Clear all decor**
+and **Strip its decor** undo either. Dressing is pure and seeded
+(`src/ui/mapmaker/dress.ts`): the same map, platform, style and seed give the
+same props, and a property test proves no decoration lands inside another
+platform or off the map.
+
+## Vertical maps
+
+A map is **1–4 rows of screens tall** (the bar's *tall* control, or Height in
+**New**). Rows are added and removed at the **top**: the floor stays the
+floor and everything moves down a screen, so a map grows into a climb;
+shrinking drops what was in the removed rows. The editor draws a dashed seam
+per row, labels each screen `SCREEN n · ROW r`, opens a tall map on its bottom
+row, and repeats the sky per row (the game's backdrop is screen-locked).
+
+In the game nothing new simulates: the world's `bottom` is `rows × 600`, and
+the follow camera, already written for a world taller than the view, scrolls
+vertically. The backdrops lock to the screen vertically (see
+[skybox.md](skybox.md)). Reach checks walk the whole height. Measured by
+`scripts/decor-probe.ts`: a Sky tower is an 1800px world in the real game and
+the camera scrolls from the summit to the floor.
 
 ## The play-test is the game
 
@@ -178,5 +250,6 @@ wins**: a themed map shows the plain gradient for a player who chose it, and
 ## Not implemented
 
 - Moving platforms, hazards, one-way platforms, slopes (the format has none).
-- Taller-than-one-screen maps.
+- Vertical parallax on a tall map (the backdrop is screen-locked).
+- Decorations in front of the fighters (every prop draws behind them).
 - Inline video in the PR (GitHub only inlines its own uploads).

@@ -29,15 +29,363 @@
   },
   "props": {
     "image": "assets/tilesets/snow-props.png",
-    "version": "2ba7973bd0a7",
+    "version": "fa3c8cf8e8ad",
     "frames": {
-      "vine": [0, 0, 8, 24],
-      "vineFlower": [8, 0, 8, 24],
-      "planter": [16, 0, 24, 12],
-      "lantern": [40, 0, 8, 16],
-      "crate": [48, 0, 16, 16],
-      "barrel": [0, 24, 14, 16],
-      "flowerBox": [16, 24, 16, 8]
+      "bush": [220, 171, 18, 11],
+      "bushFlower": [0, 184, 18, 11],
+      "tallGrass": [132, 196, 13, 9],
+      "flowersRed": [158, 196, 11, 9],
+      "flowersBlue": [146, 196, 11, 9],
+      "sunflower": [140, 82, 9, 22],
+      "fern": [36, 184, 14, 11],
+      "reeds": [13, 141, 11, 15],
+      "mushroom": [214, 196, 9, 9],
+      "mushrooms": [194, 184, 15, 10],
+      "rock": [110, 207, 13, 8],
+      "boulder": [223, 124, 24, 15],
+      "stump": [19, 184, 16, 11],
+      "log": [75, 196, 26, 9],
+      "tree": [0, 0, 34, 50],
+      "pine": [35, 0, 22, 44],
+      "deadTree": [157, 0, 24, 36],
+      "snowman": [19, 82, 16, 22],
+      "planter": [140, 157, 24, 12],
+      "flowerBox": [63, 207, 16, 8],
+      "pottedPlant": [139, 124, 12, 16],
+      "crate": [0, 124, 16, 16],
+      "barrel": [51, 124, 14, 16],
+      "crateStack": [232, 0, 20, 30],
+      "sack": [52, 196, 11, 10],
+      "amphora": [235, 141, 10, 14],
+      "chest": [19, 171, 16, 12],
+      "bench": [113, 157, 26, 12],
+      "signpost": [220, 82, 18, 20],
+      "mailbox": [165, 124, 10, 16],
+      "fence": [195, 171, 24, 11],
+      "bollard": [0, 207, 7, 9],
+      "anchor": [150, 105, 16, 18],
+      "well": [62, 51, 26, 28],
+      "fountain": [214, 51, 30, 22],
+      "statue": [182, 0, 16, 34],
+      "tombstone": [196, 141, 12, 14],
+      "cart": [187, 82, 32, 20],
+      "stall": [199, 0, 32, 30],
+      "haybale": [23, 157, 18, 13],
+      "cannon": [0, 157, 22, 13],
+      "anvil": [102, 196, 14, 9],
+      "weaponRack": [0, 82, 18, 22],
+      "dummy": [0, 51, 16, 30],
+      "flag": [73, 0, 20, 38],
+      "flag~1": [94, 0, 20, 38],
+      "flag~2": [115, 0, 20, 38],
+      "flag~3": [136, 0, 20, 38],
+      "windowLit": [222, 141, 12, 14],
+      "windowDark": [209, 141, 12, 14],
+      "windowArched": [180, 105, 12, 18],
+      "windowTall": [129, 82, 10, 22],
+      "windowRound": [64, 196, 10, 10],
+      "windowShutters": [116, 141, 22, 14],
+      "windowBox": [239, 82, 14, 20],
+      "windowBarred": [160, 171, 12, 12],
+      "stainedGlass": [51, 82, 14, 22],
+      "door": [89, 51, 18, 28],
+      "balcony": [60, 141, 28, 14],
+      "awning": [144, 184, 28, 10],
+      "shopSign": [193, 105, 22, 16],
+      "clock": [216, 105, 16, 16],
+      "shield": [111, 124, 14, 16],
+      "crest": [89, 141, 26, 14],
+      "mosaic": [34, 124, 16, 16],
+      "poster": [0, 141, 12, 15],
+      "birdhouse": [167, 105, 12, 18],
+      "ivy": [131, 105, 18, 18],
+      "bricks": [173, 184, 20, 10],
+      "crack": [147, 171, 12, 12],
+      "vent": [117, 196, 14, 9],
+      "pipe": [187, 51, 8, 24],
+      "lantern": [187, 124, 8, 16],
+      "streetlamp": [58, 0, 14, 42],
+      "torch": [196, 124, 8, 16],
+      "torch~1": [205, 124, 8, 16],
+      "torch~2": [214, 124, 8, 16],
+      "brazier": [66, 124, 14, 16],
+      "brazier~1": [81, 124, 14, 16],
+      "brazier~2": [96, 124, 14, 16],
+      "campfire": [165, 157, 18, 12],
+      "campfire~1": [184, 157, 18, 12],
+      "campfire~2": [203, 157, 18, 12],
+      "candles": [240, 184, 12, 10],
+      "candles~1": [0, 196, 12, 10],
+      "candles~2": [13, 196, 12, 10],
+      "neonHeart": [117, 171, 14, 12],
+      "neonHeart~1": [132, 171, 14, 12],
+      "hangingLamp": [118, 82, 10, 22],
+      "paperLantern": [66, 82, 12, 22],
+      "paperLantern~1": [79, 82, 12, 22],
+      "paperLantern~2": [92, 82, 12, 22],
+      "paperLantern~3": [105, 82, 12, 22],
+      "stringLights": [95, 184, 48, 10],
+      "vine": [196, 51, 8, 24],
+      "vineFlower": [205, 51, 8, 24],
+      "roots": [152, 124, 12, 16],
+      "chain": [125, 51, 5, 26],
+      "bannerRed": [47, 51, 14, 30],
+      "bannerBlue": [17, 51, 14, 30],
+      "bannerPurple": [32, 51, 14, 30],
+      "bunting": [64, 157, 48, 12],
+      "laundry": [0, 105, 48, 18],
+      "hangingPlant": [36, 82, 14, 22],
+      "bell": [126, 124, 12, 16],
+      "birdcage": [131, 51, 14, 24],
+      "birdcage~1": [146, 51, 14, 24],
+      "icicles": [0, 171, 18, 12],
+      "stalactite": [176, 124, 10, 16],
+      "cobweb": [233, 105, 16, 16],
+      "bat": [210, 184, 14, 10],
+      "bat~1": [225, 184, 14, 10],
+      "pigeon": [192, 196, 10, 9],
+      "pigeon~1": [203, 196, 10, 9],
+      "gull": [26, 196, 12, 10],
+      "gull~1": [39, 196, 12, 10],
+      "crow": [170, 196, 10, 9],
+      "crow~1": [181, 196, 10, 9],
+      "sparrow": [192, 207, 8, 7],
+      "sparrow~1": [201, 207, 8, 7],
+      "owl": [173, 171, 10, 12],
+      "owl~1": [184, 171, 10, 12],
+      "chicken": [51, 184, 10, 11],
+      "chicken~1": [62, 184, 10, 11],
+      "cat": [87, 171, 14, 12],
+      "cat~1": [102, 171, 14, 12],
+      "catSleeping": [46, 207, 16, 8],
+      "dog": [36, 171, 16, 12],
+      "dog~1": [53, 171, 16, 12],
+      "fox": [222, 157, 18, 12],
+      "rabbit": [73, 184, 10, 11],
+      "rabbit~1": [84, 184, 10, 11],
+      "frog": [182, 207, 9, 7],
+      "snail": [124, 207, 11, 8],
+      "crab": [80, 207, 14, 8],
+      "crab~1": [95, 207, 14, 8],
+      "rat": [218, 207, 12, 6],
+      "penguin": [42, 157, 10, 13],
+      "penguin~1": [53, 157, 10, 13],
+      "butterfly": [162, 207, 9, 7],
+      "butterfly~1": [172, 207, 9, 7],
+      "birdFlying": [136, 207, 12, 7],
+      "birdFlying~1": [149, 207, 12, 7],
+      "flock": [49, 105, 40, 18],
+      "flock~1": [90, 105, 40, 18],
+      "gullGliding": [8, 207, 18, 8],
+      "gullGliding~1": [27, 207, 18, 8],
+      "balloonRed": [174, 51, 12, 24],
+      "balloonBlue": [161, 51, 12, 24],
+      "kite": [108, 51, 16, 28],
+      "airship": [150, 82, 36, 20],
+      "cloud": [25, 141, 34, 14],
+      "leaves": [70, 171, 16, 12],
+      "fireflies": [139, 141, 18, 14],
+      "fireflies~1": [158, 141, 18, 14],
+      "fireflies~2": [177, 141, 18, 14],
+      "sparkle": [224, 196, 9, 9],
+      "sparkle~1": [234, 196, 9, 9],
+      "sparkle~2": [244, 196, 9, 9],
+      "moon": [17, 124, 16, 16],
+      "star": [210, 207, 7, 7]
+    },
+    "anims": {
+      "flag": {
+        "frames": [
+          "flag",
+          "flag~1",
+          "flag~2",
+          "flag~3"
+        ],
+        "ms": 160
+      },
+      "torch": {
+        "frames": [
+          "torch",
+          "torch~1",
+          "torch~2"
+        ],
+        "ms": 120
+      },
+      "brazier": {
+        "frames": [
+          "brazier",
+          "brazier~1",
+          "brazier~2"
+        ],
+        "ms": 120
+      },
+      "campfire": {
+        "frames": [
+          "campfire",
+          "campfire~1",
+          "campfire~2"
+        ],
+        "ms": 120
+      },
+      "candles": {
+        "frames": [
+          "candles",
+          "candles~1",
+          "candles~2"
+        ],
+        "ms": 180
+      },
+      "neonHeart": {
+        "frames": [
+          "neonHeart",
+          "neonHeart~1"
+        ],
+        "ms": 700
+      },
+      "paperLantern": {
+        "frames": [
+          "paperLantern",
+          "paperLantern~1",
+          "paperLantern~2",
+          "paperLantern~3"
+        ],
+        "ms": 260
+      },
+      "birdcage": {
+        "frames": [
+          "birdcage",
+          "birdcage~1"
+        ],
+        "ms": 420
+      },
+      "bat": {
+        "frames": [
+          "bat",
+          "bat~1"
+        ],
+        "ms": 900
+      },
+      "pigeon": {
+        "frames": [
+          "pigeon",
+          "pigeon~1"
+        ],
+        "ms": 650
+      },
+      "gull": {
+        "frames": [
+          "gull",
+          "gull~1"
+        ],
+        "ms": 900
+      },
+      "crow": {
+        "frames": [
+          "crow",
+          "crow~1"
+        ],
+        "ms": 800
+      },
+      "sparrow": {
+        "frames": [
+          "sparrow",
+          "sparrow~1"
+        ],
+        "ms": 300
+      },
+      "owl": {
+        "frames": [
+          "owl",
+          "owl~1"
+        ],
+        "ms": 1400
+      },
+      "chicken": {
+        "frames": [
+          "chicken",
+          "chicken~1"
+        ],
+        "ms": 380
+      },
+      "cat": {
+        "frames": [
+          "cat",
+          "cat~1"
+        ],
+        "ms": 600
+      },
+      "dog": {
+        "frames": [
+          "dog",
+          "dog~1"
+        ],
+        "ms": 220
+      },
+      "rabbit": {
+        "frames": [
+          "rabbit",
+          "rabbit~1"
+        ],
+        "ms": 900
+      },
+      "crab": {
+        "frames": [
+          "crab",
+          "crab~1"
+        ],
+        "ms": 340
+      },
+      "penguin": {
+        "frames": [
+          "penguin",
+          "penguin~1"
+        ],
+        "ms": 500
+      },
+      "butterfly": {
+        "frames": [
+          "butterfly",
+          "butterfly~1"
+        ],
+        "ms": 160
+      },
+      "birdFlying": {
+        "frames": [
+          "birdFlying",
+          "birdFlying~1"
+        ],
+        "ms": 220
+      },
+      "flock": {
+        "frames": [
+          "flock",
+          "flock~1"
+        ],
+        "ms": 240
+      },
+      "gullGliding": {
+        "frames": [
+          "gullGliding",
+          "gullGliding~1"
+        ],
+        "ms": 700
+      },
+      "fireflies": {
+        "frames": [
+          "fireflies",
+          "fireflies~1",
+          "fireflies~2"
+        ],
+        "ms": 260
+      },
+      "sparkle": {
+        "frames": [
+          "sparkle",
+          "sparkle~1",
+          "sparkle~2"
+        ],
+        "ms": 200
+      }
     }
   }
 }

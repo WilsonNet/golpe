@@ -5,7 +5,8 @@ Waterfront platform tileset generator.
 Generates, from the shared hand-painted Waterfront palette:
 
   public/assets/tilesets/waterfront-platforms.png   64x24, 8x8 tiles
-  public/assets/tilesets/waterfront-props.png       64x48, named prop frames
+  public/assets/tilesets/waterfront-props.png       256xN, the props.py catalogue, shelf-packed
+  src/game/maps/propCatalog.json                    the editor's catalogue (names, attach, sizes)
   public/assets/tilesets/waterfront-platforms.json  frames + SHA-256 versions
   public/assets/tilesets/waterfront-preview.png     320x80, 1x art-card sample
 
@@ -30,6 +31,8 @@ import re
 from pathlib import Path
 
 from PIL import Image
+
+import props as props_mod
 
 # ---------------------------------------------------------------------------
 # Paths and palette
@@ -93,6 +96,26 @@ C = {
     "far": "#688596",
     "far_dark": "#587387",
     "far_deep": "#4b657e",
+    # Accents the map maker's props need: fire and roofs, dyes and glass,
+    # pale stone greys, dusk mauves. Still palette.json members, every one.
+    "indigo": "#4c4a72",
+    "ember_hi": "#ff8a4c",
+    "ember": "#f26a4f",
+    "ember_deep": "#d24f4a",
+    "violet": "#8e6bc0",
+    "violet_deep": "#6e54a8",
+    "glass": "#42b2c2",
+    "glass_mid": "#66d0cf",
+    "glass_light": "#96e8dc",
+    "glass_hi": "#c8f7ec",
+    "grey_light": "#8ea9ae",
+    "grey": "#7b98a3",
+    "mauve": "#72586e",
+    "rose": "#a87876",
+    "clay": "#d3a17f",
+    "white": "#effff4",
+    "night": "#244f7d",
+    "candle": "#fff3c9",
 }
 for _name, _hex in C.items():
     assert _hex in PALETTE_HEX, f"{_name} {_hex} is not in the palette"
@@ -144,6 +167,24 @@ KEY = {
     "N": C["far"],
     "O": C["far_dark"],
     "P": C["far_deep"],
+    "3": C["indigo"],
+    "x": C["ember_hi"],
+    "y": C["ember"],
+    "z": C["ember_deep"],
+    "X": C["violet"],
+    "Y": C["violet_deep"],
+    "Q": C["glass"],
+    "R": C["glass_mid"],
+    "S": C["glass_light"],
+    "T": C["glass_hi"],
+    "4": C["grey_light"],
+    "5": C["grey"],
+    "6": C["mauve"],
+    "7": C["rose"],
+    "8": C["clay"],
+    "9": C["white"],
+    "Z": C["night"],
+    "#": C["candle"],
 }
 KEY_RGB = {k: tuple(int(v[i : i + 2], 16) for i in (1, 3, 5)) for k, v in KEY.items()}
 KEY_RGB["."] = None
@@ -728,24 +769,113 @@ def make_flower_box() -> Image.Image:
     return canvas.to_image()
 
 
-PROPS: dict[str, tuple[list[int], Image.Image]] = {
-    "vine": ([0, 0, 8, 24], make_vine(False)),
-    "vineFlower": ([8, 0, 8, 24], make_vine(True)),
-    "planter": ([16, 0, 24, 12], make_planter()),
-    "lantern": ([40, 0, 8, 16], make_lantern()),
-    "crate": ([48, 0, 16, 16], make_crate()),
-    "barrel": ([0, 24, 14, 16], make_barrel()),
-    "flowerBox": ([16, 24, 16, 8], make_flower_box()),
+# The original seven are hand-set above; everything else is the map maker's
+# catalogue in props.py. Both are packed into one atlas.
+LEGACY_PROPS = {
+    "vine": lambda: make_vine(False),
+    "vineFlower": lambda: make_vine(True),
+    "planter": make_planter,
+    "lantern": make_lantern,
+    "crate": make_crate,
+    "barrel": make_barrel,
+    "flowerBox": make_flower_box,
 }
+
+PROP_ATLAS_W = 256
+#: One transparent pixel between frames, so a filtered sample never bleeds.
+PROP_GAP = 1
+
+
+def grid_image(g: "props_mod.G") -> Image.Image:
+    canvas = Canvas(g.w, g.h)
+    for y, row in enumerate(g.k):
+        for x, key in enumerate(row):
+            if key is not None:
+                assert key in KEY_RGB, f"unknown pixel key {key!r}"
+                canvas.set_key(x, y, key)
+    return canvas.to_image()
+
+
+def build_props() -> tuple[
+    dict[str, tuple[list[int], Image.Image]],
+    dict[str, dict],
+    list["props_mod.Prop"],
+]:
+    """Draw every prop under the current KEY_RGB and shelf-pack the frames."""
+    catalogue = props_mod.catalogue(LEGACY_PROPS)
+    names = [p.name for p in catalogue]
+    assert len(names) == len(set(names)), "duplicate prop names"
+    images: dict[str, Image.Image] = {}
+    anims: dict[str, dict] = {}
+    for prop in catalogue:
+        frames = prop.draw()
+        frame_names = [prop.name] + [f"{prop.name}~{i}" for i in range(1, len(frames))]
+        for name, frame in zip(frame_names, frames):
+            images[name] = frame if isinstance(frame, Image.Image) else grid_image(frame)
+        if len(frames) > 1:
+            assert prop.ms > 0, f"{prop.name}: animated with no frame time"
+            anims[prop.name] = {"frames": frame_names, "ms": prop.ms}
+    # Shelf packing: tallest first, then by name, so the layout is deterministic.
+    order = sorted(images, key=lambda n: (-images[n].height, -images[n].width, n))
+    packed: dict[str, tuple[list[int], Image.Image]] = {}
+    x = y = shelf = 0
+    for name in order:
+        img = images[name]
+        w, h = img.size
+        if x + w > PROP_ATLAS_W:
+            x = 0
+            y += shelf + PROP_GAP
+            shelf = 0
+        packed[name] = ([x, y, w, h], img)
+        x += w + PROP_GAP
+        shelf = max(shelf, h)
+    # Keep the catalogue's order in the JSON, frames after their first.
+    ordered = {n: packed[n] for n in images}
+    return ordered, anims, catalogue
+
+
+PROPS, PROP_ANIMS, PROP_CATALOGUE = build_props()
+
+
+def prop_atlas_size() -> tuple[int, int]:
+    bottom = max(f[1] + f[3] for f, _ in PROPS.values())
+    return PROP_ATLAS_W, -(-bottom // 8) * 8
 
 
 def make_prop_atlas() -> Image.Image:
-    canvas = Canvas(64, 48)
+    canvas = Canvas(*prop_atlas_size())
     for name, (frame, image) in PROPS.items():
         x, y, w, h = frame
         assert image.size == (w, h), f"{name}: {image.size} != {(w, h)}"
         canvas.paste(image, x, y)
     return canvas.to_image()
+
+
+CATALOG_PATH = ROOT / "src" / "game" / "maps" / "propCatalog.json"
+
+
+def write_catalog() -> None:
+    """The editor's palette and attach rules, from the same catalogue."""
+    doc = {
+        "note": "Generated by scripts/tilesets/generate.py from props.py — do not edit.",
+        "categories": [{"id": c, "label": label} for c, label in props_mod.CATEGORIES],
+        "props": [
+            {
+                "type": p.name,
+                "label": p.label,
+                "category": p.category,
+                "attach": p.attach,
+                "w": PROPS[p.name][0][2],
+                "h": PROPS[p.name][0][3],
+                **({"frames": len(PROP_ANIMS[p.name]["frames"])} if p.name in PROP_ANIMS else {}),
+            }
+            for p in PROP_CATALOGUE
+        ],
+    }
+    for p in doc["props"]:
+        assert p["category"] in {c for c, _ in props_mod.CATEGORIES}, p
+        assert p["attach"] in ("stand", "hang", "wall", "air"), p
+    CATALOG_PATH.write_text(json.dumps(doc, indent=1) + "\n")
 
 
 # ---------------------------------------------------------------------------
@@ -982,11 +1112,12 @@ def check_frames() -> None:
         assert w == 8 and h == 8, (name, w, h)
         assert 0 <= x and x + w <= 64, (name, x, w)
         assert 0 <= y and y + h <= 24, (name, y, h)
+    atlas_w, atlas_h = prop_atlas_size()
     for name, (frame, image) in PROPS.items():
         x, y, w, h = frame
         assert image.size == (w, h), (name, image.size, (w, h))
-        assert 0 <= x and x + w <= 64, (name, x, w)
-        assert 0 <= y and y + h <= 48, (name, y, h)
+        assert 0 <= x and x + w <= atlas_w, (name, x, w)
+        assert 0 <= y and y + h <= atlas_h, (name, y, h)
     # No overlapping prop frames.
     frames = list(PROPS.items())
     for i, (a, (fa, _)) in enumerate(frames):
@@ -1146,8 +1277,10 @@ def main() -> None:
             "image": "assets/tilesets/waterfront-props.png",
             "version": props_version,
             "frames": {name: frame for name, (frame, _) in PROPS.items()},
+            "anims": PROP_ANIMS,
         },
     }
+    write_catalog()
     json_path = OUT_DIR / "waterfront-platforms.json"
     text = json.dumps(doc, indent=2)
     # Keep every [x, y, w, h] on one line, as the contract reads.

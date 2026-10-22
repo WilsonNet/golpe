@@ -64,6 +64,8 @@ export interface GameStateSnapshot {
 	worldScreens: number;
 	/** The world's width in px. */
 	worldWidth: number;
+	/** The world's height in px — rows of 600px screens on a vertical map. */
+	worldHeight: number;
 	/** The follow camera's top-left, world px. */
 	cameraX: number;
 	cameraY: number;
@@ -512,6 +514,8 @@ declare global {
 			issues: () => MapIssue[];
 			load: (raw: unknown) => boolean;
 			overview: () => Promise<Uint8Array>;
+			/** The canvas view (zoom, pan), so a probe can aim at world points. */
+			view: () => { zoom: number; panX: number; panY: number } | null;
 		};
 		/**
 		 * A pair of renders of the same frame (with and without fighters) plus

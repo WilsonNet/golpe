@@ -23,7 +23,9 @@ A dark, mossy **stone quay** matching the hand-painted Waterfront:
 
 ```
 public/assets/tilesets/waterfront-platforms.png     64x24  (8x3 8px tiles)
-public/assets/tilesets/waterfront-props.png         64x48  (prop atlas)
+public/assets/tilesets/waterfront-props.png         256xN  (prop atlas, shelf-packed)
+src/game/maps/propCatalog.json                      the editor's catalogue (generated)
+scripts/tilesets/props.py                           the prop catalogue: names, categories, attach rules, pixels
 public/assets/tilesets/waterfront-platforms.json    frames + prop frames + SHA-256 versions
 public/assets/tilesets/waterfront-preview.png       320x80  a representative ledge + ground sample
 scripts/tilesets/generate.py                        generator, .venv/bin/python
@@ -59,19 +61,28 @@ Row 2 (bottom):
 - `bottomShadow` — deep shadow/void.
 - `bottomTrim` — brass underside detail.
 
-### Props atlas (64x48)
+### Props atlas (256 wide, shelf-packed)
 
-Named frames in the JSON, any size:
-- `vine` (8x24) — hanging green vine, top at y=0.
-- `vineFlower` (8x24) — vine with small pink flowers.
-- `planter` (24x12) — cream stone planter with plants; base at its bottom.
-- `lantern` (8x16) — brass lamp post with a warm light; base at bottom.
-- `crate` (16x16) — wooden crate; base at bottom.
-- `barrel` (14x16) — wooden barrel; base at bottom.
-- `flowerBox` (16x8) — low planter box; base at bottom.
+The catalogue lives in `props.py` (the original seven — `vine`, `vineFlower`,
+`planter`, `lantern`, `crate`, `barrel`, `flowerBox` — stay hand-set in
+`generate.py` and are listed in the same catalogue). Each entry is a
+`Prop(name, label, category, attach, build, ms)`:
 
-Only the lives/props the map spec places are drawn. The current map uses vines
-hanging under some ledge edges; the rest are for the future map maker.
+- **`build`** returns a key grid (`G`) or a list of them for an animated prop.
+  Draw in palette **keys**, never RGB, or `themes.py` cannot recolour it.
+  `G` has rects, discs, a lit `ball`, lines, string `art` maps and an
+  automatic one-pixel `outline`.
+- **`attach`** is `stand` (base on the bottom row), `hang` (top row hangs),
+  `wall` (mounted on a platform face) or `air`.
+- Frames are named `<name>`, `<name>~1`, `<name>~2`… and packed tallest-first
+  with a 1px gap; the JSON's `props.anims` maps an animated prop to its frame
+  names and `ms` per frame.
+- `generate.py` also writes `src/game/maps/propCatalog.json` (type, label,
+  category, attach, w, h, frames) — the editor's palette. Never hand-edit it.
+
+Keys added for props, all `palette.json` members: `3` indigo, `x y z` ember
+(orange → red), `X Y` violet, `Q R S T` glass (cyan → pale), `4 5` stone
+greys, `6 7 8` mauve / rose / clay, `9` near-white, `Z` night blue, `#` candle.
 
 ## Tileset JSON
 
@@ -98,7 +109,8 @@ hanging under some ledge edges; the rest are for the future map maker.
       "crate": [48, 0, 16, 16],
       "barrel": [0, 24, 14, 16],
       "flowerBox": [16, 24, 16, 8]
-    }
+    },
+    "anims": { "flag": { "frames": ["flag", "flag~1", "flag~2", "flag~3"], "ms": 160 } }
   }
 }
 ```
