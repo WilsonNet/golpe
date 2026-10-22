@@ -16,6 +16,12 @@
 	header /index.html Cache-Control "no-cache"
 }
 
+# The apex is the game. `www` is only ever a redirect, so a link a player
+# types by habit lands on the same room, not on a second copy of the client.
+www.{$GOLPE_DOMAIN} {
+	redir https://{$GOLPE_DOMAIN}{uri} permanent
+}
+
 # The client dials the game server on the same host at :9208 — Geckos'
 # signalling WebSocket, `/health`, `/rooms` and the POTG clip fetch all land
 # here. The WebRTC data channel itself is UDP 9208, published straight to the
