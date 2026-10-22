@@ -65,23 +65,19 @@ made every choice look like every other choice:
   selected. **Graphics** is where the skybox is switched off for a
   low-distraction fight; **Sound** is the mixer.
 
-- **Open source** — after Play, in the same column: one line saying the game is
-  free and MIT-licensed, then **Read the code** and **Report a bug**, both links
-  into the GitHub repository. Last in the play column so it never outranks
-  playing.
-
-**The repository is named in the header too**: an *Open source · ★ Star N* pill
+**The repository is named in the header, and only there**: an *Open source · ★ Star N* pill
 beside the title, linking to `github.com/WilsonNet/golpe`. The game shipped
 open source and this is the one page every player sees. The star count is read
 from the public GitHub API once per session (`sessionStorage`, 10 minutes); a
-failed fetch costs the number, never the link.
+failed fetch costs the number, never the link. (A whole "Open source" section
+under Play — a blurb plus *Read the code* and *Report a bug* — said the same
+thing twice and was cut as clutter; the pill is the one place.)
 
-Two-column rows (Host/Join, Move list/Options, Graphics/Sound, the open-source
-pair) collapse to a single column on a phone so every button is a thumb-sized
+Two-column rows (Host/Join, Move list/Options, Graphics/Sound) collapse to a single column on a phone so every button is a thumb-sized
 target, and the header pill drops under the title.
 
 **A big screen gets two columns, not a wider one.** From 1100px wide the home
-view is a grid — Start here, Play and Open source on the left; Your fighter and
+view is a grid — Start here and Play on the left; Your fighter and
 Learn & settings on the right — in a 1120px card, so the whole home screen fits
 a 1280×800 laptop without scrolling (the padding tightens below 860px of
 height). Past 1800×1000 and 2400×1300 the card is zoomed (1.2×, 1.5×) rather than

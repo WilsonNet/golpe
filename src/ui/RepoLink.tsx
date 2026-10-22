@@ -12,7 +12,7 @@
 import { useEffect, useState } from "react";
 
 const REPO = "WilsonNet/golpe";
-export const REPO_URL = `https://github.com/${REPO}`;
+const REPO_URL = `https://github.com/${REPO}`;
 const API_URL = `https://api.github.com/repos/${REPO}`;
 const CACHE_KEY = "golpe.repoStars";
 /** Unauthenticated GitHub allows 60 requests an hour per IP; ten minutes is plenty fresh. */

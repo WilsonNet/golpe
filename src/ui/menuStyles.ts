@@ -707,16 +707,6 @@ a.gd-play-item { color: inherit; text-decoration: none; }
 	font-weight: bold;
 }
 
-/* The open-source section's links are play items that happen to be anchors. */
-a.gd-play-item {
-	text-decoration: none;
-}
-.gd-oss-blurb {
-	margin: 0;
-	font-size: 12px;
-	line-height: 1.5;
-	color: rgba(255, 255, 255, 0.7);
-}
 
 /* ---- the big screen ----
    A 620px column in the middle of a 1920px monitor is a phone layout with a

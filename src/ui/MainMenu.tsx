@@ -18,7 +18,9 @@
  *   primary *action* of a game is playing it, and the course wears the aim
  *   beam's cyan so it reads as a different door rather than a competing one.
  * - **Play** — starting a fight is the primary job, so it is next: the gold
- *   Quick match, then Host/Join as siblings, then Practice.
+ *   Quick match, then Host/Join as siblings, then Practice and the Map maker. The
+ *   repository lives in the header pill only — a second "Open source" section
+ *   here was clutter.
  * - **Your fighter** — who you bring. The hero picker lives here, on the home
  *   screen, beside the name field: a hero shooter should show its heroes, and
  *   the choice rides every match started here.
@@ -66,7 +68,7 @@ import { GraphicsSettings } from "./GraphicsSettings";
 import { HUD_CSS } from "./hudStyles";
 import { MoveList } from "./MoveList";
 import { MENU_CSS } from "./menuStyles";
-import { REPO_URL, RepoLink } from "./RepoLink";
+import { RepoLink } from "./RepoLink";
 import { ServerBrowser } from "./ServerBrowser";
 import { SoundMixer } from "./SoundMixer";
 
@@ -331,37 +333,6 @@ export function MainMenu({
 										game as a pull request.
 									</span>
 								</a>
-							</div>
-
-							{/* The release's other message: this is a public project. Last
-							    in the play column so it never outranks playing, and on a
-							    big screen it fills the space the shorter column leaves. */}
-							<div className="gd-section">
-								<div className="gd-section-head">Open source</div>
-								<p className="gd-oss-blurb">
-									golpe is free and MIT-licensed — the game, the server, the art
-									pipeline and every probe that measures it are on GitHub.
-								</p>
-								<div className="gd-two">
-									<a
-										className="gd-play-item"
-										href={REPO_URL}
-										target="_blank"
-										rel="noopener noreferrer"
-									>
-										<strong>Read the code</strong>
-										<span>Star it, fork it, send a pull request.</span>
-									</a>
-									<a
-										className="gd-play-item"
-										href={`${REPO_URL}/issues`}
-										target="_blank"
-										rel="noopener noreferrer"
-									>
-										<strong>Report a bug</strong>
-										<span>Found something broken? Open an issue.</span>
-									</a>
-								</div>
 							</div>
 						</div>
 
