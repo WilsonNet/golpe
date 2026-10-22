@@ -37,7 +37,7 @@ loop short.
      drops what no longer fits. Height is always one screen (600px).
 3. **Themes** are swatches in the top bar — Waterfront, Castle, Meadow, Snow
    (see *Themes* below). Switching is instant and never moves a collider.
-4. **Test vs bots** (T) boots the real game on the map in a frame: 1–15 bots,
+4. **Test with bots & friends** (T) boots the real game on the map in a frame: 0–15 bots,
    free-for-all or team deathmatch (3+ screens), your hero, or **AI vs AI**
    to watch. The game's Esc → Exit, or **Back to editor**, returns to exactly
    where you were.
@@ -59,6 +59,21 @@ plays in the test plays in a match.
 
 The frame's `exitToMenu` posts `golpe:mapmaker:exit` to the parent instead of
 showing the root menu.
+
+## Testing with friends
+
+**👥 Invite friends** in the play-test bar copies a bare `?room=<id>` link.
+The editor reads the id from the frame's own address bar (the game writes
+the seated room there, `showRoomInUrl`) and deliberately drops the rest of
+the frame's URL: `map=draft` names a slot only the author's browser has, and
+`ai`/`hero` are the author's own. **A friend needs nothing but the room** —
+the server sends them the sanitised map in `match.map`, so they play the map
+without ever having the file. Bots are ballast: each friend takes a bot's
+seat (`bots=0` is "just us"). The room is private, so it stays out of quick
+match; it lives while anyone is in it, so friends can keep playing after the
+author goes back to the editor. Measured by `mapmaker-probe.ts`: a fresh
+browser with only the link plays the same platforms and theme, and the room
+stays the same size.
 
 ## Capture
 

@@ -447,6 +447,26 @@ export const MAPMAKER_CSS = `
 	flex-wrap: wrap;
 }
 .mm-playtest-title { font-size: var(--mm-fs-sm); color: rgba(255, 255, 255, 0.8); }
+.mm-invite {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 9px 14px;
+	background: rgba(255, 209, 102, 0.1);
+	border-bottom: 1px solid rgba(255, 209, 102, 0.3);
+	font-size: var(--mm-fs-sm);
+	flex-wrap: wrap;
+}
+.mm-invite input {
+	flex: 1 1 320px;
+	padding: 7px 10px;
+	border: 1px solid rgba(255, 209, 102, 0.5);
+	border-radius: 6px;
+	background: rgba(0, 0, 0, 0.4);
+	color: #ffd166;
+	font: inherit;
+	font-size: var(--mm-fs-md);
+}
 .mm-playtest-frame { flex: 1 1 auto; width: 100%; border: 0; background: #000; }
 .mm-rec.on { border-color: #ff5d5d; color: #ff8a8a !important; animation: mm-pulse 1.2s ease-in-out infinite; }
 @keyframes mm-pulse { 50% { background: rgba(255, 93, 93, 0.2); } }

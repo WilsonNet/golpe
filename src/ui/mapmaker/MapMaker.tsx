@@ -450,7 +450,7 @@ export function MapMaker() {
 					disabled={!spec}
 					data-testid="mapmaker-test"
 				>
-					▶ Test vs bots
+					▶ Test with bots & friends
 				</button>
 				<button
 					type="button"
@@ -480,7 +480,7 @@ export function MapMaker() {
 							className="mm-link"
 							onClick={() => setDialog("test")}
 						>
-							▶ Test it against bots
+							▶ Test it with bots and friends
 						</button>
 					</span>
 					<span>
@@ -1260,13 +1260,18 @@ function TestDialog({
 }) {
 	const tdmOk = map.screens >= TDM_MIN_SCREENS;
 	return (
-		<Modal title="Test against bots" onClose={onClose}>
+		<Modal title="Test your map" onClose={onClose}>
 			<div className="mm-form">
 				<label className="mm-wide">
-					Opponents: <b>{settings.bots}</b>
+					Bots: <b>{settings.bots}</b>{" "}
+					<span className="mm-muted">
+						{settings.bots === 0
+							? "— just you and the friends you invite"
+							: "— friends who join take a bot's seat"}
+					</span>
 					<input
 						type="range"
-						min={1}
+						min={0}
 						max={15}
 						value={settings.bots}
 						onChange={(e) =>
@@ -1336,7 +1341,9 @@ function TestDialog({
 			</div>
 			<p className="mm-muted small">
 				The test is a real online match on your map — same server, same netcode,
-				same bots. Esc → Exit, or the button at the top, brings you back.
+				same bots. Once it starts, <b>👥 Invite friends</b> copies a link that
+				drops anyone into it, on your map. Esc → Exit, or the button at the top,
+				brings you back.
 			</p>
 			<div className="mm-row end">
 				<button type="button" className="mm-btn" onClick={onClose}>
@@ -1368,7 +1375,7 @@ function KeysDialog({ onClose }: { onClose: () => void }) {
 		["F", "Flip spawn / decoration"],
 		["⌘Z · ⇧⌘Z", "Undo · redo"],
 		["G · R", "Grid · jump reach"],
-		["T", "Test vs bots"],
+		["T", "Test with bots & friends"],
 	];
 	return (
 		<Modal title="Shortcuts" onClose={onClose}>

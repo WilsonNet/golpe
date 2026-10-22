@@ -43,6 +43,7 @@ const AUTO_SHOTS = [5, 11, 17];
 /** Wait out the FIGHT banner before the first take rolls. */
 const RECORD_DELAY_MS = 2500;
 const ATTACH_POLL_MS = 250;
+const INVITE_POLL_MS = 500;
 
 function playtestUrl(s: PlaytestSettings): string {
 	const params: LaunchParams = {
@@ -97,6 +98,8 @@ export function Playtest({ map, settings, onClose, onMedia }: Props) {
 	const [shots, setShots] = useState(0);
 	const [clips, setClips] = useState(0);
 	const [toast, setToast] = useState<string | null>(null);
+	const [invite, setInvite] = useState<string | null>(null);
+	const [inviteOpen, setInviteOpen] = useState(false);
 	const sessionStart = useRef(performance.now());
 	const canRecord = clipMime() !== null;
 
@@ -190,6 +193,40 @@ export function Playtest({ map, settings, onClose, onMedia }: Props) {
 		};
 	}, []);
 
+	// The room's invite link. The game in the frame writes the id the server
+	// seated it in into its own address bar (`showRoomInUrl`), so the editor
+	// reads it from there. The link is the bare `?room=<id>` — not the frame's
+	// URL, which carries `map=draft` (a slot only this browser has), `ai` and
+	// this player's hero. A friend needs none of it: the server sends them the
+	// map when they are seated.
+	useEffect(() => {
+		if (invite) return;
+		const poll = window.setInterval(() => {
+			try {
+				const search = frameRef.current?.contentWindow?.location.search ?? "";
+				const room = new URLSearchParams(search).get("room");
+				if (!room) return;
+				const url = new URL(window.location.pathname, window.location.origin);
+				url.searchParams.set("room", room);
+				setInvite(url.toString());
+			} catch {
+				// The frame is mid-navigation; try again on the next tick.
+			}
+		}, INVITE_POLL_MS);
+		return () => window.clearInterval(poll);
+	}, [invite]);
+
+	const copyInvite = async () => {
+		if (!invite) return;
+		setInviteOpen(true);
+		try {
+			await navigator.clipboard.writeText(invite);
+			say("Invite link copied — send it to a friend");
+		} catch {
+			say("Copy the link from the box");
+		}
+	};
+
 	// The game's own Esc menu "exit" lands here instead of on the root menu.
 	useEffect(() => {
 		const onMessage = (e: MessageEvent) => {
@@ -262,7 +299,38 @@ export function Playtest({ map, settings, onClose, onMedia }: Props) {
 					{clips} clip{clips === 1 ? "" : "s"} · {shots} shot
 					{shots === 1 ? "" : "s"}
 				</span>
+				<button
+					type="button"
+					className="mm-btn mm-btn-primary"
+					disabled={!invite}
+					onClick={() => void copyInvite()}
+					title="Copy a link that drops a friend into this test, on this map"
+					data-testid="playtest-invite"
+				>
+					👥 Invite friends
+				</button>
 			</div>
+			{inviteOpen && invite ? (
+				<div className="mm-invite" data-testid="playtest-invite-panel">
+					<span>
+						Anyone with this link joins this test on your map — they do not need
+						the map file. Each friend takes a bot's seat.
+					</span>
+					<input
+						readOnly
+						value={invite}
+						onFocus={(e) => e.currentTarget.select()}
+						data-testid="playtest-invite-link"
+					/>
+					<button
+						type="button"
+						className="mm-link"
+						onClick={() => setInviteOpen(false)}
+					>
+						hide
+					</button>
+				</div>
+			) : null}
 			<iframe
 				ref={frameRef}
 				className="mm-playtest-frame"

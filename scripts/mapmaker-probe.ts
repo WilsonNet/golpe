@@ -213,6 +213,53 @@ try {
 		`${standings.length} fighters, ${frags} frags so far`,
 	);
 
+	// A friend: a fresh browser with no map file and no editor, given only
+	// the invite link. The server must hand them the map, and they must take
+	// a bot's seat rather than grow the room.
+	await page.getByTestId("playtest-invite").click();
+	const invite = await page.getByTestId("playtest-invite-link").inputValue();
+	check(
+		"the invite is a bare room link",
+		/\?room=[A-Za-z0-9_-]+$/.test(invite),
+		invite,
+	);
+	const friendCtx = await browser.newContext({
+		viewport: { width: 800, height: 600 },
+	});
+	const friend = await friendCtx.newPage();
+	friend.on("pageerror", (e) => pageErrors.push(`friend: ${e.message}`));
+	// `ai` only so the friend needs no name prompt; it is still the same room.
+	await friend.goto(`${invite}&ai=true&mute=1`);
+	await friend.waitForFunction(
+		() =>
+			(window.__tilemapDebug?.()?.platforms ?? 0) > 0 &&
+			window.__matchState?.() != null,
+		undefined,
+		{ timeout: 20_000 },
+	);
+	await friend.waitForTimeout(3000);
+	const friendTiles = await friend.evaluate(() => window.__tilemapDebug?.());
+	check(
+		"a friend with only the link plays the same map",
+		friendTiles?.platforms === editorPlatforms && friendTiles?.theme === "snow",
+		`friend ${friendTiles?.platforms} platforms (${friendTiles?.theme})`,
+	);
+	const seats = await inner.evaluate(
+		() => window.__matchState?.()?.standings.length ?? 0,
+	);
+	const friendSeen = await inner.evaluate(
+		() =>
+			window
+				.__matchState?.()
+				?.standings.filter((st) => !st.name.startsWith("BOT")).length ?? 0,
+	);
+	check(
+		"the friend took a bot's seat",
+		seats === 4 && friendSeen === 2,
+		`${seats} fighters, ${friendSeen} not bots`,
+	);
+	await friendCtx.close();
+
 	// The first take records itself and stops at 20s.
 	await page.waitForFunction(
 		() =>
