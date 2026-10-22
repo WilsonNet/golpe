@@ -31,6 +31,7 @@ download the full-quality MP4.
 | [Feedback loop](.agents/skills/feedback-loop/SKILL.md) | The physics diagnostic: how to measure a bug before fixing it, and the catalogue of root causes already found. |
 | [Herdr dev workspace](.agents/skills/herdr-dev-workspace/SKILL.md) | Running the dev servers in visible herdr panes instead of background processes. |
 | [Knowledge sharpener](.agents/skills/knowledge-sharpener/SKILL.md) | End-of-session routine for folding what was learned back into the docs. |
+| [Deployment](deploy/oracle/README.md) | The Oracle free-tier VM: two Docker images behind Caddy, automatic HTTPS, and the GitHub Actions workflow that ships the `deploy` branch. |
 
 ## Quick start
 

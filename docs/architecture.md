@@ -120,7 +120,11 @@ directory/      the control plane's first process: a stateless aggregator over
                 Read by menus, never by matches. See `docs/regions.md`
 deploy/         the distributable game part: `Dockerfile.game-server` (one
                 image, run once per region), `fly.toml`, and
-                `docker-compose.regions.yml` for a local fleet
+                `docker-compose.regions.yml` for a local fleet.
+                `oracle/` is the live single-VM stack: a Caddy web image
+                (static client + TLS + the game server's 9208 proxy) and the
+                game image, composed together and shipped from the `deploy`
+                branch by `.github/workflows/deploy.yml`
 
 scripts/          diagnose.ts (Playwright harness), deathmatch-probe.ts (sixteen
                   AI fighters played to a winner), tdm-probe.ts (two sides,

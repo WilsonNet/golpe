@@ -1,0 +1,26 @@
+# Caddy in front of golpe: the static client on 443, the game server's
+# HTTPS/WSS surface on 9208, and one automatic Let's Encrypt certificate for
+# both. `sslip.io` resolves the VM's raw IP, so a domain is optional.
+{
+	admin off
+}
+
+{$GOLPE_DOMAIN} {
+	encode zstd gzip
+	root * /srv
+	try_files {path} /index.html
+	file_server
+
+	@immutable path /assets/*
+	header @immutable Cache-Control "public, max-age=31536000, immutable"
+	header /index.html Cache-Control "no-cache"
+}
+
+# The client dials the game server on the same host at :9208 — Geckos'
+# signalling WebSocket, `/health`, `/rooms` and the POTG clip fetch all land
+# here. The WebRTC data channel itself is UDP 9208, published straight to the
+# game container.
+{$GOLPE_DOMAIN}:9208 {
+	encode zstd gzip
+	reverse_proxy game:9208
+}

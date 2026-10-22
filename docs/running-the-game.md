@@ -2,6 +2,18 @@
 
 Every way to launch golpe, and what each one is for.
 
+## The live instance
+
+The public build is whatever is on the **`deploy`** branch, shipped by
+`.github/workflows/deploy.yml` to one Oracle Cloud VM. That VM runs two Docker
+containers: Caddy (the Vite client on 443, and the game server's HTTPS/WSS
+surface proxied on 9208) and the authoritative game server (UDP 9208 for the
+WebRTC data channels). The full runbook — first-boot public IP, security-list
+ports, secrets, logs — is [`deploy/oracle/README.md`](../deploy/oracle/README.md).
+
+`main` and `develop` are development branches and never deploy. **Only push to
+`deploy` when the user explicitly asks for a deploy.**
+
 - [Prerequisites](#prerequisites)
 - [Starting the dev servers](#starting-the-dev-servers)
 - [Playing with real people](#playing-with-real-people)

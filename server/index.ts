@@ -19,7 +19,54 @@ import {
 import { GameRoom } from "./GameRoom.js";
 import { cleanPassword } from "./RoomPassword.js";
 
-const io = geckos({ iceServers: [] });
+/** Lowest and highest TCP/UDP port this process may bind. */
+const MIN_PORT = 1;
+const MAX_PORT = 65535;
+
+/**
+ * The UDP port WebRTC ICE binds, when the host must be reachable through a
+ * firewall.
+ *
+ * Empty in local development: the OS picks a port, so three regions can run
+ * side by side on one machine. Production pins it to the same number the
+ * reverse proxy publishes, because a cloud security list cannot open a port
+ * range nobody wrote down.
+ */
+function icePort(): number | null {
+	const raw = env("GOLPE_ICE_PORT");
+	if (raw === undefined) return null;
+	const port = Number.parseInt(raw, 10);
+	if (!Number.isSafeInteger(port) || port < MIN_PORT || port > MAX_PORT) {
+		return null;
+	}
+	return port;
+}
+
+/**
+ * STUN servers the WebRTC stack asks for its public reflexive address.
+ *
+ * A game server behind a cloud NAT only knows its private address, so the
+ * browser cannot dial it without a candidate that names the public one.
+ * Comma-separated `stun:` / `turn:` URLs; empty for a LAN, where the host
+ * candidate is the address itself.
+ */
+function stunServers(): { urls: string }[] {
+	const raw = env("GOLPE_STUN");
+	if (raw === undefined) return [];
+	return raw
+		.split(",")
+		.map((url) => url.trim())
+		.filter((url) => url.length > 0)
+		.map((urls) => ({ urls }));
+}
+
+const ICE_PORT = icePort();
+const io = geckos({
+	iceServers: stunServers(),
+	// Pin the multiplexed ICE socket only when production asked for a port;
+	// dev keeps the OS-chosen one.
+	...(ICE_PORT === null ? {} : { portRange: { min: ICE_PORT, max: ICE_PORT } }),
+});
 
 /**
  * Guardrails for the creator-only `?` URL parameters. Every value a player can
@@ -499,10 +546,6 @@ const PORT = GAME_SERVER_PORT;
  * a room lives. Rooms never leave the region they were created in.
  */
 const REGION = parseRegion(env("GOLPE_REGION")) ?? "local";
-
-/** Lowest and highest TCP/UDP port this process may bind. */
-const MIN_PORT = 1;
-const MAX_PORT = 65535;
 
 /**
  * One environment value, by name.

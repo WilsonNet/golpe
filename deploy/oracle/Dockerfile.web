@@ -1,0 +1,23 @@
+# The static client, served by Caddy with automatic HTTPS.
+#
+# The build happens in this image rather than on the VM: the only thing the
+# host needs is Docker, and the output is a self-contained Caddy image whose
+# `/srv` is exactly the Vite build for the commit being deployed.
+FROM node:22-slim AS build
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable
+WORKDIR /app
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
+
+COPY index.html tsconfig.json tsconfig.base.json ./
+COPY vite ./vite
+COPY public ./public
+COPY src ./src
+RUN pnpm build
+
+FROM caddy:2-alpine
+COPY deploy/oracle/Caddyfile /etc/caddy/Caddyfile
+COPY --from=build /app/dist /srv

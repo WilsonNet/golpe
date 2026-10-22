@@ -1,0 +1,64 @@
+# golpe on one Oracle Cloud VM.
+#
+#   web  — Caddy: the client on 443, the game server's HTTPS/WSS on 9208.
+#   game — the game server: TCP 9208 inside the compose network, UDP 9208
+#          published for WebRTC.
+#
+# The two publish different protocols on the same host port on purpose. Caddy
+# owns TCP 9208 (signalling and HTTP), the game container owns UDP 9208 (the
+# data channels), so a browser talks to one hostname for both and the cloud
+# security list only needs four ingress rules: 80/tcp, 443/tcp, 9208/tcp,
+# 9208/udp (plus SSH).
+name: golpe
+
+services:
+  game:
+    build:
+      context: ../..
+      dockerfile: deploy/Dockerfile.game-server
+    restart: unless-stopped
+    environment:
+      PORT: "9208"
+      GOLPE_REGION: "${GOLPE_REGION:-sa}"
+      # Pin the multiplexed ICE socket to the port the firewall opens. Without
+      # this, libdatachannel picks an ephemeral UDP port no security list knows.
+      GOLPE_ICE_PORT: "9208"
+      # A cloud VM only knows its private address; STUN gives the browser a
+      # candidate that names the public one.
+      GOLPE_STUN: "${GOLPE_STUN:-stun:stun1.l.google.com:19302,stun:stun2.l.google.com:19302}"
+    ports:
+      - "9208:9208/udp"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:9208/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
+  web:
+    build:
+      context: ../..
+      dockerfile: deploy/oracle/Dockerfile.web
+    restart: unless-stopped
+    depends_on:
+      game:
+        condition: service_healthy
+    environment:
+      GOLPE_DOMAIN: "${GOLPE_DOMAIN:?set GOLPE_DOMAIN in .env}"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "9208:9208"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

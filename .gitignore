@@ -29,6 +29,11 @@ home/
 # herdr dev-workspace state (pane ids are machine-local)
 .herdr/
 
+# Deployment keys and per-host configuration — never commit
+ssh-key-*.key
+ssh-key-*.key.pub
+.env
+
 # Ad-hoc AI fight log dumps
 fight-logs*.txt
 audio/soundfonts/

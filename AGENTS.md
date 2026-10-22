@@ -37,6 +37,28 @@ silently assumed there was exactly one opponent.
 skill({ name: "feedback-loop" })    # the full workflow
 ```
 
+## ████████████████████████████████████████████████████
+## ██  NEVER PUSH TO `deploy` UNLESS EXPLICITLY ASKED  ██
+## ████████████████████████████████████████████████████
+
+**`deploy` is the public production branch.** A push to it triggers
+`.github/workflows/deploy.yml`, which pulls the branch onto the Oracle VM,
+rebuilds the Docker images and publishes the game to the world. It is not a
+backup branch and it is not a place to park work. **Only push to `deploy` when
+the user says so in that request** — "deploy", "push to deploy", "ship it".
+Finishing a feature, merging to `main`, or a green `pnpm run verify` is *not*
+permission. When in doubt, stop and ask.
+
+Work on `main` (or a feature branch). The deploy itself is one command, run
+only on request:
+
+```bash
+git push origin main:deploy
+```
+
+The live stack, its ports and its first-boot steps are documented in
+[`deploy/oracle/README.md`](deploy/oracle/README.md).
+
 ## Where to look
 
 | Question | File |
@@ -58,6 +80,7 @@ skill({ name: "feedback-loop" })    # the full workflow
 | How do I measure anything? | [`docs/diagnostics.md`](docs/diagnostics.md) + the `feedback-loop` skill |
 | How do I write a unit test — example or property? | the `property-testing` skill — when fast-check's `.prop` beats a hand-picked example, and the traps |
 | How do I run the game? | [`docs/running-the-game.md`](docs/running-the-game.md) |
+| **How does it get deployed?** | [`deploy/oracle/README.md`](deploy/oracle/README.md) — Oracle free-tier VM, two Docker images behind Caddy, GitHub Actions on the `deploy` branch |
 | **Anands' art — the next big job?** | [`docs/anands-art.md`](docs/anands-art.md) — the brief: HD-2D characters (Octopath / DQ3 remake); fix the keying that eats 21% of her silhouette, then a Blender model that keeps her style, gated against her boards |
 | How do I edit a hero's art — or build a new one in Blender? | [`art/README.md`](art/README.md) — Lia's and Jeffs' .blend files are the source; one command renders the atlas |
 | How do I slice a raw art board into a game sheet? | [`docs/sprite-slicer.md`](docs/sprite-slicer.md) — the `?slicer=true` workshop |
@@ -311,6 +334,8 @@ pnpm run dev:herdr:down
 pnpm run verify           # typecheck (client AND server) + tests + build + dead-code (knip)
 pnpm run lint             # biome, across src/ server/ scripts/
 pnpm run knip             # unused exports/files/dependencies — run before believing the tree is lean
+
+git push origin main:deploy   # PUBLIC DEPLOY — only on an explicit request (see above)
 tsx scripts/diagnose.ts --mode=online --runs=3       # the feedback loop, in a duel
 tsx scripts/diagnose.ts --mode=online --ultCharge=100 # ...and the bots cast their ultimates
 tsx scripts/deathmatch-probe.ts                      # sixteen AI fighters, to a winner

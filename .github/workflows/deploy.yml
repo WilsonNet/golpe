@@ -1,0 +1,82 @@
+name: Deploy golpe
+
+# Only a push to `deploy` ships. Main and develop are ordinary development
+# branches: they can be broken, half-finished or measured, and none of that
+# should reach the public URL. The workflow does not build anything in
+# Actions: it hands the commit to the Oracle VM, which pulls it and lets
+# `docker compose` rebuild the two images (game server, web/Caddy). That keeps
+# the native `node-datachannel` binary on the same architecture it runs on and
+# makes "deploy" mean exactly "the VM runs this commit".
+on:
+  push:
+    branches: [deploy]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-oracle
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Install the deploy key
+        env:
+          SSH_KEY: ${{ secrets.ORACLE_SSH_KEY }}
+          HOST: ${{ secrets.ORACLE_HOST }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/oracle
+          chmod 600 ~/.ssh/oracle
+          ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts
+
+      - name: Deploy over SSH
+        env:
+          HOST: ${{ secrets.ORACLE_HOST }}
+          USER: ${{ secrets.ORACLE_USER }}
+          DOMAIN: ${{ vars.GOLPE_DOMAIN }}
+          REGION: ${{ vars.GOLPE_REGION }}
+        run: |
+          set -euo pipefail
+          USER="${USER:-ubuntu}"
+          REGION="${REGION:-sa}"
+
+          # No domain is a supported setup: sslip.io resolves any embedded
+          # IPv4 address, so the raw IP gets a real Let's Encrypt certificate
+          # and the game's WebSocket/POTG fetches stay on a secure origin.
+          if [ -z "${DOMAIN:-}" ]; then
+            if [[ "$HOST" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              DOMAIN="${HOST}.sslip.io"
+            else
+              DOMAIN="$HOST"
+            fi
+          fi
+
+          echo "Deploying $GITHUB_SHA to $USER@$HOST as https://$DOMAIN"
+          ssh -i ~/.ssh/oracle -o StrictHostKeyChecking=yes "$USER@$HOST" \
+            "GOLPE_DOMAIN='$DOMAIN' GOLPE_REGION='$REGION' bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          # First boot needs git; Docker is installed by deploy.sh.
+          if ! command -v git >/dev/null 2>&1; then
+            sudo apt-get update -y
+            sudo apt-get install -y git
+          fi
+
+          if [ ! -d /opt/golpe/.git ]; then
+            sudo mkdir -p /opt/golpe
+            sudo chown "$(id -u):$(id -g)" /opt/golpe
+            git clone --branch deploy https://github.com/WilsonNet/golpe.git /opt/golpe
+          fi
+
+          cd /opt/golpe
+          git fetch --depth 1 origin deploy
+          git reset --hard origin/deploy
+
+          sudo bash deploy/oracle/deploy.sh "$GOLPE_DOMAIN" "$GOLPE_REGION"
+          REMOTE

@@ -1,0 +1,22 @@
+# Docker build context. The two images need package files, src/, public/,
+# server/ and the Vite config — not the repository's history, renders or local
+# environments. Keeping the context small is what makes a deploy on a 1-OCPU
+# VM mostly a layer-cache hit.
+.git
+.gitignore
+node_modules
+dist
+dist-server
+dist-ssr
+art
+audio
+media
+.playwright-mcp
+.herdr
+.tasks
+.agents
+.claude
+.venv
+.venv-audio
+*.log
+fight-logs*.txt

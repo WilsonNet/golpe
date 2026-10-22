@@ -74,6 +74,33 @@ VITE_GOLPE_SERVERS=sa=sa.golpe.gg:9208,us-east=us.golpe.gg:9208,eu=eu.golpe.gg:9
 
 ## Deploying
 
+The live deployment is **one Oracle free-tier VM running two Docker images**,
+shipped by GitHub Actions when — and only when — the `deploy` branch moves.
+The full runbook is [`deploy/oracle/README.md`](../deploy/oracle/README.md);
+the shape is:
+
+- **`web`** — Caddy. Serves the Vite client on `443`, terminates TLS for the
+  game server's `9208` signalling/HTTP surface, and redirects `80` for ACME.
+- **`game`** — `deploy/Dockerfile.game-server`, the same image per region with
+  `GOLPE_REGION` set per deployment. It publishes **UDP 9208** for WebRTC and
+  keeps TCP 9208 inside the compose network for Caddy to proxy. Production
+  pins `GOLPE_ICE_PORT=9208` and passes STUN (`GOLPE_STUN`) so the cloud NAT's
+  public address reaches the browser.
+- **Only `deploy` deploys.** `main` and `develop` are development branches;
+  `.github/workflows/deploy.yml` triggers on `deploy` (or a manual dispatch),
+  pulls that branch into `/opt/golpe` and rebuilds. Never push to `deploy`
+  without an explicit request — see `AGENTS.md`.
+- **No domain is required.** The workflow derives `<ip>.sslip.io`, which
+  resolves the raw IP and gets a normal Let's Encrypt certificate, so the URL
+  a player shares is HTTPS. A real domain is set with the `GOLPE_DOMAIN`
+  repository variable and changes nothing else.
+- **First boot:** assign an ephemeral public IP to the instance, then open
+  `80/tcp`, `443/tcp`, `9208/tcp` and `9208/udp` in the subnet's security
+  list. `deploy/oracle/deploy.sh` installs Docker, writes `.env`, opens the
+  host firewall and waits for `https://<host>:9208/health`.
+
+Fly.io and the multi-region compose file remain available for a wider fleet:
+
 - **Game server:** `deploy/Dockerfile.game-server` — same image per region,
   `GOLPE_REGION` set per deployment. See `deploy/fly.toml` (with its UDP
   caveat — prove one region with an online probe before committing) and
