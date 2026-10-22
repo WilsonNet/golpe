@@ -226,9 +226,9 @@ neither touches the snapshot path.
 
 ## Local player: predict and replay
 
-- Every fixed step the client sends `{seq, ...intent, aimAngle}` and simulates it
-  immediately. `PlayerInput` extends `PlayerIntent`, so a field added to the
-  simulation cannot be silently left out of the packet.
+- Every fixed step the client simulates its input immediately and sends it as
+  `{seq, ...intent, aimAngle}`. `PlayerInput` extends `PlayerIntent`, so a field
+  added to the simulation cannot be silently left out of the packet.
 - The server echoes the highest `seq` it has consumed, with the full
   `PlayerPosition`.
 - On a snapshot the client **rewinds to the authoritative state and replays every
@@ -239,6 +239,53 @@ neither touches the snapshot path.
   standing error and 1790px of cumulative drift per 8s.
 - Residual error is smoothed visually over a few frames; corrections beyond 100px
   are real teleports (respawns) and snap.
+
+## Input on a real link: redundant, ordered, steered
+
+Localhost never loses, delays or reorders a datagram, so for most of the
+project's life none of this could be seen. `?netsim=<oneWayMs>/<jitterMs>/<loss%>`
+shapes a client's link (`online/NetSim.ts`), and the server reports each
+client's input stream back to it (`net`, from `server/InputLink.ts`) — lost,
+duplicated, throttled and starved inputs, and the queue's depth.
+
+- **Every input message carries the whole unacknowledged window** (`inputs`, an
+  `InputBundle`: the newest seq, packed intents, aims to 1e-4 rad; up to 12
+  inputs, 200ms). One input per message meant a lost datagram was a tick the
+  client predicted and the server never ran — a permanent divergence. With the
+  window, the next message to arrive repairs it. Quake's answer, Overwatch's and
+  Gaffer's; an input packs to two short numbers, so the window costs less than
+  one verbatim input did.
+- **The server's queue is kept in seq order, once per seq.** It used to append
+  in arrival order, so two inputs swapped by the network were *simulated*
+  swapped and the ack went backwards between them — with 20ms of jitter, a third
+  of the stream. Copies of anything queued or simulated are dropped.
+- **A discarded queue is acknowledged.** A respawn or round reset throws the
+  queue away and marks it consumed, or the window's redundant copies in flight
+  would queue the old life's input on the new one.
+- **The client's step clock is steered** (time dilation, as Overwatch does it).
+  The server takes one input per tick, so its queue is a jitter buffer whose
+  depth is whatever the network left: a late input starves a tick, and every
+  starved tick leaves the queue one input deeper for good — 16ms more latency on
+  everything that player does. Each snapshot carries `q`, the shallowest the
+  player's queue got since the last one (-1: a tick starved); the client steps
+  3% fast below 0 and 3% slow above 1. The simulation's `dt` never changes,
+  only how often a step is taken, so nothing replays differently.
+- **Input messages are validated and budgeted.** Every field is rebuilt from a
+  bitmask and a finite number before it reaches `tickPlayer`, and a client gets
+  180 input messages a second (it sends ~60), so a flood costs only its sender.
+
+Measured with `diagnose.ts --mode=online --runs=2` (two AI clients, both
+shaped):
+
+| link (one-way / jitter / loss) | | before | after |
+|---|---|---|---|
+| 40ms / ±10ms / 2% | inputs the server never ran | 313, 290 | **0, 0** |
+| | local visible corrections | 95, 73 | **6, 5** |
+| | starved ticks | 19, 22 | 8, 4 |
+| 60ms / ±20ms / 5% | inputs the server never ran | 408, 399 | **0, 0** |
+| | local visible corrections | 93, 107 | **5, 9** |
+| | jitter events | 2, 5 | **0, 0** |
+| | queue depth (redundancy alone → steered) | | 2.2 → **1.6** |
 
 ## Never simulate a tick the client did not send
 

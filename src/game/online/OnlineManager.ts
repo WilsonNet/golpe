@@ -3,12 +3,14 @@ import type { PotgAnnounce } from "../potg/types";
 import type { HeroId } from "../simulation/Heroes";
 import type { MatchMode } from "../simulation/Teams";
 import type { TrainingConfigMsg, TrainingStateMsg } from "../training/types";
+import { NetSim } from "./NetSim";
 import {
 	type ControlCapturedMsg,
 	type ControlOvertimeMsg,
 	type GameSnapshot,
 	type MatchMessage,
 	type MatchOverMsg,
+	type NetReportMsg,
 	type PlayerInput,
 	RELIABLE,
 	type RespawnMsg,
@@ -16,6 +18,7 @@ import {
 	type RoundLiveMsg,
 	type RoundWonMsg,
 } from "./types";
+import { packInputs } from "./wire";
 
 type OnlineStateHandler = (state: GameSnapshot) => void;
 type OnlineStatusHandler = (status: string) => void;
@@ -62,6 +65,8 @@ export interface OnlineHandlers {
 	 * locked room is a new attempt with the key, not a wait.
 	 */
 	onRoomLocked: (roomId: string) => void;
+	/** The server's view of this client's input stream. Diagnostics only. */
+	onNet: (msg: NetReportMsg) => void;
 }
 
 export interface JoinOptions {
@@ -162,6 +167,8 @@ export class OnlineManager {
 	private _matched = false;
 	private _myId = "";
 	private _roomId = "";
+	/** `?netsim=` — a shaped, lossy link for the probes. Null on a real one. */
+	readonly netsim = NetSim.fromLocation();
 
 	constructor(
 		private serverUrl: string,
@@ -198,6 +205,7 @@ export class OnlineManager {
 	connect(handlers: OnlineHandlers, join: JoinOptions = {}) {
 		const channel = geckos({ url: this.serverUrl, port: this.serverPort });
 		this.channel = channel;
+		if (this.netsim) shapeChannel(channel, this.netsim);
 
 		channel.onConnect((error) => {
 			if (error) {
@@ -285,6 +293,10 @@ export class OnlineManager {
 			handlers.onState(data as GameSnapshot);
 		});
 
+		channel.on("net", (data: unknown) => {
+			handlers.onNet(data as NetReportMsg);
+		});
+
 		channel.on("round-reset", () => {
 			handlers.onRoundReset();
 		});
@@ -348,9 +360,10 @@ export class OnlineManager {
 		});
 	}
 
-	sendInput(input: PlayerInput) {
-		if (this.channel && this._connected) {
-			this.channel.emit("input", input);
+	/** The unacknowledged input window. Unreliable on purpose: see `InputBundle`. */
+	sendInputs(inputs: readonly PlayerInput[]) {
+		if (this.channel && this._connected && inputs.length > 0) {
+			this.channel.emit("inputs", packInputs(inputs));
 		}
 	}
 
@@ -403,4 +416,35 @@ export class OnlineManager {
 		this._connected = false;
 		this._matched = false;
 	}
+}
+
+/**
+ * The server's unreliable messages — the ones a real link can lose. Everything
+ * else it sends is reliable and is only delayed by the shaper.
+ */
+const LOSSY_INCOMING = new Set(["state", "roster", "respawn", "net"]);
+
+/**
+ * Route every message this channel sends or hears through the shaper.
+ *
+ * Done by wrapping `on` and `emit` once, before any handler is registered, so
+ * no message can take a path around it and nothing downstream knows the link
+ * is simulated.
+ */
+function shapeChannel(channel: ReturnType<typeof geckos>, sim: NetSim) {
+	const on = channel.on.bind(channel);
+	channel.on = ((event: string, cb: (data: unknown) => void) =>
+		on(event, (data: unknown) =>
+			sim.deliver(() => cb(data), LOSSY_INCOMING.has(event)),
+		)) as typeof channel.on;
+	const emit = channel.emit.bind(channel);
+	channel.emit = ((
+		event: string,
+		data: unknown,
+		options?: { reliable?: boolean },
+	) =>
+		sim.deliver(
+			() => emit(event, data as never, options),
+			!options?.reliable,
+		)) as typeof channel.emit;
 }

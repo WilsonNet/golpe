@@ -31,7 +31,7 @@ import type {
 	Stance,
 	WallSide,
 } from "../simulation/Physics.js";
-import type { SnapshotAxe, WireAxe } from "./types.js";
+import type { PlayerInput, SnapshotAxe, WireAxe } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Intent
@@ -324,4 +324,73 @@ export function unpackAxe(w: WireAxe): SnapshotAxe {
 		resting: w.resting === true,
 		restAngle: w.restAngle ?? 0,
 	};
+}
+
+// ---------------------------------------------------------------------------
+// Input bundles
+// ---------------------------------------------------------------------------
+
+/**
+ * Every input the server has not acknowledged yet, in one datagram.
+ *
+ * Input used to travel one tick per unreliable message, so a lost datagram was
+ * a tick the client predicted and the server never ran — a permanent divergence
+ * only a correction could repair. The Quake/Overwatch answer (and Gaffer's for
+ * lockstep) is redundancy: each message carries the whole unacknowledged
+ * window, so the next one to arrive fills any hole the network made. Packed, an
+ * input is two short numbers, so a window costs less than one verbatim input
+ * used to.
+ *
+ * `s` is the newest input's seq; `i` and `a` run oldest → newest, so element k
+ * is seq `s - (length - 1 - k)`.
+ */
+export interface InputBundle {
+	s: number;
+	i: PackedIntent[];
+	a: number[];
+}
+
+/**
+ * Aim travels to a ten-thousandth of a radian — a twentieth of a pixel at the
+ * far wall. Nothing the client predicts reads it (`PlayerIntent` has no aim);
+ * the server aims bullets with it, so this is far inside anything visible.
+ */
+const AIM_STEPS = 10000;
+
+/** The longest window a server accepts, so a bundle cannot be made to cost much. */
+export const MAX_BUNDLE_INPUTS = 32;
+
+/** `inputs` must be consecutive seqs, oldest first. */
+export function packInputs(inputs: readonly PlayerInput[]): InputBundle {
+	return {
+		s: inputs[inputs.length - 1]?.seq ?? 0,
+		i: inputs.map(packIntent),
+		a: inputs.map((x) => Math.round(x.aimAngle * AIM_STEPS) / AIM_STEPS),
+	};
+}
+
+/** The bundle as inputs, oldest first — or null when it is not one. */
+export function unpackInputs(data: unknown): PlayerInput[] | null {
+	const b = data as Partial<InputBundle> | null;
+	if (
+		typeof b?.s !== "number" ||
+		!Number.isSafeInteger(b.s) ||
+		!Array.isArray(b.i) ||
+		!Array.isArray(b.a) ||
+		b.i.length !== b.a.length ||
+		b.i.length === 0 ||
+		b.i.length > MAX_BUNDLE_INPUTS
+	) {
+		return null;
+	}
+	const first = b.s - b.i.length + 1;
+	const out: PlayerInput[] = [];
+	for (let k = 0; k < b.i.length; k++) {
+		const packed = b.i[k];
+		const aim = b.a[k];
+		if (typeof packed !== "number" || typeof aim !== "number") return null;
+		if (!Number.isFinite(aim)) return null;
+		out.push({ ...unpackIntent(packed), seq: first + k, aimAngle: aim });
+	}
+	return out;
 }

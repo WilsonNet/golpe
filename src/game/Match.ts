@@ -3762,7 +3762,9 @@ export class Match {
 			this.localIntent = this.input.intent(this.aimAngle);
 		}
 
-		this.diagSteps = this.runFixedSteps(dtSec, (dt) => {
+		// The step clock runs a few percent fast or slow to keep the server's
+		// input queue topped up and shallow — see `OnlineSession.clockRate`.
+		this.diagSteps = this.runFixedSteps(dtSec * session.clockRate, (dt) => {
 			// The one-shot dash is delivered here, at the fixed-step boundary,
 			// rather than by the rendered frame. A frame can run zero fixed steps
 			// — on a 120Hz+ display, roughly half of them — and a gesture consumed

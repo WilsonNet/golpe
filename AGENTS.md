@@ -213,6 +213,12 @@ One line each; the war story behind every one is in
   the swing, never the outcome.
 - **Never simulate a tick the client did not send.** That includes a *remote*
   fighter: `input: null` in a snapshot means the server froze it, so freeze it too.
+- **Input travels as the whole unacknowledged window, and is queued by seq.**
+  One input per datagram lost a tick per lost packet, and an arrival-ordered
+  queue simulated reordered inputs swapped — 300 of 1,000 on a 40ms ±10ms link,
+  invisible on localhost. The client's step clock is steered ±3% by the server's
+  queue cushion (`q`), or every starved tick adds 16ms of latency for good.
+  Measure a real link with `--netsim=40/10/2`; see specs/netcode.md.
 - **Every fighter is simulated at the present instant.** Remotes carry their last
   known input forward and are rewound on each snapshot; nothing is interpolated
   into the past. Rollback depth is the local player's pending input count.

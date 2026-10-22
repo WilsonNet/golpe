@@ -138,6 +138,20 @@ node scripts/tdm-probe.mjs                         # the same, in two sides
 - `?offline=true` exists only for working without a server. Never diagnose it and
   conclude anything about the netcode.
 
+### What localhost cannot test: a real link
+
+A datagram on localhost is never late, reordered or lost, so the whole input
+path was untested until `--netsim=<oneWayMs>/<jitterMs>/<loss%>` existed — and
+the first shaped run found 300 of 1,000 inputs simulated out of order or not at
+all. Run the duel at `--netsim=40/10/2` (ordinary) and `60/20/5` (bad) after
+touching anything on the input or snapshot path, and read `net.link.lost`
+(must be 0), `net.inputAck` and `net.link.avgDepth`.
+
+**Read `avgFps` first.** Under SwiftShader the probes drew at 10fps, the client
+hit the 5-step catch-up cap, and every netcode number described a client
+running at half speed. `scripts/browser.ts` puts Chromium on the GPU; a report
+below ~55fps is not a measurement of the netcode.
+
 ### What a duel cannot test: everything that only breaks at sixteen
 
 `--mode=online` seats two fighters — two clients in one room, and bots are opt-in,

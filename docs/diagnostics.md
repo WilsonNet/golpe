@@ -198,6 +198,38 @@ for occasional misprediction and a trade has to be measured or it is a preferenc
 | `rollback.frozenRemoteTicks` | ticks the server had starved a fighter, and so did we |
 | `rollback.teleports` | announced discontinuities — respawns and spawns. Not errors |
 | `rollback.primarySwitches` | **check this first** when `enemy_x`/`enemy_y` look wrong |
+| `inputAck` | send → first snapshot acknowledging it, ms (p50/p95/max). ~20ms on localhost; RTT + ~30ms on a real link |
+| `link` | the **server's** view of this client's input stream (`net`): `lost` (seqs it simulated past without — must be 0), `duplicates` (redundancy at work), `starved`, `overflow`, `throttled`, queue `avgDepth`/`maxDepth` |
+| `clockSteer` | snapshots the step clock ran fast / normal / slow to hold the server's queue at 0-1 spare inputs |
+| `netsim` | what `?netsim=` was asked for, and how many messages it shaped and dropped |
+
+### A real link: `--netsim`
+
+Localhost never loses, delays or reorders a datagram, so every input-path bug
+was invisible to it — 300 of every 1,000 inputs simulated out of order or not at
+all on a 40ms ±10ms link, and nothing said so. `?netsim=<oneWayMs>/<jitterMs>/<loss%>`
+shapes both directions of one client's link (`online/NetSim.ts`):
+
+```bash
+tsx scripts/diagnose.ts --mode=online --runs=2 --netsim=40/10/2   # an ordinary connection
+tsx scripts/diagnose.ts --mode=online --runs=2 --netsim=60/20/5   # a bad one
+tsx scripts/deathmatch-probe.ts --scoreLimit=999 --timeLimit=25 --netsim=40/10/2
+GOLPE_NETSIM=40/10/2 tsx scripts/training-probe.ts                 # any probe using probeQuery()
+```
+
+Both probes also take `--server=host:port` (others `GOLPE_SERVER=`), for a dev
+server moved off 9208 with `GOLPE_DEV_SERVER_PORT` — say, when a local Docker
+copy of the deploy stack holds the port.
+
+### The probes run on the GPU
+
+`scripts/browser.ts` launches every probe's Chromium with ANGLE on the real GPU.
+Headless Chromium's default is SwiftShader, which drew the game at **10fps** with
+two clients up — below the 12fps the 5-step catch-up cap can carry, so the client
+simulated and sent input at half speed, the server starved half its ticks, and
+an input took 118ms to be acknowledged on localhost. Read `avgFps` before
+anything else in an online report: below ~55 the netcode numbers describe a
+client nobody plays on.
 
 `primarySwitches` counts how often the fighter those metrics *describe* changed. A
 change of subject reads exactly like a fighter teleporting, and it is what turned

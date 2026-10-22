@@ -77,7 +77,7 @@ import type {
 	SnapshotTrap,
 	SnapshotTrapCanister,
 } from "./types";
-import { GAME_SERVER_PORT } from "./types";
+import { GAME_SERVER_PORT, type NetReportMsg, type PlayerInput } from "./types";
 import { unpackAxe, unpackIntent, unpackState } from "./wire";
 
 /** Cap on ballistic extrapolation, so a bad clock estimate cannot fling a bullet. */
@@ -367,6 +367,27 @@ export class OnlineSession {
 	 */
 	private snapshotBytes: number[] = [];
 	private snapshotsSeen = 0;
+	/** The server's latest account of our input stream (`net`). */
+	private serverLink: NetReportMsg | null = null;
+	/**
+	 * When each recent seq left this client, indexed by `seq % ring size`, so the
+	 * snapshot that first acknowledges it can time the round trip: send, the
+	 * server's queue, its tick, and the wait for the next broadcast. That sum is
+	 * what a player's input actually costs before the server acts on it.
+	 */
+	private readonly sentAt = new Float64Array(SENT_AT_RING);
+	private lastAckedSeq = 0;
+	/**
+	 * Every input sent and not yet acknowledged, newest last — the window each
+	 * input message carries in full, so one that arrives repairs every loss
+	 * before it. Trimmed by the ack in `reconcileLocal`.
+	 */
+	private unacked: PlayerInput[] = [];
+	/** See `clockRate`. */
+	private _clockRate = 1;
+	/** Snapshots spent at each clock rate, for the report. */
+	private readonly clockSteer = { fast: 0, normal: 0, slow: 0 };
+	private ackMs: number[] = [];
 
 	constructor(
 		layer: Container,
@@ -766,6 +787,9 @@ export class OnlineSession {
 					this.callbacks.onSeated(roomId, screens, mode),
 				onRoomFull: (roomId) => this.callbacks.onRoomFull(roomId),
 				onRoomLocked: (roomId) => this.callbacks.onRoomLocked(roomId),
+				onNet: (msg) => {
+					this.serverLink = msg;
+				},
 			},
 			join,
 		);
@@ -870,7 +894,10 @@ export class OnlineSession {
 		// `PlayerIntent` precisely so a field added to the simulation cannot be
 		// silently left out of the packet, which would make the server replay a
 		// different input than the client predicted.
-		this.manager.sendInput({ ...intent, seq, aimAngle });
+		this.unacked.push({ ...intent, seq, aimAngle });
+		if (this.unacked.length > REDUNDANT_INPUTS) this.unacked.shift();
+		this.manager.sendInputs(this.unacked);
+		this.sentAt[seq % SENT_AT_RING] = performance.now();
 
 		// The field's own clock, advanced on the fixed step like everything else it
 		// affects. Corrected by every snapshot; this only carries it between them,
@@ -1070,6 +1097,39 @@ export class OnlineSession {
 	}
 
 	/**
+	 * How fast this client's fixed-step clock runs against the wall clock.
+	 *
+	 * **Time dilation, Overwatch's answer to a jittery link.** The server takes
+	 * exactly one input per tick, so its queue is a jitter buffer whose depth is
+	 * whatever the network left there: a late input starves a tick (a freeze
+	 * every other client mispredicts), and every freeze leaves the queue one
+	 * input deeper *for good* — 16ms more latency on everything this player
+	 * does, creeping up across a match. The server reports the shallowest the
+	 * queue got since its last snapshot (`q`), and the client steps a few
+	 * percent fast or slow until it sits in the band: never empty, never more
+	 * than one spare. The simulation's dt never changes — only how often a step
+	 * is taken — so nothing replays differently.
+	 */
+	get clockRate(): number {
+		return this._clockRate;
+	}
+
+	private steerClock(q: number | undefined) {
+		if (q === undefined) {
+			this._clockRate = 1;
+		} else if (q < CUSHION_MIN) {
+			this._clockRate = 1 + CLOCK_DILATION;
+		} else if (q > CUSHION_MAX) {
+			this._clockRate = 1 - CLOCK_DILATION;
+		} else {
+			this._clockRate = 1;
+		}
+		this.clockSteer[
+			this._clockRate > 1 ? "fast" : this._clockRate < 1 ? "slow" : "normal"
+		]++;
+	}
+
+	/**
 	 * Bandwidth and rollback quality, for the diagnostic report.
 	 *
 	 * `snapshots: 0` means nothing ever arrived, which makes every other number in
@@ -1087,6 +1147,20 @@ export class OnlineSession {
 			estBytesPerSec:
 				bytes.length > 0 ? Math.round((total / bytes.length) * SNAPSHOT_HZ) : 0,
 			rollback: this.rollbackStats.summary(),
+			/** Snapshots the step clock spent fast / normal / slow. */
+			clockSteer: { ...this.clockSteer },
+			/** Send → first snapshot acknowledging it, ms. */
+			inputAck: percentiles(this.ackMs),
+			/** The server's side of our input stream. */
+			link: this.serverLink,
+			/** `?netsim=` — what the shaped link was asked to be, and what it did. */
+			netsim: this.manager.netsim
+				? {
+						...this.manager.netsim.config,
+						shaped: this.manager.netsim.shaped,
+						dropped: this.manager.netsim.dropped,
+					}
+				: null,
 		};
 	}
 
@@ -1297,6 +1371,21 @@ export class OnlineSession {
 
 	/** Fold the authoritative local state in, and report how far ahead we are. */
 	private reconcileLocal(p: SnapshotPlayer): number {
+		this.steerClock(p.q);
+		if (p.lastSeq > this.lastAckedSeq) {
+			this.lastAckedSeq = p.lastSeq;
+			while (
+				this.unacked[0] !== undefined &&
+				this.unacked[0].seq <= p.lastSeq
+			) {
+				this.unacked.shift();
+			}
+			const sent = this.sentAt[p.lastSeq % SENT_AT_RING] ?? 0;
+			if (sent > 0) {
+				this.ackMs.push(performance.now() - sent);
+				if (this.ackMs.length > SNAPSHOT_BYTE_WINDOW) this.ackMs.shift();
+			}
+		}
 		const before = { x: this.predicted.state.x, y: this.predicted.state.y };
 		const result = this.predicted.reconcile(
 			unpackState(p.state),
@@ -1410,4 +1499,46 @@ export class OnlineSession {
 		this.bulletPool.releaseAll();
 		for (const id of this.fighters.keys()) this.pendingTeleports.add(id);
 	}
+}
+
+/**
+ * The longest unacknowledged window one input message repeats: 200ms of
+ * input. Enough to ride out a burst of loss at any latency the rollback cap
+ * (150ms) still plays well at; past it an input really is lost, which the
+ * server reports as `link.lost`.
+ */
+const REDUNDANT_INPUTS = 12;
+
+/**
+ * The band `clockRate` holds the server's input cushion in: at least the input
+ * the next tick needs ready (0 spare), at most one spare — each spare input is
+ * a tick of latency on everything this player does.
+ */
+const CUSHION_MIN = 0;
+const CUSHION_MAX = 1;
+/**
+ * How hard the clock steers: 3%, so a tick of cushion is won or spent in about
+ * half a second. Overwatch's is ~5% (16ms steps run at 15.2ms); this is gentler
+ * because a fighting game's player is watching their own timing.
+ */
+const CLOCK_DILATION = 0.03;
+
+/** Seqs remembered for the ack timer — four seconds of input at 60Hz. */
+const SENT_AT_RING = 256;
+
+/** avg / p50 / p95 / max of a sample window, rounded to the millisecond. */
+function percentiles(xs: readonly number[]) {
+	if (xs.length === 0) return null;
+	const sorted = [...xs].sort((a, b) => a - b);
+	const at = (q: number) =>
+		Math.round(
+			sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))] ?? 0,
+		);
+	return {
+		samples: xs.length,
+		avg: Math.round(xs.reduce((a, b) => a + b, 0) / xs.length),
+		p50: at(0.5),
+		p95: at(0.95),
+		max: Math.round(sorted[sorted.length - 1] ?? 0),
+	};
 }

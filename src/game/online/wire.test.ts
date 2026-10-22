@@ -20,10 +20,13 @@ import {
 	tickPlayer,
 } from "../simulation/Physics";
 import {
+	MAX_BUNDLE_INPUTS,
 	packAxe,
+	packInputs,
 	packIntent,
 	packState,
 	unpackAxe,
+	unpackInputs,
 	unpackIntent,
 	unpackState,
 } from "./wire";
@@ -210,5 +213,52 @@ describe("packAxe", () => {
 			y: 480,
 			resting: true,
 		});
+	});
+});
+
+describe("packInputs", () => {
+	/** A window of consecutive inputs, as the client keeps one. */
+	const windowArb = fc
+		.tuple(
+			fc.integer({ min: 1, max: 1_000_000 }),
+			fc.array(
+				fc.tuple(
+					intentArb,
+					fc.double({ min: -Math.PI, max: Math.PI, noNaN: true }),
+				),
+				{ minLength: 1, maxLength: MAX_BUNDLE_INPUTS },
+			),
+		)
+		.map(([first, xs]) =>
+			xs.map(([intent, aimAngle], k) => ({
+				...intent,
+				seq: first + k,
+				aimAngle,
+			})),
+		);
+
+	test.prop([windowArb])(
+		"round-trips every intent and seq, aim to a ten-thousandth",
+		(inputs) => {
+			const back = unpackInputs(packInputs(inputs));
+			expect(back).not.toBeNull();
+			expect(back?.map(({ aimAngle: _, ...rest }) => rest)).toEqual(
+				inputs.map(({ aimAngle: _, ...rest }) => rest),
+			);
+			back?.forEach((b, k) => {
+				expect(
+					Math.abs(b.aimAngle - (inputs[k]?.aimAngle ?? 0)),
+				).toBeLessThanOrEqual(0.00005 + Number.EPSILON);
+			});
+		},
+	);
+
+	it("rejects what is not a bundle", () => {
+		expect(unpackInputs(null)).toBeNull();
+		expect(unpackInputs({ s: 5, i: [1, 2], a: [0] })).toBeNull();
+		expect(unpackInputs({ s: 5, i: [], a: [] })).toBeNull();
+		expect(unpackInputs({ s: 5, i: [1], a: [Number.NaN] })).toBeNull();
+		const long = Array.from({ length: MAX_BUNDLE_INPUTS + 1 }, () => 0);
+		expect(unpackInputs({ s: 99, i: long, a: long })).toBeNull();
 	});
 });

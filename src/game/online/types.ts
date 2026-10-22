@@ -155,6 +155,13 @@ export interface SnapshotPlayer {
 	hp: number;
 	/** Highest input sequence from this player already folded into `state`. */
 	lastSeq: number;
+	/**
+	 * The fewest inputs this player had waiting in the server's queue at any
+	 * tick since the last snapshot, after taking one; -1 means a tick starved.
+	 * The client's step clock steers on it (`OnlineSession.clockRate`). Absent
+	 * for bots, dummies, and while a cinematic's parked backlog drains.
+	 */
+	q?: number;
 	/** Full authoritative simulation state, packed. See `wire.ts`. */
 	state: PackedState;
 	/**
@@ -673,6 +680,24 @@ export interface RosterEntry {
 	admin?: boolean;
 	/** True for the room's creator (the first human to join). */
 	creator?: boolean;
+}
+
+/**
+ * `net`: one client's own input stream, as the server saw it arrive. Sent to
+ * that client alone, once a second, cumulative since it joined. Diagnostics
+ * only — nothing simulates with it. See `server/InputLink.ts`.
+ */
+export interface NetReportMsg {
+	packets: number;
+	accepted: number;
+	duplicates: number;
+	lost: number;
+	overflow: number;
+	starved: number;
+	repeated: number;
+	throttled: number;
+	avgDepth: number;
+	maxDepth: number;
 }
 
 export interface RosterMsg {

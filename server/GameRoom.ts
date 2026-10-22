@@ -30,7 +30,12 @@ import {
 	type SnapshotPlayer,
 	type TeamStatus,
 } from "../src/game/online/types.js";
-import { packAxe, packIntent, packState } from "../src/game/online/wire.js";
+import {
+	packAxe,
+	packIntent,
+	packState,
+	unpackInputs,
+} from "../src/game/online/wire.js";
 import {
 	POTG_ABSORB_BURST,
 	POTG_DAMAGE_BURST,
@@ -142,6 +147,7 @@ import {
 	pelletDamageAt,
 } from "../src/tweakables/ranged.js";
 import { botName, sanitiseName, uniqueName } from "./BotNames.js";
+import { InputLink } from "./InputLink.js";
 import { PotgRecorder } from "./PlayOfTheGame.js";
 import {
 	addCharge,
@@ -390,6 +396,10 @@ interface ConnectedPlayer {
 	lastSeq: number;
 	/** Consecutive ticks with no input available. */
 	starvedTicks: number;
+	/** What this client's input stream looked like on arrival. See `InputLink`. */
+	link: InputLink;
+	/** Fewest inputs left queued at any tick since the last broadcast (`q`). */
+	cushion: number;
 	/**
 	 * The input actually simulated this tick, or null when the player was frozen.
 	 *
@@ -471,6 +481,9 @@ const BROADCAST_HZ = 20;
 const BROADCAST_RATE = MS_PER_SECOND / BROADCAST_HZ;
 const RESET_DELAY_MS = 1500;
 
+/** How often each client hears its own input-stream counters (`net`). */
+const NET_REPORT_MS = 1000;
+
 /** How often the roster is re-sent even when nothing changed. See `tick`. */
 const ROSTER_HEARTBEAT_MS = 2000;
 
@@ -532,6 +545,12 @@ const MAX_STARVED_TICKS = 6;
  * losing it, high enough that it happens often enough to be worth naming.
  */
 const POTG_CLUTCH_HP = 30;
+
+/** To a tenth: the wire precision of anything a client only draws. */
+const WIRE_TENTHS = 10;
+function tenth(n: number): number {
+	return Math.round(n * WIRE_TENTHS) / WIRE_TENTHS;
+}
 
 function idleInput(seq = 0): PlayerInput {
 	return {
@@ -615,6 +634,15 @@ export class GameRoom {
 	/** Bullets the guard turned away, for the purple sparks. Effects only. */
 	private blockedBullets: BlockedBulletMsg[] = [];
 	private channelIds: string[] = [];
+	/**
+	 * Numbers the seats the server fills itself (bots, the dummy), so their ids
+	 * are short and never reused in this room. An id is repeated in every
+	 * snapshot — the fighter, each of its bullets, traps and melee events — and
+	 * the old `bot-<room uuid>-<n>-<ms>` was 57 characters of it: a sixteen-bot
+	 * snapshot was a quarter ids. Ids are only ever compared within the room,
+	 * and a human's is geckos' random 24-character one, so these cannot collide.
+	 */
+	private serverSeatSerial = 0;
 	private tickAccumulator = 0;
 	private broadcastAccumulator = 0;
 	private lastTime = 0;
@@ -632,6 +660,8 @@ export class GameRoom {
 	private trainingSignature = "";
 	/** ms since the roster was last sent. */
 	private rosterAccumulator = 0;
+	/** ms since each client was last sent its `net` report. */
+	private netAccumulator = 0;
 
 	// ---- the ultimate ----
 	//
@@ -1179,7 +1209,7 @@ export class GameRoom {
 		let spawnTeam = team;
 		if (spawnTeam === null && this.mode !== "ffa") spawnTeam = this.nextTeam();
 		else if (this.mode === "ffa") spawnTeam = null;
-		const id = `bot-${this.id}-${this.channelIds.length}-${Date.now()}`;
+		const id = `bot-${++this.serverSeatSerial}`;
 		this.channelIds.push(id);
 		const hero = this.botHeroFor();
 		const slot = this.newSlot(
@@ -1288,6 +1318,8 @@ export class GameRoom {
 			aim: 0,
 			lastSeq: 0,
 			starvedTicks: 0,
+			link: new InputLink(),
+			cushion: Number.POSITIVE_INFINITY,
 			tickInput: null,
 			pendingInput: null,
 			simulatedIntent: null,
@@ -1406,21 +1438,20 @@ export class GameRoom {
 		channel.join(this.id);
 		channel.userData = { roomId: this.id, hero: slot.hero };
 
-		channel.on("input", (data: unknown) => {
+		// The unacknowledged window, redundantly: every copy after the first is
+		// a hole the network made being filled. See `InputBundle`.
+		//
+		// Validated by `unpackInputs` — every field is rebuilt from a bitmask and
+		// a finite number, so nothing a client sends reaches `tickPlayer` raw —
+		// and budgeted, so a flood costs its sender its own inputs rather than
+		// costing the room its tick.
+		channel.on("inputs", (data: unknown) => {
 			const player = this.players.get(id);
-			if (!player) return;
-			const input = data as PlayerInput;
-			if (typeof input?.seq !== "number") return;
-			// Ignore replays of inputs already simulated.
-			if (input.seq <= player.lastSeq) return;
-			player.queue.push(input);
-			const cap =
-				this.cinematicGraceMs > 0
-					? MAX_QUEUED_INPUTS_FROZEN
-					: MAX_QUEUED_INPUTS;
-			if (player.queue.length > cap) {
-				player.queue.splice(0, player.queue.length - cap);
-			}
+			if (!player || !player.link.admit(Date.now())) return;
+			const inputs = unpackInputs(data);
+			if (!inputs) return;
+			player.link.packets++;
+			for (const input of inputs) this.acceptInput(player, input);
 		});
 
 		// The Esc menu's hero select. A mid-match change is *queued*, not
@@ -1601,7 +1632,7 @@ export class GameRoom {
 	addDummy(patch: TrainingConfigPatch = {}): boolean {
 		if (this.isFull) return false;
 
-		const id = `dummy-${this.id}-${this.channelIds.length}`;
+		const id = `dummy-${++this.serverSeatSerial}`;
 		const dummy = new TrainingDummy(patch);
 		this.channelIds.push(id);
 		this.players.set(
@@ -2413,7 +2444,7 @@ export class GameRoom {
 		player.respawnTimer = 0;
 		player.lastHurtBy = null;
 		player.lastHurtCause = "bullet";
-		player.queue.length = 0;
+		this.discardQueue(player);
 		player.pendingInput = null;
 		player.tickInput = null;
 		player.simulatedIntent = null;
@@ -2919,6 +2950,12 @@ export class GameRoom {
 				id: p.id,
 				hp: p.hp,
 				lastSeq: p.lastSeq,
+				// The input cushion its client steers its clock on. Not while a
+				// cinematic's parked backlog drains: that depth is the freeze,
+				// not the client running fast.
+				...(Number.isFinite(p.cushion) && this.cinematicGraceMs <= 0
+					? { q: p.cushion }
+					: {}),
 				// Packed rather than sent as an object: sixteen verbatim
 				// `PlayerPosition` objects is ~6KB a snapshot, which is both a lot of
 				// bandwidth and a datagram nobody's MTU wants. See `online/wire.ts`.
@@ -2956,13 +2993,16 @@ export class GameRoom {
 			t: Date.now(),
 			tick: this.tickCount,
 			players: playerArr,
+			// Projectiles are drawn, never simulated, by a client — dead-reckoned
+			// from first sight — so they travel to a tenth of a pixel. Sixteen
+			// decimal places of a bullet's position was a fifth of a snapshot.
 			bullets: this.bullets.map((b) => ({
 				id: b.id,
 				ownerId: b.ownerId,
-				x: b.x,
-				y: b.y,
-				vx: b.vx,
-				vy: b.vy,
+				x: tenth(b.x),
+				y: tenth(b.y),
+				vx: tenth(b.vx),
+				vy: tenth(b.vy),
 				pellet: b.pellet ?? false,
 			})),
 			melee: this.meleeEvents.slice(),
@@ -2973,10 +3013,10 @@ export class GameRoom {
 				id: g.id,
 				ownerId: g.ownerId,
 				ownerTeam: g.ownerTeam,
-				x: g.x,
-				y: g.y,
-				vx: g.vx,
-				vy: g.vy,
+				x: tenth(g.x),
+				y: tenth(g.y),
+				vx: tenth(g.vx),
+				vy: tenth(g.vy),
 			})),
 			// Sent in full every snapshot rather than announced once. It is what every
 			// client feeds into `tickPlayer`, so a lost datagram must never be able to
@@ -3004,15 +3044,21 @@ export class GameRoom {
 			// dead-reckon like bullets — position and velocity, anchored by the
 			// client on first sight.
 			traps: this.traps.map((t) => ({ ...t })),
-			trapCanisters: this.trapCanisters.map((c) => ({ ...c })),
+			trapCanisters: this.trapCanisters.map((c) => ({
+				...c,
+				x: tenth(c.x),
+				y: tenth(c.y),
+				vx: tenth(c.vx),
+				vy: tenth(c.vy),
+			})),
 			heGrenades: this.heGrenades.map((g) => ({
 				id: g.id,
 				ownerId: g.ownerId,
 				ownerTeam: g.ownerTeam,
-				x: g.x,
-				y: g.y,
-				vx: g.vx,
-				vy: g.vy,
+				x: tenth(g.x),
+				y: tenth(g.y),
+				vx: tenth(g.vx),
+				vy: tenth(g.vy),
 			})),
 			// Smoke canisters dead-reckon like bullets; the clouds travel in full
 			// every snapshot because the concealment is re-derived from the list.
@@ -3020,10 +3066,10 @@ export class GameRoom {
 				id: g.id,
 				ownerId: g.ownerId,
 				ownerTeam: g.ownerTeam,
-				x: g.x,
-				y: g.y,
-				vx: g.vx,
-				vy: g.vy,
+				x: tenth(g.x),
+				y: tenth(g.y),
+				vx: tenth(g.vx),
+				vy: tenth(g.vy),
 			})),
 			smokeClouds: this.smokeClouds.map((c) => ({ ...c })),
 			// The map's supply: only the packs that are there, in full every
@@ -3088,6 +3134,59 @@ export class GameRoom {
 		// is ~300 B/s — cheap enough that self-healing is the obvious trade.
 		this.rosterAccumulator += elapsed;
 		if (this.rosterAccumulator >= ROSTER_HEARTBEAT_MS) this.broadcastRoster();
+
+		// Each client's own input stream, as the server saw it. Unreliable and
+		// cumulative, so a lost one is healed by the next.
+		this.netAccumulator += elapsed;
+		if (this.netAccumulator >= NET_REPORT_MS) {
+			this.netAccumulator = 0;
+			for (const player of this.players.values()) {
+				player.channel?.emit("net", player.link.report());
+			}
+		}
+	}
+
+	/**
+	 * Queue one input in seq order, once.
+	 *
+	 * **In seq order, not arrival order.** Datagrams are unordered, and the
+	 * queue used to be appended as they landed: two inputs swapped by the
+	 * network were *simulated* swapped, and the ack went backwards between
+	 * them. With 20ms of jitter that was a third of every input stream.
+	 */
+	private acceptInput(player: ConnectedPlayer, input: PlayerInput) {
+		const { queue } = player;
+		// Already simulated — a redundant copy, or one that came too late.
+		if (input.seq <= player.lastSeq) {
+			player.link.duplicates++;
+			return;
+		}
+		// Nearly always appended: search from the back.
+		let at = queue.length;
+		while (at > 0 && (queue[at - 1] as PlayerInput).seq > input.seq) at--;
+		if (at > 0 && (queue[at - 1] as PlayerInput).seq === input.seq) {
+			player.link.duplicates++;
+			return;
+		}
+		queue.splice(at, 0, input);
+		player.link.accepted++;
+		const cap =
+			this.cinematicGraceMs > 0 ? MAX_QUEUED_INPUTS_FROZEN : MAX_QUEUED_INPUTS;
+		if (queue.length > cap) {
+			player.link.overflow += queue.length - cap;
+			queue.splice(0, queue.length - cap);
+		}
+	}
+
+	/**
+	 * Throw the queued input away — a respawn, a round reset — and count it as
+	 * consumed. Acknowledging it is what stops the redundant copies already in
+	 * flight from queueing it all over again on the new life.
+	 */
+	private discardQueue(player: ConnectedPlayer) {
+		const newest = player.queue[player.queue.length - 1];
+		if (newest && newest.seq > player.lastSeq) player.lastSeq = newest.seq;
+		player.queue.length = 0;
 	}
 
 	/**
@@ -3097,6 +3196,11 @@ export class GameRoom {
 	private consumeInput(player: ConnectedPlayer): PlayerInput | null {
 		const next = player.queue.shift();
 		if (next) {
+			if (next.seq > player.lastSeq + 1 && player.lastSeq > 0) {
+				player.link.lost += next.seq - player.lastSeq - 1;
+			}
+			player.link.sampleDepth(player.queue.length);
+			player.cushion = Math.min(player.cushion, player.queue.length);
 			player.lastInput = next;
 			player.lastSeq = next.seq;
 			player.starvedTicks = 0;
@@ -3105,10 +3209,13 @@ export class GameRoom {
 		}
 
 		player.starvedTicks++;
+		player.cushion = -1;
 		if (player.starvedTicks <= MAX_STARVED_TICKS) {
+			player.link.starved++;
 			player.tickInput = null;
 			return null;
 		}
+		player.link.repeated++;
 		// Given up waiting: hold the previous intent, but do not re-acknowledge a
 		// sequence we have already applied. Nor is a repeated intent a frame the
 		// player sent, so it is not offered to the dummy's recorder.
@@ -5057,7 +5164,7 @@ export class GameRoom {
 			p.lastHurtCause = "bullet";
 			p.lastAttackTime = 0;
 			p.pendingThrowCharge = null;
-			p.queue.length = 0;
+			this.discardQueue(p);
 			p.pendingInput = null;
 			p.tickInput = null;
 			p.simulatedIntent = null;
@@ -5158,6 +5265,7 @@ export class GameRoom {
 		});
 		for (const player of this.players.values()) {
 			player.channel?.emit("state", snap);
+			player.cushion = Number.POSITIVE_INFINITY;
 		}
 		// Melee events are one-shot. Cleared unconditionally, so a room with no
 		// listening humans does not accumulate them forever.

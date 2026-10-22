@@ -15,6 +15,7 @@ import {
 	penetrationDepth,
 	type World,
 } from "../simulation/Arena";
+import { meleeHaste } from "../simulation/Melee";
 import {
 	AIR_JUMPS,
 	BULLET_SPEED,
@@ -1069,7 +1070,13 @@ export class PhysicsDiagnostics {
 		 * Massive observed ending at 700ms of its declared 720ms, purely because
 		 * the run was averaging 49fps.
 		 */
-		const tolerance = Math.max(toleranceMs, dtMs + FRAME_TOLERANCE_MS);
+		//
+		// And in *move* time: the timer advances at the fighter's melee clock,
+		// so a bloodlust-hasted Ibiriki covers 30% more of his move between two
+		// samples. A 20Hz remote hew3 seen 79ms before its end was a legal move
+		// reported as one cancelled early.
+		const tolerance =
+			Math.max(toleranceMs, dtMs + FRAME_TOLERANCE_MS) * meleeHaste(s);
 
 		const stunned = s.stunTimer > 0;
 		/**
