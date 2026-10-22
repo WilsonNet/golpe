@@ -12,7 +12,7 @@ import type { Browser, Page } from "playwright";
  */
 import type { AIState } from "../src/game/characters/EnemyBrain";
 import type { WallSide } from "../src/game/simulation/Physics";
-import { launchBrowser } from "./browser";
+import { launchBrowser, serveDist } from "./browser";
 
 const BASE_URL = process.env.GOLPE_URL ?? "http://localhost:8084";
 const RESULT_RE = /__DIAGNOSTIC_RESULT__(\{.*?\})__END__/s;
@@ -79,6 +79,9 @@ const HERO = arg("hero", "");
 const NETSIM = arg("netsim", "");
 // `--server=host:port` dials a game server other than the page's own :9208.
 const SERVER = arg("server", "");
+// `--dist=dist` serves that local build in place of BASE_URL's own files: a
+// client change measured against the live server before it ships.
+const DIST = arg("dist", "");
 const URL_PARAMS =
 	`${NETSIM ? `&netsim=${NETSIM}` : ""}` +
 	`${SERVER ? `&server=${SERVER}` : ""}` +
@@ -231,6 +234,7 @@ async function assertServerUp() {
 async function onlineRun(browser: Browser, durationMs: number) {
 	await assertServerUp();
 	const ctx = await browser.newContext();
+	if (DIST) await serveDist(ctx, new URL(BASE_URL).origin, DIST);
 	// **The same `room` for both tabs, or they are not in the same match.** Rooms
 	// are addressed rather than matchmade, so a client with no `?room=` makes a new
 	// one — two tabs opened at the same URL would sit in two separate rooms and the

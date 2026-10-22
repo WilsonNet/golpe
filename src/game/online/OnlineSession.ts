@@ -1114,6 +1114,13 @@ export class OnlineSession {
 		return this._clockRate;
 	}
 
+	/**
+	 * Steered on each snapshot's `q`, deliberately not a longer window. On
+	 * golpe.quest's bursty real link, steering on the worst `q` of the last
+	 * second cut starved ticks from ~25 a run to ~6 — and cost a tick of
+	 * latency (ack p50 107 → 125ms, queue 3.3 → 4.5 deep) for no fewer visible
+	 * corrections. Latency is the one a fighting game feels.
+	 */
 	private steerClock(q: number | undefined) {
 		if (q === undefined) {
 			this._clockRate = 1;

@@ -145,7 +145,11 @@ them at 20Hz is ~128 KB/s per client and a datagram well past any sane MTU.
 
 - **A fighter's state is twenty-two numbers**, and its intent is one integer.
   `online/wire.ts` packs and unpacks; measured cost is ~800 bytes a snapshot for a
-  duel (~16 KB/s) and ~3.4 KB for sixteen fighters (~66 KB/s).
+  duel (~16 KB/s) and ~6.6 KB for sixteen fighters (~130 KB/s) once their
+  bullets, traps and events ride along. Server-seated ids are short (`bot-7`,
+  `dummy-1`) because an id repeats in every entry a fighter owns — the old
+  57-character bot id was a quarter of a sixteen-bot snapshot — and projectiles
+  a client only draws travel to a tenth of a pixel.
 - **The field list is checked by the compiler.** `STATE_FIELDS` is asserted to
   cover every key of `PlayerPosition`, so adding a field to the simulation fails
   to build until it is also on the wire. Same guarantee `PlayerInput extends
@@ -286,6 +290,14 @@ shaped):
 | | local visible corrections | 93, 107 | **5, 9** |
 | | jitter events | 2, 5 | **0, 0** |
 | | queue depth (redundancy alone → steered) | | 2.2 → **1.6** |
+
+And on **golpe.quest** itself (São Paulo, two AI clients over the real internet,
+three runs each, before and after the deploy): remote prediction depth 6.6-7.2 →
+**5.5-5.9 ticks**, 2 of 3 runs failing → 3 of 3 passing. The live link is
+*bursty* in a way `netsim` is not — the queue sits ~3 deep and still starves ~25
+ticks a run. Steering on the worst `q` of a whole second instead of each
+snapshot's was measured and rejected: starvation fell to ~6, but the queue grew
+to ~4.5 and input latency by a tick, for no fewer visible corrections.
 
 ## Never simulate a tick the client did not send
 

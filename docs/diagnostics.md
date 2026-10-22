@@ -190,7 +190,7 @@ for occasional misprediction and a trade has to be measured or it is a preferenc
 | Field | Meaning |
 |---|---|
 | `snapshots` | **0 means the client simulated alone** — every other number is about nothing |
-| `avgSnapshotBytes` / `estBytesPerSec` | what forced the packed wire format; ~800B/16KBps for a duel, ~3.4KB/66KBps at sixteen |
+| `avgSnapshotBytes` / `estBytesPerSec` | what forced the packed wire format; ~800B/16KBps for a duel, ~6.6KB/130KBps at sixteen |
 | `rollback.avgErrorPx` | how wrong remote prediction usually is. 2-8px observed |
 | `rollback.maxErrorPx` | worst single correction. 57-99px observed; past 100px is a discontinuity, not an error |
 | `rollback.visibleCorrections` | corrections over 1px. ~12% of rollbacks in a duel, ~20% at sixteen |
@@ -220,6 +220,19 @@ GOLPE_NETSIM=40/10/2 tsx scripts/training-probe.ts                 # any probe u
 Both probes also take `--server=host:port` (others `GOLPE_SERVER=`), for a dev
 server moved off 9208 with `GOLPE_DEV_SERVER_PORT` — say, when a local Docker
 copy of the deploy stack holds the port.
+
+### The live server, before shipping: `--dist`
+
+```bash
+pnpm run build
+GOLPE_URL=https://golpe.quest tsx scripts/diagnose.ts --mode=online --runs=3 --dist=dist
+```
+
+serves the local build in place of the live site's own files (Playwright
+routing, `serveDist` in `scripts/browser.ts`), so an unshipped *client* change
+is measured against the deployed server over the real internet, from the real
+HTTPS origin. Drop `--dist` to measure what is actually live. A server change
+still has to be deployed to be measured this way.
 
 ### The probes run on the GPU
 

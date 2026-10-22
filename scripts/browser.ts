@@ -1,4 +1,6 @@
-import { type Browser, chromium } from "playwright";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { extname, join, resolve } from "node:path";
+import { type Browser, type BrowserContext, chromium } from "playwright";
 
 /**
  * Chromium for every probe — on the GPU when the machine has one.
@@ -39,3 +41,46 @@ export function probeQuery(): string {
 		(server ? `&server=${server}` : "") + (netsim ? `&netsim=${netsim}` : "")
 	);
 }
+
+/**
+ * Serve a local client build in place of the page origin's own files.
+ *
+ * `GOLPE_URL=https://golpe.quest diagnose --dist=dist` measures a client that
+ * has not shipped against the live server, over the real internet, from the
+ * live origin — so the page is HTTPS and dials the server exactly as a player's
+ * would. Anything the build lacks falls through to the network.
+ */
+export async function serveDist(
+	ctx: BrowserContext,
+	origin: string,
+	dist: string,
+): Promise<void> {
+	const root = resolve(dist);
+	await ctx.route(`${origin}/**`, async (route) => {
+		const path = new URL(route.request().url()).pathname;
+		const file = join(root, path === "/" ? "index.html" : path);
+		if (
+			!file.startsWith(root) ||
+			!existsSync(file) ||
+			!statSync(file).isFile()
+		) {
+			return route.fallback();
+		}
+		return route.fulfill({
+			body: readFileSync(file),
+			contentType: CONTENT_TYPES[extname(file)] ?? "application/octet-stream",
+		});
+	});
+}
+
+const CONTENT_TYPES: Record<string, string> = {
+	".html": "text/html",
+	".js": "text/javascript",
+	".css": "text/css",
+	".json": "application/json",
+	".png": "image/png",
+	".webp": "image/webp",
+	".wav": "audio/wav",
+	".ogg": "audio/ogg",
+	".svg": "image/svg+xml",
+};
