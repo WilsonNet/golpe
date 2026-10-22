@@ -67,6 +67,13 @@ interface Service {
 	ready: RegExp;
 }
 
+/**
+ * The game server's port. `GOLPE_DEV_SERVER_PORT` moves it when something else
+ * already owns 9208 — a local Docker copy of the deploy stack, say — and then
+ * every probe needs `&server=localhost:<port>` to dial it.
+ */
+const SERVER_PORT = Number(process.env.GOLPE_DEV_SERVER_PORT ?? 9208);
+
 /** The processes the tab supervises. */
 const SERVICES: Service[] = [
 	{
@@ -78,10 +85,10 @@ const SERVICES: Service[] = [
 	},
 	{
 		name: "server",
-		label: "geckos :9208",
-		command: ["pnpm", "run", "dev:server"],
-		port: 9208,
-		ready: /listening on port 9208/,
+		label: `geckos :${SERVER_PORT}`,
+		command: ["env", `PORT=${SERVER_PORT}`, "pnpm", "run", "dev:server"],
+		port: SERVER_PORT,
+		ready: new RegExp(`listening on port ${SERVER_PORT}`),
 	},
 ];
 
@@ -151,11 +158,11 @@ function findTab(workspaceId: string, label: string): HerdrTab | null {
 /** Is something already listening on the port? */
 async function portOpen(port: number): Promise<boolean> {
 	const url =
-		port === 9208
-			? "http://localhost:9208/.wrtc/v2/connections"
+		port === SERVER_PORT
+			? `http://localhost:${port}/.wrtc/v2/connections`
 			: `http://localhost:${port}/`;
 	const res = await fetch(url, {
-		method: port === 9208 ? "POST" : "GET",
+		method: port === SERVER_PORT ? "POST" : "GET",
 	}).catch(() => null);
 	return Boolean(res);
 }

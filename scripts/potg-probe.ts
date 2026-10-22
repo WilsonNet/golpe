@@ -25,8 +25,8 @@
  */
 import { randomUUID } from "node:crypto";
 import type { Page } from "playwright";
-import { chromium } from "playwright";
 import type { MatchStateSnapshot, PotgSnapshot } from "../src/types/global";
+import { launchBrowser, probeQuery } from "./browser";
 
 const BASE_URL = process.env.GOLPE_URL ?? "http://localhost:8084";
 const SERVER_URL = process.env.GOLPE_SERVER_URL ?? "http://localhost:9208";
@@ -521,7 +521,7 @@ function assess({
 
 async function main() {
 	await assertServerUp();
-	const browser = await chromium.launch();
+	const browser = await launchBrowser();
 	const ctx = await browser.newContext();
 	const page = await ctx.newPage();
 	const lines = sinkConsole(page);
@@ -531,6 +531,7 @@ async function main() {
 	const room = randomUUID();
 	const url =
 		`${BASE_URL}/?ai=true&room=${room}&bots=${FIGHTERS - 1}&mute=1` +
+		probeQuery() +
 		`&scoreLimit=${SCORE_LIMIT}&timeLimit=${TIME_LIMIT_SEC}` +
 		(MODE === "tdm" ? "&mode=tdm&freezeTime=1" : "") +
 		(ULT_CHARGE ? `&ultCharge=${ULT_CHARGE}` : "");

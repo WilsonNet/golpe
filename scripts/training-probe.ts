@@ -20,7 +20,6 @@ import type { Page } from "playwright";
  *   tsx scripts/training-probe.ts --only=backstab
  *   tsx scripts/training-probe.ts --keep-open   # leave the browser up
  */
-import { chromium } from "playwright";
 import type { MeleeEventMsg } from "../src/game/online/types";
 import type { MeleeMove, MeleeOutcome } from "../src/game/simulation/Physics";
 import type {
@@ -28,6 +27,7 @@ import type {
 	TrainingScenario,
 } from "../src/game/training/report";
 import { DRAGON_DAMAGE } from "../src/tweakables/ultimate";
+import { launchBrowser, probeQuery } from "./browser";
 
 const BASE_URL = process.env.GOLPE_URL ?? "http://localhost:8084";
 
@@ -1831,7 +1831,7 @@ function digest(report: TrainingReport) {
 async function main() {
 	await assertServerUp();
 
-	const browser = await chromium.launch();
+	const browser = await launchBrowser();
 	const ctx = await browser.newContext({
 		viewport: { width: 900, height: 900 },
 	});
@@ -1846,7 +1846,7 @@ async function main() {
 	// and at the real 0.35 charge/s the probe would be waiting out ~285s to
 	// measure one interaction.
 	await page.goto(
-		`${BASE_URL}/?training=true&ultCharge=100&mute=1${HERO !== "lia" ? `&hero=${HERO}` : ""}`,
+		`${BASE_URL}/?training=true&ultCharge=100&mute=1${HERO !== "lia" ? `&hero=${HERO}` : ""}${probeQuery()}`,
 	);
 	await page.waitForFunction(() => !!window.__training, { timeout: 20000 });
 	const seated = await page.evaluate(() => window.__training!.ready(20000));

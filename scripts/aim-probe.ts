@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import type { Browser, Page } from "playwright";
 /**
  * Aim feedback-loop harness.
  *
@@ -22,8 +21,9 @@ import type { Browser, Page } from "playwright";
  *   tsx scripts/aim-probe.ts --dpr=2
  *   tsx scripts/aim-probe.ts --mode=offline
  */
-import { chromium } from "playwright";
 import { randomUUID } from "node:crypto";
+import type { Browser, Page } from "playwright";
+import { launchBrowser } from "./browser";
 
 const BASE_URL = process.env.GOLPE_URL ?? "http://localhost:8084";
 
@@ -452,7 +452,7 @@ async function runOne(browser: Browser, dpr: number) {
 }
 
 async function main() {
-	const browser = await chromium.launch();
+	const browser = await launchBrowser();
 	let failed = false;
 	for (const dpr of DPRS) {
 		const report = await runOne(browser, dpr);

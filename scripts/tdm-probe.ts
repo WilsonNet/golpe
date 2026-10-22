@@ -25,9 +25,9 @@ import type { Page } from "playwright";
  *   tsx scripts/tdm-probe.ts
  *   tsx scripts/tdm-probe.ts --fighters=8 --scoreLimit=2 --timeLimit=120
  */
-import { chromium } from "playwright";
 import type { TeamId } from "../src/game/simulation/Teams";
 import type { MatchStateSnapshot } from "../src/types/global";
+import { launchBrowser, probeQuery } from "./browser";
 
 const BASE_URL = process.env.GOLPE_URL ?? "http://localhost:8084";
 const RESULT_RE = /__DIAGNOSTIC_RESULT__(\{.*?\})__END__/s;
@@ -389,7 +389,7 @@ function assess(
 
 async function main() {
 	await assertServerUp();
-	const browser = await chromium.launch();
+	const browser = await launchBrowser();
 	const ctx = await browser.newContext();
 	const page = await ctx.newPage();
 	const lines = sinkConsole(page);
@@ -398,6 +398,7 @@ async function main() {
 	// and asking for it here would test the URL rather than the rule.
 	const url =
 		`${BASE_URL}/?ai=true&mode=tdm&bots=${FIGHTERS - 1}&mute=1` +
+		probeQuery() +
 		`&scoreLimit=${SCORE_LIMIT}&timeLimit=${TIME_LIMIT_SEC}` +
 		`&freezeTime=${FREEZE_SEC}` +
 		(ULT_CHARGE > 0 ? `&ultCharge=${ULT_CHARGE}` : "") +

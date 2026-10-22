@@ -1,3 +1,5 @@
+import { launchBrowser } from "./browser";
+
 /**
  * The move-list previews, measured: every entry whose card claims a hit must
  * actually land one on the preview's target dummies.
@@ -11,7 +13,6 @@
  *
  * Run with the dev servers up (pnpm run dev:herdr).
  */
-import { chromium } from "playwright";
 
 const BASE = process.env.GOLPE_URL ?? "http://localhost:8084";
 
@@ -87,7 +88,7 @@ async function watch(
 	return last;
 }
 
-const browser = await chromium.launch();
+const browser = await launchBrowser();
 
 // ---------------------------------------------------------------- Lia ----
 {

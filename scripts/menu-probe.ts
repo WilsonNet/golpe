@@ -1,3 +1,5 @@
+import { launchBrowser } from "./browser";
+
 /**
  * Drive the root menu the way a player would, and prove it cannot lie.
  *
@@ -9,7 +11,6 @@
  *
  * Run with the dev servers up (pnpm run dev:herdr).
  */
-import { chromium } from "playwright";
 
 const BASE = process.env.GOLPE_URL ?? "http://localhost:8084";
 
@@ -42,7 +43,7 @@ function check(label: string, ok: boolean, detail = "") {
 	if (!ok) failures++;
 }
 
-const browser = await chromium.launch();
+const browser = await launchBrowser();
 
 // --- 1. the bare URL is the menu --------------------------------
 {

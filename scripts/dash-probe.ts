@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { launchBrowser } from "./browser";
+
 /**
  * Dash reliability probe.
  *
@@ -13,7 +15,6 @@
  *   tsx scripts/dash-probe.ts               # current build
  *   tsx scripts/dash-probe.ts --trials=40
  */
-import { chromium } from "playwright";
 
 const BASE_URL = process.env.GOLPE_URL ?? "http://localhost:8084";
 const TRIALS = Number(
@@ -47,7 +48,7 @@ const FAKE_FRAME = `
 })();
 `;
 
-const browser = await chromium.launch();
+const browser = await launchBrowser();
 const ctx = await browser.newContext();
 await ctx.addInitScript(FAKE_FRAME);
 const page = await ctx.newPage();

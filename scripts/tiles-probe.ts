@@ -15,7 +15,7 @@
  * proves the platform switch leaves the sky off.
  */
 import { mkdir } from "node:fs/promises";
-import { chromium } from "playwright";
+import { launchBrowser } from "./browser";
 
 const BASE = process.env.GOLPE_URL ?? "http://localhost:8084";
 const SHOTS = ".playwright-mcp/tiles";
@@ -51,7 +51,7 @@ const check = (ok: boolean, label: string, detail = "") => {
 	if (!ok) failed = true;
 };
 
-const browser = await chromium.launch();
+const browser = await launchBrowser();
 const ctx = await browser.newContext({
 	viewport: { width: 1200, height: 900 },
 	deviceScaleFactor: 1,
@@ -217,7 +217,11 @@ await urlPage.waitForTimeout(400);
 const byUrl = (await urlPage.evaluate(() =>
 	window.__tilemapDebug?.(),
 )) as TileDebug | null;
-check(byUrl?.style === "flat", "?tiles=flat pins the competitive skin", byUrl?.style);
+check(
+	byUrl?.style === "flat",
+	"?tiles=flat pins the competitive skin",
+	byUrl?.style,
+);
 await urlPage.close();
 
 check(errors.length === 0, "no page or console errors", errors[0] ?? "");

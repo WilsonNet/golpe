@@ -1,7 +1,8 @@
-/** One-off: open two online AI clients and dump what the first one sees. */
-import { chromium } from "playwright";
+import { launchBrowser } from "./browser";
 
-const browser = await chromium.launch();
+/** One-off: open two online AI clients and dump what the first one sees. */
+
+const browser = await launchBrowser();
 const ctx = await browser.newContext();
 // One `room` for both tabs. Without it each client makes its own room and the
 // two never meet, which reads as a netcode failure and is a URL mistake. No

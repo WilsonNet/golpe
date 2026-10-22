@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import type { Page } from "playwright";
+import { launchBrowser } from "./browser";
+
 /**
  * Multi-screen smoke probe: the `?screen=N` arena, online.
  *
@@ -17,7 +19,6 @@ import type { Page } from "playwright";
  * jitter signal by the diagnostic, so `diagnose.ts --screens=N` proves the
  * follow cam never moves fast enough to read as a defect.
  */
-import { chromium } from "playwright";
 
 const BASE = "http://localhost:8084";
 const ROOM = `screenprobe-${Date.now().toString(36)}`;
@@ -45,7 +46,7 @@ async function gameState(page: Page) {
 	});
 }
 
-const browser = await chromium.launch();
+const browser = await launchBrowser();
 const ctx = await browser.newContext();
 const a = await ctx.newPage();
 const b = await ctx.newPage();

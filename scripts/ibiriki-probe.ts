@@ -13,7 +13,8 @@
  *
  * Run: `tsx scripts/ibiriki-probe.ts [--duration=45000]` with both dev servers up.
  */
-import { chromium, type Page } from "playwright";
+import type { Page } from "playwright";
+import { launchBrowser } from "./browser";
 
 const BASE = "http://localhost:8084";
 const arg = (name: string, fallback: string) =>
@@ -42,7 +43,7 @@ async function boot(page: Page, url: string, errors: string[]) {
 }
 
 async function main() {
-	const browser = await chromium.launch();
+	const browser = await launchBrowser();
 	const ctx = await browser.newContext({
 		viewport: { width: 800, height: 600 },
 	});

@@ -62,8 +62,8 @@ import type { Page } from "playwright";
  * produces that number whatever the ultimate does. The metric could not have
  * discriminated, so it was replaced with one that can.
  */
-import { chromium } from "playwright";
 import type { UltSnapshot } from "../src/types/global";
+import { launchBrowser } from "./browser";
 
 /** `--no-cast`: the control. Scenario A, same room, no button pressed. */
 const CAST = !process.argv.includes("--no-cast");
@@ -224,7 +224,7 @@ async function watch(pages: Page[], ms: number, stepMs = 25) {
 	return frames;
 }
 
-const browser = await chromium.launch();
+const browser = await launchBrowser();
 const ctx = await browser.newContext({ viewport: { width: 900, height: 800 } });
 
 // =========================================================

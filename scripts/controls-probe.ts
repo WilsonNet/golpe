@@ -21,7 +21,7 @@
  */
 import { randomUUID } from "node:crypto";
 import type { Page } from "playwright";
-import { chromium } from "playwright";
+import { launchBrowser } from "./browser";
 
 const BASE_URL = process.env.GOLPE_URL ?? "http://localhost:8084";
 
@@ -118,7 +118,7 @@ async function closeMenu(page: Page) {
 }
 
 async function run() {
-	const browser = await chromium.launch();
+	const browser = await launchBrowser();
 	const ctx = await browser.newContext({
 		viewport: { width: 900, height: 900 },
 	});

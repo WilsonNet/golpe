@@ -16,8 +16,8 @@ import type { Page } from "playwright";
  *   tsx scripts/deathmatch-probe.ts --fighters=16 --scoreLimit=5 --timeLimit=90
  *   tsx scripts/deathmatch-probe.ts --scoreLimit=999 --timeLimit=20   # test the clock
  */
-import { chromium } from "playwright";
 import type { MatchStateSnapshot } from "../src/types/global";
+import { launchBrowser } from "./browser";
 
 const BASE_URL = process.env.GOLPE_URL ?? "http://localhost:8084";
 const RESULT_RE = /__DIAGNOSTIC_RESULT__(\{.*?\})__END__/s;
@@ -40,6 +40,10 @@ const SCREENS = Math.max(1, Number(arg("screens", "1")) || 1);
 const HERO = arg("hero", "");
 /** `--botHero=anands` seats every bot as the dagger hero. */
 const BOT_HERO = arg("botHero", "");
+/** `--server=host:port` dials a game server other than the page's :9208. */
+const SERVER = arg("server", "");
+/** `--netsim=40/10/2` shapes the probe client's link: one-way ms / jitter ms / loss %. */
+const NETSIM = arg("netsim", "");
 
 function sinkConsole(page: Page, lines: string[] = []): string[] {
 	page.on("console", (msg) => lines.push(msg.text()));
@@ -54,12 +58,14 @@ function sinkConsole(page: Page, lines: string[] = []): string[] {
  * no misprediction — a false PASS that looks like a clean bill of health.
  */
 async function assertServerUp() {
-	const res = await fetch("http://localhost:9208/.wrtc/v2/connections", {
-		method: "POST",
-	}).catch(() => null);
+	const host = new URL(BASE_URL);
+	const target = SERVER || `${host.hostname}:9208`;
+	const res = await fetch(`${host.protocol}//${target}/health`).catch(
+		() => null,
+	);
 	if (!res) {
 		throw new Error(
-			"game server unreachable on :9208 — start it with `pnpm run dev:server`",
+			`game server unreachable on ${target} — start it with \`pnpm run dev:server\``,
 		);
 	}
 }
@@ -190,7 +196,7 @@ function assess(
 
 async function main() {
 	await assertServerUp();
-	const browser = await chromium.launch();
+	const browser = await launchBrowser();
 	const ctx = await browser.newContext();
 	const page = await ctx.newPage();
 	const lines = sinkConsole(page);
@@ -203,7 +209,9 @@ async function main() {
 		`&scoreLimit=${SCORE_LIMIT}&timeLimit=${TIME_LIMIT_SEC}` +
 		(SCREENS > 1 ? `&screen=${SCREENS}` : "") +
 		(HERO ? `&hero=${HERO}` : "") +
-		(BOT_HERO ? `&botHero=${BOT_HERO}` : "");
+		(BOT_HERO ? `&botHero=${BOT_HERO}` : "") +
+		(SERVER ? `&server=${SERVER}` : "") +
+		(NETSIM ? `&netsim=${NETSIM}` : "");
 	console.log(`[PROBE] ${url}`);
 	await page.goto(url);
 	await page.waitForFunction(() => typeof window.__matchState === "function", {

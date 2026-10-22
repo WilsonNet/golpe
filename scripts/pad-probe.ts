@@ -29,8 +29,8 @@
  */
 import { randomUUID } from "node:crypto";
 import type { Browser, Page } from "playwright";
-import { chromium } from "playwright";
 import type { GameStateSnapshot } from "../src/types/global";
+import { launchBrowser } from "./browser";
 
 const BASE_URL = process.env.GOLPE_URL ?? "http://localhost:8084";
 
@@ -531,7 +531,7 @@ async function runTouchDeck(browser: Browser, check: Check) {
 type Check = (name: string, ok: boolean, detail: string) => void;
 
 async function run() {
-	const browser = await chromium.launch();
+	const browser = await launchBrowser();
 	const ctx = await browser.newContext({
 		viewport: { width: 900, height: 900 },
 	});

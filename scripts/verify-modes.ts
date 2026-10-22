@@ -6,7 +6,7 @@
  */
 
 import type { Page } from "playwright";
-import { chromium } from "playwright";
+import { launchBrowser } from "./browser";
 
 const BASE = process.env.GOLPE_URL ?? "http://localhost:8084";
 
@@ -144,7 +144,7 @@ const MODES: Mode[] = [
 	},
 ];
 
-const browser = await chromium.launch();
+const browser = await launchBrowser();
 
 for (const [modeIndex, mode] of MODES.entries()) {
 	const ctx = await browser.newContext();

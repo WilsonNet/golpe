@@ -24,7 +24,7 @@
  * to meet.
  */
 import { mkdir, writeFile } from "node:fs/promises";
-import { chromium } from "playwright";
+import { launchBrowser } from "./browser";
 
 const BASE = "http://localhost:8084";
 const SHOTS = ".playwright-mcp/readability";
@@ -82,7 +82,7 @@ const check = (ok: boolean, label: string, detail = "") => {
 	if (!ok) failed = true;
 };
 
-const browser = await chromium.launch();
+const browser = await launchBrowser();
 const ctx = await browser.newContext({
 	viewport: { width: 1200, height: 900 },
 	deviceScaleFactor: 1,

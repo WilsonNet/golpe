@@ -1,3 +1,5 @@
+import { launchBrowser } from "./browser";
+
 /**
  * The art probe: does a rendered hero's sheet actually get drawn?
  *
@@ -13,7 +15,6 @@
  * measured where the pixels are made (`scripts/make-hero-art.py`) and checked
  * on the shipped atlas by `heroAtlas.test.ts`.
  */
-import { chromium } from "playwright";
 
 const seconds = Number(
 	process.argv.find((a) => a.startsWith("--seconds="))?.split("=")[1] ?? 30,
@@ -70,7 +71,7 @@ const MUST_DRAW: string[][] = [
 	],
 ];
 
-const browser = await chromium.launch();
+const browser = await launchBrowser();
 const ctx = await browser.newContext();
 const errors: string[] = [];
 const a = await ctx.newPage();

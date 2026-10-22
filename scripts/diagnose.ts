@@ -10,9 +10,9 @@ import type { Browser, Page } from "playwright";
  *   tsx scripts/diagnose.ts --mode=offline
  *   tsx scripts/diagnose.ts --mode=online --duration=10000 --runs=3
  */
-import { chromium } from "playwright";
 import type { AIState } from "../src/game/characters/EnemyBrain";
 import type { WallSide } from "../src/game/simulation/Physics";
+import { launchBrowser } from "./browser";
 
 const BASE_URL = process.env.GOLPE_URL ?? "http://localhost:8084";
 const RESULT_RE = /__DIAGNOSTIC_RESULT__(\{.*?\})__END__/s;
@@ -73,7 +73,15 @@ const ULT_CHARGE = Math.max(0, Number(arg("ultCharge", "0")) || 0);
 // stays the sword game, and this is how the dagger's AI-vs-AI behaviour is
 // measured without changing what `diagnose.ts` proves by default.
 const HERO = arg("hero", "");
+// `--netsim=60/15/3` shapes every client's link: one-way latency ms / jitter
+// ms / loss %. A localhost run never loses or reorders a datagram, so every
+// netcode path that only runs on a real connection is invisible without it.
+const NETSIM = arg("netsim", "");
+// `--server=host:port` dials a game server other than the page's own :9208.
+const SERVER = arg("server", "");
 const URL_PARAMS =
+	`${NETSIM ? `&netsim=${NETSIM}` : ""}` +
+	`${SERVER ? `&server=${SERVER}` : ""}` +
 	`${SCREENS > 1 ? `&screen=${SCREENS}` : ""}` +
 	`${ULT_CHARGE > 0 ? `&ultCharge=${ULT_CHARGE}` : ""}` +
 	`${HERO ? `&hero=${HERO}` : ""}`;
@@ -207,9 +215,12 @@ async function offlineRun(browser: Browser, durationMs: number) {
  * therefore no jitter — a false PASS that looks like a clean bill of health.
  */
 async function assertServerUp() {
-	const res = await fetch("http://localhost:9208/.wrtc/v2/connections", {
-		method: "POST",
-	}).catch(() => null);
+	// GOLPE_URL may be the live site, whose game server is on the same host.
+	const host = new URL(BASE_URL);
+	const target = SERVER || `${host.hostname}:9208`;
+	const res = await fetch(`${host.protocol}//${target}/health`).catch(
+		() => null,
+	);
 	if (!res) {
 		throw new Error(
 			"game server unreachable on :9208 — start it with `pnpm run dev:server`",
@@ -290,7 +301,7 @@ function digest(r: DiagnosticReport) {
 }
 
 async function main() {
-	const browser = await chromium.launch();
+	const browser = await launchBrowser();
 	const modes = MODE === "both" ? ["offline", "online"] : [MODE];
 
 	for (const mode of modes) {

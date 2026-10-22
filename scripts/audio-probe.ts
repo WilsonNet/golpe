@@ -20,8 +20,8 @@ import type { Browser, Page } from "playwright";
  *   tsx scripts/audio-probe.ts
  *   tsx scripts/audio-probe.ts --bots=4 --runs=2
  */
-import { chromium } from "playwright";
 import type { AudioKitState } from "../src/game/sound/engine";
+import { launchBrowser } from "./browser";
 
 const BASE_URL = process.env.GOLPE_URL ?? "http://localhost:8084";
 
@@ -206,7 +206,7 @@ function listSounds(toList: Record<string, number>, bar: number): string[] {
 }
 
 async function main() {
-	const browser = await chromium.launch();
+	const browser = await launchBrowser();
 	let failed = false;
 	for (let run = 0; run < RUNS; run++) {
 		const report = await runOne(browser);

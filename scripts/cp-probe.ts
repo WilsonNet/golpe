@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import { randomUUID } from "node:crypto";
-import type { Page } from "playwright";
 /**
  * Control points feedback loop: two sides of AI fighting over the line.
  *
@@ -35,7 +34,7 @@ import type { Page } from "playwright";
  *   tsx scripts/cp-probe.ts --fighters=8 --scoreLimit=1 --timeLimit=300
  *   tsx scripts/cp-probe.ts --ultCharge=100     # and the black holes come too
  */
-import { chromium } from "playwright";
+import type { chromium, Page } from "playwright";
 import { CONTROL_SCREEN_SPAWNS } from "../src/game/simulation/ControlMap";
 import {
 	type ControlStatus,
@@ -43,6 +42,7 @@ import {
 } from "../src/game/simulation/ControlPoints";
 import type { TeamId } from "../src/game/simulation/Teams";
 import type { MatchStateSnapshot } from "../src/types/global";
+import { launchBrowser, probeQuery } from "./browser";
 
 const BASE_URL = process.env.GOLPE_URL ?? "http://localhost:8084";
 const RESULT_RE = /__DIAGNOSTIC_RESULT__(\{.*?\})__END__/s;
@@ -531,6 +531,7 @@ async function runOvertimePhase(
 		sinkConsole(page, lines);
 		const url =
 			`${BASE_URL}/?ai=true&mode=5cp&bots=3&mute=1&scoreLimit=2` +
+			probeQuery() +
 			`&timeLimit=15&freezeTime=0&capTime=1&room=${randomUUID()}`;
 		console.log(`[PROBE] overtime room ${attempt + 1}: ${url}`);
 		const obs: OvertimeObservation = {
@@ -633,6 +634,7 @@ async function runEconomyPhase(
 		try {
 			const url =
 				`${BASE_URL}/?ai=true&mute=1${modeParam}` +
+				probeQuery() +
 				`&freezeTime=${ECONOMY_FREEZE_S}&timeLimit=300&room=${randomUUID()}`;
 			console.log(`[PROBE] economy room: ${url}`);
 			await page.goto(url);
@@ -705,7 +707,7 @@ async function runEconomyPhase(
 
 async function main() {
 	await assertServerUp();
-	const browser = await chromium.launch();
+	const browser = await launchBrowser();
 	const ctx = await browser.newContext();
 	const page = await ctx.newPage();
 	const lines = sinkConsole(page);
@@ -713,6 +715,7 @@ async function main() {
 	// No `screen=`, deliberately: the control map's shape is the mode's job.
 	const url =
 		`${BASE_URL}/?ai=true&mode=5cp&bots=${FIGHTERS - 1}&mute=1` +
+		probeQuery() +
 		`&scoreLimit=${SCORE_LIMIT}&timeLimit=${TIME_LIMIT_SEC}` +
 		`&freezeTime=${FREEZE_SEC}&capTime=${CAP_TIME_S}` +
 		(ULT_CHARGE > 0 ? `&ultCharge=${ULT_CHARGE}` : "");

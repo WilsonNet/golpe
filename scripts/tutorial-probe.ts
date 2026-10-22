@@ -38,10 +38,11 @@
  *   tsx scripts/tutorial-probe.ts --play          # play every drill to the end
  *   tsx scripts/tutorial-probe.ts --keep-open
  */
-import { chromium, type Page } from "playwright";
+import type { Page } from "playwright";
 import { tutorialFor } from "../src/game/campaign/content/index";
 import { lessonsOf } from "../src/game/campaign/types";
 import { HERO_IDS, type HeroId } from "../src/game/simulation/Heroes";
+import { launchBrowser } from "./browser";
 
 const BASE_URL = process.env.GOLPE_URL ?? "http://localhost:8084";
 
@@ -799,7 +800,7 @@ async function checkProgress(page: Page, lessonId: string) {
 async function main() {
 	await assertServerUp();
 
-	const browser = await chromium.launch();
+	const browser = await launchBrowser();
 	const ctx = await browser.newContext({
 		viewport: { width: 900, height: 900 },
 	});

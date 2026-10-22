@@ -3,7 +3,6 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { chromium } from "playwright";
 
 /**
  * Record README gameplay from the live, authoritative game.
@@ -20,6 +19,7 @@ import { chromium } from "playwright";
  *   tsx scripts/record-gameplay.ts --url="http://localhost:8084/?ai=true&bots=7&ultCharge=100"
  */
 import type { MatchStateSnapshot } from "../src/types/global";
+import { launchBrowser } from "./browser";
 
 function arg(name: string, fallback: string): string {
 	const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
@@ -192,7 +192,7 @@ async function main() {
 	mkdirSync(outDir, { recursive: true });
 	const framesDir = mkdtempSync(path.join(tmpdir(), "golpe-frames-"));
 
-	const browser = await chromium.launch();
+	const browser = await launchBrowser();
 	const startedAt = Date.now();
 	const context = await browser.newContext({
 		viewport: { width: WIDTH, height: HEIGHT },
