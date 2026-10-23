@@ -498,7 +498,7 @@ used by the next match. See [specs/skybox.md](specs/skybox.md) and
 [specs/tilemap.md](specs/tilemap.md).
 
 **The *Move list* is a Guilty Gear-style command list** — opened by the root
-menu's Learn & settings (for the hero picked there) and the Esc menu's *Moves*
+menu's *More → Move list* (for the hero picked on the home screen) and the Esc menu's *Moves*
 item: one move at a time, a category rail, live-keycap commands from the
 player's *actual* bindings, a stat card, and a preview stage whose timeline
 tracks the move's real frame data. It is a presentation module
@@ -816,12 +816,15 @@ panel — it is a URL mode, and its header collapses it. See
 [specs/training-room.md](specs/training-room.md).
 
 **`?tutorial=true` is the guided course, and it is the training room with a
-director in front of it.** The **first item on the root menu**, above Play — a
-game whose good moves are invisible to somebody who has only pressed attack
-answers that question first. Cuphead's model: a **live opponent** (the server's
-scriptable dummy, restaged per lesson — `slash` to teach the guard, `jump` to
-teach anti-air, `counterAttack` for the graduation fight), a short brief, and
-objectives that only complete when the simulation agrees the move happened.
+director in front of it.** It is offered twice and lives in one place: a
+first-time browser gets it in a **dialog** (Skip / `Play <hero> Tutorial` /
+Don't show this again, remembered in `localStorage`), and the button stays in the
+root menu's *Your fighter* column under the hero picker — the course teaches
+that kit, so it belongs where the kit is chosen. Cuphead's model: a **live
+opponent** (the server's scriptable dummy, restaged per lesson — `slash` to
+teach the guard, `jump` to teach anti-air, `counterAttack` for the graduation
+fight), a short brief, and objectives that only complete when the simulation
+agrees the move happened.
 **A tutorial that simulated anything itself would teach a game nobody else is
 playing**, so it stages, counts and reports — and never decides an outcome.
 - **Every counter is a transition or a server decision, never a button press.**

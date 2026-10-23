@@ -47,6 +47,22 @@ function check(label: string, ok: boolean, detail = "") {
 
 const browser = await launchBrowser();
 
+/**
+ * A browser that has already answered the first-time card.
+ *
+ * The card itself is measured in section 1, with a genuinely fresh context.
+ * Every later section wants the menu unobstructed, so it seeds the answer the
+ * same way a returning player's `localStorage` would — not by clicking, which
+ * would make each section depend on the card's wording.
+ */
+async function menuContext() {
+	const ctx = await browser.newContext();
+	await ctx.addInitScript(() => {
+		localStorage.setItem("golpe.tutorialPromptDismissed", "1");
+	});
+	return ctx;
+}
+
 // --- 1. the bare URL is the menu --------------------------------
 {
 	const ctx = await browser.newContext();
@@ -66,6 +82,84 @@ const browser = await launchBrowser();
 		repoHref === "https://github.com/WilsonNet/golpe",
 		`href=${repoHref}`,
 	);
+	// The mark is the label. A second "Open source" caption beside the octocat
+	// said the same thing twice and made the header heavier; the word "Star"
+	// beside the star glyph said it a third time. Icon and count only.
+	const repoText = (await page.textContent(".gd-repo"))?.trim() ?? "";
+	check(
+		"the GitHub pill is the mark and the count only",
+		!/open source|star/i.test(repoText),
+		`text="${repoText}"`,
+	);
+	// The hero chips are the widest content on the page ("DAGGER · MACHINE
+	// GUN"): a grid item that refuses to shrink pushed them past the card's
+	// padding edge, which is exactly the kind of break the eye forgives and the
+	// phone does not.
+	const chipOverflow = await page.evaluate(() => {
+		const card = document.querySelector(".gd-menu-page .gd-card");
+		if (!card) return -1;
+		const limit =
+			card.getBoundingClientRect().right -
+			Number.parseFloat(getComputedStyle(card).paddingRight) +
+			0.5;
+		return [...document.querySelectorAll(".gd-hero-chip")].filter(
+			(chip) => chip.getBoundingClientRect().right > limit,
+		).length;
+	});
+	check("hero chips stay inside the card", chipOverflow === 0, `overflowing=${chipOverflow}`);
+	// The home page is a short list by design. Five play choices are on the
+	// front (Quick match, Host, Join, Map maker, and the tutorial beside the
+	// hero picker); everything else is disclosed, and the first-time card is a
+	// dialog, not a page item. This is the regression gate for "the menu got
+	// heavy again".
+	const frontItems = await page.$$eval(".gd-card .gd-play-item", (els) =>
+		els.filter((e) => (e as HTMLElement).offsetParent !== null).length,
+	);
+	check(
+		"the front page carries five play choices",
+		frontItems === 5,
+		`items=${frontItems}`,
+	);
+	const moreOpen = await page.evaluate(
+		() => document.querySelector(".gd-more-body") !== null,
+	);
+	check("the disclosure starts closed", !moreOpen);
+	// A browser that has never answered the first-time card is offered the
+	// tutorial once — in a dialog, over the menu, with Skip as the easy answer.
+	const prompt = await page.evaluate(() => ({
+		open: document.querySelector(".gd-prompt") !== null,
+		title: document.querySelector(".gd-prompt-title")?.textContent ?? "",
+		skip:
+			document.querySelector(".gd-prompt-skip")?.textContent?.trim() ?? "",
+		play:
+			document
+				.querySelector(".gd-prompt .gd-play-item-tutorial strong")
+				?.textContent?.trim() ?? "",
+	}));
+	check("a first-time browser gets the tutorial card", prompt.open, prompt.title);
+	check(
+		"the card offers skip and the course",
+		prompt.skip !== "" && prompt.play !== "",
+		`skip="${prompt.skip}" play="${prompt.play}"`,
+	);
+	// *Don't show this again* is the promise that makes the card acceptable:
+	// it is remembered, and a reload proves it was written where the next load
+	// reads it.
+	await page.click(".gd-prompt-never");
+	await page.waitForFunction(
+		() => document.querySelector(".gd-prompt") === null,
+		{ timeout: 5000 },
+	);
+	const stored = await page.evaluate(() =>
+		localStorage.getItem("golpe.tutorialPromptDismissed"),
+	);
+	check("the card writes its dismissal", stored === "1", `stored=${stored}`);
+	await page.reload();
+	await page.waitForSelector(".gd-menu-page", { timeout: 10000 });
+	const afterReload = await page.evaluate(
+		() => document.querySelector(".gd-prompt") !== null,
+	);
+	check("a dismissed card never returns", !afterReload);
 	// The server status line is the feedback the menu exists for — a game that
 	// loads with no server behind it must say so before a match is started.
 	await page.waitForSelector(".gd-server", { timeout: 5000 });
@@ -120,7 +214,7 @@ const browser = await launchBrowser();
 	}
 	check("open room is discoverable via /rooms", discoverable);
 
-	const ctx = await browser.newContext();
+	const ctx = await menuContext();
 	const page = await ctx.newPage();
 	await page.goto(`${BASE}/?mute=1`);
 	await page.waitForSelector(".gd-menu-page", { timeout: 10000 });
@@ -146,7 +240,7 @@ const browser = await launchBrowser();
 	// boot — by creating a `?bots=1` duel. On a shared dev server a step-2 room
 	// (or another probe's) may still be open, so the assertion accepts either a
 	// fresh duel or a join; both are valid answers and both boot the game.
-	const ctx = await browser.newContext();
+	const ctx = await menuContext();
 	const page = await ctx.newPage();
 	await page.goto(`${BASE}/?mute=1`);
 	await page.waitForSelector(".gd-menu-page", { timeout: 10000 });
@@ -215,7 +309,7 @@ const browser = await launchBrowser();
 	}
 	check("ai room is never offered by /rooms", !offered);
 
-	const ctx = await browser.newContext();
+	const ctx = await menuContext();
 	const page = await ctx.newPage();
 	await page.goto(`${BASE}/?mute=1`);
 	await page.waitForSelector(".gd-menu-page", { timeout: 10000 });
@@ -236,10 +330,14 @@ const browser = await launchBrowser();
 
 // --- 5. practice is one click, and boots training --------------
 {
-	const ctx = await browser.newContext();
+	const ctx = await menuContext();
 	const page = await ctx.newPage();
 	await page.goto(`${BASE}/?mute=1`);
 	await page.waitForSelector(".gd-menu-page", { timeout: 10000 });
+	// Practice lives in the home page's one disclosure: it is a way to play,
+	// not one of the four choices the front page carries.
+	await page.click(".gd-more-toggle");
+	await page.waitForSelector(".gd-more-body", { timeout: 5000 });
 	const items = await page.$$(".gd-play-item");
 	for (const el of items) {
 		if ((await el.textContent())?.includes("Practice")) {
@@ -261,7 +359,7 @@ const browser = await launchBrowser();
 
 // --- 6. join: a bare room id, typed by hand ---------------------
 {
-	const ctx = await browser.newContext();
+	const ctx = await menuContext();
 	const page = await ctx.newPage();
 	await page.goto(`${BASE}/?mute=1`);
 	await page.waitForSelector(".gd-menu-page", { timeout: 10000 });
@@ -300,7 +398,7 @@ const browser = await launchBrowser();
 
 // --- 8. the host form: mode and constraints land in the URL -----
 {
-	const ctx = await browser.newContext();
+	const ctx = await menuContext();
 	const page = await ctx.newPage();
 	await page.goto(`${BASE}/?mute=1`);
 	await page.waitForSelector(".gd-menu-page", { timeout: 10000 });
@@ -342,10 +440,16 @@ const browser = await launchBrowser();
 
 // --- 9. learn: how to play is grouped, move list opens for the pick ---------
 {
-	const ctx = await browser.newContext();
+	const ctx = await menuContext();
 	const page = await ctx.newPage();
 	await page.goto(`${BASE}/?mute=1`);
 	await page.waitForSelector(".gd-menu-page", { timeout: 10000 });
+
+	// The home page stays short: four play choices and who you are. Everything
+	// else is behind the one labelled disclosure, which is what these two
+	// learn/settings items are reached through.
+	await page.click(".gd-more-toggle");
+	await page.waitForSelector(".gd-more-body", { timeout: 5000 });
 
 	// How to play: one view, three named groups, nine one-line rows.
 	for (const el of await page.$$(".gd-play-item")) {

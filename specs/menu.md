@@ -35,54 +35,91 @@ them ever sees the menu.
 
 ## The home screen
 
-The root is four sections in strict hierarchy — seven buttons of equal weight
-made every choice look like every other choice:
+The root is **a short list, not a catalogue**. Hick's law is the reason: the time
+to choose grows with the number of options weighed, and eleven equal-weight
+buttons made every choice look like every other choice. So the front page carries
+only the decisions a player actually makes, and everything else is one disclosure
+away (progressive disclosure: show what is frequent up front, reveal the rest on
+request, never more than one level deep).
 
-- **Start here** — the **Tutorial**, and it is the first thing on the page,
-  above Play. This is a game whose good moves are invisible to somebody who has
-  only ever pressed attack, so the answer to the only question a stranger
-  actually has goes first; everything below it assumes you already know what a
-  butterfly is. It is deliberately **not** the gold button — Quick match keeps
-  that, because the primary action of a game is playing it — and wears the aim
-  beam's cyan instead, so it reads as a different kind of door rather than as a
-  competing one. The label names the picked hero, and a `4/16` badge appears
-  once any lesson is finished: progress is remembered, and saying so is what
-  turns a half-finished course into one worth coming back to. See
-  [tutorial.md](tutorial.md).
-- **Play** — starting a fight is the primary job, so it is next: the gold
-  Quick match (the only filled button on the page), then Host/Join as siblings,
-  then Practice.
-- **Your fighter** — the hero picker lives here, on the home screen, beside the
-  name field: a hero shooter should show its heroes, and the choice rides every
-  match started here. There is no separate Heroes page; picking is the
-  discoverable face of `golpe.hero`.
-- **Learn & settings** — How to play full-width, then the Move list and Options
-  as a pair, then Graphics and Sound as a pair. How to play is the stranger's
-  one-page answer to "how do I play"; the Move list is a *different question* —
-  "what does my fighter do" — and a full-screen feature of its own (live
-  preview, stats, frame data), so it sits beside not under How to play. Both
-  read the current hero: the move list opens for whoever the picker above has
-  selected. **Graphics** is where the skybox is switched off for a
-  low-distraction fight; **Sound** is the mixer.
+- **Quick match** — the gold button and the only filled one on the page, one
+  click from the bare URL.
+- **Host a match / Join a match** — two quiet siblings, still on the front page
+  because playing with a human is the second most common intent. They answer
+  different questions and neither is a step toward the other.
+- **Map maker** — also on the front page, not in the disclosure: building an
+  arena is still play, and it is the one tool that produces content for the
+  game. It is a link, not a launch — the editor is its own page.
+- **Your fighter** (the right column) — the **name field first**, then the hero
+  picker: a row of four portrait tiles, each the fighter's own sheet frame with
+  the name beneath and the selected tile in gold. A hero shooter should show its
+  heroes, and the choice rides every match started here. There is no separate
+  Heroes page; picking is the discoverable face of `golpe.hero`. The kit labels
+  are deliberately not repeated on the tiles — the selected fighter's blurb
+  beneath the row says what they carry, and the Move list says it in full.
+- **`Play <hero> Tutorial`** — under the picker and the blurb, because the
+  course teaches *this kit*: the swordsman's lessons are not the dagger's. The
+  label names the fighter ("Play Lia Tutorial"), the aim beam's cyan marks it as
+  a different kind of door, and a `4/18` badge appears once any lesson is
+  finished — progress is remembered, and saying so is what turns a half-finished
+  course into one worth coming back to. Most players never need it, so it is not
+  one of the four front-page play choices; the player who does finds it where
+  the choice of kit is. See [tutorial.md](tutorial.md).
+- **More** — one labelled disclosure at the foot of the page: *practice and
+  settings*. Inside it, grouped: **More ways to play** (Practice), **Learn**
+  (How to play, Move list), **Settings** (Options, Graphics, Sound). The label
+  names what is inside, so it is not a mystery-meat "More"; and the disclosure
+  is capped at this single level — a menu of submenus is burying complexity,
+  not organising it.
 
-**The repository is named in the header, and only there**: an *Open source · ★ Star N* pill
-beside the title, linking to `github.com/WilsonNet/golpe`. The game shipped
-open source and this is the one page every player sees. The star count is read
-from the public GitHub API once per session (`sessionStorage`, 10 minutes); a
-failed fetch costs the number, never the link. (A whole "Open source" section
-under Play — a blurb plus *Read the code* and *Report a bug* — said the same
-thing twice and was cut as clutter; the pill is the one place.)
+### The first-time card
 
-Two-column rows (Host/Join, Move list/Options, Graphics/Sound) collapse to a single column on a phone so every button is a thumb-sized
-target, and the header pill drops under the title.
+A browser that has never answered the card **and has no lesson finished** gets
+one dialog over the menu: *First time?* — one line, *Learn the moves that aren't
+on the buttons* — then **Skip for now** (filled, because most players will), the
+cyan **`Play <hero> Tutorial`**, and a quiet **Don't show this again**. Esc or a
+click on the backdrop is Skip.
 
-**A big screen gets two columns, not a wider one.** From 1100px wide the home
-view is a grid — Start here and Play on the left; Your fighter and
-Learn & settings on the right — in a 1120px card, so the whole home screen fits
-a 1280×800 laptop without scrolling (the padding tightens below 860px of
-height). Past 1800×1000 and 2400×1300 the card is zoomed (1.2×, 1.5×) rather than
-stretched: a longer line of text is harder to read, not easier. The other views
-(host form, join, how to play…) keep the single column — a form is a column.
+The card exists because the offer has to find the player who needs it: the good
+moves are invisible to somebody who has only pressed attack. It is a dialog, not
+a section, because it is a question about this player, and the menu behind it is
+what they came for.
+
+- **Skipping is the session's answer.** It closes the card; the button beside
+  the hero picker is right there, so nothing is lost.
+- **Accepting and "Don't show this again" are the browser's answer**, stored in
+  `localStorage` (`golpe.tutorialPromptDismissed`) — never the wire, like the
+  name and the bindings. Accepting also writes it: the card introduced the
+  course, and the course stays visible under the picker, so re-asking would be
+  a nag.
+- **Storage that cannot be written counts as answered**, so a private-mode
+  browser is never shown a card it cannot silence.
+
+**The repository is named in the header, and only there**: an octocat mark and
+the live star count as a pill beside the title, linking to
+`github.com/WilsonNet/golpe`. The mark *is* the label — a second "Open source"
+caption beside it said the same thing twice and made the header heavier; the
+accessible name still spells it out. The star count is read from the public
+GitHub API once per session (`sessionStorage`, 10 minutes); a failed fetch costs
+the number, never the link. (A whole "Open source" section under Play — a blurb
+plus *Read the code* and *Report a bug* — said the same thing twice and was cut
+as clutter; the pill is the one place.)
+
+**Two columns, one decision each, not a wall of pairs.** From 980px wide the
+home card is 940px and the home view is a grid: the play column on the left, who
+you are on the right, with a hairline between them. *Inside* each column every
+action is full-width and stacked — there is no side-by-side pair anywhere on the
+home screen, because two buttons sharing a row read as equal choices of equal
+weight. On a narrow screen the columns stack in the same order, and the hero
+chips become one column. The other views (host form, join, how to play…) keep the
+single column — a form is a column. Past 1800×1000 and 2400×1300 the card is
+zoomed (1.2×, 1.5×) rather than stretched: a longer line of text is harder to
+read, not easier.
+
+The rule the layout is protecting: **a newcomer must be able to name what this
+screen offers in one breath** — play, host, join, build, and who you are
+(including the course that teaches them). If a new item cannot be described as
+one of those, it belongs behind *More*.
 
 ## The flows
 
@@ -92,13 +129,13 @@ stretched: a longer line of text is harder to read, not easier. The other views
 | Your fighter (on home) | `golpe.hero`, and `?hero=` on every launch below | Two portrait chips: Lia and Anands, each the fighter's own sheet frame. Picking writes the preference immediately; a commit below carries it. |
 | Host a match | `?mode=…&screen=N` (or `map=<id>`) `&bots=N&scoreLimit=N&timeLimit=N` (+ `fill`, `freezeTime`, `ultCharge`, `private`, `password`) | Every room-creator choice, defaults pre-filled to the server's own defaults. |
 | Join a match | `?room=<id>` | One field accepts the bare id *or* the whole link. |
-| Tutorial (first on the page) | `?tutorial=true&hero=<id>` | The guided course for the picked hero — a live opponent, one lesson at a time, and objectives the simulation has to agree happened. It boots the *training room* with a director in front of it, so it is the practice room's dummy and the practice room's netcode. See [tutorial.md](tutorial.md). |
-| Practice | `?training=true` | The training room, one click away — the same room the tutorial runs in, handed to the player instead of to a lesson script. |
-| Map maker | `?mapmaker=true` | A link, not a launch: the editor is its own page (see [map-maker.md](map-maker.md)). It sits under Practice because building an arena is still play. |
-| How to play | — | The controls reference, **grouped into three sections** (getting around / fighting / the match) and read from the *live* bindings — a hint that lies about the button is worse than no hint. One sentence per row; the advanced tactics point to the Move list, which is where their full cards live. |
-| Move list | — | The Guilty Gear-style command list, for the hero the picker has selected — the same module the Esc menu's *Moves* item opens. |
-| Options | — | The same controls dialog as the Esc menu, so rebinding is possible before the first match. |
-| Graphics | — | The visual-comfort submenu: a side-by-side Waterfront vs. Off skybox comparison, plus a Waterfront art vs. Flat competitive platform comparison. Off restores the plain blue gradient with no grade, blur, scenery or motion; Flat restores the original monochrome blocks. The two choices are **independent**: Off keeps painted platforms, and Flat does not bring the city back. Both are stored and apply immediately — a live match swaps only its backdrop or its arena container, without resetting the fight. The same submenu is in the Esc menu. |
+| Tutorial (first-time card, and under the hero picker) | `?tutorial=true&hero=<id>` | The guided course for the picked hero — a live opponent, one lesson at a time, and objectives the simulation has to agree happened. It boots the *training room* with a director in front of it, so it is the practice room's dummy and the practice room's netcode. A first-time browser is offered it once in a card. See [tutorial.md](tutorial.md). |
+| Practice (under *More*) | `?training=true` | The training room, one click away — the same room the tutorial runs in, handed to the player instead of to a lesson script. |
+| Map maker | `?mapmaker=true` | A link, not a launch: the editor is its own page (see [map-maker.md](map-maker.md)). It stays on the front page rather than in *More* — building an arena is still play. |
+| How to play (under *More*) | — | The controls reference, **grouped into three sections** (getting around / fighting / the match) and read from the *live* bindings — a hint that lies about the button is worse than no hint. One sentence per row; the advanced tactics point to the Move list, which is where their full cards live. |
+| Move list (under *More*) | — | The Guilty Gear-style command list, for the hero the picker has selected — the same module the Esc menu's *Moves* item opens. |
+| Options (under *More*) | — | The same controls dialog as the Esc menu, so rebinding is possible before the first match. |
+| Graphics (under *More*) | — | The visual-comfort submenu: a side-by-side Waterfront vs. Off skybox comparison, plus a Waterfront art vs. Flat competitive platform comparison. Off restores the plain blue gradient with no grade, blur, scenery or motion; Flat restores the original monochrome blocks. The two choices are **independent**: Off keeps painted platforms, and Flat does not bring the city back. Both are stored and apply immediately — a live match swaps only its backdrop or its arena container, without resetting the fight. The same submenu is in the Esc menu. |
 
 The hero is **per-client**: the picker's choice rides every commit as
 `?hero=`, and a shared room link deliberately does not carry one, so a joiner
@@ -230,7 +267,7 @@ and who can manage the room rather than assuming its own URL.
 ## The move list
 
 The move list opens from **two places** — the root menu's *Move list* item
-(Learn & settings, using the hero picked on the home screen) and the Esc menu's
+(under *More*, using the hero picked on the home screen) and the Esc menu's
 *Moves* item (using `readStoredHero`). Both render the same module, so the two
 can never drift. It is a Guilty Gear-style command list for one hero, with four
 parts:

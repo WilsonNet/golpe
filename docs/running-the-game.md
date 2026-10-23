@@ -446,7 +446,7 @@ node scripts/diagnose.ts --mode=online --runs=3  # the canonical duel
 node scripts/deathmatch-probe.ts                 # 16 AI fighters, played to a winner
 node scripts/tdm-probe.ts                       # two sides, wipe-out rounds, no friendly fire
 node scripts/cp-probe.ts                        # five control points: captures, forward spawns, overtime
-node scripts/menu-probe.ts                       # the root menu: every click a URL, boots a match
+tsx scripts/menu-probe.ts                       # the root menu: every click a URL, boots a match
 node scripts/potg-probe.ts                      # play of the game — the only probe that reads past the final whistle
 pnpm run diagnose                                  # offline + online, 8s each
 node scripts/verify-modes.ts                     # smoke-check every launch mode

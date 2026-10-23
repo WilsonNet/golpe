@@ -8,15 +8,18 @@
  * buttons, inputs) so the menu, the name prompt and the Esc menu read as one
  * system no matter where they appear.
  *
- * The home view is three sections in strict hierarchy, because seven equal
- * buttons in a row made every choice look like every other choice:
+ * The home view is a short list, and that is the design. Hick's law: decision
+ * time grows with the number of things on offer, so the front page carries only
+ * the choices a player actually makes — play, host, join, build — plus who they
+ * are. Everything else lives behind one disclosure, one click away, instead of
+ * competing for the same glance.
  *
- * - **Play** — starting a fight is the primary job, so it is first: the gold
- *   Quick match, then Host/Join as siblings, then Practice.
- * - **Your fighter** — who you bring. The hero picker lives here, on the home
- *   screen, with the fighter's own sprite and the name field, because a hero
- *   shooter should show its heroes and the choice rides every match you start.
- * - **Learn & settings** — the detours, smallest and quietest.
+ * - **Play** — starting a fight is the primary job, so the left column is it:
+ *   the gold Quick match, then Host/Join as quiet siblings, then the Map maker.
+ * - **Your fighter** — the right column: the name field, the four hero chips,
+ *   the selected hero's blurb, and the *Play &lt;hero&gt; Tutorial* entry.
+ * - **More** — practice and every settings page, behind one labelled
+ *   disclosure at the bottom of the page.
  */
 
 import { HERO_SPRITE_CSS } from "./HeroSelect";
@@ -52,7 +55,7 @@ export const MENU_CSS = `
 	   capped by max-width the used width is definite, so the buttons below
 	   really do fill it. */
 	width: 100%;
-	max-width: 620px;
+	max-width: 600px;
 	box-sizing: border-box;
 	/* A page deserves more padding than an overlay: 26px of air around every
 	   side of the content, or the card's own furniture reads as shoved into
@@ -78,8 +81,8 @@ export const MENU_CSS = `
    captions. The vertical rhythm here is the whole polish story: 24px between
    one block and the next section's head, then a uniform 10px between the head
    and its content and between every control inside the section. Without the
-   inner gap the Quick match button, the Host/Join row and Practice met edge to
-   edge, which read as one big block. */
+   inner gap the Quick match button, Host and Join met edge to edge, which read
+   as one big block. */
 .gd-section {
 	display: flex;
 	flex-direction: column;
@@ -214,37 +217,182 @@ a.gd-play-item { color: inherit; text-decoration: none; }
 	vertical-align: middle;
 }
 
-/* Host and Join answer different questions and neither is a step toward the
-   other, so they sit side by side as siblings rather than one above the
-   other. The row collapses to a column on a phone. */
-.gd-two {
-	display: grid;
-	grid-template-columns: 1fr 1fr;
+/* ---- the home layout ----
+   Two columns read as two decisions: how to play on the left, who to play as
+   on the right. Inside each, everything is stacked and full-width — there is
+   no side-by-side pair anywhere, because two buttons sharing a row read as
+   equal choices of equal weight, which is how the old screen became heavy.
+   On a narrow screen the two columns stack in the same order. */
+.gd-home {
+	display: flex;
+	flex-direction: column;
 	gap: 10px;
+	margin-top: 4px;
+}
+.gd-home-main,
+.gd-home-fighter {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	min-width: 0;
+}
+
+/* ---- the secondary entries ----
+   Host, Join and everything in the disclosure: the same play item one size
+   down. A smaller title and a single quieter line is the whole hierarchy
+   signal — the gold Quick match and the cyan Tutorial are the two things the
+   eye must find first. */
+.gd-play-item-compact {
+	padding: 10px 14px;
+}
+.gd-play-item-compact strong {
+	font-size: 13px;
+	letter-spacing: 0.05em;
+}
+.gd-play-item-compact span {
+	font-size: 11px;
+}
+
+/* ---- the disclosure ----
+   One labelled door to everything that is not "start a fight": practice, the
+   map maker, how to play and the three settings pages. The label names what is
+   inside so it is not a mystery-meat "More", and the arrow is the state.
+   Disclosure is capped at this one level — a menu of submenus of submenus is
+   burying complexity, not organising it. */
+.gd-more {
+	margin-top: 2px;
+	padding-top: 12px;
+	border-top: 1px dashed rgba(255, 255, 255, 0.14);
+	/* In the two-column home it sits under both columns, never inside one —
+	   otherwise opening it leaves the other column blank and lopsided. */
+	grid-column: 1 / -1;
+}
+.gd-more-toggle {
+	width: 100%;
+	background: none;
+	border: none;
+	color: #7ff0f4;
+	font: inherit;
+	font-size: 11px;
+	letter-spacing: 0.09em;
+	text-transform: uppercase;
+	text-align: left;
+	cursor: pointer;
+	padding: 4px 2px;
+}
+.gd-more-toggle:hover {
+	color: #ffd166;
+}
+.gd-more-toggle:focus-visible {
+	outline: 2px solid #0ec3c9;
+	outline-offset: 2px;
+}
+.gd-more-body {
+	display: flex;
+	flex-direction: column;
+	gap: 18px;
+	padding-top: 12px;
+}
+/* Inside the disclosure the sections are spaced by the body's gap, not by the
+   page-level 24px rhythm — the drawer is one block, not three. */
+.gd-more-body .gd-section + .gd-section {
+	margin-top: 0;
+}
+
+/* ---- the first-time card ----
+   One question, asked once, over a dimmed menu. Skip is the filled button
+   because most players already know how to swing a sword and want to get on
+   with it; the tutorial is offered beneath it, quieter but full-size, because
+   the player who needs it is exactly the one who would never look for it. The
+   third choice — never show this again — is a text link, so it is findable
+   without competing with the two answers. */
+.gd-prompt-backdrop {
+	position: fixed;
+	inset: 0;
+	z-index: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 20px;
+	background: rgba(3, 6, 8, 0.72);
+	backdrop-filter: blur(2px);
+}
+.gd-prompt {
+	width: 100%;
+	max-width: 420px;
+	box-sizing: border-box;
+	padding: 22px 24px 18px;
+	border: 1px solid rgba(255, 209, 102, 0.45);
+	border-radius: 12px;
+	background: linear-gradient(180deg, #10161a 0%, #08080b 100%);
+	box-shadow: 0 24px 70px rgba(0, 0, 0, 0.75);
+}
+.gd-prompt-title {
+	margin: 0 0 8px;
+	color: #ffd166;
+	font-size: 20px;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+}
+.gd-prompt-body {
+	margin: 0 0 18px;
+	font-size: 13px;
+	line-height: 1.6;
+	opacity: 0.75;
+}
+.gd-prompt-actions {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+.gd-prompt-skip {
+	width: 100%;
+}
+.gd-prompt-never {
+	margin-top: 14px;
+	padding: 0;
+	background: none;
+	border: none;
+	color: #7ff0f4;
+	font: inherit;
+	font-size: 11px;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	cursor: pointer;
+}
+.gd-prompt-never:hover,
+.gd-prompt-never:focus-visible {
+	color: #ffd166;
 }
 
 /* ---- your fighter ----
-   The hero picker lives on the home screen: the fighter's own sprite, their
-   name and kit, and the name field all in one panel. Picking rides every match
-   started here, exactly as the old buried Heroes page did — this just shows
-   the choice instead of hiding it a click away. */
+   A row of four portrait tiles: the sprite above the name, centred. Four
+   equal tiles read as one control — "pick a fighter" — instead of four wide
+   rows with a name floating in the middle of each. On a phone the grid
+   becomes two columns, which is still one glance and half the height of four
+   stacked rows. */
 .gd-hero-pick {
 	display: grid;
-	grid-template-columns: 1fr 1fr;
-	gap: 10px;
+	grid-template-columns: repeat(4, 1fr);
+	gap: 8px;
 }
 .gd-hero-chip {
 	display: flex;
+	flex-direction: column;
 	align-items: center;
-	gap: 12px;
+	justify-content: center;
+	gap: 6px;
+	/* A grid item's default min-width is its content's, and a long name used
+	   to grow the track past the card's padding edge instead of fitting it. */
+	min-width: 0;
 	background: #000;
 	border: 1px solid rgba(255, 255, 255, 0.22);
 	border-radius: 8px;
-	padding: 10px 12px 10px 10px;
+	padding: 8px 6px 10px;
 	color: inherit;
 	font: inherit;
 	cursor: pointer;
-	text-align: left;
+	text-align: center;
 	transition: border-color 0.15s, box-shadow 0.15s;
 }
 .gd-hero-chip:hover {
@@ -260,36 +408,35 @@ a.gd-play-item { color: inherit; text-decoration: none; }
 	box-shadow: 0 0 12px rgba(255, 209, 102, 0.3);
 }
 /* The sprite is the hero's own sheet frame — what you pick is what you fight
-   as — sitting left of the name instead of centred above it, because this is
-   a compact picker, not the card grid of the Esc menu. Sized at 48x72 (the
-   same as the phone) so the whole card fits a 778px window with the footer
-   visible — the Esc menu's full-size cards stay the place for the big art. */
+   as. 44x66 keeps four tiles inside the right column and the whole card inside
+   a 1280x800 window; the Esc menu's full-size cards stay the place for the
+   big art. */
 .gd-hero-chip .hp-sprite {
 	margin: 0;
 	flex: 0 0 auto;
-	width: 48px;
-	height: 72px;
-	background-size: 48px 72px;
+	width: 44px;
+	height: 66px;
+	background-size: 44px 66px;
 	background-position: 0 0;
 }
 .gd-hero-chip-meta {
 	display: flex;
 	flex-direction: column;
+	align-items: center;
 	gap: 2px;
 	min-width: 0;
+	max-width: 100%;
 }
 .gd-hero-chip-name {
-	font-size: 14px;
-	letter-spacing: 0.06em;
+	font-size: 12px;
+	letter-spacing: 0.04em;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	max-width: 100%;
 }
 .gd-hero-chip-on .gd-hero-chip-name {
 	color: #ffd166;
-}
-.gd-hero-chip-kit {
-	font-size: 10px;
-	letter-spacing: 0.05em;
-	opacity: 0.55;
-	white-space: nowrap;
 }
 .gd-hero-blurb {
 	font-size: 12px;
@@ -709,35 +856,43 @@ a.gd-play-item { color: inherit; text-decoration: none; }
 
 
 /* ---- the big screen ----
-   A 620px column in the middle of a 1920px monitor is a phone layout with a
-   lot of wallpaper. From 1100px the home view becomes two columns — what to do
-   on the left, who you are and how it works on the right — so the whole home
-   screen fits a laptop's height without scrolling; past 1800px (a 1440p or 4K
-   desktop) it is zoomed rather than stretched, because a wider line of text is
-   harder to read, not easier. Other views keep the single column: a form is a
-   column. Stacked, the second column's first section keeps the 24px rhythm. */
-.gd-home-col + .gd-home-col {
-	margin-top: 24px;
-}
-@media (min-width: 1100px) {
+   From 980px the home view becomes the two columns it was designed as. The card
+   stays narrow on purpose: past 1800×1000 it is zoomed (1.2×, 1.5×) rather than
+   stretched, because a longer line of text is harder to read, not easier. The
+   other views (host form, join, how to play…) keep the single column — a form
+   is a column. */
+@media (min-width: 980px) {
 	.gd-menu-page .gd-card.gd-card-home {
-		max-width: 1120px;
-		padding: 30px 40px;
+		max-width: 940px;
+		padding: 26px 36px;
 	}
 	.gd-home {
 		display: grid;
-		grid-template-columns: 1fr 1fr;
-		column-gap: 40px;
-		align-items: start;
+		grid-template-columns: 1.1fr 1fr;
+		column-gap: 36px;
+		row-gap: 20px;
+		align-items: stretch;
 	}
-	.gd-home-col + .gd-home-col {
-		margin-top: 0;
+	/* The rule is what makes the right column a column and not a stray block
+	   under the buttons: who you are is a separate decision. It runs the full
+	   height of the row, so a taller left column never leaves it hanging. */
+	.gd-home-fighter {
+		border-left: 1px solid rgba(255, 255, 255, 0.1);
+		padding-left: 36px;
+	}
+	/* The disclosure spans the page, and its three groups sit side by side:
+	   opening it costs one short band, not a second screen. */
+	.gd-more-body {
+		display: grid;
+		grid-template-columns: repeat(3, 1fr);
+		gap: 24px;
+		align-items: start;
 	}
 }
 /* A 1280x800 laptop: the two columns fit, the padding is what spills. */
-@media (min-width: 1100px) and (max-height: 860px) {
+@media (min-width: 980px) and (max-height: 860px) {
 	.gd-menu-page .gd-card.gd-card-home {
-		padding: 18px 40px;
+		padding: 18px 36px;
 	}
 }
 @media (min-width: 1800px) and (min-height: 1000px) {
@@ -761,11 +916,10 @@ a.gd-play-item { color: inherit; text-decoration: none; }
 		min-width: 0;
 		width: calc(100% - 24px);
 	}
-	/* Two-column rows become one column so every button is a thumb-sized
-	   full-width target — a phone is the discoverability story too. */
-	.gd-two,
+	/* Two portrait tiles per row so the picker is one glance down the card,
+	   not four full-width rows between the player and the game. */
 	.gd-hero-pick {
-		grid-template-columns: 1fr;
+		grid-template-columns: repeat(2, 1fr);
 	}
 	/* The pill drops under the title rather than squeezing it. */
 	.gd-menu-head {

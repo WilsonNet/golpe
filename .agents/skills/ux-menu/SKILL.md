@@ -1,6 +1,6 @@
 ---
 name: ux-menu
-description: "Use when building, changing or reviewing any menu or pre-match screen in golpe — the root menu, the name prompt, the Esc menu, the controls dialog, or any new flow a human walks before a fight starts. Covers the UX principles this project commits to (Don Norman's The Design of Everyday Things and Nielsen's 10 heuristics, applied), the URL-as-state model that makes the menu truthful, the nesting rules for host/join/practice flows, and how to verify a menu without breaking the agentic path. Triggers on: menu, root menu, main menu, UX, discoverability, host a match, join a match, quick match, how to play, options, pre-match screen, onboarding, first-time experience."
+description: "Use when building, changing or reviewing any menu or pre-match screen in golpe — the root menu, the name prompt, the Esc menu, the controls dialog, or any new flow a human walks before a fight starts. Covers the UX principles this project commits to (Don Norman's The Design of Everyday Things and Nielsen's 10 heuristics, applied), the short-list home screen (Hick's law, choice overload, one level of progressive disclosure), the URL-as-state model that makes the menu truthful, the nesting rules for host/join/practice flows, and how to verify a menu without breaking the agentic path. Triggers on: menu, root menu, main menu, UX, discoverability, menu too heavy, too many options, simplify the menu, Hick's law, progressive disclosure, disclosure, host a match, join a match, quick match, how to play, options, pre-match screen, onboarding, first-time experience."
 license: MIT
 ---
 
@@ -50,9 +50,80 @@ order of value:
 | 5 | Error prevention | Constraints before validation: clamped fields, enforced team floor, join id checked against `ROOM_ID_RE` |
 | 6 | Recognition rather than recall | Options visible in the form, never remembered parameters; the share link is shown, not described |
 | 7 | Flexibility and efficiency | Query params stay the expert/agentic path; the menu is the novice path; both reach the same game |
-| 8 | Aesthetic and minimalist | Primary action first, everything else in order of frequency; measuring tools behind the Advanced disclosure; **spacing is part of the layout — a control with no air around it reads as broken** |
+| 8 | Aesthetic and minimalist | Primary action first, everything else in order of frequency; secondary features behind **one** labelled disclosure; **spacing is part of the layout — a control with no air around it reads as broken** |
 | 9 | Help users recover from errors | Error text says what was wrong and what to do; nothing is a code |
 | 10 | Help and documentation | "How to play" reads the **live bindings** — a hint that lies about the button is worse than no hint |
+
+## The home screen is a short list, not a catalogue
+
+Three findings, from the research the menu's shape is built on:
+
+- **Hick's law** (Hick 1952, Hyman 1952): the time to choose grows with the
+  number and complexity of options — logarithmically, not linearly, so the first
+  few choices are the expensive ones and each additional equal-weight button
+  still taxes the scan. The practical reading is *not* "delete features"; it is
+  **stop presenting equal-weight choices** and **collapse the ones that are
+  rare**. (Laws of UX; NN/g, "Hick's Law: Designing Long Menu Lists".)
+- **Choice overload**: many equally attractive options produce deferral — the
+  player reads all of them and picks none. What prevents it is grouping,
+  sensible defaults, and one clearly recommended action, not simply fewer
+  features.
+- **Progressive disclosure** (Nielsen, 1995; NN/g): show the few most important
+  options first; offer the specialised ones **on request**. NN/g's caveat is the
+  whole job: everything frequent must be up front, the primary list must stay
+  short, and designs past **two levels** of disclosure measurably lose
+  usability. GitLab's design system encodes the same rule — cap disclosure at
+  two levels and group secondary features rather than nesting further.
+
+Applied to this menu, as a budget rather than a taste call:
+
+| Where | What | Why |
+|---|---|---|
+| Front, play column | Quick match, Host a match, Join a match, Map maker | The intents a player arrives with. Quick match is the only filled button. |
+| Front, identity column | Name field, four hero chips, the hero's blurb, `Play <hero> Tutorial` | A second *decision*, not a second list: who you are. Name before fighter, because it is the one field a returning player edits. The course sits here because it teaches **this** kit — its relation to the hero is the reason it is discoverable at all. |
+| One disclosure | Practice, How to play, Move list, Options, Graphics, Sound | Rare-or-settings. They still need to be discoverable; they do not need to compete for the same glance. |
+| One dialog, once | The first-time tutorial card | The player who needs the course will not go looking for it. Most will skip, so Skip is the filled button and the course is the quieter one. |
+
+The rules that follow:
+
+- **Never two buttons side by side on the home screen.** A pair reads as equal
+  choices of equal weight, which is how eleven buttons became a wall. Two
+  *columns* are fine when each column is one decision — play vs. identity — and
+  they stack on a phone.
+- **The disclosure's label names its contents** — "More — practice and
+  settings", not "More". A mystery-meat trigger makes the gulf of execution
+  worse than the clutter it removed.
+- **One level, never two.** A submenu inside the disclosure would already be the
+  third door; if a group outgrows the drawer, it becomes its own view, as the
+  host form and join form already do.
+- **A new item must justify the front page in one breath.** If it cannot be
+  called "play, host, join, build, or who you are", it goes behind the
+  disclosure. Adding a button is the easy move; it is also the move that
+  regressed this screen once.
+- **Relate an item to the thing it modifies.** The tutorial is about a *hero*,
+  so it sits under the hero picker as `Play <hero> Tutorial`, not in a generic
+  list. An offer whose label names the hero is a different act from a tutorial
+  in a menu: one is "learn this fighter", the other is homework.
+- **A one-off prompt is a dialog, and frequency decides its primary.** The
+  first-time card is a question about this player, so it overlays; most people
+  answer it by declining, so **Skip** is the filled button and the course is the
+  quieter one. Its third answer, **Don't show this again**, is remembered in
+  `localStorage` (`golpe.tutorialPromptDismissed`) — never the wire — and
+  storage that cannot be written counts as answered, so nobody gets a card they
+  cannot silence. Never gate a URL launch behind it: the card only exists on the
+  bare menu.
+- **The header mark is the label.** The GitHub pill is the octocat plus the star
+  count; "Open source" beside it repeated the mark and made the title block
+  heavier. The accessible name (`aria-label`) still spells it out, so dropping
+  the caption costs nothing for a screen reader.
+
+**Measure the front page, do not eyeball it.** `scripts/menu-probe.ts` counts
+the *visible* `.gd-play-item`s on the bare URL and asserts five (four in the play
+column plus the tutorial beside the picker), asserts the disclosure starts
+closed, and asserts the first-time card appears once, offers skip and the
+course, writes its dismissal, and is gone after a reload. That is the
+regression gate: a sixth front-page button, or a card that comes back, fails the
+probe instead of quietly making the menu heavy again.
 
 ## Breathing room is a feature, not a nicety
 
@@ -61,12 +132,13 @@ buttons *that touch each other* is broken. The menu's polish is its vertical
 rhythm, and it is explicit, not accidental. The values that ship today
 (`src/ui/menuStyles.ts`):
 
-- **28px of card padding** — the menu owns the whole screen, so its furniture
+- **26px of card padding** — the menu owns the whole screen, so its furniture
   earns more air than an overlay's.
 - **24px between sections**, **10px inside a section** — a section is a flex
-  column with `gap: 10px`, so the heading, the Quick match button, the
-  Host/Join row and Practice all sit 10px apart and the sections sit 24px
-  apart. One number does the whole job instead of hand-tuned margins.
+  column with `gap: 10px`, so the heading and the entries beneath it sit 10px
+  apart and the sections sit 24px apart. One number does the whole job instead
+  of hand-tuned margins. The home columns use the same 10px gap, and the
+  disclosure's internal groups use 18px, because a drawer is one block.
 - **4px inside a button** between its title and its one-line description.
   At 3px it read as a label with a footnote; at 4px it reads as a button with
   a caption.
@@ -83,19 +155,18 @@ Two CSS traps cost real time on this screen and both look like the layout
   with `width: auto` hugs its text. Every menu button needs an explicit
   `width: 100%` (plus `box-sizing: border-box`), or a full-width "Practice"
   renders 398px wide with a void to its right.
-- **A `.gd-two`/`.gd-hero-pick` @media rule that comes *before* the base rules
-  is dead on arrival** — later rules of equal specificity beat it, so the
-  phone kept two cramped columns and the card overhung the screen. Put the
-  phone block last, and test at a real 390px viewport, not a wide one.
+- **A `.gd-hero-pick` @media rule that comes *before* the base rules is dead on
+  arrival** — later rules of equal specificity beat it, so the phone kept two
+  cramped columns and the card overhung the screen. Put the phone block last,
+  and test at a real 390px viewport, not a wide one.
 
-Breathing has a cost: the card grew to 812px before the hero chips were sized
-down (48×72 on the home screen, the Esc menu keeps its 64×96 cards), and it
-still ends 30px taller than a 778px viewport at the layout's previous density.
-That is the right trade — a menu that scrolls gracefully (`margin: auto` +
-`overflow-y: auto` on the page keeps the title reachable at the top and the
-footer reachable by scroll) beats a menu that fits but is cramped. What is not
-acceptable is a menu where the footer is *invisible without scroll on a
-standard laptop window*; aim for the whole card inside ~800px of height.
+Breathing has a cost, and the short-list layout is what pays it back: the home
+card used to run past a 778px window, and now the same air fits inside one
+laptop screen because there are five entries where there were eleven. A menu
+that scrolls gracefully (`margin: auto` + `overflow-y: auto` on the page keeps
+the title reachable and the footer reachable by scroll) still beats a menu that
+fits but is cramped — but *aim for the whole card inside ~800px of height*, and
+measure it rather than trusting the layout to be as short as it looks.
 
 ## The architectural law: the menu is a URL generator, never a booter
 
@@ -180,16 +251,18 @@ string. Rules that follow:
 ## Verifying a menu change
 
 1. `pnpm run typecheck && pnpm run lint && pnpm run test`.
-2. `node scripts/menu-probe.mjs` with the servers up — it drives the real menu:
-   bare URL shows the menu; Quick match boots with `bots=1`; Practice boots
-   training; Join accepts a room; a URL with a launch key never shows the menu.
-3. `node scripts/verify-modes.mjs` — the whole URL matrix must still pass: the
+2. `tsx scripts/menu-probe.ts` with the servers up — it drives the real menu:
+   bare URL shows the menu and **five visible play choices** (a sixth front-page
+   button fails it); Quick match boots with `bots=1`; the disclosure opens and
+   Practice boots training from inside it; Join accepts a room; a URL with a
+   launch key never shows the menu.
+3. `tsx scripts/verify-modes.ts` — the whole URL matrix must still pass: the
    menu is the novice path and must not have disturbed the expert path.
 4. Take a screenshot at a phone viewport: the menu is the first thing a mobile
    player sees, and the last thing a desktop player sees differently.
-5. Measure the vertical gaps, don't eyeball them. `getBoundingClientRect` the
-   heading-to-content and element-to-element gaps and confirm the 24px/10px/4px
-   rhythm survived — a button at 0px from its neighbour is the exact bug that
-   ships as "unpolished".
-6. Ground truth beats eyeballs: the probe asserts on `.gd-menu` presence and
-   the URL after commits, not on styling.
+5. Measure, don't eyeball. `getBoundingClientRect` the card's height at
+   1280×800 and the heading-to-content and element-to-element gaps, and confirm
+   the 24px/10px/4px rhythm survived — a button at 0px from its neighbour is the
+   exact bug that ships as "unpolished".
+6. Ground truth beats eyeballs: the probe asserts on `.gd-menu-page` presence,
+   the visible-item count and the URL after commits, not on styling.

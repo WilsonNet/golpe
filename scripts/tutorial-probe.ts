@@ -127,23 +127,37 @@ async function checkMenu(page: Page) {
 	await page.goto(`${BASE_URL}/?mute=1`);
 	await page.waitForSelector(".gd-menu-page", { timeout: 20000 });
 
-	// The course is the page's first item. Asserted structurally rather than by
-	// eye: "toppest thing" is a layout promise, and a later section heading
-	// inserted above it would silently demote it.
-	const firstItem = await page.evaluate(() => {
-		const el = document.querySelector(".gd-play-item");
+	// A first-time browser gets the card, because the good moves are invisible
+	// to somebody who has only pressed attack — and the card is the first thing
+	// they read. Asserted structurally: it is the offer, and it names the hero.
+	const prompt = await page.evaluate(() => {
+		const card = document.querySelector(".gd-prompt");
 		return {
-			tutorial: el?.classList.contains("gd-play-item-tutorial") ?? false,
-			label: el?.querySelector("strong")?.textContent ?? "",
+			open: card !== null,
+			title: card?.querySelector(".gd-prompt-title")?.textContent ?? "",
+			tutorial:
+				card?.querySelector(".gd-play-item-tutorial strong")?.textContent ??
+				"",
 		};
 	});
 	check(
-		"the tutorial is the first item on the root menu",
-		firstItem.tutorial,
-		firstItem.label,
+		"a first-time player is offered the tutorial",
+		prompt.open && /Tutorial/.test(prompt.tutorial),
+		`${prompt.title} · ${prompt.tutorial}`,
+	);
+	// The offer is not the only door: the course stays beside the hero picker,
+	// named after the fighter it teaches.
+	const besidePicker = await page.$$eval(
+		".gd-home-fighter .gd-play-item-tutorial strong",
+		(els) => els.map((e) => e.textContent?.trim() ?? ""),
+	);
+	check(
+		"the tutorial stays under the hero picker",
+		besidePicker.some((t) => t.includes("Tutorial")),
+		besidePicker.join(" / "),
 	);
 
-	await page.getByRole("button", { name: /Tutorial/ }).click();
+	await page.locator(".gd-prompt .gd-play-item-tutorial").click();
 	await page.waitForFunction(() => !!window.__tutorial, { timeout: 25000 });
 	const url = page.url();
 	check(

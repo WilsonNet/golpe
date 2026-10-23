@@ -8,28 +8,25 @@
  * configure something the game will not honour. What the address bar says after
  * a commit is exactly the link that would boot that match if it were shared.
  *
- * The home screen is four sections in strict hierarchy, because seven buttons
- * of equal weight made every choice look like every other choice:
+ * The home screen is **two columns, one decision each**, because eleven buttons
+ * of equal weight made every choice look like every other choice — Hick's law
+ * applied literally: fewer things to weigh, and nothing sharing a row.
  *
- * - **Start here** — the Tutorial, first on the page. The good moves in this
- *   game are invisible to somebody who has only ever pressed attack, so the
- *   answer to the stranger's real question goes above everything else. It is
- *   deliberately not the gold button: Quick match keeps that, because the
- *   primary *action* of a game is playing it, and the course wears the aim
- *   beam's cyan so it reads as a different door rather than a competing one.
- * - **Play** — starting a fight is the primary job, so it is next: the gold
- *   Quick match, then Host/Join as siblings, then Practice and the Map maker. The
- *   repository lives in the header pill only — a second "Open source" section
- *   here was clutter.
- * - **Your fighter** — who you bring. The hero picker lives here, on the home
- *   screen, beside the name field: a hero shooter should show its heroes, and
- *   the choice rides every match started here.
- * - **Learn & settings** — the detours: How to play full-width (the primary
- *   "how do I play" answer), then Move list and Options as siblings. The move
- *   list is a top-level destination, not a chapter of How to play — it answers
- *   "what does my fighter do" for the hero picked above, and it is a
- *   full-screen feature (live preview, stats) that would drown a reference
- *   page. The Esc menu's Moves item is the same module.
+ * - **Play (left)** — Quick match (gold, the primary action), then Host, Join
+ *   and the Map maker as quiet entries. Starting a fight is the job.
+ * - **Your fighter (right)** — the name field, then the hero picker, the
+ *   selected hero's blurb, and **Play <hero> Tutorial**: the course teaches
+ *   this kit, so it belongs under the choice of kit rather than in a generic
+ *   menu. Most players never need it; the one who does finds it where the
+ *   choice is.
+ * - **More** — a disclosure holding the rest: Practice, How to play, the Move
+ *   list, Options, Graphics and Sound. Secondary by design: progressive
+ *   disclosure is what keeps one short list from becoming a catalogue.
+ * - **The first-time card** — one dialog, once per browser, offering the
+ *   tutorial to a player with no lesson finished. Skip is the easy answer
+ *   because most players will take it; the course is offered quietly beneath.
+ *   Answering the card is remembered in `localStorage` (never the wire), so it
+ *   cannot become a nag.
  *
  * The rules underneath stay the ones the whole screen is built on:
  *
@@ -61,6 +58,10 @@ import { MAX_NAME, readStoredName, storeName } from "../game/playerName";
 import { HERO_IDS, HEROES, type HeroId } from "../game/simulation/Heroes";
 import type { MatchMode } from "../game/simulation/Teams";
 import { mapScreens } from "../game/simulation/Tilemap";
+import {
+	dismissTutorialPromptForever,
+	tutorialPromptDismissed,
+} from "../game/tutorialPrompt";
 import { CP_SCREENS } from "../tweakables/control";
 import { ULT_MAX_CAP } from "../tweakables/ultimate";
 import { ControlsDialog } from "./ControlsDialog";
@@ -184,6 +185,10 @@ export function MainMenu({
 	// place the menu is asynchronous: the primary action has to learn the room
 	// id before it can write it into the URL.
 	const [quickBusy, setQuickBusy] = useState(false);
+	// The home page's one disclosure. Closed by default: the front page is a
+	// short list of ways to *play*, and everything else is a detour a player
+	// asks for rather than reads past.
+	const [showMore, setShowMore] = useState(false);
 	// How much of this hero's course is done. Snapshotted into state rather than
 	// read off `localStorage` during the render, exactly like the bindings: a
 	// compiled component memoises the values a render *reads*, and a store it
@@ -193,11 +198,30 @@ export function MainMenu({
 	const [tutorialProgress, setTutorialProgress] = useState(() =>
 		progressOf(lessonsOf(tutorialFor(hero)).map((l) => l.id)),
 	);
+	// The first-time card: offered once, to a browser that has not answered it
+	// and has no lesson finished. Skipping it lasts the session; *Don't show
+	// this again* and *Play the tutorial* are both remembered. Most players
+	// want to skip, so Skip is the easy button and the course is the detour.
+	const [promptOpen, setPromptOpen] = useState(
+		() => !tutorialPromptDismissed() && tutorialProgress.done === 0,
+	);
 	useEffect(() => {
 		setTutorialProgress(
 			progressOf(lessonsOf(tutorialFor(hero)).map((l) => l.id)),
 		);
 	}, [hero]);
+
+	const startTutorial = () => {
+		// Accepting the offer answers it: the card has introduced the course,
+		// and *More* keeps it reachable for the rest of this browser's life.
+		dismissTutorialPromptForever();
+		onLaunch({ ...NOTHING, tutorial: true, hero });
+	};
+
+	const answerPromptForever = () => {
+		dismissTutorialPromptForever();
+		setPromptOpen(false);
+	};
 
 	const quickMatch = async () => {
 		if (quickBusy) return;
@@ -218,16 +242,21 @@ export function MainMenu({
 		}
 	};
 
-	// Esc steps back through the menu; on the home view it does nothing. There
-	// is no game under this screen, so there is nothing else for it to mean.
+	// Esc closes the first-time card first, then steps back through the menu;
+	// on the home view with no card it does nothing. There is no game under this
+	// screen, so there is nothing else for it to mean.
 	useEffect(() => {
 		const onKey = (e: KeyboardEvent) => {
 			if (e.code !== "Escape") return;
+			if (promptOpen) {
+				setPromptOpen(false);
+				return;
+			}
 			setView((v) => (v === "home" ? v : "home"));
 		};
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
-	}, []);
+	}, [promptOpen]);
 
 	return (
 		<div className="gd-menu-page">
@@ -245,100 +274,78 @@ export function MainMenu({
 				</div>
 
 				{view === "home" ? (
-					// Two columns on a big screen — what to do on the left, who you
-					// are and how it works on the right — and the same order stacked
-					// on anything narrower. See `.gd-home` in menuStyles.
+					// Two columns, and each one is a column: starting a fight on the
+					// left, who you are on the right. Every action inside a column is
+					// full-width and stacked, so nothing reads as an equal-weight pair
+					// — the overload this screen used to have. See `.gd-home` in
+					// menuStyles.
 					<div className="gd-home">
-						<div className="gd-home-col">
-							{/* First on the page, above Play, because it is the answer to the
-						    only question a stranger actually has. Everything else on
-						    this screen assumes you already know what a butterfly is. */}
-							<div className="gd-section">
-								<div className="gd-section-head">Start here</div>
-								<button
-									className="gd-play-item gd-play-item-tutorial"
-									type="button"
-									onClick={() => onLaunch({ ...NOTHING, tutorial: true, hero })}
-								>
-									<strong>
-										Tutorial — learn {HEROES[hero].name}
-										{tutorialProgress.done > 0 ? (
-											<span className="gd-badge">
-												{tutorialProgress.done}/{tutorialProgress.total}
-											</span>
-										) : null}
-									</strong>
-									<span>
-										Play every move against a live opponent, one lesson at a
-										time.
-										{tutorialProgress.done > 0
-											? " Your progress is remembered."
-											: ""}
-									</span>
-								</button>
-							</div>
+						<div className="gd-home-main">
+							<button
+								className="gd-play-item gd-play-item-primary"
+								type="button"
+								onClick={quickMatch}
+							>
+								<strong>Quick match</strong>
+								<span>
+									{quickBusy
+										? "Finding an open room…"
+										: "Join an open room, or start a duel against a bot."}
+								</span>
+							</button>
 
-							<div className="gd-section">
-								<div className="gd-section-head">Play</div>
-								<button
-									className="gd-play-item gd-play-item-primary"
-									type="button"
-									onClick={quickMatch}
-								>
-									<strong>Quick match</strong>
-									<span>
-										{quickBusy
-											? "Finding an open room…"
-											: "Join an open room, or start a duel against a bot — your room link is ready to share."}
-									</span>
-								</button>
-								<div className="gd-two">
-									<button
-										className="gd-play-item"
-										type="button"
-										onClick={() => setView("host")}
-									>
-										<strong>Host a match</strong>
-										<span>
-											Choose the mode, arena and rules, then share the link.
-										</span>
-									</button>
-									<button
-										className="gd-play-item"
-										type="button"
-										onClick={() => setView("join")}
-									>
-										<strong>Join a match</strong>
-										<span>Enter a room id or a link someone sent you.</span>
-									</button>
-								</div>
-								<button
-									className="gd-play-item"
-									type="button"
-									onClick={() => onLaunch({ ...NOTHING, training: true, hero })}
-								>
-									<strong>Practice</strong>
-									<span>
-										The training room: a scriptable dummy and its menu.
-									</span>
-								</button>
-								<a
-									className="gd-play-item"
-									href="?mapmaker=true"
-									data-testid="menu-mapmaker"
-								>
-									<strong>Map maker</strong>
-									<span>
-										Build an arena, test it against bots, and send it to the
-										game as a pull request.
-									</span>
-								</a>
-							</div>
+							<button
+								className="gd-play-item gd-play-item-compact"
+								type="button"
+								onClick={() => setView("host")}
+							>
+								<strong>Host a match</strong>
+								<span>Mode, arena and rules — then share the link.</span>
+							</button>
+							<button
+								className="gd-play-item gd-play-item-compact"
+								type="button"
+								onClick={() => setView("join")}
+							>
+								<strong>Join a match</strong>
+								<span>A room id, or a link someone sent you.</span>
+							</button>
+							{/* Building an arena is still play, so the map maker stays on
+							    the front page rather than in the disclosure. It is a link,
+							    not a launch: the editor is its own page. */}
+							<a
+								className="gd-play-item gd-play-item-compact"
+								href="?mapmaker=true"
+								data-testid="menu-mapmaker"
+							>
+								<strong>Map maker</strong>
+								<span>Build an arena and send it as a pull request.</span>
+							</a>
 						</div>
 
-						<div className="gd-home-col">
+						{/* Who you are: the name first, then the fighter. Naming comes
+						    before picking because the name is the one field a returning
+						    player edits, and a hero shooter should show its heroes —
+						    four chips, one choice, above the fold. */}
+						<div className="gd-home-fighter">
 							<div className="gd-section">
 								<div className="gd-section-head">Your fighter</div>
+								<div className="gd-name-row">
+									<label htmlFor="gd-name">Name</label>
+									<input
+										id="gd-name"
+										className="gd-input"
+										value={name}
+										maxLength={MAX_NAME}
+										placeholder="your name"
+										autoComplete="off"
+										spellCheck={false}
+										onChange={(e) => {
+											setName(e.target.value);
+											storeName(e.target.value.trim().slice(0, MAX_NAME));
+										}}
+									/>
+								</div>
 								<div className="gd-hero-pick">
 									{HERO_IDS.map((id) => (
 										<button
@@ -359,84 +366,117 @@ export function MainMenu({
 												<span className="gd-hero-chip-name">
 													{HEROES[id].name}
 												</span>
-												<span className="gd-hero-chip-kit">
-													{HEROES[id].melee.label} · {HEROES[id].ranged.label}
-												</span>
 											</span>
 										</button>
 									))}
 								</div>
-								<div className="gd-name-row">
-									<label htmlFor="gd-name">Fighter name</label>
-									<input
-										id="gd-name"
-										className="gd-input"
-										value={name}
-										maxLength={MAX_NAME}
-										placeholder="your name"
-										autoComplete="off"
-										spellCheck={false}
-										onChange={(e) => {
-											setName(e.target.value);
-											storeName(e.target.value.trim().slice(0, MAX_NAME));
-										}}
-									/>
-								</div>
 								<p className="gd-hero-blurb">{HEROES[hero].blurb}</p>
-							</div>
-
-							<div className="gd-section">
-								<div className="gd-section-head">Learn &amp; settings</div>
+								{/* The course belongs to the fighter, not to a generic
+								    menu: it teaches *this* kit, so it sits under the
+								    picker and names the hero. Most players never need
+								    it; the one who does finds it where the choice is. */}
 								<button
-									className="gd-play-item"
+									className="gd-play-item gd-play-item-tutorial gd-play-item-compact"
 									type="button"
-									onClick={() => setView("howto")}
+									onClick={() => onLaunch({ ...NOTHING, tutorial: true, hero })}
 								>
-									<strong>How to play</strong>
-									<span>Movement, the sword chain, and the ultimate.</span>
+									<strong>
+										Play {HEROES[hero].name} Tutorial
+										{tutorialProgress.done > 0 ? (
+											<span className="gd-badge">
+												{tutorialProgress.done}/{tutorialProgress.total}
+											</span>
+										) : null}
+									</strong>
+									<span>
+										One lesson at a time, against a live opponent.
+									</span>
 								</button>
-								<div className="gd-two">
-									<button
-										className="gd-play-item"
-										type="button"
-										onClick={() => setView("moves")}
-									>
-										<strong>Move list</strong>
-										<span>
-											Every command for {HEROES[hero].name} — stats and a live
-											preview.
-										</span>
-									</button>
-									<button
-										className="gd-play-item"
-										type="button"
-										onClick={() => setView("controls")}
-									>
-										<strong>Options</strong>
-										<span>Aiming scheme, on-screen gamepad, rebinding.</span>
-									</button>
-								</div>
-								<div className="gd-two">
-									<button
-										className="gd-play-item"
-										type="button"
-										onClick={() => setView("graphics")}
-									>
-										<strong>Graphics</strong>
-										<span>Skybox on or off — the low-distraction setting.</span>
-									</button>
-									<button
-										className="gd-play-item"
-										type="button"
-										onClick={() => setView("sound")}
-									>
-										<strong>Sound</strong>
-										<span>
-											Master, music and effects — set the mix before you play.
-										</span>
-									</button>
-								</div>
 							</div>
+						</div>
+
+						{/* The disclosure is the page's, not the play column's: it spans
+						    both columns beside each other, so opening it never leaves
+						    one column long and the other one blank. Its label names
+						    what is inside — practice and settings are one click away
+						    and never in a newcomer's way. */}
+						<div className="gd-more">
+							<button
+								className="gd-more-toggle"
+								type="button"
+								aria-expanded={showMore}
+								onClick={() => setShowMore(!showMore)}
+							>
+								{showMore ? "▾" : "▸"} More — practice and settings
+							</button>
+							{showMore ? (
+								<div className="gd-more-body">
+									<div className="gd-section">
+										<div className="gd-section-head">More ways to play</div>
+										<button
+											className="gd-play-item gd-play-item-compact"
+											type="button"
+											onClick={() =>
+												onLaunch({ ...NOTHING, training: true, hero })
+											}
+										>
+											<strong>Practice</strong>
+											<span>A scriptable dummy and its menu.</span>
+										</button>
+									</div>
+
+									<div className="gd-section">
+										<div className="gd-section-head">Learn</div>
+										<button
+											className="gd-play-item gd-play-item-compact"
+											type="button"
+											onClick={() => setView("howto")}
+										>
+											<strong>How to play</strong>
+											<span>Movement, the sword chain, and the ultimate.</span>
+										</button>
+										<button
+											className="gd-play-item gd-play-item-compact"
+											type="button"
+											onClick={() => setView("moves")}
+										>
+											<strong>Move list</strong>
+											<span>
+												Every command for {HEROES[hero].name} — stats and a
+												live preview.
+											</span>
+										</button>
+									</div>
+
+									<div className="gd-section">
+										<div className="gd-section-head">Settings</div>
+										<button
+											className="gd-play-item gd-play-item-compact"
+											type="button"
+											onClick={() => setView("controls")}
+										>
+											<strong>Options</strong>
+											<span>Aiming scheme, gamepad, rebinding.</span>
+										</button>
+										<button
+											className="gd-play-item gd-play-item-compact"
+											type="button"
+											onClick={() => setView("graphics")}
+										>
+											<strong>Graphics</strong>
+											<span>Skybox on or off — the low-distraction setting.</span>
+										</button>
+										<button
+											className="gd-play-item gd-play-item-compact"
+											type="button"
+											onClick={() => setView("sound")}
+										>
+											<strong>Sound</strong>
+											<span>Master, music and effects.</span>
+										</button>
+									</div>
+								</div>
+							) : null}
 						</div>
 					</div>
 				) : null}
@@ -498,6 +538,60 @@ export function MainMenu({
 
 				<ServerStatus />
 			</div>
+
+			{view === "home" && promptOpen ? (
+				// The one interruption the menu allows itself, and only ever once
+				// per browser. A dialog because it is a question, not a section:
+				// it is about this player, and the menu behind it is what they
+				// came for. Skip is the easy answer because most players have
+				// one; the course is the detour, and it is offered quietly.
+				<div
+					className="gd-prompt-backdrop"
+					role="presentation"
+					onClick={(e) => {
+						if (e.target === e.currentTarget) setPromptOpen(false);
+					}}
+				>
+					<div
+						className="gd-prompt"
+						role="dialog"
+						aria-modal="true"
+						aria-labelledby="gd-prompt-title"
+					>
+						<h2 className="gd-prompt-title" id="gd-prompt-title">
+							First time?
+						</h2>
+						<p className="gd-prompt-body">
+							Learn the moves that aren't on the buttons.
+						</p>
+						<div className="gd-prompt-actions">
+							<button
+								className="gd-btn gd-btn-primary gd-prompt-skip"
+								type="button"
+								autoFocus
+								onClick={() => setPromptOpen(false)}
+							>
+								Skip for now
+							</button>
+							<button
+								className="gd-play-item gd-play-item-tutorial gd-play-item-compact"
+								type="button"
+								onClick={startTutorial}
+							>
+								<strong>Play {HEROES[hero].name} Tutorial</strong>
+							</button>
+						</div>
+						<button
+							className="gd-prompt-never"
+							type="button"
+							onClick={answerPromptForever}
+						>
+							Don't show this again
+						</button>
+					</div>
+				</div>
+			) : null}
+
 			{view === "moves" ? (
 				<MoveList hero={hero} onClose={() => setView("home")} />
 			) : null}

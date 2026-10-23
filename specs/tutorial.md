@@ -15,13 +15,21 @@ fighter's body or a decision the server already made.
 
 ## Where it lives
 
-**The tutorial is the first thing on the root menu**, above Play, in its own
-"Start here" section. It is not the gold primary button — Quick match keeps
-that, because the primary action of a game is playing it — it wears the aim
-beam's cyan instead, so it reads as a different kind of door rather than as a
-competing one. The button names the hero currently picked, and once any lesson
-is finished it carries a `4/16` badge: progress is remembered, and saying so is
-what makes a half-finished course feel resumable.
+**The tutorial is part of choosing a fighter**, so it lives in the root menu's
+*Your fighter* column: under the name field, the hero tiles and the blurb, as
+**`Play <hero> Tutorial`**. The course teaches *this kit* — the swordsman's
+lessons are not the dagger's — so the offer belongs where the choice of kit is,
+not in a generic menu or a separate page; it wears the aim beam's cyan so it
+reads as a different kind of door rather than as a competing one, and once any
+lesson is finished it carries a `4/18` badge: progress is remembered, and saying
+so is what makes a half-finished course feel resumable.
+
+A browser that has never answered the card, and has no lesson finished, is also
+offered the course **once** in a first-time dialog (Skip / Play / Don't show this
+again). It exists because the player who needs the course is exactly the one who
+would never go looking for it; the answer is stored in `localStorage`, so most
+players see it once and never again. The menu half of that model is specified in
+[menu.md](menu.md).
 
 Committing it writes `?tutorial=true&hero=<id>` and boots, exactly like every
 other menu choice — the URL is still the authority (see [menu.md](menu.md)).
