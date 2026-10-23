@@ -76,9 +76,13 @@ request, never more than one level deep).
 
 A browser that has never answered the card **and has no lesson finished** gets
 one dialog over the menu: *First time?* — one line, *Learn the moves that aren't
-on the buttons* — then **Skip for now** (filled, because most players will), the
-cyan **`Play <hero> Tutorial`**, and a quiet **Don't show this again**. Esc or a
-click on the backdrop is Skip.
+on the buttons* — then the cyan **`Play <hero> Tutorial`** as the card's biggest
+target, **Skip for now** as a quiet full-width button beneath it, and a
+**Don't show this again** link. Esc or a click on the backdrop is Skip.
+
+The course is the big one because the player who needs it is exactly the one who
+would never go looking for it. Skipping still costs one click and never hides:
+most players will take it.
 
 The card exists because the offer has to find the player who needs it: the good
 moves are invisible to somebody who has only pressed attack. It is a dialog, not

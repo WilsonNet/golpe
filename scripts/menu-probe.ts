@@ -142,6 +142,23 @@ async function menuContext() {
 		prompt.skip !== "" && prompt.play !== "",
 		`skip="${prompt.skip}" play="${prompt.play}"`,
 	);
+	// The course is the card's biggest target and Skip is the smaller one
+	// beneath it. Measured, because "bigger" is a layout promise that a later
+	// tidy-up could quietly reverse.
+	const promptSizes = await page.evaluate(() => ({
+		play:
+			document
+				.querySelector(".gd-prompt .gd-play-item-tutorial")
+				?.getBoundingClientRect().height ?? 0,
+		skip:
+			document.querySelector(".gd-prompt-skip")?.getBoundingClientRect()
+				.height ?? 0,
+	}));
+	check(
+		"the course is the bigger button",
+		promptSizes.play > promptSizes.skip,
+		`play=${Math.round(promptSizes.play)} skip=${Math.round(promptSizes.skip)}`,
+	);
 	// *Don't show this again* is the promise that makes the card acceptable:
 	// it is remembered, and a reload proves it was written where the next load
 	// reads it.

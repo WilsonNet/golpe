@@ -23,10 +23,10 @@
  *   list, Options, Graphics and Sound. Secondary by design: progressive
  *   disclosure is what keeps one short list from becoming a catalogue.
  * - **The first-time card** — one dialog, once per browser, offering the
- *   tutorial to a player with no lesson finished. Skip is the easy answer
- *   because most players will take it; the course is offered quietly beneath.
- *   Answering the card is remembered in `localStorage` (never the wire), so it
- *   cannot become a nag.
+ *   tutorial to a player with no lesson finished. The course is the card's
+ *   biggest target because the player who needs it will not go looking; Skip
+ *   is one click beneath it. Answering the card is remembered in
+ *   `localStorage` (never the wire), so it cannot become a nag.
  *
  * The rules underneath stay the ones the whole screen is built on:
  *
@@ -200,8 +200,9 @@ export function MainMenu({
 	);
 	// The first-time card: offered once, to a browser that has not answered it
 	// and has no lesson finished. Skipping it lasts the session; *Don't show
-	// this again* and *Play the tutorial* are both remembered. Most players
-	// want to skip, so Skip is the easy button and the course is the detour.
+	// this again* and *Play the tutorial* are both remembered. The course is
+	// the large target — the player who needs it is the one who would not look
+	// for it — and Skip waits one click beneath.
 	const [promptOpen, setPromptOpen] = useState(
 		() => !tutorialPromptDismissed() && tutorialProgress.done === 0,
 	);
@@ -543,8 +544,8 @@ export function MainMenu({
 				// The one interruption the menu allows itself, and only ever once
 				// per browser. A dialog because it is a question, not a section:
 				// it is about this player, and the menu behind it is what they
-				// came for. Skip is the easy answer because most players have
-				// one; the course is the detour, and it is offered quietly.
+				// came for. The course is the biggest thing in it — the player
+				// who needs it would never go looking — and Skip waits below.
 				<div
 					className="gd-prompt-backdrop"
 					role="presentation"
@@ -565,20 +566,23 @@ export function MainMenu({
 							Learn the moves that aren't on the buttons.
 						</p>
 						<div className="gd-prompt-actions">
+							{/* The course is the biggest thing in the card: the player
+							    who needs it is the one who would never go looking for
+							    it. Skipping stays one click and one line below. */}
 							<button
-								className="gd-btn gd-btn-primary gd-prompt-skip"
+								className="gd-play-item gd-play-item-tutorial gd-prompt-play"
 								type="button"
 								autoFocus
-								onClick={() => setPromptOpen(false)}
-							>
-								Skip for now
-							</button>
-							<button
-								className="gd-play-item gd-play-item-tutorial gd-play-item-compact"
-								type="button"
 								onClick={startTutorial}
 							>
 								<strong>Play {HEROES[hero].name} Tutorial</strong>
+							</button>
+							<button
+								className="gd-btn gd-prompt-skip"
+								type="button"
+								onClick={() => setPromptOpen(false)}
+							>
+								Skip for now
 							</button>
 						</div>
 						<button

@@ -300,12 +300,12 @@ a.gd-play-item { color: inherit; text-decoration: none; }
 }
 
 /* ---- the first-time card ----
-   One question, asked once, over a dimmed menu. Skip is the filled button
-   because most players already know how to swing a sword and want to get on
-   with it; the tutorial is offered beneath it, quieter but full-size, because
-   the player who needs it is exactly the one who would never look for it. The
-   third choice — never show this again — is a text link, so it is findable
-   without competing with the two answers. */
+   One question, asked once, over a dimmed menu. The tutorial is the biggest
+   target in the card — larger than Skip, in the cyan it wears everywhere —
+   because the player who needs it is exactly the one who would never go
+   looking for it. Skip is a quiet full-width button directly beneath, so
+   declining is still one click; *Don't show this again* is a text link, so it
+   is findable without competing with the two answers. */
 .gd-prompt-backdrop {
 	position: fixed;
 	inset: 0;
@@ -345,8 +345,20 @@ a.gd-play-item { color: inherit; text-decoration: none; }
 	flex-direction: column;
 	gap: 10px;
 }
+/* The course is the card's biggest target — taller than Skip, larger type,
+   the cyan door — because the player who needs it is the one who would never
+   go looking. Skip stays one click below, quieter but a full-width target. */
+.gd-prompt-play {
+	padding: 16px 18px;
+}
+.gd-prompt-play strong {
+	font-size: 16px;
+}
 .gd-prompt-skip {
 	width: 100%;
+	padding: 9px 14px;
+	font-size: 12px;
+	color: rgba(255, 255, 255, 0.72);
 }
 .gd-prompt-never {
 	margin-top: 14px;

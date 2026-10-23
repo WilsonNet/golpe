@@ -82,7 +82,7 @@ Applied to this menu, as a budget rather than a taste call:
 | Front, play column | Quick match, Host a match, Join a match, Map maker | The intents a player arrives with. Quick match is the only filled button. |
 | Front, identity column | Name field, four hero chips, the hero's blurb, `Play <hero> Tutorial` | A second *decision*, not a second list: who you are. Name before fighter, because it is the one field a returning player edits. The course sits here because it teaches **this** kit — its relation to the hero is the reason it is discoverable at all. |
 | One disclosure | Practice, How to play, Move list, Options, Graphics, Sound | Rare-or-settings. They still need to be discoverable; they do not need to compete for the same glance. |
-| One dialog, once | The first-time tutorial card | The player who needs the course will not go looking for it. Most will skip, so Skip is the filled button and the course is the quieter one. |
+| One dialog, once | The first-time tutorial card | The player who needs the course will not go looking for it, so the course is the card's biggest target; Skip is a quiet full-width button beneath it and stays one click. |
 
 The rules that follow:
 
@@ -104,10 +104,11 @@ The rules that follow:
   so it sits under the hero picker as `Play <hero> Tutorial`, not in a generic
   list. An offer whose label names the hero is a different act from a tutorial
   in a menu: one is "learn this fighter", the other is homework.
-- **A one-off prompt is a dialog, and frequency decides its primary.** The
-  first-time card is a question about this player, so it overlays; most people
-  answer it by declining, so **Skip** is the filled button and the course is the
-  quieter one. Its third answer, **Don't show this again**, is remembered in
+- **A one-off prompt is a dialog; the course is its biggest target and Skip is
+  still one click.** The first-time card is a question about this player, so it
+  overlays. The tutorial is the large cyan button because the player who needs
+  it will not go looking; **Skip** is a quiet full-width button directly beneath
+  it, and **Don't show this again** is a link. The dismissal is remembered in
   `localStorage` (`golpe.tutorialPromptDismissed`) — never the wire — and
   storage that cannot be written counts as answered, so nobody gets a card they
   cannot silence. Never gate a URL launch behind it: the card only exists on the
