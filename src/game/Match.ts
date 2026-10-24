@@ -19,7 +19,7 @@ const SPRITE_ANCHOR_CENTRE = 0.5;
 
 import { Container, type Renderer, Sprite } from "pixi.js";
 import { SMOKE_REVEAL_MS } from "../tweakables/items.js";
-import { pelletDamageAt } from "../tweakables/ranged.js";
+import { AXE_CHARGE_MS, pelletDamageAt } from "../tweakables/ranged.js";
 import { TutorialDirector, tutorialFor } from "./campaign";
 import { type AIConfig, randomBotConfig } from "./characters/AIConfig";
 import { EnemyBrain } from "./characters/EnemyBrain";
@@ -60,6 +60,7 @@ import {
 	type Queries,
 } from "./ecs/world";
 import { HUD_EVENTS, type HudState } from "./hud";
+import { assistedAim } from "./input/AimAssist";
 import { Input } from "./input/Input";
 import { inputSettings } from "./input/Scheme";
 import { resolveMap } from "./maps/library";
@@ -854,6 +855,29 @@ export class Match {
 		// includes the round being pumped. Either way it reads "how full is
 		// the gun becoming".
 		const ranged = kitFor(this.hero).ranged;
+		const melee = kitFor(this.hero).melee;
+		// The deck's charge rings. A weapon without a charge reads zero, and a
+		// guard-break Massive reads full even on the tick its timer has been
+		// spent — the player is holding a ready move, and the ring says so. The
+		// axe's throw charge is its own timer and its own ring.
+		const charge = !melee.hasCharge
+			? 0
+			: this.local.body.massiveReady
+				? 1
+				: Math.max(
+						0,
+						Math.min(
+							1,
+							this.local.body.chargeTimer / Math.max(1, melee.chargeMs),
+						),
+					);
+		const throwCharge =
+			ranged.thrown === true
+				? Math.max(
+						0,
+						Math.min(1, this.local.body.throwChargeTimer / AXE_CHARGE_MS),
+					)
+				: 0;
 		const ammo = this.onlineMode ? this.local.body.ammo : this.localAmmo;
 		const reserve = this.onlineMode
 			? this.local.body.reserveRounds
@@ -871,6 +895,8 @@ export class Match {
 			reloadTimer > 0 ? 1 - Math.max(0, reloadTimer) / reloadTotal : 0;
 		const reloadProgress =
 			(ammo + roundProgress * (ranged.magazine - ammo)) / ranged.magazine;
+		const localCentre = bodyCentre(this.local.body.x, this.local.body.y);
+		const view = this.input.viewport;
 		const state: HudState = {
 			hp: this.local.fighter.hp,
 			maxHp: this.local.fighter.maxHp,
@@ -904,6 +930,20 @@ export class Match {
 				(this.offlineFoe ? 1 : 0),
 			online: this.onlineMode,
 			massiveReady: this.local.body.massiveReady,
+			charge,
+			throwCharge,
+			blocking: this.local.body.blocking,
+			facing: this.local.body.facing,
+			playerScreenX: clamp(
+				(localCentre.x - this.stage.cameraX) / view.width,
+				0,
+				1,
+			),
+			playerScreenY: clamp(
+				(localCentre.y - this.stage.cameraY) / view.height,
+				0,
+				1,
+			),
 			berserk: this.local.body.bloodlust >= 1,
 			bloodlust:
 				kitFor(this.hero).passive === "bloodlust"
@@ -1869,6 +1909,8 @@ export class Match {
 			aim: this.input.aimReport(),
 			face: this.localIntent.face,
 			facing: this.local.body.facing,
+			assist: inputSettings.assist,
+			attacking: this.input.actionDown("attack"),
 		});
 		// Switching scheme from a probe, the same way the Esc menu switches it —
 		// a bypass nobody plays would prove nothing about the path a player takes.
@@ -3811,7 +3853,9 @@ export class Match {
 				this.aimAngle = output.aimAngle;
 			}
 		} else {
-			this.aimAngle = this.input.aimAngle(this.local.body.x, this.local.body.y);
+			this.aimAngle = this.assistedLocalAim(
+				this.input.aimAngle(this.local.body.x, this.local.body.y),
+			);
 			this.localIntent = this.input.intent(this.aimAngle);
 		}
 
@@ -3943,7 +3987,9 @@ export class Match {
 			this.localIntent = intentFromAI(output);
 			this.aimAngle = output.aimAngle;
 		} else {
-			this.aimAngle = this.input.aimAngle(this.local.body.x, this.local.body.y);
+			this.aimAngle = this.assistedLocalAim(
+				this.input.aimAngle(this.local.body.x, this.local.body.y),
+			);
 			this.localIntent = this.input.intent(this.aimAngle);
 		}
 
@@ -4084,6 +4130,58 @@ export class Match {
 	private aimOf(id: string, local: boolean): number | undefined {
 		if (local) return this.aimAngle;
 		return this.online ? this.online.aimOf(id) : this.remoteBrainAim;
+	}
+
+	/**
+	 * The nearest living hostile's body, for the deck's aim assist.
+	 *
+	 * `OnlineSession.nearestFoe` already filters teammates and the dead — it is
+	 * the same answer the client AI is given — so a TDM assist can never turn
+	 * toward a teammate. The offline escape hatch has exactly one rival.
+	 */
+	private nearestHostileBody(): { x: number; y: number } | null {
+		const session = this.online;
+		if (session) return session.nearestFoe(this.local.body)?.state ?? null;
+		const foe = this.offlineFoe;
+		if (!foe || foe.fighter.hp <= 0) return null;
+		return foe.body;
+	}
+
+	/**
+	 * The local aim, after the deck's gated assist.
+	 *
+	 * Mouse and gamepad clients never see this: it is gated on a coarse-pointer
+	 * device, controller mode, no connected pad, the deck being visible and the
+	 * setting being on, and it does nothing for the gun or a live fine-aim drag.
+	 * It changes only the angle handed to `tickPlayer` — `face` is an ordinary
+	 * input field, so reconciliation replays it exactly like a mouse's angle.
+	 */
+	private assistedLocalAim(raw: number): number {
+		// Mouse aim is a cursor; a gamepad has a right stick. The assist exists
+		// for a *thumb on glass*, so a forced-on deck on a desktop, a paired pad,
+		// or a mouse scheme must not quietly gain it.
+		if (inputSettings.scheme !== "controller" || !inputSettings.touchPrimary) {
+			return raw;
+		}
+		if (this.input.padAvailable) return raw;
+		if (!inputSettings.deckVisible()) return raw;
+		if (inputSettings.assist === "off") return raw;
+		const foe = this.nearestHostileBody();
+		if (!foe) return raw;
+		const me = bodyCentre(this.local.body.x, this.local.body.y);
+		const them = bodyCentre(foe.x, foe.y);
+		return assistedAim({
+			rawAngle: raw,
+			shooter: me,
+			target: them,
+			swordStance: this.local.body.stance === "sword",
+			// The guard that is actually up, not merely the button a thumb holds:
+			// a stunned, charging or dagger fighter has no guard to turn.
+			blocking: this.local.body.blocking,
+			attacking: this.input.actionDown("attack"),
+			vx: this.local.body.vx,
+			fineAiming: this.input.aimReport().overriding,
+		});
 	}
 	/** The escape hatch's own magazines, mirrored from the server's model. */
 	private localAmmo = 0;

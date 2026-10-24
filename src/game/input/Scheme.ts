@@ -8,7 +8,7 @@
  *   cursor. `"controller"` uses the two-layer aim in `Aim.ts` — the analog
  *   Contra layer (d-pad or left stick, the same input that moves you), plus the
  *   right stick (or a relative mouse) for the full 360 on top.
- * - **`deck`** decides whether the on-screen gamepad is drawn. A phone wants one;
+ * - **`deck`** decides whether the on-screen deck is drawn. A phone wants one;
  *   a phone with a Bluetooth keyboard and mouse plugged into it does not, and
  *   that player must be able to say so. That is the whole reason this is not
  *   simply derived from `scheme`.
@@ -26,12 +26,25 @@
 /** Where the aim angle comes from. */
 export type AimScheme = "mouse" | "controller";
 
-/** Whether the on-screen gamepad is drawn. */
+/** Whether the on-screen deck is drawn. */
 export type DeckSetting = "auto" | "on" | "off";
+
+/**
+ * Whether the deck may turn the fighter toward a nearby foe on its own.
+ *
+ * A cursor points; a thumb on a one-axis rocker is lucky to be pointing the
+ * right way when somebody crosses behind it. On **sword** stance only, and only
+ * while the fighter is stationary or holding guard, the deck nudges the angle
+ * toward the nearest hostile within melee range. It is an input angle like any
+ * other — the simulation never learns it was assisted — and it is a setting so
+ * a player can turn it off.
+ */
+export type DeckAssist = "on" | "off";
 
 export interface InputSettings {
 	scheme: AimScheme;
 	deck: DeckSetting;
+	assist: DeckAssist;
 }
 
 const STORAGE_KEY = "golpe.input";
@@ -57,27 +70,53 @@ export function isTouchPrimary(): boolean {
  * and a player with a pad can say so in two clicks.
  */
 function defaultSettings(): InputSettings {
-	return { scheme: isTouchPrimary() ? "controller" : "mouse", deck: "auto" };
+	return {
+		scheme: isTouchPrimary() ? "controller" : "mouse",
+		deck: "auto",
+		assist: "on",
+	};
 }
 
 /** Take whatever was in storage and make it usable. Unknown values default. */
 function sanitiseSettings(raw: unknown): InputSettings {
 	const out = defaultSettings();
 	if (!raw || typeof raw !== "object") return out;
-	const source = raw as Partial<Record<"scheme" | "deck", unknown>>;
+	const source = raw as Partial<Record<"scheme" | "deck" | "assist", unknown>>;
 	const scheme = source.scheme;
 	const deck = source.deck;
+	const assist = source.assist;
 	if (scheme === "mouse" || scheme === "controller") out.scheme = scheme;
 	if (deck === "auto" || deck === "on" || deck === "off") out.deck = deck;
+	if (assist === "on" || assist === "off") out.assist = assist;
 	return out;
 }
 
 class InputSettingsStore {
 	private settings: InputSettings;
 	private readonly listeners = new Set<() => void>();
+	/**
+	 * The coarse-pointer answer, cached.
+	 *
+	 * `deckVisible()` and the deck's aim assist are asked every frame; calling
+	 * `matchMedia` per frame allocates a MediaQueryList on a phone for an answer
+	 * that changes only when a mouse is paired. The listener below is the same
+	 * change event the deck's own component subscribes to.
+	 */
+	private coarse = isTouchPrimary();
 
 	constructor(initial: InputSettings = defaultSettings()) {
 		this.settings = initial;
+		if (typeof window !== "undefined" && window.matchMedia) {
+			const query = window.matchMedia("(pointer: coarse)");
+			query.addEventListener("change", () => {
+				this.coarse = query.matches;
+				this.changed();
+			});
+		}
+	}
+
+	get touchPrimary(): boolean {
+		return this.coarse;
 	}
 
 	get scheme(): AimScheme {
@@ -86,6 +125,10 @@ class InputSettingsStore {
 
 	get deck(): DeckSetting {
 		return this.settings.deck;
+	}
+
+	get assist(): DeckAssist {
+		return this.settings.assist;
 	}
 
 	snapshot(): InputSettings {
@@ -104,14 +147,20 @@ class InputSettingsStore {
 		this.changed();
 	}
 
+	setAssist(assist: DeckAssist) {
+		if (this.settings.assist === assist) return;
+		this.settings = { ...this.settings, assist };
+		this.changed();
+	}
+
 	/**
-	 * Whether the on-screen gamepad should be drawn right now.
+	 * Whether the on-screen deck should be drawn right now.
 	 *
 	 * `auto` is not "is this phone" but "is this player using a finger *and*
 	 * aiming like a controller" — a touch device switched to mouse aim has
 	 * something else pointing at the screen, and the deck would only be in the way.
 	 */
-	deckVisible(touchPrimary = isTouchPrimary()): boolean {
+	deckVisible(touchPrimary = this.coarse): boolean {
 		return deckVisibleFor(this.settings, touchPrimary);
 	}
 

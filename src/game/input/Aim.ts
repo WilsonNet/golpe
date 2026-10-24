@@ -5,12 +5,13 @@
  * gives a *direction*, and a d-pad gives one of eight. So controller mode aims
  * with two layers that this module owns and nothing else does:
  *
- * - **Contra aim.** The d-pad, the left stick or the on-screen cross — the same
- *   input that moves you, so the aim follows the run for free and there is
- *   nothing extra to hold. An analog source is **analog**: a stick tilted at 30°
- *   aims at 30°, not at the nearest of eight. Only a d-pad — or the arrow keys,
- *   which feed the same {-1, 0, 1} vectors — resolves to exactly eight. See
- *   `setContra`.
+ * - **Contra aim.** The d-pad or the left stick — the same input that moves you,
+ *   so the aim follows the run for free and there is nothing extra to hold. An
+ *   analog source is **analog**: a stick tilted at 30° aims at 30°, not at the
+ *   nearest of eight. Only a d-pad — or the arrow keys, which feed the same
+ *   {-1, 0, 1} vectors — resolves to exactly eight. See `setContra`. The deck's
+ *   one-axis rocker feeds the same horizontal fallback; its gun/item/ultimate
+ *   drags are the fine layer.
  * - **Fine aim.** The right stick, full 360°, at whatever angle it is pushed.
  *   It **overrides** the contra aim while it is being touched, which is what lets
  *   a fighter run right and cover the door on the left. Let go and it falls back
@@ -224,11 +225,12 @@ export class AimController {
 	 *
 	 * The angle is whatever `atan2(y, x)` says — nothing is quantised here. A
 	 * d-pad or the arrow keys feed vectors in {-1, 0, 1}, which resolve to the
-	 * same eight directions a run-and-gun always aimed with; a left stick or the
-	 * on-screen cross feed the raw deflection, so a stick pushed at 30° aims at
-	 * 30° and there are more directions than a d-pad has fingers. The *movement*
-	 * codes stay quantised downstream — walking is still left or right — but the
-	 * aim follows the analog source.
+	 * same eight directions a run-and-gun always aimed with; a left stick feeds
+	 * the raw deflection, so a stick pushed at 30° aims at 30° and there are more
+	 * directions than a d-pad has fingers. The *movement* codes stay quantised
+	 * downstream — walking is still left or right — but the aim follows the
+	 * analog source. The deck's rocker is horizontal, so it lands in the same
+	 * fallback; its fine aim is a drag on the button that fires or throws.
 	 *
 	 * `facing` is the fallback for a controller that has never pointed anywhere —
 	 * a fighter that spawns facing right should aim right, not at some remembered
@@ -266,8 +268,15 @@ export class AimController {
 	 * A physical stick returns to centre on its own, so there is nothing to decay
 	 * here: releasing it puts the magnitude inside the deadzone and the handover
 	 * back to the contra aim starts on its own.
+	 *
+	 * `immediate` exists for the deck. A physical stick is already in the hand
+	 * and the 260ms ramp is what makes grabbing it mid-decay continuous; a touch
+	 * drag is a fresh, deliberate vector, and waiting 260ms for it to win meant
+	 * the first shots of a gun burst left along the old Contra aim. The touch
+	 * layer still hands back with the same ease-out, so a released drag does not
+	 * snap the facing.
 	 */
-	setFine(x: number, y: number) {
+	setFine(x: number, y: number, immediate = false) {
 		const magnitude = Math.hypot(x, y);
 		if (magnitude < STICK_DEADZONE) {
 			// Not "touched": a stick sitting at rest is a stick nobody is holding, and
@@ -278,6 +287,10 @@ export class AimController {
 		const scale = Math.min(1, magnitude) * this.radius;
 		this.stick = { x: (x / magnitude) * scale, y: (y / magnitude) * scale };
 		this.touched = true;
+		if (immediate) {
+			this.fineAngle = Math.atan2(this.stick.y, this.stick.x);
+			this.blend = 1;
+		}
 	}
 
 	/** Drop the fine aim immediately — a scheme change, or a lost window. */

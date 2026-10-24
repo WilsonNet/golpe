@@ -151,8 +151,9 @@ scripts/          diagnose.ts (Playwright harness), deathmatch-probe.ts (sixteen
                   arranged overtime), aim-probe.ts (drives a real
                   cursor — the only thing that can test mouse aim), pad-probe.ts
                   (stubs the Gamepad API — the only thing that can test controller
-                  aim and the phone deck), training-probe.ts (one interaction at
-                  a time), potg-probe.ts (the end-of-match ceremony — the only
+                  aim), deck-probe.ts (CDP touch on six phone shapes — the only
+                  thing that can test the two-thumb deck), training-probe.ts (one
+                  interaction at a time), potg-probe.ts (the end-of-match ceremony — the only
                   thing that reads past the final whistle), make-anands-art.py
                   (cuts Anands' dragon ride from her boards), make-potg-art.py
                   (generates the ceremony's sunburst and medal),
@@ -216,8 +217,8 @@ those pieces are explicit files rather than framework config:
 | Input | `input/Input.ts` |
 | Key bindings | `input/Bindings.ts` — `Input` knows no key names of its own |
 | Gamepad | `input/Gamepad.ts` — polled, and read as codes in the same namespace |
-| Controller aim | `input/Aim.ts` — the analog Contra aim, plus a 360° virtual stick |
-| On-screen gamepad | `ui/TouchControls.tsx` — DOM, and it emits `Pad…` codes |
+| Controller aim | `input/Aim.ts` — the analog Contra aim, the 360° virtual stick, and the deck's immediate press-drag fine aim |
+| On-screen deck | `ui/TouchControls.tsx` — DOM, two thumbs, and it emits **actions** (not `Pad…` codes); its paint is `ui/deckStyles.ts` |
 | Aim beam | `render/AimLine.ts` — controller mode's reticle, drawn in the world |
 | Particles | `render/Particles.ts` |
 | Animation | `ecs/systems.ts` + frame slices in `render/assets.ts` |

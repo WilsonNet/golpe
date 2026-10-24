@@ -74,6 +74,10 @@ export function useKeyHeld(code: string): boolean {
 	useEffect(() => {
 		const down = (e: KeyboardEvent) => {
 			if (e.code !== code) return;
+			// A menu is a keyboard surface too: Tab must move focus through it, or
+			// the dialog cannot be operated without a mouse. Only the game surface
+			// swallows Tab to keep the scoreboard from stealing the keyboard.
+			if (document.querySelector(".gd-veil")) return;
 			// Tab moves focus by default, which would pull the keyboard off the canvas
 			// and leave WASD going into whatever it landed on.
 			e.preventDefault();

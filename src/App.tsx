@@ -180,10 +180,10 @@ function App() {
 				<VictoryCard />
 				<PlayOfTheGame />
 			</GameCanvas>
-			{/* Directly after the canvas, because it is part of the *page* rather
-			    than an overlay on it: the deck's presence is what turns a centred
-			    canvas into a handheld, screen above and controls below. It draws
-			    nothing at all unless this player is aiming like a controller. */}
+			{/* A fixed overlay, not a page layout: the canvas keeps the page and
+			    the deck's two hands float over the bottom corners. It draws nothing
+			    unless this player is aiming like a controller — or a bare Menu pill
+			    on a phone whose deck has been turned off. */}
 			<TouchControls />
 			{training && !tutorial ? <TrainingPanel /> : null}
 			<Scoreboard />

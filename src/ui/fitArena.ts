@@ -3,7 +3,8 @@
  *
  * The box is the largest 4:3 rectangle that fits the page, capped at the
  * stylesheet's `--arena-max-height`. The stylesheet already says that, and it
- * stays in charge of the first paint and of the on-screen deck's layouts.
+ * stays in charge of the first paint; the on-screen deck is a fixed overlay and
+ * never owns a share of the page.
  *
  * **Browser zoom is why this file exists.** Ctrl/Cmd +/- changes the viewport
  * in CSS pixels, so a box sized in `vw`/`dvh` re-fits at every zoom step — the
@@ -90,9 +91,9 @@ export function keepArenaFitted(container: HTMLElement): () => void {
 	};
 
 	/**
-	 * The deck owns its own layout: full width in portrait, the arena in the
-	 * letterbox margin in landscape. Its presence is a DOM fact, which is also
-	 * what the stylesheet's `:has()` rule keys off — kept in step here.
+	 * The deck is a fixed overlay and must not resize the arena. Its presence is
+	 * a DOM fact, which is also what the stylesheet's `:has()` rule keys off —
+	 * kept in step here so the fit does not pin a size the CSS then overrides.
 	 */
 	const syncDeck = () => {
 		if (page.querySelector(".gg-deck")) {

@@ -12,7 +12,12 @@
  * menu so a player can rebind before their first match rather than during it.
  */
 
-import { useEffect, useRef, useState } from "react";
+import {
+	type KeyboardEvent as ReactKeyboardEvent,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
 import { EventBus } from "../game/EventBus";
 import { readStoredHero, storeHero } from "../game/heroPref";
 import type { RosterEntry } from "../game/online/types";
@@ -76,6 +81,53 @@ export function PauseMenu({
 	const naming = useRef(false);
 	const openRef = useRef(false);
 	openRef.current = open;
+	const cardRef = useRef<HTMLDivElement>(null);
+	const wasOpen = useRef(false);
+
+	// A dialog that does not take focus leaves a keyboard player tabbing into the
+	// game behind it — or, because Tab is the scoreboard key, nowhere at all.
+	useEffect(() => {
+		if (open) {
+			wasOpen.current = true;
+			const first = cardRef.current?.querySelector<HTMLElement>("button");
+			first?.focus();
+			return;
+		}
+		if (!wasOpen.current) return;
+		wasOpen.current = false;
+		// Hand the keyboard back to the deck's own Menu pill, which is the
+		// affordance that opened this on a phone.
+		document.querySelector<HTMLElement>('[data-deck="menu"]')?.focus();
+	}, [open]);
+
+	/**
+	 * Keep Tab inside the card.
+	 *
+	 * The deck is made `inert` by `TouchControls` while input is suspended, but
+	 * the page behind the veil is not. A dialog that lets focus escape is a
+	 * dialog a keyboard player cannot finish using.
+	 */
+	const trapFocus = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+		if (e.key !== "Tab") return;
+		const card = cardRef.current;
+		if (!card) return;
+		const nodes = [
+			...card.querySelectorAll<HTMLElement>(
+				'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+			),
+		].filter((el) => el.offsetParent !== null);
+		if (nodes.length === 0) return;
+		const first = nodes[0];
+		const last = nodes[nodes.length - 1];
+		if (!first || !last) return;
+		if (e.shiftKey && document.activeElement === first) {
+			e.preventDefault();
+			last.focus();
+		} else if (!e.shiftKey && document.activeElement === last) {
+			e.preventDefault();
+			first.focus();
+		}
+	};
 
 	useEffect(() => {
 		const offNeed = EventBus.on("need-player-name", (() => {
@@ -100,7 +152,7 @@ export function PauseMenu({
 			setOpen(!openRef.current);
 		};
 		window.addEventListener("keydown", onKey);
-		// A phone has no Escape key. The on-screen gamepad's menu button fires this
+		// A phone has no Escape key. The on-screen deck's menu button fires this
 		// instead of synthesising a keystroke, because a synthetic keydown would
 		// also have to be kept out of the rebind capture and out of the canvas.
 		const offToggle = EventBus.on("menu-toggle", (() => {
@@ -130,7 +182,14 @@ export function PauseMenu({
 	return (
 		<div className="gd-veil gd-menu-veil">
 			<style>{HUD_CSS}</style>
-			<div className="gd-card gd-menu-card">
+			<div
+				ref={cardRef}
+				className="gd-card gd-menu-card"
+				role="dialog"
+				aria-modal="true"
+				aria-label="Menu"
+				onKeyDown={trapFocus}
+			>
 				{view === "menu" ? (
 					<MainMenuView
 						onResume={() => setOpen(false)}
@@ -165,7 +224,8 @@ export function PauseMenu({
 					<>
 						<h2 className="gd-title">Graphics</h2>
 						<p className="gd-sub">
-							Visual comfort. Sky and platform choices apply immediately in a match.
+							Visual comfort. Sky and platform choices apply immediately in a
+							match.
 						</p>
 						<GraphicsSettings onClose={() => setView("menu")} />
 					</>

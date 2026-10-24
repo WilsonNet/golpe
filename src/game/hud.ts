@@ -89,6 +89,36 @@ export interface HudState {
 	online: boolean;
 	/** The held slash has finished charging — the Massive Strike is armed. */
 	massiveReady: boolean;
+	/**
+	 * The charge so far, 0..1, for the on-screen deck's ring.
+	 *
+	 * Zero for a weapon without a charge. It is the *button's* feedback, not a
+	 * second source of truth: the simulation still decides when the charge is
+	 * armed, and `massiveReady` is the authority on that.
+	 */
+	charge: number;
+	/**
+	 * The throwing axe's charge so far, 0..1.
+	 *
+	 * Zero for a gun. The axe's hold-to-charge is a second charge ring on the
+	 * deck's weapon button, and it is separate from the melee charge because the
+	 * axe is a ranged weapon — the same button means a different thing in each
+	 * stance.
+	 */
+	throwCharge: number;
+	/** True while the guard is actually up, rather than merely held. */
+	blocking: boolean;
+	/** The local fighter's facing (-1 or 1), for a deck with no direction held. */
+	facing: number;
+	/**
+	 * The local fighter's centre as a fraction of the visible arena, 0..1.
+	 *
+	 * The deck uses it to fade the hand the fighter is standing under; the
+	 * camera is included, so a wide room reports the same screen position a
+	 * player sees.
+	 */
+	playerScreenX: number;
+	playerScreenY: number;
 	/** Ibiriki is berserk: the badge says so and the panel burns. */
 	berserk: boolean;
 	/**

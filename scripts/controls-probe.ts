@@ -10,7 +10,7 @@
  *
  * It presses real keys at a real browser and reads the simulation state back:
  *
- *   1. the defaults do what they say — Shift blocks, Space and W jump, and
+ *   1. the defaults do what they say — Shift blocks, Space jumps, W uppercuts, and
  *      right-click no longer blocks,
  *   2. the Esc menu takes the keyboard away from the fighter,
  *   3. a rebind made by *pressing a key at the dialog* reaches the simulation,
@@ -165,16 +165,16 @@ async function run() {
 		`blocking=${rightHeld.playerPhys.blocking}`,
 	);
 
-	const spaceUppercut = await hold(page, "Space");
+	const spaceRise = await jumpRise(page, "Space");
+	check("Space jumps", spaceRise >= JUMP_RISE_PX, `rose ${spaceRise}px`);
+	const wUppercut = await hold(page, "KeyW");
 	check(
-		"Space uppercuts",
-		spaceUppercut.during.playerPhys.meleeAction === "uppercut",
-		`action=${spaceUppercut.during.playerPhys.meleeAction}`,
+		"W uppercuts",
+		wUppercut.during.playerPhys.meleeAction === "uppercut",
+		`action=${wUppercut.during.playerPhys.meleeAction}`,
 	);
-	const wRise = await jumpRise(page, "KeyW");
-	check("W still jumps", wRise >= JUMP_RISE_PX, `rose ${wRise}px`);
 
-	// The item took F when the uppercut moved to Space. Lia's item is the HE
+	// The item took F when the uppercut moved to W. Lia's item is the HE
 	// grenade, and the observable is the server spending a charge: two uses in
 	// the life, one left after a press. Held for a few frames — a sub-frame
 	// tap can land between two intent polls and never reach the wire, which is

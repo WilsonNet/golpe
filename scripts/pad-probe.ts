@@ -9,6 +9,11 @@
  * `navigator.getGamepads` before the page loads and drives the game the way a
  * controller would, exactly as `controls-probe.ts` presses real keys.
  *
+ * **The on-screen deck is not this probe's job any more.** It has its own
+ * contract, its own layout and its own two-thumb sequences; `scripts/deck-probe.ts`
+ * drives it with CDP touch and measures the gates that matter there. This file
+ * still measures the physical pad, the two aim layers and mouse-as-stick.
+ *
  * It measures the claims the scheme is made of:
  *
  *   1. the d-pad aims in eight directions, and the horizontal one is the same
@@ -28,9 +33,9 @@
  *   GOLPE_URL=http://localhost:8084 tsx scripts/pad-probe.ts
  */
 import { randomUUID } from "node:crypto";
-import type { Browser, Page } from "playwright";
+import type { Page } from "playwright";
 import type { GameStateSnapshot } from "../src/types/global";
-import { launchBrowser } from "./browser";
+import { launchBrowser, probeQuery } from "./browser";
 
 const BASE_URL = process.env.GOLPE_URL ?? "http://localhost:8084";
 
@@ -58,7 +63,7 @@ function angleGap(a: number, b: number): number {
  * scheme. Two runs sharing a room id would land in the same match.
  */
 function gameUrl() {
-	return `${BASE_URL}/?bots=0&room=${randomUUID()}&mute=1`;
+	return `${BASE_URL}/?bots=0&room=${randomUUID()}&mute=1${probeQuery()}`;
 }
 
 /**
@@ -185,346 +190,6 @@ async function contraAimAt(page: Page, angleDeg: number, ms = 400) {
 	await page.evaluate(() => window.__pad!.axes([0, 0, 0, 0]));
 	await page.waitForTimeout(150);
 	return input;
-}
-
-/**
- * The on-screen gamepad, on a phone-shaped browser.
- *
- * A separate context because the deck is decided by `(pointer: coarse)`, which
- * is a property of the *context* — `hasTouch` is what makes Chromium answer that
- * query the way a phone does, and it cannot be changed on a live page.
- *
- * The deck's controls are ordinary DOM, so this taps them the way a thumb does
- * and reads the simulation back. It is the same argument as `controls-probe.ts`
- * pressing real keys: an emitted event proves the wiring, a tap proves the game.
- */
-async function runTouchDeck(browser: Browser, check: Check) {
-	const ctx = await browser.newContext({
-		// A portrait phone: the whole reason the deck exists is the empty half of
-		// the screen a 4:3 game leaves below itself here.
-		viewport: { width: 390, height: 844 },
-		deviceScaleFactor: 3,
-		isMobile: true,
-		hasTouch: true,
-	});
-	const page = await ctx.newPage();
-	const errors: string[] = [];
-	page.on("pageerror", (e) => errors.push(e.message));
-
-	/**
-	 * A real finger, not a synthetic mouse.
-	 *
-	 * `page.mouse.*` reports `pointerType: "mouse"` even inside a `hasTouch`
-	 * context, and the two are **not** interchangeable here: the relative-mouse aim
-	 * layer is filtered on exactly that field, so a probe that drove the deck with
-	 * `page.mouse` would be blind to every bug in the filter. CDP touch events are
-	 * the only way to get a pointer the game will agree is a thumb.
-	 */
-	const cdp = await ctx.newCDPSession(page);
-	const touch = {
-		start: (x: number, y: number) =>
-			cdp.send("Input.dispatchTouchEvent", {
-				type: "touchStart",
-				touchPoints: [{ x, y }],
-			}),
-		move: (x: number, y: number) =>
-			cdp.send("Input.dispatchTouchEvent", {
-				type: "touchMove",
-				touchPoints: [{ x, y }],
-			}),
-		end: () =>
-			cdp.send("Input.dispatchTouchEvent", {
-				type: "touchEnd",
-				touchPoints: [],
-			}),
-	};
-	/** Hold a point for `ms`, sample, and lift. */
-	const holdTouch = async (x: number, y: number, ms = 500) => {
-		await touch.start(x, y);
-		await page.waitForTimeout(ms);
-		const sample = {
-			game: await gameState(page),
-			input: await inputState(page),
-		};
-		await touch.end();
-		await page.waitForTimeout(200);
-		return sample;
-	};
-
-	await page.goto(gameUrl());
-	await waitForGame(page);
-
-	const state = await inputState(page);
-	check(
-		"a touch device starts in controller mode",
-		state.scheme === "controller",
-		`scheme=${state.scheme}`,
-	);
-	check(
-		"and is given an on-screen gamepad",
-		state.deckVisible === true,
-		`deckVisible=${state.deckVisible}`,
-	);
-
-	const deck = page.locator(".gg-deck");
-	check("the deck is drawn", (await deck.count()) === 1, "");
-
-	// The screen and the controls each get a share of the phone. Neither may spill
-	// off it, which is the failure this layout exists to avoid.
-	const canvas = await page.locator("canvas").boundingBox();
-	const deckBox = await deck.boundingBox();
-	if (!canvas || !deckBox) throw new Error("deck or canvas not laid out");
-	check(
-		"the game and the deck both fit on the screen",
-		canvas.y + canvas.height <= deckBox.y + 1 &&
-			deckBox.y + deckBox.height <= 845,
-		`canvas ends at ${Math.round(canvas.y + canvas.height)}, deck ${Math.round(deckBox.y)}–${Math.round(deckBox.y + deckBox.height)}`,
-	);
-	check(
-		"the game keeps its 4:3 shape",
-		Math.abs(canvas.width / canvas.height - 4 / 3) < 0.02,
-		`${Math.round(canvas.width)}x${Math.round(canvas.height)}`,
-	);
-	check(
-		"the page does not scroll sideways",
-		(await page.evaluate(
-			() => document.documentElement.scrollWidth <= window.innerWidth,
-		)) === true,
-		"",
-	);
-
-	// A thumb on the right arm of the cross. One control, eight sectors — so the
-	// touch point decides the direction, not which of four buttons was hit.
-	const cross = await page.locator(".gg-cross").boundingBox();
-	if (!cross) throw new Error("cross not laid out");
-	const before = await gameState(page);
-	const walking = await holdTouch(
-		cross.x + cross.width * 0.88,
-		cross.y + cross.height / 2,
-	);
-	check(
-		"a thumb on the cross walks the fighter",
-		walking.game.playerPhys.x - before.playerPhys.x > 20,
-		`moved ${Math.round(walking.game.playerPhys.x - before.playerPhys.x)}px`,
-	);
-	check(
-		"the left stick is drawn as an analog pad, not a d-pad",
-		(await page.locator(".gg-cross-nub").count()) === 1 &&
-			(await page.locator(".gg-cross-arm").count()) === 0,
-		"",
-	);
-
-	/**
-	 * **A thumb drag is not a trackpad stroke.**
-	 *
-	 * `movementX`/`movementY` are populated for *touch* pointers too, so the
-	 * relative-mouse fine-aim layer — which exists for a laptop with no controller
-	 * — was being driven by every thumb that slid across the d-pad. Pressing *up*
-	 * on the cross reported an aim of 76° with the fine layer fully engaged: the
-	 * travel of the thumb across the glass beat the direction it was pressing.
-	 *
-	 * Only reachable with a real touch pointer, which is why this section uses CDP
-	 * rather than `page.mouse`.
-	 */
-	await settle(page);
-	// The thumb slides *rightward along the left arm* — so the direction it is
-	// pressing (left) and the direction it is travelling (right) disagree. That
-	// disagreement is the only thing that separates a correct build from the bug:
-	// a drag toward a d-pad arm points the virtual stick the same way the arm does,
-	// and the two agree by accident.
-	const armY = cross.y + cross.height * 0.5;
-	await touch.start(cross.x + cross.width * 0.03, armY);
-	for (const t of [0.09, 0.15, 0.21, 0.27, 0.3]) {
-		await touch.move(cross.x + cross.width * t, armY);
-		await page.waitForTimeout(35);
-	}
-	await page.waitForTimeout(400);
-	const slid = await inputState(page);
-	await touch.end();
-	await page.waitForTimeout(250);
-	check(
-		"a thumb sliding across the cross does not steer the aim",
-		Math.abs(angleGap(slid.aim.angle, Math.PI)) <= ANGLE_TOLERANCE_DEG,
-		`aimed ${deg(slid.aim.angle)}° while holding left and dragging right, wanted 180°`,
-	);
-	check(
-		"and a thumb drag never engages the fine layer",
-		slid.aim.blend === 0,
-		`blend=${slid.aim.blend.toFixed(2)} — the deck's thumb pad is the touch fine-aim, not the glass`,
-	);
-
-	/**
-	 * **Every deck button used to also swing the sword.**
-	 *
-	 * `Input` listens for `pointerdown` on `window` — it has to, so a drag that
-	 * starts on the canvas keeps being tracked when it leaves — and button 0 is
-	 * `Mouse0`, which is attack. The deck is DOM sitting on that same window, so a
-	 * thumb on Jump jumped *and* slashed, and so did the d-pad, the stance pills
-	 * and the menu button. `preventDefault` in the deck's handler cannot fix it: it
-	 * stops the browser's default, not another listener on the same event.
-	 *
-	 * Checked on Jump, because a button whose real action is obvious is the one
-	 * where a spurious second action hides.
-	 */
-	const jump = await page.locator(".gg-btn.jump").boundingBox();
-	if (!jump) throw new Error("jump button not laid out");
-	await settle(page);
-	const jumping = await holdTouch(
-		jump.x + jump.width / 2,
-		jump.y + jump.height / 2,
-		140,
-	);
-	check(
-		"a deck button does not also swing the sword",
-		jumping.game.playerPhys.meleeAction === "none",
-		`meleeAction=${jumping.game.playerPhys.meleeAction}`,
-	);
-	check(
-		"and still does its own job",
-		jumping.game.playerPhys.grounded === false ||
-			jumping.game.playerPhys.vy < 0,
-		`vy=${Math.round(jumping.game.playerPhys.vy)} grounded=${jumping.game.playerPhys.grounded}`,
-	);
-
-	// Same trap, one layer out: the d-pad is a plain div on the same window.
-	await settle(page);
-	const crossHeld = await holdTouch(
-		cross.x + cross.width * 0.88,
-		cross.y + cross.height / 2,
-		140,
-	);
-	check(
-		"nor does the d-pad",
-		crossHeld.game.playerPhys.meleeAction === "none",
-		`meleeAction=${crossHeld.game.playerPhys.meleeAction}`,
-	);
-
-	// The screen is the whole width of the phone: no bezel, no padding, no
-	// rounding. 20px of frame is 5% of a 390px arena a player then cannot see.
-	check(
-		"the game screen reaches both edges of the phone",
-		canvas.x <= 1 && canvas.width >= 388,
-		`canvas x=${Math.round(canvas.x)} w=${Math.round(canvas.width)}`,
-	);
-
-	// The thumb pad is the fine layer, and on a touchscreen it is the *only* fine
-	// layer: absolute, full 360, and it recentres. The deck is in sword stance by
-	// default, so a thumb on the pad must aim without slashing.
-	const stick = await page.locator(".gg-stick").boundingBox();
-	if (!stick) throw new Error("thumb pad not laid out");
-	await touch.start(stick.x + stick.width / 2, stick.y + stick.height / 2);
-	await touch.move(stick.x + stick.width / 2, stick.y - 40);
-	await page.waitForTimeout(500);
-	const aiming = await inputState(page);
-	check(
-		"the thumb pad aims where the thumb is",
-		Math.abs(angleGap(aiming.aim.angle, -Math.PI / 2)) <= ANGLE_TOLERANCE_DEG,
-		`aimed ${deg(aiming.aim.angle)}°, wanted -90°`,
-	);
-	check(
-		"and it is the fine layer doing it",
-		aiming.aim.blend > 0.9,
-		`blend=${aiming.aim.blend.toFixed(2)}`,
-	);
-	const swordHold = await gameState(page);
-	check(
-		"and does not slash while the stance is sword",
-		swordHold.playerPhys.meleeAction === "none",
-		`meleeAction=${swordHold.playerPhys.meleeAction}`,
-	);
-	await touch.end();
-	await page.waitForTimeout(700);
-	check(
-		"letting go of the thumb pad hands the aim back",
-		(await inputState(page)).aim.overriding === false,
-		"",
-	);
-
-	// ---- in gun mode the aim stick is the trigger too ----
-	// On a phone the right thumb is on this pad, and there is no spare finger for
-	// the fire button — so in gun stance the pad aims *and* fires, which is what
-	// makes a phone gun a twin-stick shooter. The stance pill is real DOM, so a
-	// tap proves the path a player takes. The stance also decides which face
-	// buttons are worth drawing: block and uppercut are sword moves, so a gunner
-	// should not be shown buttons that do nothing.
-	check(
-		"sword stance draws the sword-only buttons",
-		(await page.locator(".gg-btn.block").count()) === 1 &&
-			(await page.locator(".gg-btn.upper").count()) === 1,
-		"",
-	);
-	await settle(page);
-	await page.locator(".gg-pill").filter({ hasText: "Gun" }).tap();
-	await page.waitForTimeout(300);
-	const gunBefore = await gameState(page);
-	check(
-		"the deck's Gun pill switched the stance",
-		gunBefore.playerPhys.stance === "gun",
-		`stance=${gunBefore.playerPhys.stance}`,
-	);
-	check(
-		"gun stance hides the sword-only buttons",
-		(await page.locator(".gg-btn.block").count()) === 0 &&
-			(await page.locator(".gg-btn.upper").count()) === 0,
-		"",
-	);
-	await touch.start(stick.x + stick.width / 2, stick.y + stick.height / 2);
-	await touch.move(stick.x + stick.width / 2, stick.y - 40);
-	// A bullet is live only while it is inside the world, and the client sees it
-	// once the server's snapshot arrives — so poll a few times and take the peak
-	// rather than gambling on one sample landing inside that window.
-	let peakBullets = gunBefore.bulletCount;
-	for (let i = 0; i < 4; i++) {
-		await page.waitForTimeout(150);
-		peakBullets = Math.max(peakBullets, (await gameState(page)).bulletCount);
-	}
-	await touch.end();
-	await page.waitForTimeout(150);
-	check(
-		"in gun mode the aim stick fires the gun",
-		peakBullets > gunBefore.bulletCount,
-		`bullets ${gunBefore.bulletCount} → ${peakBullets}`,
-	);
-
-	// ---- the cross is the deck's left stick: continuous, not just eight ----
-	// The sector code still *moves* the fighter in eight directions, but the raw
-	// thumb position is the Contra aim, so a thumb at 30° aims at 30° — the same
-	// analog deal a physical left stick gets.
-	await settle(page);
-	const ccx = cross.x + cross.width / 2;
-	const ccy = cross.y + cross.height / 2;
-	const r30 = (Math.PI / 180) * 30;
-	const thumbR = cross.width * 0.3;
-	await touch.start(ccx + Math.cos(r30) * thumbR, ccy - Math.sin(r30) * thumbR);
-	await page.waitForTimeout(500);
-	const crossAim = await inputState(page);
-	await touch.end();
-	await page.waitForTimeout(200);
-	check(
-		"a thumb at 30° on the cross aims at 30°, not the nearest sector",
-		Math.abs(angleGap(crossAim.aim.angle, -Math.PI / 6)) <= ANGLE_TOLERANCE_DEG,
-		`aimed ${deg(crossAim.aim.angle)}°, wanted -30°`,
-	);
-	check(
-		"and it is the Contra layer doing it",
-		crossAim.aim.blend === 0,
-		`blend=${crossAim.aim.blend.toFixed(2)}`,
-	);
-
-	// And the whole thing has to be undoable, or choosing it on a phone is a trap.
-	await page.locator(".gg-menu").click();
-	await page.getByRole("button", { name: "Controls" }).click();
-	await page.locator(".gd-choice").first().getByText("Mouse").click();
-	await page.waitForTimeout(150);
-	check(
-		"the deck's own menu button can send the deck away",
-		(await page.locator(".gg-deck").count()) === 0,
-		"a phone has no Escape key, so this is the only way back",
-	);
-
-	if (errors.length)
-		check("no page errors on mobile", false, errors.join(" | "));
-	await ctx.close();
 }
 
 /** One named pass/fail assertion. */
@@ -923,7 +588,6 @@ async function run() {
 	if (errors.length) check("no page errors", false, errors.join(" | "));
 	await ctx.close();
 
-	await runTouchDeck(browser, check);
 	await browser.close();
 
 	const failures = checks.filter((c) => !c.ok);

@@ -378,8 +378,10 @@ than a puddle bots stand in.
 - Rebindable like everything else — it is an ordinary action in `ACTIONS`, so
   the Esc → Controls dialog lists it and the on-screen deck carries a button for
   it. See [controls.md](controls.md).
-- The deck's ultimate button is drawn **only when the meter is full**, because a
-  phone screen has no room for a button that does nothing.
+- The deck's ultimate button is **always drawn**, with its charge ring and
+  percentage, so its place is learned before the one moment it matters. A
+  **260ms** hold arms it — a brush spends nothing — then a drag aims and the
+  release casts. See [controls.md](controls.md).
 
 ## What is drawn
 

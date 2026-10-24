@@ -1,469 +1,761 @@
 /**
- * The on-screen gamepad's appearance.
+ * The two-thumb deck's appearance.
  *
- * Injected as a `<style>` element by `TouchControls`, the way `hudStyles.ts` and
- * the training panel do — the game ships one global stylesheet for the page shell
- * and nothing else, and a deck that only exists on a phone should carry its own
- * paint rather than growing that file.
+ * Injected as a `<style>` element by `TouchControls`, the way `hudStyles.ts`
+ * and the training panel do — the game ships one global stylesheet for the page
+ * shell and nothing else, and a deck that only exists on a phone should carry
+ * its own paint rather than growing that file.
  *
  * Every class is prefixed `gg-` (golpe gamepad), so it cannot collide with the
  * deathmatch overlay's `gd-` or the training panel's `gt-`.
  *
- * **It is a handheld, on purpose.** A 4:3 game on a portrait phone leaves the
- * bottom half of the screen empty, and the shape that fills it — screen up top,
- * cross on the left, face buttons on the right, a wordmark between them — is a
- * Game Boy. Borrowing the silhouette means a player knows where their thumbs go
- * before reading a single label.
+ * **The deck is an overlay, not a handheld shell.** The old layout put the game
+ * on top and a plastic slab underneath in portrait, which pushed every control
+ * 200-330px above where a thumb rests and left the bottom of the phone empty.
+ * Here the canvas keeps the whole page (fitted 4:3) and the hands float over
+ * the bottom corners, transparent enough to see the arena through them. In
+ * landscape they sit in the letterbox margins and lap the arena's bottom
+ * corners; the middle is always the game.
  *
- * The palette is the game's, not Nintendo's: charcoal-plum shell, gold trim, the
- * `#0ec3c9` the rest of the UI already uses for anything live.
+ * **Size follows reach, not symmetry.** The weapon button is the biggest
+ * because it is pressed most; Guard sits under the left thumb's other reach so
+ * the right hand never leaves the weapon; the rare controls are smaller but
+ * never below 44px.
  */
 
 export const DECK_CSS = `
 /* ---- page shell ----
-   The deck's presence is what turns the page from "a centred canvas" into a
-   handheld: screen on top, controls underneath. Keyed off :has() so nothing has
-   to thread a boolean from React down into the global stylesheet — the deck
-   renders or it does not, and the layout follows. */
+   The deck is fixed over the page, so it must not resize the arena. The only
+   layout job it owns is putting the canvas at the top in portrait — a phone in
+   one hand wants the fight above the thumbs, not vertically centred with a
+   dead band on both sides. */
 #app:has(.gg-deck) {
-	flex-direction: column;
-	justify-content: flex-start;
-	align-items: stretch;
-	gap: 0;
 	background:
-		radial-gradient(120% 60% at 50% 0%, #2b2438 0%, #14121c 60%, #0a0910 100%);
+		radial-gradient(120% 70% at 50% 100%, #1b1726 0%, #0a0910 72%);
 }
-/* **No bezel, no padding, no rounding.** The handheld this borrows from has a
-   thick plastic surround; a phone cannot afford one. The arena is 800x600 of
-   fixed authored space scaled to fit, so every pixel spent on a frame is arena a
-   player cannot see — and on a 390px-wide screen, 20px of padding is 5% of the
-   fight. The screen goes edge to edge and the shell starts where it ends. */
-#app:has(.gg-deck) #game-container {
-	/* A full-width box in portrait; the base rule's 75vw height is then
-	   exactly its 4:3 partner. None, not shrink: a squashed height with a
-	   pinned width is the one thing that would distort the arena. */
-	flex: none;
-	width: 100%;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	padding: 0;
-	box-sizing: border-box;
+@media (orientation: portrait) {
+	#app:has(.gg-deck) {
+		align-items: flex-start;
+		padding-top: env(safe-area-inset-top, 0px);
+		box-sizing: border-box;
+	}
+	#app:has(.gg-deck) #game-container {
+		align-self: flex-start;
+	}
 }
 
 .gg-deck {
-	flex: 1 1 auto;
-	min-height: 0;
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-	padding: 8px 12px 14px;
-	box-sizing: border-box;
-	/* The shell: a lit top edge and a dark bottom, which is the whole trick to
-	   making flat CSS read as a moulded plastic body. */
-	background: linear-gradient(180deg, #3a3348 0%, #2a2436 38%, #1a1624 100%);
-	border-top: 1px solid rgba(232, 182, 76, 0.45);
-	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
-	font-family: monospace;
-	color: rgba(255, 255, 255, 0.88);
-	/* A thumb dragging across the deck must never scroll the page or fire the
-	   browser's double-tap zoom. The canvas sets the same property for the same
-	   reason. */
+	/* One source of truth for the notch and the home indicator. A probe can
+	   override these with ?safe=top,right,bottom,left; normal play never does. */
+	--safe-t: env(safe-area-inset-top, 0px);
+	--safe-r: env(safe-area-inset-right, 0px);
+	--safe-b: env(safe-area-inset-bottom, 0px);
+	--safe-l: env(safe-area-inset-left, 0px);
+	--gg-edge: 14px;
+	--gg-gap: 8px;
+	--gg-gold: #e8b64c;
+	--gg-cyan: #0ec3c9;
+	--gg-violet: #a06bff;
+	--gg-steel: #8fa7c4;
+	--gg-ink: #0d0b14;
+	position: fixed;
+	inset: 0;
+	z-index: 20;
+	pointer-events: none;
+	font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+	color: rgba(255, 255, 255, 0.92);
 	touch-action: none;
 	user-select: none;
 	-webkit-user-select: none;
+	-webkit-touch-callout: none;
 	-webkit-tap-highlight-color: transparent;
-	z-index: 10;
 }
 
-/* ---- the wordmark ----
-   Where the handheld this borrows from puts its own. Two weights on one line,
-   the way that logo is two words in two faces. */
-.gg-brand {
+/* Every painted surface is a control; the empty space between the hands is
+   still the game and must stay touchable by the canvas. */
+.gg-deck .gg-control,
+.gg-deck .gg-move,
+.gg-deck .gg-menu {
+	pointer-events: auto;
+}
+
+.gg-control,
+.gg-move,
+.gg-menu,
+.gg-coach,
+.gg-coach-ok {
+	font: inherit;
+	-webkit-tap-highlight-color: transparent;
+	touch-action: none;
+	box-sizing: border-box;
+}
+
+.gg-control {
 	position: relative;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	gap: 10px;
-	padding: 2px 0 4px;
-	flex: 0 0 auto;
-}
-.gg-brand-mark {
-	font-family: Georgia, "Times New Roman", serif;
-	font-style: italic;
-	font-size: clamp(15px, 4.6vw, 24px);
-	letter-spacing: 0.02em;
-	background: linear-gradient(180deg, #ffe9a8 0%, #e8b64c 55%, #a97c1c 100%);
-	-webkit-background-clip: text;
-	background-clip: text;
-	color: transparent;
-	text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
-}
-.gg-brand-mark b {
-	font-weight: 700;
-	letter-spacing: 0.06em;
-}
-.gg-brand-sub {
-	font-size: clamp(7px, 2.1vw, 10px);
-	letter-spacing: 0.34em;
+	border: 1px solid rgba(255, 255, 255, 0.18);
+	border-radius: 18px;
+	background:
+		linear-gradient(180deg, rgba(58, 51, 72, 0.86), rgba(24, 20, 34, 0.9));
+	box-shadow:
+		0 3px 0 rgba(0, 0, 0, 0.45),
+		inset 0 1px 0 rgba(255, 255, 255, 0.14);
+	color: rgba(255, 255, 255, 0.94);
+	font-size: clamp(10px, 2.3vw, 12px);
+	letter-spacing: 0.08em;
 	text-transform: uppercase;
-	color: rgba(255, 255, 255, 0.32);
+	font-weight: 700;
+	cursor: pointer;
+	opacity: 0.8;
+	transition: opacity 0.09s, transform 0.05s, box-shadow 0.05s, filter 0.05s;
+	text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
 }
-.gg-menu {
+@media (pointer: coarse) {
+	.gg-control { opacity: 0.88; }
+}
+.gg-control.held,
+.gg-control.armed {
+	opacity: 1;
+	transform: translateY(2px);
+	box-shadow:
+		0 1px 0 rgba(0, 0, 0, 0.45),
+		inset 0 1px 0 rgba(255, 255, 255, 0.2);
+	filter: brightness(1.16);
+}
+.gg-control.on {
+	border-color: rgba(14, 195, 201, 0.9);
+	box-shadow:
+		0 3px 0 rgba(0, 0, 0, 0.45),
+		0 0 14px rgba(14, 195, 201, 0.45),
+		inset 0 0 10px rgba(14, 195, 201, 0.2);
+}
+.gg-control.disabled {
+	opacity: 0.45;
+	filter: saturate(0.4);
+}
+.gg-control:focus-visible,
+.gg-menu:focus-visible,
+.gg-coach-ok:focus-visible {
+	outline: 2px solid var(--gg-cyan);
+	outline-offset: 3px;
+}
+.gg-label {
+	position: relative;
+	z-index: 2;
+	pointer-events: none;
+}
+
+/* The charge / readiness ring. A conic gradient inside a masked padding box,
+   so it reads as a ring rather than a pie filling the button and hiding the
+   label. The filled arc is near-white on a dark track: gold-on-gold was 2:1. */
+.gg-ring {
+	position: absolute;
+	inset: -4px;
+	border-radius: inherit;
+	padding: 4px;
+	background: conic-gradient(
+		#fff2c0 calc(var(--v, 0) * 1turn),
+		rgba(0, 0, 0, 0.38) 0
+	);
+	-webkit-mask:
+		linear-gradient(#000 0 0) content-box,
+		linear-gradient(#000 0 0);
+	-webkit-mask-composite: xor;
+	mask:
+		linear-gradient(#000 0 0) content-box,
+		linear-gradient(#000 0 0);
+	mask-composite: exclude;
+	pointer-events: none;
+	z-index: 1;
+}
+
+/* ---- the two hands ----
+   Anchored to the bottom corners inside the safe box. Nothing is centred,
+   because a thumb is not centred: it rests in a corner and reaches inward. */
+.gg-hand {
+	position: absolute;
+	bottom: calc(var(--safe-b) + var(--gg-edge));
+	display: flex;
+	flex-direction: column;
+	gap: var(--gg-gap);
+	pointer-events: none;
+	transition: opacity 0.12s ease;
+}
+/* A fighter at the edge stands under a hand in a one-screen room, where the
+   camera cannot scroll it out. Fade the hand, not the fight: the buttons stay
+   hit-testable and come back when the feet move. Portrait puts the hands below
+   the arena, so there is nothing to fade there. */
+@media (orientation: landscape) {
+	.gg-deck.fighter-left .gg-hand-left,
+	.gg-deck.fighter-right .gg-hand-right {
+		opacity: 0.42;
+	}
+}
+.gg-left {
+	left: calc(var(--safe-l) + var(--gg-edge));
+	align-items: flex-start;
+	--pad-w: clamp(120px, min(32dvh, 32vw), 152px);
+	width: var(--pad-w);
+}
+.gg-right {
+	right: calc(var(--safe-r) + var(--gg-edge));
+	align-items: flex-end;
+}
+
+/* ---- the left hand: guard, dash, then the move/jump rocker ---- */
+.gg-left-utility {
+	display: grid;
+	grid-template-columns: 1.18fr 1fr;
+	gap: var(--gg-gap);
+	width: 100%;
+}
+.gg-guard,
+.gg-dash {
+	width: 100%;
+	aspect-ratio: 1;
+	border-radius: 16px;
+}
+.gg-guard {
+	border-color: rgba(143, 167, 196, 0.55);
+	background:
+		linear-gradient(180deg, rgba(60, 76, 96, 0.9), rgba(26, 32, 44, 0.94));
+	color: #dce9f8;
+}
+.gg-guard.tap {
+	border-color: rgba(232, 182, 76, 0.55);
+	background:
+		linear-gradient(180deg, rgba(92, 72, 38, 0.9), rgba(36, 27, 18, 0.94));
+	color: #ffe6ad;
+}
+.gg-dash {
+	border-color: rgba(14, 195, 201, 0.5);
+	background:
+		linear-gradient(180deg, rgba(24, 82, 88, 0.9), rgba(12, 30, 36, 0.94));
+	color: #bffcff;
+}
+
+.gg-move {
+	position: relative;
+	width: 100%;
+	height: clamp(150px, min(44dvh, 44vw), 204px);
+	border-radius: 26px;
+	border: 1px solid rgba(255, 255, 255, 0.13);
+	background:
+		radial-gradient(100% 75% at 50% 100%, rgba(52, 45, 68, 0.78), rgba(14, 12, 22, 0.82));
+	box-shadow:
+		inset 0 4px 14px rgba(0, 0, 0, 0.55),
+		0 2px 0 rgba(0, 0, 0, 0.4);
+	overflow: hidden;
+	opacity: 0.88;
+	transition: opacity 0.09s, border-color 0.09s;
+}
+.gg-move.live {
+	opacity: 1;
+	border-color: rgba(232, 182, 76, 0.55);
+}
+.gg-move-jump {
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 0;
+	height: 44px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-bottom: 1px dashed rgba(255, 255, 255, 0.13);
+	background:
+		linear-gradient(180deg, rgba(34, 70, 58, 0.75), rgba(19, 34, 30, 0.35));
+	color: rgba(210, 255, 228, 0.82);
+	font-size: clamp(10px, 2.1vw, 11px);
+	letter-spacing: 0.28em;
+	text-transform: uppercase;
+	pointer-events: none;
+}
+.gg-move.jumping .gg-move-jump {
+	background:
+		linear-gradient(180deg, rgba(63, 190, 130, 0.9), rgba(20, 78, 54, 0.65));
+	color: #eafff1;
+	box-shadow: 0 0 18px rgba(70, 230, 150, 0.5) inset;
+}
+/* The horizontal rails: where the thumb goes, not a d-pad's arms. */
+.gg-move-stem {
+	position: absolute;
+	left: 10px;
+	right: 10px;
+	top: 58%;
+	height: 3px;
+	border-radius: 2px;
+	background:
+		linear-gradient(90deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.04) 40%, rgba(255, 255, 255, 0.04) 60%, rgba(255, 255, 255, 0.16));
+	pointer-events: none;
+}
+.gg-move-arrow {
+	position: absolute;
+	top: 50%;
+	transform: translateY(-58%);
+	font-size: clamp(24px, 6vw, 38px);
+	line-height: 1;
+	color: rgba(255, 255, 255, 0.18);
+	font-weight: 400;
+}
+.gg-move-left { left: 8px; }
+.gg-move-right { right: 8px; }
+.gg-move.left .gg-move-left,
+.gg-move.right .gg-move-right {
+	color: rgba(255, 233, 168, 0.95);
+	text-shadow: 0 0 12px rgba(232, 182, 76, 0.7);
+}
+.gg-move-nub {
+	position: absolute;
+	left: 50%;
+	top: 58%;
+	width: clamp(46px, 13vw, 62px);
+	height: clamp(46px, 13vw, 62px);
+	margin:
+		calc(clamp(46px, 13vw, 62px) / -2)
+		0 0
+		calc(clamp(46px, 13vw, 62px) / -2);
+	border-radius: 50%;
+	background: radial-gradient(circle at 36% 30%, #655d7a, #2a2438);
+	border: 1px solid rgba(0, 0, 0, 0.55);
+	box-shadow:
+		0 3px 8px rgba(0, 0, 0, 0.5),
+		inset 0 1px 0 rgba(255, 255, 255, 0.14);
+	pointer-events: none;
+	transition: transform 0.04s;
+}
+.gg-move.live .gg-move-nub {
+	background: radial-gradient(circle at 36% 30%, #ffe9a8, #a97c1c);
+	border-color: rgba(232, 182, 76, 0.85);
+}
+.gg-move-caption {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 7px;
+	text-align: center;
+	font-size: 10px;
+	letter-spacing: 0.24em;
+	text-transform: uppercase;
+	color: rgba(255, 255, 255, 0.58);
+	pointer-events: none;
+}
+
+/* ---- the right hand: weapon cluster ----
+   A 2-column grid. The weapon button is the bottom-right home; the three kit
+   controls sit in a column to its left, and the stance sits above both. The
+   thumb rolls left/up without lifting, and no path crosses the centre of the
+   screen. */
+.gg-combat {
+	--side: clamp(56px, min(16dvh, 17vw), 72px);
+	--row: clamp(52px, min(14.5dvh, 15vw), 64px);
+	--stance-h: 52px;
+	--attack: clamp(96px, min(28dvh, 30vw), 128px);
+	display: grid;
+	grid-template-columns: var(--side) var(--attack);
+	grid-template-rows: var(--stance-h) var(--row) var(--row) var(--row);
+	grid-template-areas:
+		"stance stance"
+		"ult    attack"
+		"item   attack"
+		"upper  attack";
+	gap: var(--gg-gap);
+	align-items: stretch;
+}
+
+.gg-stance {
+	grid-area: stance;
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 4px;
+	padding: 2px;
+	border-radius: 14px;
+	border: 1px solid rgba(255, 255, 255, 0.14);
+	background: rgba(16, 13, 24, 0.82);
+}
+.gg-stance-seg {
+	border-radius: 10px;
+	border: 1px solid transparent;
+	background: transparent;
+	box-shadow: none;
+	opacity: 0.58;
+	font-size: clamp(10px, 2.1vw, 11px);
+	letter-spacing: 0.1em;
+}
+.gg-stance-seg.on {
+	opacity: 1;
+	background:
+		linear-gradient(180deg, rgba(232, 182, 76, 0.24), rgba(122, 88, 24, 0.28));
+	border-color: rgba(232, 182, 76, 0.65);
+	color: #ffe9a8;
+	box-shadow: inset 0 0 10px rgba(232, 182, 76, 0.15);
+}
+.gg-stance-seg.held {
+	opacity: 1;
+	transform: none;
+	box-shadow: none;
+	filter: brightness(1.3);
+}
+
+.gg-ult {
+	grid-area: ult;
+	border-radius: 16px;
+	border-color: rgba(160, 107, 255, 0.55);
+	background:
+		linear-gradient(180deg, rgba(74, 40, 122, 0.9), rgba(28, 16, 52, 0.94));
+	color: #e9d9ff;
+	font-size: clamp(9px, 2.2vw, 11px);
+}
+.gg-ult:not(.ready) {
+	opacity: 0.7;
+}
+.gg-ult.ready {
+	opacity: 1;
+	border-color: rgba(214, 168, 255, 0.95);
+	box-shadow:
+		0 3px 0 rgba(0, 0, 0, 0.45),
+		0 0 18px rgba(150, 90, 255, 0.55);
+	animation: gg-ult-ready 1.5s ease-in-out infinite;
+}
+.gg-ult.armed {
+	animation: none;
+	box-shadow:
+		0 0 24px rgba(190, 130, 255, 0.85),
+		inset 0 0 18px rgba(160, 107, 255, 0.4);
+}
+.gg-ult-pct {
+	position: absolute;
+	right: 5px;
+	bottom: 3px;
+	font-size: 10px;
+	letter-spacing: 0.02em;
+	color: rgba(255, 255, 255, 0.82);
+	pointer-events: none;
+}
+@keyframes gg-ult-ready {
+	0%, 100% { filter: brightness(1); }
+	50% { filter: brightness(1.28); }
+}
+@media (prefers-reduced-motion: reduce) {
+	.gg-ult.ready { animation: none; }
+}
+
+.gg-item {
+	grid-area: item;
+	border-radius: 16px;
+	border-color: rgba(109, 138, 79, 0.65);
+	background:
+		linear-gradient(180deg, rgba(70, 93, 48, 0.92), rgba(26, 36, 18, 0.94));
+	color: #eaf2d8;
+}
+.gg-item-count {
+	position: absolute;
+	left: 6px;
+	top: 3px;
+	font-size: clamp(10px, 2.4vw, 13px);
+	color: #f4ffd8;
+	opacity: 0.9;
+	pointer-events: none;
+}
+
+.gg-upper {
+	grid-area: upper;
+	border-radius: 16px;
+	border-color: rgba(214, 110, 160, 0.55);
+	background:
+		linear-gradient(180deg, rgba(110, 45, 78, 0.92), rgba(40, 16, 30, 0.94));
+	color: #ffe0ef;
+}
+
+.gg-attack {
+	grid-area: attack;
+	align-self: end;
+	justify-self: end;
+	width: var(--attack);
+	height: var(--attack);
+	border-radius: 50%;
+	border: 2px solid rgba(255, 232, 168, 0.7);
+	background:
+		radial-gradient(circle at 36% 28%, rgba(255, 213, 106, 0.98), rgba(154, 106, 24, 0.96) 72%);
+	color: #241905;
+	font-size: clamp(13px, 3.4vw, 18px);
+	letter-spacing: 0.06em;
+	text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25);
+	box-shadow:
+		0 5px 0 rgba(61, 39, 4, 0.75),
+		0 0 0 5px rgba(20, 16, 28, 0.32);
+}
+.gg-attack.held {
+	transform: translateY(3px);
+	box-shadow:
+		0 2px 0 rgba(61, 39, 4, 0.75),
+		0 0 0 5px rgba(20, 16, 28, 0.32);
+}
+.gg-attack.ready {
+	border-color: #fff1be;
+	box-shadow:
+		0 5px 0 rgba(61, 39, 4, 0.75),
+		0 0 26px rgba(255, 208, 92, 0.7);
+}
+.gg-attack.gun {
+	border-color: rgba(127, 240, 244, 0.85);
+	background:
+		radial-gradient(circle at 36% 28%, rgba(26, 132, 138, 0.98), rgba(8, 48, 56, 0.97) 74%);
+	color: #d8feff;
+	text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+	box-shadow:
+		0 5px 0 rgba(3, 26, 30, 0.8),
+		0 0 0 5px rgba(20, 16, 28, 0.32);
+}
+.gg-attack.gun .gg-ring {
+	background: conic-gradient(
+		#bffcff calc(var(--v, 0) * 1turn),
+		rgba(0, 0, 0, 0.38) 0
+	);
+}
+.gg-ammo {
 	position: absolute;
 	right: 12px;
-	font: inherit;
+	bottom: 11px;
+	font-size: clamp(10px, 2.5vw, 13px);
+	letter-spacing: 0;
+	color: rgba(220, 255, 255, 0.95);
+	pointer-events: none;
+}
+.gg-ammo-reserve {
+	opacity: 0.78;
+	font-size: 0.8em;
+}
+.gg-charge-hint {
+	position: absolute;
+	left: 50%;
+	bottom: 7px;
+	transform: translateX(-50%);
+	padding: 1px 7px;
+	border-radius: 999px;
+	background: rgba(13, 11, 20, 0.84);
+	white-space: nowrap;
 	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 0.1em;
+	color: #ffffff;
+	pointer-events: none;
+}
+.gg-charge-hint.gun {
+	color: #ffffff;
+	text-shadow: none;
+}
+.gg-aim-dot {
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	width: 12px;
+	height: 12px;
+	margin: -6px 0 0 -6px;
+	border-radius: 50%;
+	background: #fff;
+	box-shadow:
+		0 0 0 3px rgba(14, 195, 201, 0.55),
+		0 0 14px rgba(14, 195, 201, 0.9);
+	pointer-events: none;
+	transition: transform 0.03s;
+}
+
+/* ---- menu ----
+   The only way off the deck on a phone, so it is deliberately outside the
+   thumb's combat arc. Landscape: the right letterbox margin, past the enemy
+   panel. Portrait: the band under the canvas, not over the fight. */
+.gg-menu {
+	position: absolute;
+	top: calc(var(--safe-t) + 8px);
+	right: calc(var(--safe-r) + 10px);
+	min-width: 64px;
+	min-height: 44px;
+	padding: 0 12px;
+	border-radius: 999px;
+	border: 1px solid rgba(255, 255, 255, 0.26);
+	background: rgba(12, 10, 18, 0.62);
+	color: rgba(255, 255, 255, 0.72);
+	font-size: 11px;
 	letter-spacing: 0.16em;
 	text-transform: uppercase;
-	color: rgba(255, 255, 255, 0.55);
-	background: none;
-	border: 1px solid rgba(255, 255, 255, 0.22);
+	cursor: pointer;
+}
+@media (orientation: portrait) {
+	/* The canvas is 75vw tall in portrait, so the band under it starts there.
+	   36dvh was only below the canvas on very tall phones and put the only menu
+	   button over the arena (and the HUD) on a 320x568 or a 375x667. */
+	.gg-menu {
+		top: calc(var(--safe-t) + 75vw + 12px);
+	}
+}
+
+/* ---- first-run coach ----
+   A top toast, not a card over the thumbs. Only its button takes a touch; the
+   body lets the tap through to the fight, and the whole thing goes on the first
+   deliberate touch or on "Got it". */
+.gg-coach {
+	position: absolute;
+	left: calc(50% + (var(--safe-l) - var(--safe-r)) / 2);
+	top: calc(var(--safe-t) + 4px);
+	transform: translateX(-50%);
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: min(
+		420px,
+		calc(100vw - var(--safe-l) - var(--safe-r) - 16px)
+	);
+	padding: 6px 8px 6px 12px;
+	border-radius: 12px;
+	border: 1px solid rgba(232, 182, 76, 0.55);
+	background: rgba(14, 12, 22, 0.96);
+	box-shadow: 0 8px 30px rgba(0, 0, 0, 0.55);
+	font-size: 10px;
+	line-height: 1.3;
+	letter-spacing: 0.01em;
+	color: rgba(255, 255, 255, 0.9);
+	pointer-events: none;
+}
+.gg-coach-copy {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+.gg-coach-line b {
+	color: #ffe0a0;
+	font-weight: 700;
+}
+.gg-coach-line.dim {
+	color: rgba(255, 255, 255, 0.7);
+}
+.gg-coach-ok {
+	flex: 0 0 auto;
+	margin: 0;
+	min-height: 44px;
+	min-width: 76px;
+	padding: 0 12px;
 	border-radius: 999px;
-	padding: 5px 12px;
-	touch-action: none;
+	border: 1px solid rgba(14, 195, 201, 0.8);
+	background: rgba(14, 195, 201, 0.2);
+	color: #d8ffff;
+	font-size: 11px;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
 	cursor: pointer;
 	pointer-events: auto;
 }
 
-/* ---- the four clusters ----
-   Placed by area rather than by source order, so a rotation moves them without
-   touching the DOM — and therefore without dropping a button a thumb is holding
-   through the rotation. */
-.gg-body {
-	flex: 1 1 auto;
-	min-height: 0;
-	display: grid;
-	grid-template-columns: 1fr 1fr;
-	grid-template-areas:
-		"cross face"
-		"stance stick";
-	/* Spread rather than centred: on a tall phone the two rows should reach down
-	   towards where thumbs actually rest, not huddle in the middle of the shell. */
-	align-content: space-evenly;
-	justify-items: center;
-	align-items: center;
-	gap: clamp(10px, 3vh, 26px) 6px;
+/* ---- the bare deck ----
+   The deck is off, but a phone still needs a way into the menu. This is the
+   same pill, nothing else. */
+.gg-deck-bare {
+	background: none;
 }
-.gg-cell {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	gap: 8px;
-	min-width: 0;
-}
-.gg-cell.cross { grid-area: cross; }
-.gg-cell.face { grid-area: face; }
-.gg-cell.stance { grid-area: stance; }
-.gg-cell.stick { grid-area: stick; }
 
-/* The canvas HUD's keyboard hint is a lie on a device with no keyboard. */
-#app:has(.gg-deck) .gd-hint {
+/* ---- the training room ----
+   Its panel starts open and is 300px wide; on a phone it sat exactly on the
+   left hand. Put it at the top centre, where it can cover sky but never a
+   thumb, and let the player collapse it. */
+#app:has(.gg-deck:not(.gg-deck-bare)) .gt-panel {
+	top: calc(env(safe-area-inset-top, 0px) + 6px);
+	left: 50%;
+	transform: translateX(-50%);
+	width: min(320px, calc(100vw - 24px));
+	max-height: 46dvh;
+}
+
+/* ---- the mobile HUD ----
+   The keyboard hint is a lie on a phone, and the deck already draws the ammo,
+   item and ultimate readouts on the thumbs that use them. Hide the copies the
+   right hand sits on. */
+#app:has(.gg-deck:not(.gg-deck-bare)) .vdh-hint,
+#app:has(.gg-deck:not(.gg-deck-bare)) .vdh-ammo,
+#app:has(.gg-deck:not(.gg-deck-bare)) .vdh-item,
+#app:has(.gg-deck:not(.gg-deck-bare)) .vdh-ult {
 	display: none;
 }
-
-/* ---- the left stick (was "the cross") ----
-   One element, not four buttons, and a round analog pad, not a d-pad. A thumb
-   rolling from left to up-left has to stay on the control the whole way, and
-   four adjacent buttons each with their own hit test drop the input in the gap
-   between them. The movement sector is worked out from where the thumb is, by
-   the same eight-way quantiser the physical left stick uses — and the raw thumb
-   position is handed over as the analog Contra aim, so it is the deck's left
-   stick rather than a d-pad. It used to be drawn as a d-pad and read as one, so
-   now it looks like what it is: a pad and a nub, the nub gold because gold is
-   the Contra aim's colour and this is the stick that drives it. */
-.gg-cross {
-	position: relative;
-	/* Sized off both axes, because which one runs out first depends entirely on
-	   how the phone is held: the height is the constraint in landscape and the
-	   width is the constraint in portrait. */
-	width: min(40vw, 30vh, 190px);
-	aspect-ratio: 1;
-	border-radius: 50%;
-	background: radial-gradient(circle at 50% 40%, #221d2e 0%, #14111d 70%);
-	border: 1px solid rgba(255, 255, 255, 0.1);
-	box-shadow: inset 0 3px 8px rgba(0, 0, 0, 0.7);
-	touch-action: none;
-	flex: 0 0 auto;
-}
-.gg-cross-nub {
-	position: absolute;
-	left: 50%;
-	top: 50%;
-	width: 42%;
-	height: 42%;
-	margin: -21% 0 0 -21%;
-	border-radius: 50%;
-	background: radial-gradient(circle at 35% 30%, #59526b, #26212f);
-	border: 1px solid rgba(0, 0, 0, 0.6);
-	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.55);
-	pointer-events: none;
-}
-.gg-cross.live .gg-cross-nub {
-	background: radial-gradient(circle at 35% 30%, #ffe9a8, #a97c1c);
-	border-color: #e8b64c;
-}
-.gg-cross-label {
-	position: absolute;
-	left: 0;
-	right: 0;
-	bottom: -14px;
-	text-align: center;
-	font-size: 8px;
-	letter-spacing: 0.22em;
-	text-transform: uppercase;
-	color: rgba(255, 255, 255, 0.3);
-	pointer-events: none;
+@media (pointer: coarse) {
+	.vdh-hint { display: none; }
 }
 
-/* ---- the fine-aim stick ----
-   The layer that is *not* eight directions. It always leaves from the centre,
-   which is why the nub is drawn from a transform rather than from where the
-   thumb is: releasing it must put the aim back at rest, visibly. */
-.gg-stick {
-	position: relative;
-	width: min(30vw, 20vh, 128px);
-	aspect-ratio: 1;
-	border-radius: 50%;
-	background: radial-gradient(circle at 50% 40%, #221d2e 0%, #14111d 70%);
-	border: 1px solid rgba(255, 255, 255, 0.1);
-	box-shadow: inset 0 3px 8px rgba(0, 0, 0, 0.7);
-	touch-action: none;
-	flex: 0 0 auto;
+/* ---- contrast and system settings ---- */
+@media (prefers-contrast: more) {
+	.gg-control,
+	.gg-move,
+	.gg-menu,
+	.gg-coach {
+		background: #14111d;
+		border-color: #ffffff;
+		opacity: 1;
+	}
+	.gg-control.disabled { opacity: 0.6; }
+	.gg-move-caption,
+	.gg-stance-seg { color: rgba(255, 255, 255, 0.85); }
+	/* The high-contrast background is dark; the gold button's ink was not. */
+	.gg-attack,
+	.gg-attack.gun,
+	.gg-attack .gg-label,
+	.gg-charge-hint,
+	.gg-ammo,
+	.gg-ammo-reserve {
+		color: #ffffff;
+	}
+	.gg-attack,
+	.gg-attack.gun {
+		background: #14111d;
+		border-color: #ffffff;
+	}
+	.gg-charge-hint { background: #000000; }
 }
-.gg-stick-nub {
-	position: absolute;
-	left: 50%;
-	top: 50%;
-	width: 42%;
-	height: 42%;
-	margin: -21% 0 0 -21%;
-	border-radius: 50%;
-	background: radial-gradient(circle at 35% 30%, #59526b, #26212f);
-	border: 1px solid rgba(0, 0, 0, 0.6);
-	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.55);
-	pointer-events: none;
-}
-.gg-stick.live .gg-stick-nub {
-	background: radial-gradient(circle at 35% 30%, #7ff0f4, #0e8a8f);
-	border-color: #0ec3c9;
-}
-.gg-stick-label {
-	position: absolute;
-	left: 0;
-	right: 0;
-	bottom: -14px;
-	text-align: center;
-	font-size: 8px;
-	letter-spacing: 0.22em;
-	text-transform: uppercase;
-	color: rgba(255, 255, 255, 0.3);
-	pointer-events: none;
+@media (forced-colors: active) {
+	.gg-control,
+	.gg-control *,
+	.gg-move,
+	.gg-move *,
+	.gg-menu,
+	.gg-coach,
+	.gg-coach * {
+		forced-color-adjust: none;
+		background-image: none !important;
+		text-shadow: none !important;
+		color: ButtonText !important;
+		opacity: 1;
+	}
+	.gg-control,
+	.gg-move,
+	.gg-menu,
+	.gg-coach {
+		background-color: Canvas !important;
+		border: 1px solid ButtonText;
+	}
+	.gg-control.on,
+	.gg-control.ready,
+	.gg-control.armed,
+	.gg-stance-seg.on,
+	.gg-ult.ready {
+		outline: 3px solid Highlight;
+		outline-offset: 2px;
+	}
+	.gg-control.disabled {
+		color: GrayText !important;
+		border-style: dashed;
+		opacity: 1;
+	}
+	.gg-coach-ok {
+		background: Canvas !important;
+		border-color: ButtonText !important;
+		color: ButtonText !important;
+	}
+	.gg-ring { display: none; }
 }
 
-/* ---- face buttons ----
-   A diamond, because the handheld's two-button diagonal is the shape a thumb
-   already knows, and four actions need one axis more than two. */
-.gg-face {
-	position: relative;
-	width: min(44vw, 33vh, 210px);
-	aspect-ratio: 1;
-	flex: 0 0 auto;
-}
-.gg-btn {
-	position: absolute;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	border-radius: 50%;
-	border: 1px solid rgba(0, 0, 0, 0.55);
-	font: inherit;
-	font-size: clamp(8px, 2.4vw, 10px);
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
-	color: rgba(255, 255, 255, 0.9);
-	background: radial-gradient(circle at 35% 28%, #6d3350, #3a1a2c);
-	box-shadow: 0 3px 0 rgba(0, 0, 0, 0.55);
-	touch-action: none;
-	cursor: pointer;
-	padding: 0;
-	transition: transform 0.05s, box-shadow 0.05s, filter 0.05s;
-}
-.gg-btn.held {
-	transform: translateY(2px);
-	box-shadow: 0 1px 0 rgba(0, 0, 0, 0.55);
-	filter: brightness(1.45);
-}
-/* A diamond, and the geometry is load-bearing: four circles in a square box
-   overlap unless their centres are further apart than the sum of their radii.
-   Slash is the button pressed most, so it is the biggest and sits under the
-   thumb's resting position on the outside edge. */
-.gg-btn.slash {
-	width: 46%; height: 46%; right: 0; top: 27%;
-	background: radial-gradient(circle at 35% 28%, #f0c463, #a2761f);
-	color: #241905;
-	font-weight: bold;
-}
-.gg-btn.jump   { width: 42%; height: 42%; left: 0; top: 29%; }
-.gg-btn.upper  { width: 34%; height: 34%; left: 33%; top: 0; }
-.gg-btn.block  { width: 34%; height: 34%; left: 33%; bottom: 0; }
-/* The item button rides in the one corner the diamond leaves free — top-left —
-   in the item's olive so a thumb can find it without reading. */
-.gg-btn.item {
-	width: 30%; height: 30%; left: 2%; top: 3%;
-	background: radial-gradient(circle at 35% 28%, #6d8a4f, #33421f);
-	color: #eaf2d8;
-}
-
-/* ---- stance pills ----
-   Where a handheld puts SELECT and START, and for the same reason: two things
-   pressed between exchanges rather than during one. */
-.gg-stance {
-	display: flex;
-	gap: 8px;
-	flex: 0 0 auto;
-}
-.gg-pill {
-	font: inherit;
-	font-size: clamp(8px, 2.3vw, 10px);
-	letter-spacing: 0.12em;
-	text-transform: uppercase;
-	color: rgba(255, 255, 255, 0.75);
-	background: linear-gradient(180deg, #3a3348, #241f30);
-	border: 1px solid rgba(0, 0, 0, 0.5);
-	border-radius: 999px;
-	padding: 7px 14px;
-	box-shadow: 0 2px 0 rgba(0, 0, 0, 0.5);
-	touch-action: none;
-	cursor: pointer;
-	transition: transform 0.05s, box-shadow 0.05s, color 0.05s;
-}
-.gg-pill.held {
-	transform: translateY(2px);
-	box-shadow: 0 0 0 rgba(0, 0, 0, 0.5);
-	color: #0ec3c9;
-}
-
-/* ---- the ultimate pill ----
-   Drawn only when the meter is full, which is the point: a button that appears
-   is a louder "you have it" than a button that changes colour, and a phone has
-   no room for a control that does nothing for sixty seconds at a time. The
-   violet is the black hole's own colour, used nowhere else on the deck. */
-.gg-pill.ult {
-	color: #f2e2ff;
-	background: linear-gradient(180deg, #7b3fd4, #3d1d70);
-	border-color: rgba(214, 168, 255, 0.55);
-	box-shadow: 0 2px 0 rgba(0, 0, 0, 0.5), 0 0 14px rgba(150, 90, 255, 0.55);
-	animation: gg-ult-ready 1.4s ease-in-out infinite;
-}
-.gg-pill.ult.held {
-	color: #fff;
-	animation: none;
-}
-@keyframes gg-ult-ready {
-	0%, 100% { box-shadow: 0 2px 0 rgba(0, 0, 0, 0.5), 0 0 10px rgba(150, 90, 255, 0.45); }
-	50% { box-shadow: 0 2px 0 rgba(0, 0, 0, 0.5), 0 0 22px rgba(180, 120, 255, 0.9); }
-}
-@media (prefers-reduced-motion: reduce) {
-	.gg-pill.ult { animation: none; }
-}
-
-/* ---- the speaker ----
-   Pure decoration, and worth the twenty lines: the shell is otherwise a flat
-   slab under the buttons, and the raked grille is the single detail that makes
-   a rectangle read as a handheld. Drawn with a repeating gradient rather than
-   forty elements, and skewed to get the rake. */
-.gg-speaker {
-	flex: 0 0 auto;
-	align-self: flex-end;
-	width: clamp(60px, 20vw, 96px);
-	height: 22px;
-	margin: 2px 6px 0 0;
-	transform: skewX(-22deg);
-	background: repeating-linear-gradient(
-		90deg,
-		rgba(0, 0, 0, 0.5) 0 4px,
-		transparent 4px 10px
-	);
-	border-radius: 2px;
-	opacity: 0.7;
-	pointer-events: none;
-}
-
-/* ---- landscape ----
-   A phone turned sideways has no room *below* the game, so the clusters go
-   beside it: a 4:3 canvas on a 16:9 screen leaves a margin on each side, and
-   that margin is where thumbs already are. The shell dissolves — there is no
-   handheld body to draw when the body is the phone itself. */
-@media (orientation: landscape) {
-	#app:has(.gg-deck) {
-		flex-direction: row;
-		/* The arena is a sized 4:3 box, not a stretched column of the page. */
-		justify-content: center;
-	}
-	#app:has(.gg-deck) #game-container {
-		/* The base rule already fits the shorter axis — 100dvh tall, 4:3 wide.
-		   None, not flex: 1: growing to the row's full width would stretch the
-		   canvas (and the HUD's container units) with it. */
-		flex: none;
-		/* Undo the portrait rule's full-width box: here the height sets the
-		   width through the 4:3 ratio, and the deck floats over the margins. */
-		width: auto;
-		padding: 0;
-	}
-	.gg-deck {
-		position: fixed;
-		inset: 0;
-		justify-content: flex-end;
-		background: none;
-		border: none;
-		box-shadow: none;
-		pointer-events: none;
-		padding: 0 8px 8px;
-	}
-	.gg-body {
-		/* Two stacks hard against the two edges, and nothing in the middle: the
-		   middle is the game. */
-		grid-template-columns: auto 1fr auto;
-		grid-template-areas:
-			"cross . face"
-			"stance . stick";
-		align-content: end;
-		gap: 8px;
-	}
-	/* Only the controls take the touch, never the empty space between them — the
-	   letterbox they sit in is still the game. */
-	.gg-deck .gg-cross,
-	.gg-deck .gg-stick,
-	.gg-deck .gg-btn,
-	.gg-deck .gg-pill,
-	.gg-deck .gg-brand {
-		pointer-events: auto;
-	}
-	/* No room for the wordmark beside the game, but the menu button is the only
-	   way off this deck and has to survive a rotation. */
-	.gg-brand-mark,
-	.gg-brand-sub {
-		display: none;
-	}
-	.gg-brand {
-		position: fixed;
-		top: 8px;
-		right: 8px;
-		padding: 0;
-	}
-	.gg-menu {
-		position: static;
-	}
-	.gg-speaker {
-		display: none;
-	}
-	/* The labels hang below the pads, and in landscape "below" is off the screen.
-	   The nubs say what the pads are well enough once there is no room to say
-	   it. */
-	.gg-stick-label,
-	.gg-cross-label {
-		display: none;
-	}
+/* A short viewport: keep the hands inside it without shrinking a target under
+   44px. The stance row gives up 8px first, then the kit rows. */
+@media (max-height: 340px) {
+	.gg-deck { --gg-edge: 8px; --gg-gap: 6px; }
+	.gg-combat { --stance-h: 50px; --row: 48px; }
+	.gg-move { height: clamp(132px, 42dvh, 160px); }
 }
 `;

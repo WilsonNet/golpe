@@ -39,7 +39,8 @@ node scripts/verify-modes.ts                   # smoke-check every launch mode
 node scripts/aim-probe.ts                      # cursor, facing and shot direction, at dpr 1 and 2
 node scripts/training-probe.ts                 # one interaction at a time, against a scripted dummy
 node scripts/controls-probe.ts                 # key bindings, the Esc menu and a rebind
-node scripts/pad-probe.ts                      # controller aim, a gamepad, and the phone deck
+tsx scripts/pad-probe.ts                      # controller aim and a gamepad
+tsx scripts/deck-probe.ts                     # the two-thumb deck: layout gates and real sequences
 node scripts/sky-probe.ts                      # the Waterfront: loaded, animated, parallax, movers and loops
 node scripts/readability-probe.ts              # fighter vs background: value, silhouette and detail
 node scripts/tiles-probe.ts                    # platform atlas, Art/Flat live switch, skybox independence
@@ -307,41 +308,37 @@ genuinely equivalent from the game's point of view.
 | trigger blocks, face button jumps, shoulder swaps stance | pad buttons reach the simulation through the *ordinary* bindings, not a second path |
 | switching back to Mouse gives the cursor its say | a scheme that cannot be left is a trap |
 
-It then opens a second, phone-shaped context — `hasTouch` is what makes Chromium
-answer `pointer: coarse` the way a phone does, and it cannot be changed on a live
-page — and checks that the deck is drawn, that the game and the deck **both fit
-with no horizontal scroll and the canvas keeps its 4:3**, that the screen reaches
-both edges of the phone, that a thumb on the cross walks the fighter **and aims
-at whatever angle the thumb is held — 30°, not the nearest sector**, that the
-thumb pad aims and recentres, and that the deck's own menu button can send the
-deck away. The controls are ordinary DOM, so it taps them: an emitted event
-proves the wiring, a tap proves the game.
+`deck-probe.ts` covers the on-screen deck, which the pad probe no longer drives
+at all. It opens six phone-shaped contexts — 844x390, 667x375, 568x320, 390x844,
+375x667, 320x568, plus notched safe-area variants — and measures the gates that
+matter:
 
-Two checks exist for the deck's buttons being *ordinary DOM*: the aim pad must
-**aim without slashing** while the stance is sword, and it must **fire the gun**
-in gun mode — a phone's right thumb lives on the pad, so the pad is its trigger.
-It switches stance by tapping the Gun pill, and counts bullets to prove a shot.
-It also checks the two ways the deck follows the stance: the left stick is
-**drawn as an analog pad, not a d-pad** (the nub is there, the arms are not), and
-**block and uppercut are hidden in gun mode**, because they are sword moves that
-would otherwise sit there doing nothing.
+| Gate | Why it is there |
+|---|---|
+| every target ≥44px, no overlaps, inside the safe area | the old face cluster had a 38px item overlapping Jump by 6px, so a jump tap spent a grenade |
+| the coach's *Got it* ≥44px and the coach over no control | the first-run card used to sit on the left hand on a 568x320, so the movement pad was dead for 14 seconds |
+| the middle lane clear, no scroll, 4:3, portrait hands below the canvas | the deck is an overlay, not a second page |
+| move + attack; a 1→2→3 chain; the butterfly | the three core melee loops, impossible when one thumb had six controls |
+| guard-walk after a normal-length walk | the guard latch must stamp the *release*, not the last direction change |
+| a charged Massive + jump becomes the plunge bomb | the technique the old deck could not perform |
+| a 70ms tap jump is near full height; two fast taps spend the air jump | the simulation cuts a jump on release, and the latch must not swallow a double jump |
+| retreat-fire: run left, gun aimed and firing right | the two-thumb answer to a cursor |
+| item and ultimate drag-aim; an off-centre tap uses the facing | the aim is a drag from the press point, not from the button's centre |
+| no stuck holds; the menu does not click through; the deck can be turned Off | a phone has no Escape key, so the menu must survive everything |
+| press-to-simulation p95 | the deck is DOM, but a thumb still has to reach the fight |
 
 **It drives that context with CDP `Input.dispatchTouchEvent`, never
 `page.mouse`.** Playwright's mouse reports `pointerType: "mouse"` even inside a
 touch context, and that field is exactly what the relative-mouse aim layer is
 filtered on — so a probe driven by it is structurally blind to every bug in the
-filter, and was: two of them passed a green probe until this section was
-rewritten. Two checks exist only because of that:
+filter. The same rule applies to the deck: a tap is a real multi-touch point, so
+a second finger can hold the move rocker while the first swings.
 
-| Check | Why it is there |
-|---|---|
-| a deck button does not also swing the sword | `Input`'s `pointerdown` is on `window` and `Mouse0` is attack, so every button on the deck slashed as well as doing its own job |
-| a thumb sliding across the cross does not steer the aim | `movementX` is populated for touch pointers, so a thumb drag drove the virtual stick — holding *left* while dragging *right* aimed right |
+The off-centre tap is the deck's version of the old "press and travel disagree"
+check: an absolute aim from a button's centre and a drag from the press point
+agree at the centre and diverge everywhere else. The probe presses the item and
+the gun near an edge and asserts the shot/throw uses the facing.
 
-The second one slides **rightward along the left arm** on purpose. A drag *toward*
-an arm pushes a broken virtual stick the same way that arm points, so the correct
-and the broken build agree; only a press and a travel that disagree can separate
-them.
 
 ## The training probe
 

@@ -16,7 +16,7 @@ import type { TutorialApi } from "../game/campaign";
 import type { AIState } from "../game/characters/EnemyBrain";
 import type { ReadabilitySnapshot } from "../game/diagnostics/Readability";
 import type { AimReport } from "../game/input/Aim";
-import type { AimScheme, DeckSetting } from "../game/input/Scheme";
+import type { AimScheme, DeckAssist, DeckSetting } from "../game/input/Scheme";
 import type { MapIssue } from "../game/maps/checks";
 import type { RosterEntry, TeamStatus } from "../game/online/types";
 import type { PotgPhase } from "../game/potg/Director";
@@ -202,7 +202,7 @@ export interface AimSnapshot {
 export interface InputSnapshot {
 	scheme: AimScheme;
 	deck: DeckSetting;
-	/** Whether the on-screen gamepad is actually drawn right now. */
+	/** Whether the on-screen deck is actually drawn right now. */
 	deckVisible: boolean;
 	/** True once a gamepad has reported anything at all. */
 	padAvailable: boolean;
@@ -212,6 +212,10 @@ export interface InputSnapshot {
 	face: number;
 	/** What the simulation settled on. */
 	facing: number;
+	/** Whether the mobile sword aim assist is enabled. */
+	assist: DeckAssist;
+	/** Attack held, as the aim assist reads it. */
+	attacking: boolean;
 }
 
 /**

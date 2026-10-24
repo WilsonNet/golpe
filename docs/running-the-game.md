@@ -301,7 +301,7 @@ game, and the gun answers a range problem.
 | Input | Sword | Gun |
 |---|---|---|
 | **Left click** (tap) | Slash | Fire |
-| **Left click** (hold ~2500ms, then release) | **Massive Strike** — a floor slam, or the plunge bomb if airborne | Fire |
+| **Left click** (hold ~1600ms, then release) | **Massive Strike** — a floor slam, or the plunge bomb if airborne | Fire |
 | **Shift** (hold) | **Block** | — |
 | **W** | **Uppercut** | — |
 | **F** | **Item** | **Item** |
@@ -346,24 +346,34 @@ on A, slash on X, uppercut on Y, block on the left trigger and the stances on th
 shoulders, and the controls dialog will capture a pad button into any slot.
 
 **Controller mode draws a beam** out of your fighter showing where it is aiming —
-gold for the Contra aim, turning cyan while the right stick (or the
-thumb pad) is overriding it, and fading back to gold as that hands over. Mouse
-mode has no beam, because the cursor is already telling you the same thing.
+gold for the Contra aim, turning cyan while the right stick (or the deck's aim
+drag) is overriding it, and fading back to gold as that hands over. Mouse mode
+has no beam, because the cursor is already telling you the same thing.
 
-**On a phone**, the game starts in controller mode and draws a Game Boy-shaped
-deck in the half of a portrait screen the 4:3 arena leaves empty; turn the phone
-sideways and the controls move into the letterbox margins instead. The deck has
-its own **Menu** button, because a phone has no Escape key. The left thumb works
-a round analog pad — move, and aim at whatever angle it is held — and the right
-thumb works the aim pad, which overrides the aim with the full 360° *and*, in gun
-mode, fires the gun: there is no spare finger for a fire button, so the pad is
-the trigger too, and a phone gun plays as a twin-stick shooter. The deck also
-**swaps its buttons with the stance**: block and uppercut are sword moves, so a
-gunner is not shown buttons that do nothing.
+**On a phone**, the game starts in controller mode with a **two-thumb deck**.
+It is an overlay, not a second layout: the 4:3 arena keeps the page, the hands
+float over the bottom corners inside the safe area, and the middle of the arena
+stays clear.
+- **Left thumb — feet and defence.** A one-axis move rocker with a **jump cap**
+  as its top band (push up to jump, keep steering); **Guard** is a hold above it,
+  and **Dash** a tap beside Guard.
+- **Right thumb — weapon and aim.** The weapon button is the largest control:
+  tap to attack, hold for the kit's charge move, and in gun stance **press-drag
+  to aim and fire**. Uppercut, item, ultimate and stance sit around it.
+- **The item and ultimate are press-drag-release** on their own buttons. The
+  ultimate arms after a short hold, so a brush spends nothing.
+- **Guard is on the left** so the right thumb never leaves the weapon — the
+  butterfly, a charged Massive + jump and charge + guard work with two thumbs.
+
+The deck has its own **Menu** button, because a phone has no Escape key. A
+first-run coach names the two thumb jobs and gets out of the way on the first
+touch. The sword gets a narrow aim assist (a held attack or a guard turns to a nearby
+foe; a standing fighter only within a cone) that can be turned off in Controls.
 
 **Attach a Bluetooth keyboard and mouse to that phone** and you can go straight
-back to the normal scheme: set *Aiming* to Mouse, or set *On-screen gamepad* to
-Off. They are two separate settings precisely so that this works.
+back to the normal scheme: set *Aiming* to Mouse, or set *On-screen deck* to
+Off. They are two separate settings precisely so that this works, and a small
+Menu pill survives the deck being off.
 
 ### Rebinding
 

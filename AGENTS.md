@@ -317,10 +317,13 @@ One line each; the war story behind every one is in
   touch a cursor or a stick, so the mouse must be measured with
   `scripts/aim-probe.ts` at `--dpr=2`, and controller mode with
   `scripts/pad-probe.ts`.
-- **Every input device speaks one alphabet.** Keys, `Mouse0`, `Pad0`/`PadUp` and
-  the on-screen deck are all code strings in one namespace, so an action asks "is
-  any of my codes held" once. A device with its own code path is a device that
-  quietly stops being rebindable.
+- **Every physical input device speaks one alphabet.** Keys, `Mouse0` and
+  `Pad0`/`PadUp` are code strings in one namespace, so an action asks "is any of
+  my codes held" once. **The on-screen deck is the deliberate exception**: a
+  painted control is already a binding, so it emits actions and joins at
+  `actionDown`. A physical device with its own code path quietly stops being
+  rebindable; a deck that emitted codes silently changed what a labelled button
+  did when a pad button was rebound.
 - **The gamepad has no events — it is polled**, in `Input.poll`, once per frame
   before anything reads an aim. Press edges are derived against the previous
   frame's set, or holding a direction reads as a dash sixty times a second.
@@ -372,7 +375,8 @@ tsx scripts/tdm-probe.ts --ultCharge=100             # ...and the teams throw bl
 tsx scripts/cp-probe.ts                              # five control points: captures, forward spawns, overtime
 tsx scripts/verify-modes.ts                          # smoke-check every mode
 tsx scripts/aim-probe.ts                             # cursor, facing and shot direction
-tsx scripts/pad-probe.ts                             # controller aim, gamepad and the phone deck
+tsx scripts/pad-probe.ts                             # controller aim and the physical gamepad
+tsx scripts/deck-probe.ts                            # the two-thumb deck: layout gates and real combos
 tsx scripts/training-probe.ts                        # one interaction, against a scripted dummy
 tsx scripts/training-probe.ts --hero=anands          # ...as the dagger (its rows are dagger-only)
 tsx scripts/ibiriki-probe.ts                         # Ibiriki: hews, Sunder through a guard, axes thrown/stuck/recovered, bloodlust, Rupture
@@ -522,22 +526,43 @@ one bit and a controller has no cursor. Mouse mode does not get one: the cursor
 already is the reticle. `src/game/render/AimLine.ts`, drawn from the *drawn*
 position like the nameplates.
 
-**Mobile is controller mode plus a deck.** `pointer: coarse` starts a client in
-controller mode with an on-screen gamepad: a Game Boy shell filling the half of a
-portrait phone a 4:3 game leaves empty, dissolving into the letterbox margins in
-landscape. The screen itself has **no bezel** — a fixed 800x600 arena scaled to
-fit means every framed pixel is arena nobody can see. **The deck emits `Pad…`
-codes**, the same ones a real controller sends, so it is rebindable for free. It
-is a **separate setting** from the scheme so that a phone with a Bluetooth
-keyboard can turn it off — and it carries its own menu button, because a phone has
-no Escape key.
+**Mobile is controller mode plus a two-thumb deck.** `pointer: coarse` starts a
+client in controller mode with an on-screen deck split by **hand**, not by
+console convention: the **left thumb** moves on a one-axis rocker (full speed from
+14px, with a **jump cap** as the top band, so a running jump is one thumb move),
+holds **Guard** and taps **Dash**; the **right thumb** lives on the **weapon**
+button (tap to slash, hold for the Massive, press-drag to aim and fire the gun),
+with uppercut, item, ultimate and stance around it. Guard is on the left
+*opposite the weapon* precisely so the butterfly, a charged Massive + jump and
+charge + guard are possible — the old deck gave one thumb six jobs and lost the
+butterfly, the plunge bomb, charge + guard and the aimed ultimate. A tap jump is
+latched to near-full height (the simulation cuts a jump on release, and a phone
+tap used to be a half-hop), and a second tap inside the latch flushes the release
+so a fast double jump is not swallowed. The item and the ultimate are
+press-drag-release on their own buttons; a 260ms hold arms the ult, so a brush
+spends nothing. A narrow **sword-only aim assist** (a held attack or a guard turns at any angle,
+a standing fighter within an 80° cone; 240px, switchable in Controls) turns a
+thumb-only fighter toward a nearby foe — including the retreat-slash;
+it changes only the aim angle handed to the simulation and never applies to the
+gun, a live drag, a mouse client or a paired gamepad. The deck **emits actions,
+not pad codes** — a painted control is already a binding, and rebinding a pad
+button must not silently change what the button labelled Guard does. It is a
+**separate setting** so a phone with a Bluetooth keyboard can turn it off; it
+carries its own menu button (opened on `pointerup` and a tick later, never
+`pointerdown` — `click` is not synthesised while another thumb holds a button,
+and a pointerdown-open menu gets the release click through to Heroes), and a
+**bare Menu pill survives the deck being turned off** — the old deck took the
+only way back with it. The hand over the fighter fades to just under half (the
+buttons still work); a first-run coach names the two thumb jobs and gets out of
+the way on the first touch. See
+[specs/controls.md](specs/controls.md) and `scripts/deck-probe.ts`.
 
 **DOM the player presses is not the game surface.** `Input`'s `pointerdown` is on
 `window`, and `Mouse0` is attack — so until it was gated on `e.target === canvas`,
 every button on the deck swung the sword as well as doing its own job. Likewise
 `movementX` exists on *touch* pointers, so the relative-mouse aim layer is
-filtered to `pointerType === "mouse"` or a thumb sliding on the d-pad aims 180°
-wrong. Both are only reachable with real touch events — drive the deck with CDP,
+filtered to `pointerType === "mouse"` or a thumb sliding on the move pad aims
+180° wrong. Both are only reachable with real touch events — drive the deck with CDP,
 never `page.mouse`.
 
 **A slash is the first of three.** Tap again as each swing's hitbox closes and the

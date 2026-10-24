@@ -42,6 +42,7 @@
     "dev:herdr:status": "tsx scripts/dev-herdr.ts status",
     "dev:herdr:logs": "tsx scripts/dev-herdr.ts logs",
     "diagnose": "tsx scripts/diagnose.ts",
+    "deck-probe": "tsx scripts/deck-probe.ts",
     "deathmatch": "tsx scripts/deathmatch-probe.ts",
     "map:pr": "tsx scripts/map-pr.ts",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json && tsc -p tsconfig.scripts.json && tsc -p tsconfig.directory.json",

@@ -43,7 +43,7 @@ export async function startGame(parent: HTMLElement): Promise<GameHandle> {
 	// inline width and height in CSS pixels, and an inline style beats a
 	// stylesheet — so those two are cleared and the page decides how big the
 	// screen is. It has to: on a phone the answer depends on whether the
-	// on-screen gamepad is taking the bottom half.
+	// on-screen deck is an overlay over the page.
 	app.canvas.style.width = "";
 	app.canvas.style.height = "";
 

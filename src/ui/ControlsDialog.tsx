@@ -1,5 +1,5 @@
 /**
- * The controls dialog: aiming scheme, on-screen gamepad, and the binding table.
+ * The controls dialog: aiming scheme, on-screen deck, aim assist, and the binding table.
  *
  * Shared by the Esc menu and the main menu. The game's input layer reads the
  * binding and scheme stores every frame, so this dialog is not stateful about
@@ -28,6 +28,7 @@ import {
 import { readPads } from "../game/input/Gamepad";
 import {
 	type AimScheme,
+	type DeckAssist,
 	type DeckSetting,
 	inputSettings,
 } from "../game/input/Scheme";
@@ -42,13 +43,19 @@ const SCHEMES: { value: AimScheme; label: string; hint: string }[] = [
 	{
 		value: "controller",
 		label: "Controller",
-		hint: "Eight directions from the d-pad, full 360° from the right stick — or from sliding the mouse, for a trackpad.",
+		hint: "Eight directions from the d-pad, full 360° from the right stick — or a press-drag on the deck — or by sliding the mouse, for a trackpad.",
 	},
 ];
 
-/** When the on-screen gamepad is drawn. */
+/** When the on-screen deck is drawn. */
 const DECKS: { value: DeckSetting; label: string }[] = [
 	{ value: "auto", label: "Auto" },
+	{ value: "on", label: "On" },
+	{ value: "off", label: "Off" },
+];
+
+/** Whether the deck may turn a stationary swordfighter toward a nearby foe. */
+const ASSISTS: { value: DeckAssist; label: string }[] = [
 	{ value: "on", label: "On" },
 	{ value: "off", label: "Off" },
 ];
@@ -165,6 +172,7 @@ export function ControlsDialog({ onClose }: { onClose: () => void }) {
 								key={s.value}
 								type="button"
 								className={`gd-chip${settings.scheme === s.value ? " gd-chip-on" : ""}`}
+								aria-pressed={settings.scheme === s.value}
 								onClick={() => inputSettings.setScheme(s.value)}
 							>
 								{s.label}
@@ -181,13 +189,14 @@ export function ControlsDialog({ onClose }: { onClose: () => void }) {
 
 			<div className="gd-setting">
 				<div className="gd-setting-head">
-					<span>On-screen gamepad</span>
+					<span>On-screen deck</span>
 					<div className="gd-choice">
 						{DECKS.map((d) => (
 							<button
 								key={d.value}
 								type="button"
 								className={`gd-chip${settings.deck === d.value ? " gd-chip-on" : ""}`}
+								aria-pressed={settings.deck === d.value}
 								onClick={() => inputSettings.setDeck(d.value)}
 							>
 								{d.label}
@@ -198,9 +207,44 @@ export function ControlsDialog({ onClose }: { onClose: () => void }) {
 				<p className="gd-setting-hint">
 					<strong>Auto</strong> draws it when a finger is the pointer and aiming
 					is set to Controller. Pair a keyboard to a phone and turn it{" "}
-					<strong>Off</strong>.
+					<strong>Off</strong> — a small Menu pill stays on screen so the deck
+					can always be brought back.
 				</p>
 			</div>
+
+			<div className="gd-setting">
+				<div className="gd-setting-head">
+					<span>Mobile aim assist</span>
+					<div className="gd-choice">
+						{ASSISTS.map((a) => (
+							<button
+								key={a.value}
+								type="button"
+								className={`gd-chip${settings.assist === a.value ? " gd-chip-on" : ""}`}
+								aria-pressed={settings.assist === a.value}
+								onClick={() => inputSettings.setAssist(a.value)}
+							>
+								{a.label}
+							</button>
+						))}
+					</div>
+				</div>
+				<p className="gd-setting-hint">
+					On the on-screen deck, a swordfighter who is standing still or holding
+					guard turns toward a nearby enemy. It changes only the aim angle sent
+					to the simulation — the gun, a live aim drag and every mouse client
+					are untouched, and a paired gamepad keeps its own aim. It is for a
+					finger on glass; turn it off for a raw thumb.
+				</p>
+			</div>
+
+			<p className="gd-sub">
+				<strong>On a phone:</strong> the left thumb moves and pushes up to jump,
+				and holds <strong>Guard</strong> so the right thumb never leaves the
+				weapon. The right thumb attacks (hold to charge), rolls left for
+				uppercut and item, and drags the gun, item or ultimate to aim. The
+				ultimate is held for a moment, dragged, then released.
+			</p>
 
 			<p className="gd-sub">
 				Click a slot, then press the key, mouse button or gamepad button you

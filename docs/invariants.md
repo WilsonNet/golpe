@@ -386,12 +386,13 @@ bigger one, out of step with the hand. `sheetDrawsBlade` (a packed sheet with a
   aiming scheme in the middle of a match without desyncing anything. The day the
   simulation branches on *how* the angle was made is the day it can disagree with
   the server about it.
-- **One code alphabet across every device.** Keys are `KeyboardEvent.code`, the
-  mouse is `Mouse0`, a pad is `Pad0`/`PadUp`, and the on-screen deck sends the
-  same `Pad…` codes a real pad does. An action asks "is any of my codes held" and
-  gets one answer. Give a device its own code path and it silently stops being
-  rebindable — which is exactly the state the mouse was in before block moved to
-  Shift.
+- **One code alphabet across the physical devices.** Keys are
+  `KeyboardEvent.code`, the mouse is `Mouse0`, a pad is `Pad0`/`PadUp`. An action
+  asks "is any of my codes held" and gets one answer. Give a device its own code
+  path and it silently stops being rebindable — which is exactly the state the
+  mouse was in before block moved to Shift. **The on-screen deck is the
+  deliberate exception**: a painted control is already a binding, so it sends
+  actions and joins at `actionDown` (see the deck bullets below).
 - **The gamepad is polled, so its press edges must be derived.** There are no
   button events in the Gamepad API. `Input.poll` diffs this frame's held set
   against the previous one; without that, holding a direction is a fresh press
@@ -408,14 +409,14 @@ bigger one, out of step with the hand. `sheetDrawsBlade` (a packed sheet with a
   Steam Input's *Mouse Joystick*, and Flick Stick's rotation along the gate.
 - **A virtual stick must recentre when it is let go.** A stick that resumed from
   where it was abandoned answers the same flick with a different angle every time.
-- **The Contra aim is analog when the source is, and eight when it is not.** The
-  left stick and the deck's cross hand the raw deflection to `setContra`, so a
-  push at 30° aims at 30°; only the d-pad and the arrow keys — which can feed
-  nothing but {-1, 0, 1} — resolve to exactly eight. The *movement* codes stay
-  quantised either way, so there is still one code path and one dash gesture; the
-  analog stick just gains the angles in between. An analog source wins over the
-  codes while it is held, because it is a superset of the direction its codes
-  resolve to.
+- **The Contra aim is analog when the source is, and eight when it is not.** A
+  physical left stick hands its raw deflection to `setContra`, so a push at 30°
+  aims at 30°; only the d-pad and the arrow keys — which can feed nothing but
+  {-1, 0, 1} — resolve to exactly eight. The *movement* codes stay quantised
+  either way, so there is still one code path and one dash gesture; the analog
+  stick just gains the angles in between. The deck's left hand is a one-axis
+  rocker, so it feeds the same fallback and a swordfighter faces the way it
+  walks; the gun and the throwables aim from the button that fires them.
 - **Near-vertical aim sets `face: 0`.** `cos(-90°)` is a positive floating-point
   crumb, so without a dead band a fighter aiming at the ceiling snaps to facing
   right — and facing decides which side a guard covers. With an analog stick,
@@ -428,7 +429,7 @@ bigger one, out of step with the hand. `sheetDrawsBlade` (a packed sheet with a
   listener has to be on `window` so a drag that starts on the canvas keeps being
   tracked when it leaves — but button 0 is `Mouse0`, and `Mouse0` is attack, so
   *every tap anywhere on the page swung the sword*. Invisible until the page grew
-  DOM the player is meant to press: with the on-screen gamepad, Jump jumped **and
+  DOM the player is meant to press: with the on-screen deck, Jump jumped **and
   slashed**, the stance pills slashed, and so did the menu button. Gate the press
   on `e.target === canvas`; leave the *release* ungated, because deleting a code
   that was never added is free and a drag must always be able to end.
@@ -436,18 +437,19 @@ bigger one, out of step with the hand. `sheetDrawsBlade` (a packed sheet with a
   default, not another listener on the same event.
 - **`movementX`/`movementY` are populated for touch pointers too.** The relative
   virtual stick exists for a trackpad, and without a `pointerType === "mouse"`
-  filter every thumb sliding across the on-screen d-pad drove it: holding *left*
-  while dragging *right* aimed right, 180° from what the thumb was pressing. A
-  touchscreen already has an absolute thumb pad for that layer.
+  filter every thumb sliding across the move pad drove it: holding *left* while
+  dragging *right* aimed right, 180° from what the thumb was pressing. A
+  touchscreen already has an absolute aim drag for that layer.
 - **A probe that drives touch UI with `page.mouse` is measuring the wrong
   device.** Playwright's mouse reports `pointerType: "mouse"` even inside a
   `hasTouch` context, so it cannot see a bug in anything that branches on that
   field — and both touch bugs above passed a green probe until it was rewritten
   onto CDP `Input.dispatchTouchEvent`.
-- **A gesture test needs the press and the travel to disagree.** Dragging toward
-  a d-pad arm pushes a broken virtual stick the same way that arm points, so the
-  correct build and the broken one give the same answer. Sliding *along* an arm —
-  holding left while travelling right — is what separates them.
+- **A gesture test needs the press and the travel to disagree.** A tap at the
+  centre of a button agrees with a drag from the centre, and an absolute model
+  and a relative one give the same answer; only a press *off* centre separates
+  them. The deck probe's off-centre gun and item taps are the current case: the
+  same thumb position must not become an aim.
 - **The aim needs to be drawn when there is no cursor to look at.** A mouse
   player's cursor is the reticle; a controller has none, and facing is one bit —
   so the Contra aim and 360° of fine aim all collapsed into "left or
@@ -455,22 +457,73 @@ bigger one, out of step with the hand. `sheetDrawsBlade` (a packed sheet with a
   being exactly the case facing cannot show. Draw it from the **drawn** position
   like the nameplates, or the beam detaches from its fighter by however much the
   render smoother is hiding.
-- **On the deck, the aim stick is the fire button in gun mode.** A phone's right
-  thumb lives on the aim pad, and there is no spare finger for the fire button
-  on the face cluster — so while the stance is gun, `Input` reads "aim stick
-  held" as "attack held" and a phone gun becomes a twin-stick shooter. Two
-  limits keep it honest: it is the *on-screen* stick only (a physical right
-  stick has a trigger to hand), and *gun mode* only (in sword mode a touch of
-  the pad must not slash). It travels as the `attack` button in the intent, so
-  the simulation never learns a thumb made it.
-- **A deck that draws controls per stance must own the stance change.** `Input`
-  owns `swordStance`, so the deck listens for `stance-changed` rather than
-  guessing — and a button that stops being drawn releases its code, or a
-  fighter would keep blocking while the deck it blocked with has gone away.
-  The drawing of a control and the semantics of a control must never diverge:
-  the left stick is drawn as a round analog pad precisely because it *is* one,
-  and it was drawn as a d-pad for months while behaving analog, which read as
-  a d-pad.
+- **One thumb, one hold.** The deck's split is by hand, not by console
+  convention: the left thumb moves and defends, the right wields and aims. The
+  old deck gave one thumb aim, slash, jump, block, uppercut and item, which made
+  the butterfly (guard + slash at 6Hz), a charged Massive + jump (the plunge
+  bomb), charge + guard and retreat-fire *physically impossible*. Guard belongs
+  on the left, opposite the weapon; dash belongs on the left because dash-slash
+  must not take the weapon thumb off the weapon.
+- **The deck speaks actions, not pad codes.** A painted control is already a
+  binding — the button that says Guard *is* the guard. Emitting `Pad6` meant a
+  rebind of block to `Pad1` silently turned the deck's Guard into the ultimate
+  and left guard unreachable. The deck joins at `actionDown`, beside the AI
+  brain's intents; physical devices keep the code alphabet.
+- **A tap jump is a half-hop unless the deck latches it.** The simulation cuts a
+  jump on release, and a 70-100ms phone tap produced 76px of a 136px jump. The
+  deck holds the jump action for 320ms after the thumb leaves — short of the
+  389ms apex — so a tap is ~93% of a full jump (127px measured). The latch is a
+  floor: a short hop is not available from a tap.
+- **A second jump tap inside the latch is a double jump, not a no-op.** The
+  latch keeps the action down, so a re-press has to *flush* the pending release
+  and re-press a couple of fixed steps later. A false/true in the same JS task
+  is one held button, and a held jump is not a double jump.
+- **A control that changes stance must release what it was holding.** Gun stance
+  disables Guard and Uppercut; a native disabled button can swallow its own
+  pointerup, leaving the code down forever. The deck releases both on the
+  stance change and remounts its controls whenever input is suspended.
+- **The gun's trigger is its aim, and the drag starts where the thumb lands.**
+  A press-drag on the weapon button in gun stance fires and aims at once; the
+  fine layer wins immediately, because a touch drag is a fresh vector rather
+  than a physical stick already in the hand. Measuring from the button's centre
+  made a thumb landing near an edge an arbitrary aim — the item tap threw at the
+  floor, the ultimate at the sky. A tap is zero displacement and uses the
+  facing. This is what lets a two-thumb player run left and shoot right.
+- **One aim channel, one owner — and one per press.** A gun drag, an item throw
+  and an ultimate cast all write the same absolute aim, and the item/ultimate
+  clear it on a timer. Without an owner, the ultimate's release timer wiped a
+  gun drag that started 100ms later; with one owner per *control* rather than
+  per *press*, a second item press's drag was wiped by the first press's pulse.
+  Each press takes a fresh token; a timed null only clears its own.
+- **A cancelled touch is not a release.** The ultimate casts on the server's
+  release edge, so an OS `pointercancel` that emitted `ultimate: false` spent a
+  minute of charge. The deck keeps the server's hold and the button armed; the
+  next press/release casts. (An item's cancel simply drops the throw.)
+- **A button that is drawn must be a fingertip.** No deck target below 44px —
+  including the first-run coach's *Got it* — no two hit areas overlapping, the
+  weapon button 96px+, the move pad 120x130+, and every cluster inside the
+  safe-area insets. The old face cluster had a 38px item overlapping Jump by
+  6px, so a jump tap could spend a grenade.
+- **A first-run card must not sit on the controls.** The coach was a 360x135
+  card at the bottom centre with `pointer-events: auto`; on a 568x320 it covered
+  the movement rocker, so a new player's first 14 seconds were unplayable. It is
+  a top toast now, `pointer-events: none` except its button, two/three stacked
+  lines, and it leaves on the first deliberate touch.
+- **The deck is an overlay, not a layout.** The 4:3 canvas keeps the page; the
+  hands float over the bottom corners, and the middle of the arena stays clear.
+  In portrait the canvas belongs at the top and the thumbs at the bottom, not a
+  plastic slab half-way up the phone with the bottom sixth empty.
+- **A hand that hides the fighter gets out of the way.** A one-screen room has
+  no camera scroll, so a fighter at the edge stands under the move pad or the
+  kit column. `HudState.playerScreenX/Y` drives a fade of that hand to just under half;
+  the buttons stay hit-testable and return when the feet move. An opaque hand
+  over the player's own feet is a lost exchange that no button size fixes.
+- **A menu button that opens on pointerdown opens the page underneath.** The
+  compatibility click after `touchend` lands on whatever mounted under the
+  finger; in portrait that was Heroes, so the only way off the deck went to the
+  wrong page. Open a tick after `pointerup` — `click` alone is not synthesised
+  while another thumb holds a button — and suspend/remount the deck with the
+  menu.
 
 ## Projectiles
 
@@ -902,14 +955,14 @@ not made of kills.
   directly, so every binding in the game can be wrong while `diagnose.ts`
   reports PASS — the same blind spot that made `aim-probe.ts` necessary.
   `scripts/controls-probe.ts` is the instrument for this one, and
-  `scripts/pad-probe.ts` for the controller and the on-screen deck.
+  `scripts/pad-probe.ts` for the controller and `scripts/deck-probe.ts` for the on-screen deck.
 - **A polled API can be stubbed; an evented one has to be driven.** Playwright
   cannot press a physical gamepad button, but the Gamepad API is `getGamepads()`
   returning a fresh snapshot — so an init script replacing it is *genuinely
   equivalent* from the game's point of view, on the same schedule with the same
   shape. That is what makes controller mode measurable at all.
-- **The on-screen gamepad is DOM, so tap it.** Emitting its EventBus messages
-  from a probe proves the wiring and nothing else; a probe that taps the actual
+- **The on-screen deck is DOM, so tap it.** Emitting its EventBus messages from
+  a probe proves the wiring and nothing else; a probe that taps the actual
   control proves the geometry, the pointer capture and the layout too — the same
   argument as `controls-probe.ts` pressing real keys rather than calling
   `Input`.
@@ -922,8 +975,9 @@ not made of kills.
   100%` did not save it either: the parent's height was auto, so the percentage
   resolved to nothing and a short window cropped the arena instead of shrinking
   it. The box is `inset:0` for the HUD, so its container units are the arena's
-  logical pixels. On a phone it is full-width in portrait and the deck takes the
-  rest; in landscape the deck floats over the letterbox margins.
+  logical pixels. On a phone it is full-width at the top in portrait; the deck is
+  a **fixed overlay** over the page, not a second layout, and in landscape the
+  hands float over the letterbox margins.
 - **The box is pinned in CSS pixels, because browser zoom must scale it.** A box
   sized in `vw`/`dvh` re-fits at every zoom level: the arena fills the window
   exactly as it did at 100%, so Ctrl/Cmd +/- changes nothing a player can see and
@@ -934,11 +988,13 @@ not made of kills.
   container (`is-zoomed`); zoomed out it letterboxes. `--arena-max-height`
   (1200px, 2x the authored 600) caps the fitted size, so a 4K monitor does not
   turn a 4:3 game into a wall. `scripts/pad-probe.ts` measures the fit on a
-  desktop window and on a phone.
-- **A setting a player cannot undo is a trap.** The on-screen gamepad is reached
-  by a setting and left by the Esc menu, and a phone has no Escape key — so the
-  deck carries its own menu button. Anything that can only be turned on needs the
-  same treatment.
+  desktop window; `scripts/deck-probe.ts` measures it on six phone shapes.
+- **A setting a player cannot undo is a trap.** The on-screen deck is reached by
+  a setting and left by the Esc menu, and a phone has no Escape key — so the deck
+  carries its own menu button. But the button used to live *inside* the deck:
+  turning the deck Off (or switching Aiming to Mouse) took the only way back
+  away. The bare deck now keeps a Menu pill on screen whenever a finger is the
+  primary pointer, and turning the deck off is a probe gate.
 
 ## Rooms
 

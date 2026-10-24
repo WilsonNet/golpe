@@ -7,9 +7,12 @@
  * on release — and detecting edges in two places would mean the client and the
  * server disagreed about what a given frame's input was.
  *
- * **Four devices, one alphabet.** Keys, mouse buttons, pad buttons and the
- * on-screen deck all reduce to code strings in one namespace, so an action asks
- * "is any of my codes held" and gets one answer. See `Bindings.ts`.
+ * **Three devices speak codes; the deck speaks actions.** Keys, mouse buttons
+ * and pad buttons all reduce to code strings in one namespace, so an action asks
+ * "is any of my codes held" and gets one answer — see `Bindings.ts`. The
+ * on-screen deck joins at the action layer instead: a painted button that says
+ * Guard *is* the guard, so rebinding a pad button must not silently change what
+ * it does. Both roads meet at `actionDown`, and the simulation sees one intent.
  *
  * **Two ways to answer "where is this fighter aiming".** With a cursor, the
  * angle is the vector to a point on the screen. Without one — a pad, a trackpad,
@@ -24,6 +27,7 @@ import { bodyCentre } from "../render/ArenaRenderer";
 import { NEUTRAL_INTENT, type PlayerIntent } from "../simulation/Physics";
 import { AimController, type AimReport } from "./Aim";
 import { type Action, bindings, mouseCode } from "./Bindings";
+import { DECK_EVENTS, type DeckAction } from "./Deck";
 import { GamepadSource } from "./Gamepad";
 import { inputSettings } from "./Scheme";
 
@@ -255,23 +259,19 @@ export class Input {
 	private lastScheme = inputSettings.scheme;
 
 	/**
-	 * Buttons the on-screen gamepad is holding, in the same code namespace.
+	 * Actions the on-screen deck is holding.
 	 *
-	 * Separate from `down` because a finger can leave the deck's DOM without ever
-	 * delivering a pointerup the canvas would see, and a stuck key set is how a
-	 * fighter ends up swinging at nothing forever.
+	 * The deck speaks actions rather than pad codes — a painted control is
+	 * already a binding, and emitting `Pad6` made a rebind silently change what
+	 * the button labelled Guard did. It reaches the same `actionDown` question
+	 * as every other device, so the simulation still cannot tell a thumb from a
+	 * key. See `Deck.ts`.
 	 */
-	private readonly virtual = new Set<string>();
-	/** The on-screen thumb pad, as a unit vector, or null while nobody holds it. */
+	private readonly deck = new Set<Action>();
+	/** A dash asked for by the deck's dash button, in the direction it chose. */
+	private deckDash = 0;
+	/** The deck's aim drag, as a unit vector, or null while nobody holds one. */
 	private touchAim: { x: number; y: number } | null = null;
-	/**
-	 * The on-screen cross, as a raw unit vector, or null while nobody holds it.
-	 *
-	 * Separate from `touchAim` because the cross is the Contra layer — it *moves*
-	 * the fighter too — while the thumb pad is the fine layer that overrides it.
-	 * Both are analog, because a thumb is.
-	 */
-	private touchContra: { x: number; y: number } | null = null;
 
 	/** Cursor in world coordinates. */
 	get pointerX(): number {
@@ -318,9 +318,9 @@ export class Input {
 		// forever, and the fighter would keep swinging at nothing.
 		const clearAll = () => {
 			this.down.clear();
-			this.virtual.clear();
+			this.deck.clear();
+			this.deckDash = 0;
 			this.touchAim = null;
-			this.touchContra = null;
 			this.mouseDeltaX = 0;
 			this.mouseDeltaY = 0;
 			this.aim.releaseFine();
@@ -338,12 +338,12 @@ export class Input {
 			// **A finger is not a trackpad.**
 			//
 			// The relative layer exists for a laptop with no controller. A touchscreen
-			// has the deck's own thumb pad for the same job — and `movementX` is
+			// has the deck's own aim drag for the same job — and `movementX` is
 			// populated for touch pointers too, so without this filter every thumb
-			// drag on the d-pad also shoved the virtual stick: pressing *up* on the
-			// cross reported an aim of 76° with the fine layer fully engaged, because
-			// the thumb's travel across the glass had overridden the direction the
-			// thumb was pressing.
+			// drag on the move pad also shoved the virtual stick: pressing *up* on
+			// the pad reported an aim of 76° with the fine layer fully engaged,
+			// because the thumb's travel across the glass had overridden the
+			// direction the thumb was pressing.
 			//
 			// Kept whatever the scheme is, so switching to controller mode mid-match
 			// does not need the player to jiggle the mouse before it responds.
@@ -360,7 +360,7 @@ export class Input {
 			// The listener is on `window` because a drag that starts on the canvas has
 			// to keep being tracked when it leaves — but that also meant *every* tap
 			// anywhere on the page counted as `Mouse0`, and `Mouse0` is attack. On a
-			// phone the on-screen gamepad is DOM sitting right there, so a thumb on
+			// phone the on-screen deck is DOM sitting right there, so a thumb on
 			// Jump swung the sword as well as jumping, and so did the stance pills,
 			// the d-pad and the menu button. Every button was a slash.
 			//
@@ -396,33 +396,36 @@ export class Input {
 		const offSuspend = EventBus.on("input-suspended", ((on: boolean) =>
 			suspend(on)) as never);
 
-		// The on-screen gamepad talks over the EventBus, the same bridge the rest of
-		// the React overlay uses. It sends *codes*, not actions, so a thumb on the
-		// deck's A button is bound and rebound exactly like a key — and the deck
-		// itself has no idea what any of its buttons do.
-		const offVirtual = EventBus.on("virtual-button", ((payload: {
-			code: string;
-			down: boolean;
-		}) => {
-			if (this.suspended) return;
-			if (payload.down) {
-				if (!this.virtual.has(payload.code)) {
-					this.virtual.add(payload.code);
-					this.notePress(bindings.actionFor(payload.code));
-				}
-			} else {
-				this.virtual.delete(payload.code);
-			}
-		}) as never);
+		// The deck's aim drag — the gun's trigger, the item's throw and the
+		// ultimate's cast all use it. It is the absolute fine layer, exactly what
+		// a physical right stick feeds, so the simulation still receives one angle
+		// with no provenance.
 		const offVirtualAim = EventBus.on("virtual-aim", ((
 			vector: { x: number; y: number } | null,
 		) => {
 			this.touchAim = this.suspended ? null : vector;
 		}) as never);
-		const offVirtualContra = EventBus.on("virtual-contra", ((
-			vector: { x: number; y: number } | null,
+
+		// The on-screen deck speaks actions. A press is a press edge for the
+		// actions that own one (stance, and the double-tap dash that follows the
+		// movement actions), and held state for everything else — exactly like a
+		// key. The simulation still sees one `PlayerIntent`, with no idea a thumb
+		// produced it.
+		const offDeckAction = EventBus.on(DECK_EVENTS.action, ((
+			payload: DeckAction,
 		) => {
-			this.touchContra = this.suspended ? null : vector;
+			if (this.suspended) return;
+			if (payload.down) {
+				if (this.deck.has(payload.action)) return;
+				this.deck.add(payload.action);
+				this.notePress(payload.action);
+			} else {
+				this.deck.delete(payload.action);
+			}
+		}) as never);
+		const offDeckDash = EventBus.on(DECK_EVENTS.dash, ((direction: number) => {
+			if (this.suspended) return;
+			this.deckDash = direction < 0 ? -1 : 1;
 		}) as never);
 
 		this.disposers.push(
@@ -434,20 +437,19 @@ export class Input {
 			() => window.removeEventListener("pointerup", pointerUp),
 			() => canvas.removeEventListener("contextmenu", contextMenu),
 			offSuspend,
-			offVirtual,
 			offVirtualAim,
-			offVirtualContra,
+			offDeckAction,
+			offDeckDash,
 		);
 	}
 
 	isDown(code: string): boolean {
-		return (
-			this.down.has(code) || this.virtual.has(code) || this.padDown.has(code)
-		);
+		return this.down.has(code) || this.padDown.has(code);
 	}
 
 	/** True while any code bound to `action` is held, on any device. */
 	actionDown(action: Action): boolean {
+		if (this.deck.has(action)) return true;
 		for (const code of bindings.codesFor(action)) {
 			if (this.isDown(code)) return true;
 		}
@@ -457,23 +459,18 @@ export class Input {
 	/**
 	 * Is the attack / fire button held?
 	 *
-	 * The ordinary path is any code bound to the attack action. There is one
-	 * deck-only extra path on top: on a phone, the right thumb lives on the aim
-	 * stick, and in gun mode a phone has no spare finger for the fire button — so
-	 * the aim stick is the trigger too. Touching it both aims (the fine layer)
-	 * and fires, which is what makes a phone gun a twin-stick shooter rather than
-	 * a trap where aiming and firing are mutually exclusive.
+	 * The ordinary path is any code bound to the attack action, plus the deck's
+	 * painted fire button. The old deck made *touching the aim stick* mean fire
+	 * in gun stance, because the right thumb lived there and there was no spare
+	 * finger for a trigger. The weapon button is now the trigger and the aim
+	 * field at once — a press-drag on it aims and fires — so there is no
+	 * invisible second path that can leak a round while a thumb rests.
 	 *
-	 * Deliberately the on-screen stick only, and gun mode only. A *physical*
-	 * right stick has a trigger to hand, so it must not fire by itself; and in
-	 * sword mode a touch of the aim stick must not slash. Like every other input
-	 * fact here, this travels as `attack` in the intent — the simulation never
-	 * learns that a thumb made it, so it cannot desync anything.
+	 * It travels as `attack` in the intent like any other button; the simulation
+	 * never learns a thumb made it.
 	 */
 	private attackDown(): boolean {
-		if (this.actionDown("attack")) return true;
-		if (this.touchAim === null) return false;
-		return inputSettings.scheme === "controller" && !this.swordStance;
+		return this.actionDown("attack");
 	}
 
 	/**
@@ -494,27 +491,28 @@ export class Input {
 	 * Stance and the AI toggle are edge-triggered here because they are not part
 	 * of `PlayerIntent`'s per-tick button state — stance is absolute and the
 	 * toggle is a debug switch, so neither can be re-derived by the simulation.
+	 * The deck reads the stance back from `hud-state` (the snapshot's answer),
+	 * not from a second event that could disagree with the simulation.
 	 */
 	private notePress(action: Action | undefined) {
 		if (action === undefined) return;
 		if (action === "left") this.dashGesture.press(-1, performance.now());
 		if (action === "right") this.dashGesture.press(1, performance.now());
-		if (action === "sword") {
-			this.swordStance = true;
-			// The deck draws different buttons in each stance, and the stance is
-			// owned here — so a press that flips it tells React over the same
-			// bridge the rest of the overlay talks over.
-			EventBus.emit("stance-changed", true);
-		}
-		if (action === "gun") {
-			this.swordStance = false;
-			EventBus.emit("stance-changed", false);
-		}
+		if (action === "sword") this.swordStance = true;
+		if (action === "gun") this.swordStance = false;
 		if (action === "toggleAi") this.onToggleAi?.();
 	}
 
 	/** Take the dash direction, if one was gestured since the last call. */
 	consumeDash(): number {
+		// The deck's dash button is an explicit one-shot and wins over a
+		// double-tap that happened to land in the same step; both are the same
+		// impulse by the time the simulation sees it.
+		if (this.deckDash !== 0) {
+			const direction = this.deckDash;
+			this.deckDash = 0;
+			return direction;
+		}
 		return this.dashGesture.consume();
 	}
 
@@ -569,13 +567,14 @@ export class Input {
 		}
 
 		// The Contra layer: the same buttons that move you also aim you, which is
-		// what makes aiming cost nothing extra to hold. An analog source — the left
-		// stick, or a thumb on the deck's cross — aims at the angle it is pushed,
-		// which is more than eight directions; only the d-pad and the arrow keys
-		// are stuck with the eight their {-1, 0, 1} pairs can name. The analog
-		// source wins while it is being held, because it is a superset of the
-		// direction its codes resolve to.
-		const contraVector = this.touchContra ?? frame.contra;
+		// what makes aiming cost nothing extra to hold. A physical left stick is
+		// analog, so it aims at the angle it is pushed rather than at the nearest
+		// of eight; a d-pad and the arrow keys are stuck with eight. The deck's
+		// left hand is a one-axis rocker, so its horizontal actions land in the
+		// same fallback and a swordfighter faces the way it walks. The gun and the
+		// throwables get their angle from the button that fires them (the fine
+		// layer below), which is what makes retreat-fire possible with two thumbs.
+		const contraVector = frame.contra;
 		if (contraVector) {
 			this.aim.setContra(contraVector.x, contraVector.y, facing);
 		} else {
@@ -593,7 +592,9 @@ export class Input {
 		// distinguishes the two.
 		const absolute = frame.fine ?? this.touchAim;
 		if (absolute) {
-			this.aim.setFine(absolute.x, absolute.y);
+			// A thumb drag is a fresh vector and wins at once; a physical stick is
+			// already in the hand and keeps its 260ms handover.
+			this.aim.setFine(absolute.x, absolute.y, frame.fine === null);
 		} else if (this.hadAbsoluteFine) {
 			// The stick was let go. Say so exactly once, or the aim controller would
 			// keep seeing it pushed and hold the override open for its full window.

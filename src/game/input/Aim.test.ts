@@ -167,7 +167,7 @@ describe("AimController", () => {
 	 * The analog Contra aim. A d-pad can only feed {-1, 0, 1}, which resolves to
 	 * eight directions; an analog stick pushes at any angle and the aim follows
 	 * it — 21.8° stays 21.8° instead of snapping to the diagonal at 45°. Nothing
-	 * upstream quantises it anymore: `Gamepad` and the on-screen cross hand the
+	 * upstream quantises it anymore: `Gamepad` and the deck's one-axis rocker hand the
 	 * raw deflection straight in.
 	 */
 	it("aims at whatever angle an analog stick is pushed, not the nearest of eight", () => {
@@ -292,5 +292,28 @@ describe("AimController", () => {
 		aim.update(16);
 		// Ramping in from where the decay got to, not from zero.
 		expect(aim.report().blend).toBeGreaterThan(partway);
+	});
+});
+
+describe("the deck's immediate fine aim", () => {
+	it("wins on the first frame when a thumb drag is deliberate", () => {
+		// A touch drag is a fresh vector, not a stick already in the hand: the
+		// first shot of a burst must leave on the angle the thumb chose, not 260ms
+		// of handover later.
+		const aim = new AimController();
+		aim.setContra(1, 0, 1);
+		aim.setFine(0, -1, true);
+		expect(aim.report().blend).toBe(1);
+		expect(deg(aim.angle)).toBeCloseTo(UP, 4);
+	});
+
+	it("still eases back after the thumb lets go", () => {
+		const aim = new AimController();
+		aim.setContra(1, 0, 1);
+		aim.setFine(0, -1, true);
+		aim.setFine(0, 0);
+		for (let i = 0; i < 20; i++) aim.update(16);
+		expect(aim.overriding).toBe(false);
+		expect(deg(aim.angle)).toBeCloseTo(RIGHT, 3);
 	});
 });
