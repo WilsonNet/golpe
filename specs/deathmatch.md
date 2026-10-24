@@ -170,6 +170,15 @@ A human types a name before their client connects, and it is remembered in
   they travel in the snapshot beside the frags for the same reason those do: a
   client cannot derive any of them from prediction, and a scoreboard row that
   quietly stayed at zero would be worse than no row.
+  **The Ping column is the link the fight is actually using.** The server sends
+  each human a bare timestamp over the game's own WebRTC data channel once a
+  second, the client echoes it untouched, and the server reports the median of
+  the last five round trips in a one-second `pings` message. No HTTP request, no
+  CORS preflight, no second connection, and nothing added to the 20Hz snapshot.
+  It is a *live scoreboard* column only — the podium omits it, because the match
+  is over and its last reading is not worth carrying into the winner screen.
+  Bots and the training dummy show `—`, not `0`: they have no channel, so they
+  have no round trip to report.
 - **The ending is four beats, and the podium is the last one.** First: a few
   seconds of breathing — the arena holds the last moment, and nothing is said
   about it. Then the **victory card** (VICTORY or DEFEAT, who it belongs to,

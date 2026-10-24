@@ -62,6 +62,27 @@ export function useMatchOver(): MatchOverMsg | null {
 }
 
 /**
+ * The server's latest round trip per fighter, ms.
+ *
+ * Updated once a second — not on the snapshot — so the scoreboard can hold it
+ * open without a 20Hz state churn for a number that moves at dial-up speed.
+ * Bots are simply absent: they have no channel to measure, and the table draws
+ * a dash rather than inventing a latency for them.
+ */
+export function usePings(): Record<string, number> {
+	const [pings, setPings] = useState<Record<string, number>>({});
+
+	useEffect(
+		() =>
+			EventBus.on("pings", ((next: Record<string, number>) =>
+				setPings(next)) as never),
+		[],
+	);
+
+	return pings;
+}
+
+/**
  * True while a key is held.
  *
  * `keyup` alone is not enough: switching windows mid-hold never delivers one, so

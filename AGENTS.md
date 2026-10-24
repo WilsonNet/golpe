@@ -224,6 +224,12 @@ One line each; the war story behind every one is in
 - **Every fighter is simulated at the present instant.** Remotes carry their last
   known input forward and are rewound on each snapshot; nothing is interpolated
   into the past. Rollback depth is the local player's pending input count.
+- **Ping is a round trip on the game's own data channel, never a `fetch`.** The
+  fight's inputs and snapshots travel one WebRTC channel, so that is the link the
+  scoreboard must report; an HTTP timing request measures a different connection,
+  and a cross-origin one that is not a "simple request" pays a CORS preflight
+  before its clock even starts. One tiny unreliable probe each way per second is
+  the whole cost.
 - **Anything drawn from a position the simulation did not produce is
   depenetrated first.** The render smoother offsets sprites off their bodies on
   purpose, and that offset can put one inside a ledge.
@@ -386,6 +392,7 @@ tsx scripts/menu-probe.ts                            # the root menu: every clic
 tsx scripts/movelist-probe.ts                        # the move list: every preview lands its move on the target dummies
 tsx scripts/dash-probe.ts                            # double-tap dash delivery, at a forced frame rate
 tsx scripts/connection-probe.ts                      # the server dies mid-match: the lost-connection prompt, and Rejoin
+tsx scripts/ping-probe.ts                            # the scoreboard's ping: data-channel RTT, shaped vs not, zero HTTP requests
 tsx scripts/screens-probe.ts                         # ?screen=N room: spawn spread + follow camera
 tsx scripts/ultimate-probe.ts                        # the black hole: hold to aim, release to cast, freeze, capture
 tsx scripts/potg-probe.ts                            # play of the game: the reel, the camera edit, the podium waiting

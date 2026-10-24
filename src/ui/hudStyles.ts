@@ -148,9 +148,9 @@ export const HUD_CSS = `
 	border: 1px solid rgba(255, 255, 255, 0.2);
 	border-radius: 10px;
 	padding: 20px 24px;
-	/* Six columns now (frags, deaths, damage, denies, blocked) — the four
-	   original ones fit 460px, the stat rows want a hair more. */
-	min-width: 580px;
+	/* Eight columns now, ping included — the four original ones fit 460px,
+	   and every stat column since has wanted a hair more. */
+	min-width: 640px;
 	max-height: 88vh;
 	overflow-y: auto;
 }
@@ -198,6 +198,20 @@ export const HUD_CSS = `
 	font-size: 10px;
 	opacity: 0.5;
 	margin-left: 6px;
+}
+/* The link quality, not a stat: quiet while healthy, amber once it costs
+   reactions, red when the input is visibly fighting the network. */
+.gd-ping {
+	min-width: 4.5em;
+}
+.gd-ping-none {
+	opacity: 0.35;
+}
+.gd-ping-warn {
+	color: #ffd166;
+}
+.gd-ping-bad {
+	color: #ff5d5d;
 }
 .gd-dead {
 	opacity: 0.45;

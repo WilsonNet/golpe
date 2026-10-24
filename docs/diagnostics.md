@@ -200,6 +200,7 @@ for occasional misprediction and a trade has to be measured or it is a preferenc
 | `rollback.teleports` | announced discontinuities — respawns and spawns. Not errors |
 | `rollback.primarySwitches` | **check this first** when `enemy_x`/`enemy_y` look wrong |
 | `inputAck` | send → first snapshot acknowledging it, ms (p50/p95/max). ~20ms on localhost; RTT + ~30ms on a real link |
+| `pings` | server-measured median round trip per human, ms — the scoreboard's Ping column (`scripts/ping-probe.ts`). Bots are absent |
 | `link` | the **server's** view of this client's input stream (`net`): `lost` (seqs it simulated past without — must be 0), `duplicates` (redundancy at work), `starved`, `overflow`, `throttled`, queue `avgDepth`/`maxDepth` |
 | `clockSteer` | snapshots the step clock ran fast / normal / slow to hold the server's queue at 0-1 spare inputs |
 | `netsim` | what `?netsim=` was asked for, and how many messages it shaped and dropped |

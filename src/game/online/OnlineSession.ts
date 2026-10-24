@@ -61,6 +61,7 @@ import type {
 	MatchOverMsg,
 	MatchStatus,
 	MeleeEventMsg,
+	PingsMsg,
 	RootedMsg,
 	RosterEntry,
 	RoundLiveMsg,
@@ -336,6 +337,14 @@ export class OnlineSession {
 	/** The open Death Blossom, copied from the newest snapshot. */
 	private latestBlossom: Blossom | null = null;
 	private _matchStatus: MatchStatus | undefined;
+	/**
+	 * The server's median round trip per human fighter, ms.
+	 *
+	 * Presentation only — nothing simulates with it. It arrives once a second
+	 * instead of riding the 20Hz snapshot, and is kept here so the diagnostic
+	 * report and the scoreboard read the same number. See `online/ping.ts`.
+	 */
+	private _pings: Record<string, number> = {};
 	private _matched = false;
 
 	// ---- the ultimate ----
@@ -428,6 +437,11 @@ export class OnlineSession {
 
 	get matchStatus(): MatchStatus | undefined {
 		return this._matchStatus;
+	}
+
+	/** The latest server-measured round trips, by fighter id. */
+	get pings(): Readonly<Record<string, number>> {
+		return this._pings;
 	}
 
 	/** The room the server put this client in. */
@@ -798,6 +812,7 @@ export class OnlineSession {
 				onNet: (msg) => {
 					this.serverLink = msg;
 				},
+				onPings: (msg) => this.onPings(msg),
 				onConnectionLost: () => this.callbacks.onConnectionLost(),
 			},
 			join,
@@ -836,6 +851,25 @@ export class OnlineSession {
 		this.nameById.clear();
 		for (const entry of entries) this.nameById.set(entry.id, entry);
 		EventBus.emit("roster", entries);
+	}
+
+	/**
+	 * Adopt the server's latency readings and hand them to the HUD.
+	 *
+	 * Emitted straight to the event bus, like the roster: a ping is a reading
+	 * about the link, not a simulation input, so it never enters `tickPlayer`
+	 * and nothing has to roll it back. Values are re-checked here because the
+	 * number is drawn as text — a malformed one would put `NaNms` on the
+	 * scoreboard.
+	 */
+	private onPings(msg: PingsMsg) {
+		const pings: Record<string, number> = {};
+		for (const [id, ms] of Object.entries(msg?.pings ?? {})) {
+			if (typeof ms !== "number" || !Number.isFinite(ms) || ms < 0) continue;
+			pings[id] = Math.round(ms);
+		}
+		this._pings = pings;
+		EventBus.emit("pings", pings);
 	}
 
 	private dropFighter(id: string) {
@@ -1169,6 +1203,8 @@ export class OnlineSession {
 			inputAck: percentiles(this.ackMs),
 			/** The server's side of our input stream. */
 			link: this.serverLink,
+			/** Server-measured round trip per human fighter, ms. */
+			pings: { ...this._pings },
 			/** `?netsim=` — what the shaped link was asked to be, and what it did. */
 			netsim: this.manager.netsim
 				? {

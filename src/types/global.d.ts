@@ -134,6 +134,8 @@ export interface MatchStateSnapshot {
 		maxSnapshotBytes: number;
 		estBytesPerSec: number;
 		rollback: RollbackSummary;
+		/** Server-measured round trip per human, ms, by fighter id. */
+		pings: Record<string, number>;
 	} | null;
 	/** How many 800px screens wide the arena is (`?screen=N`). */
 	worldScreens: number;

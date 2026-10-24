@@ -12,6 +12,8 @@ import {
 	type MatchMessage,
 	type MatchOverMsg,
 	type NetReportMsg,
+	type PingMsg,
+	type PingsMsg,
 	type PlayerInput,
 	RELIABLE,
 	type RespawnMsg,
@@ -73,6 +75,8 @@ export interface OnlineHandlers {
 	onRoomLocked: (roomId: string) => void;
 	/** The server's view of this client's input stream. Diagnostics only. */
 	onNet: (msg: NetReportMsg) => void;
+	/** Round trips the server measured for everyone it can time. */
+	onPings: (msg: PingsMsg) => void;
 	/** The link died without this client asking it to. Nothing more will arrive. */
 	onConnectionLost: () => void;
 }
@@ -321,6 +325,21 @@ export class OnlineManager {
 			handlers.onNet(data as NetReportMsg);
 		});
 
+		// The scoreboard's latency probe. Echoed straight back and unreliably,
+		// like the probe itself: there is nothing to queue, nothing to persist
+		// and nothing the simulation may see. A dropped echo costs one sample
+		// that the next second replaces. See `online/ping.ts` for why this is
+		// not an HTTP request.
+		channel.on("ping", (data: unknown) => {
+			const probe = data as PingMsg | null;
+			if (typeof probe?.t !== "number") return;
+			channel.emit("pong", probe);
+		});
+
+		channel.on("pings", (data: unknown) => {
+			handlers.onPings(data as PingsMsg);
+		});
+
 		channel.on("round-reset", () => {
 			handlers.onRoundReset();
 		});
@@ -451,7 +470,17 @@ export class OnlineManager {
  * The server's unreliable messages — the ones a real link can lose. Everything
  * else it sends is reliable and is only delayed by the shaper.
  */
-const LOSSY_INCOMING = new Set(["state", "roster", "respawn", "net"]);
+const LOSSY_INCOMING = new Set([
+	"state",
+	"roster",
+	"respawn",
+	"net",
+	// The latency probe and its summary are unreliable by design: a lost one is
+	// replaced by the next second's, and a retransmit would measure the retry
+	// rather than the link.
+	"ping",
+	"pings",
+]);
 
 /**
  * Route every message this channel sends or hears through the shaper.

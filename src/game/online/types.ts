@@ -684,6 +684,33 @@ export interface RosterEntry {
 }
 
 /**
+ * The server's timing probe, echoed untouched by the client.
+ *
+ * It rides the game's WebRTC data channel rather than an HTTP request: the
+ * channel is already open, it is the path the fight's inputs and snapshots
+ * travel, and a cross-origin `fetch` would pay CORS rules (and a preflight for
+ * anything that is not a simple request) to measure a different connection.
+ * The server owns the clock, so no clock skew can bend the number.
+ */
+export interface PingMsg {
+	/** The server's clock when the probe was sent, ms. Echoed unchanged. */
+	t: number;
+}
+
+/**
+ * Round-trip time per human fighter, for the scoreboard's ping column.
+ *
+ * Its own message, once a second, rather than a field on every `SnapshotPlayer`:
+ * a latency reading is presentation, it changes far slower than the simulation,
+ * and sixteen entries at 20Hz would spend twenty times the bandwidth on a number
+ * nobody can read that fast. Bots are absent — they have no channel to measure.
+ */
+export interface PingsMsg {
+	/** Fighter id -> median recent round trip, ms. */
+	pings: Record<string, number>;
+}
+
+/**
  * `net`: one client's own input stream, as the server saw it arrive. Sent to
  * that client alone, once a second, cumulative since it joined. Diagnostics
  * only — nothing simulates with it. See `server/InputLink.ts`.

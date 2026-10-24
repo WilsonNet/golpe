@@ -202,6 +202,38 @@ belong on the realtime channel.
   `PlayerPosition` and is drawn by the same systems a live fighter is. See
   [play-of-the-game.md](play-of-the-game.md).
 
+## Ping: measured on the fight's own channel
+
+The scoreboard's ping is a **round trip over the game's WebRTC data channel**,
+not an HTTP request. This is deliberate on three counts:
+
+1. **It is the path that matters.** Inputs, snapshots and the authoritative
+   answers all travel this channel. A `fetch` to `/health` or a dedicated timing
+   endpoint would time a pooled HTTP connection — a different socket, possibly a
+   different edge — and report a number the fight does not use.
+2. **There is nothing to preflight.** A cross-origin `fetch` is only free of a
+   CORS preflight when it is a *simple* request (a `GET`/`HEAD`/`POST` with only
+   CORS-safelisted headers); anything else pays an `OPTIONS` round trip before
+   the timing starts. The game channel is already open and authenticated by the
+   match itself, so the probe cannot be blocked by a policy that the game is not
+   already subject to.
+3. **It costs almost nothing.** One bare timestamp each way per human per second,
+   unreliable in both directions (a lost probe is replaced by the next one, and a
+   retransmit would measure the retry rather than the link). The summary is its
+   own once-a-second `pings` message, **not** a `SnapshotPlayer` field: sixteen
+   entries at 20Hz would spend twenty times the bandwidth on a number nobody can
+   read that fast.
+
+The server owns the clock — the client echoes `t` untouched — so clock skew
+cannot bend the number, and a client cannot improve its own reading by lying
+about its time. Recent samples are kept in a five-entry window and the **median**
+is reported, so one stalled frame, one lost echo or one NTP jump does not move
+the column. Bots and the training dummy are absent from `pings`: they have no
+channel, so the scoreboard draws `—` rather than inventing `0`.
+
+Measured with `scripts/ping-probe.ts`, including a `?netsim=` run where the
+reported round trip must rise by roughly twice the shaped one-way latency.
+
 ## Training rooms
 
 Two extra messages, and they are the *only* ones. Both are training-specific and

@@ -20,14 +20,65 @@ import {
 	useKeyHeld,
 	useMatch,
 	useMatchOver,
+	usePings,
 	useRoomId,
 } from "./useMatch";
+
+/** Where a ping stops reading as healthy and starts costing reactions, ms. */
+const PING_WARN_MS = 100;
+/** Where the link is visibly fighting the input, ms. */
+const PING_BAD_MS = 200;
+
+/**
+ * The scoreboard's ping cell, or a dash for somebody there is no link to.
+ *
+ * Bots and the training dummy are server-hosted — they have no WebRTC channel,
+ * so they have no round trip, and showing `0ms` would be a lie dressed as a
+ * good connection.
+ */
+function PingCell({
+	ping,
+	bot,
+}: {
+	ping: number | undefined;
+	bot: boolean;
+}) {
+	if (ping === undefined) {
+		return (
+			<td
+				className="gd-num gd-ping gd-ping-none"
+				title={
+					bot
+						? "Server-hosted — no network link to measure"
+						: "Waiting for the first round trip"
+				}
+			>
+				—
+			</td>
+		);
+	}
+	const tone =
+		ping > PING_BAD_MS
+			? " gd-ping-bad"
+			: ping > PING_WARN_MS
+				? " gd-ping-warn"
+				: "";
+	return (
+		<td
+			className={`gd-num gd-ping${tone}`}
+			title="Round-trip time to the game server"
+		>
+			{ping}
+		</td>
+	);
+}
 
 export function Scoreboard() {
 	const match = useMatch();
 	const over = useMatchOver();
 	const held = useKeyHeld("Tab");
 	const roomId = useRoomId();
+	const pings = usePings();
 
 	if (!match) return null;
 	// The podium is already a scoreboard, and a bigger one. Leaving the hint up
@@ -57,9 +108,14 @@ export function Scoreboard() {
 					<span>{formatClock(status.timeLimitMs - status.elapsedMs)}</span>
 				</div>
 				{teams ? (
-					<TeamTables standings={standings} myId={myId} teams={teams} />
+					<TeamTables
+						standings={standings}
+						myId={myId}
+						teams={teams}
+						pings={pings}
+					/>
 				) : (
-					<ScoreTable standings={standings} myId={myId} />
+					<ScoreTable standings={standings} myId={myId} pings={pings} />
 				)}
 			</div>
 		</div>
@@ -79,10 +135,12 @@ function TeamTables({
 	standings,
 	myId,
 	teams,
+	pings,
 }: {
 	standings: Standing[];
 	myId: string;
 	teams: NonNullable<MatchStatus["teams"]>;
+	pings: Record<string, number>;
 }) {
 	return (
 		<>
@@ -102,7 +160,7 @@ function TeamTables({
 							<span className="gd-team-rounds">{teams.scores[team] ?? 0}</span>
 						</div>
 						{rows.length > 0 ? (
-							<ScoreTable standings={rows} myId={myId} />
+							<ScoreTable standings={rows} myId={myId} pings={pings} />
 						) : null}
 					</div>
 				);
@@ -115,11 +173,18 @@ export function ScoreTable({
 	standings,
 	myId,
 	from = 1,
+	pings,
 }: {
 	standings: Standing[];
 	myId: string;
 	/** Skip the places already shown on a podium. */
 	from?: number;
+	/**
+	 * Server-measured round trips, by fighter id. Omitted on the podium: the
+	 * winner screen is about the match, not the link, and the last reading of a
+	 * match that is already over is not worth a column.
+	 */
+	pings?: Record<string, number>;
 }) {
 	const rows = standings.filter((s) => s.place >= from);
 	return (
@@ -128,6 +193,11 @@ export function ScoreTable({
 				<tr>
 					<th style={{ width: "3em" }}>#</th>
 					<th>Fighter</th>
+					{pings ? (
+						<th className="gd-num" title="Round-trip time to the game server">
+							Ping
+						</th>
+					) : null}
 					<th className="gd-num">Frags</th>
 					<th className="gd-num">Deaths</th>
 					<th className="gd-num" title="Damage dealt">
@@ -149,6 +219,7 @@ export function ScoreTable({
 							{s.name}
 							{s.bot ? <span className="gd-tag">BOT</span> : null}
 						</td>
+						{pings ? <PingCell ping={pings[s.id]} bot={s.bot} /> : null}
 						<td className="gd-num">{s.kills}</td>
 						<td className="gd-num">{s.deaths}</td>
 						<td className="gd-num">{s.damage}</td>

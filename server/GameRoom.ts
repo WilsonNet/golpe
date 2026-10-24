@@ -22,6 +22,7 @@ import {
 	type KillEventMsg,
 	type MatchStatus,
 	type MeleeEventMsg,
+	type PingsMsg,
 	type PlayerInput,
 	RELIABLE,
 	type RootedMsg,
@@ -30,6 +31,12 @@ import {
 	type SnapshotPlayer,
 	type TeamStatus,
 } from "../src/game/online/types.js";
+import {
+	addPingSample,
+	medianPing,
+	PING_INTERVAL_MS,
+	rttFrom,
+} from "../src/game/online/ping.js";
 import {
 	packAxe,
 	packIntent,
@@ -402,6 +409,14 @@ interface ConnectedPlayer {
 	starvedTicks: number;
 	/** What this client's input stream looked like on arrival. See `InputLink`. */
 	link: InputLink;
+	/**
+	 * Recent round trips measured on this fighter's own data channel, ms.
+	 *
+	 * Bots and the dummy never fill it — they have no channel to echo a probe —
+	 * so the scoreboard draws a dash for them. The median of this window is
+	 * reported once a second; see `online/ping.ts`.
+	 */
+	pingSamples: number[];
 	/** Fewest inputs left queued at any tick since the last broadcast (`q`). */
 	cushion: number;
 	/**
@@ -666,6 +681,8 @@ export class GameRoom {
 	private rosterAccumulator = 0;
 	/** ms since each client was last sent its `net` report. */
 	private netAccumulator = 0;
+	/** ms since the last latency probe. See `probeLatency`. */
+	private pingAccumulator = 0;
 
 	// ---- the ultimate ----
 	//
@@ -1335,6 +1352,7 @@ export class GameRoom {
 			lastSeq: 0,
 			starvedTicks: 0,
 			link: new InputLink(),
+			pingSamples: [],
 			cushion: Number.POSITIVE_INFINITY,
 			tickInput: null,
 			pendingInput: null,
@@ -1501,6 +1519,22 @@ export class GameRoom {
 		// the client is in a position to configure anything.
 		channel.on("training-config", (data: unknown) => {
 			this.applyTrainingConfig(data as TrainingConfigMsg | null);
+		});
+
+		// The scoreboard's latency probe, echoed by the client.
+		//
+		// It rides this channel rather than an HTTP endpoint on purpose: this is
+		// the exact path the fight's inputs and snapshots take, it is already
+		// open, and a cross-origin fetch would pay CORS (a preflight for anything
+		// that is not a simple request) to measure a *different* connection. One
+		// tiny unreliable datagram each way per second, and nothing on the
+		// snapshot. See `src/game/online/ping.ts`.
+		channel.on("pong", (data: unknown) => {
+			const player = this.players.get(id);
+			const sentAt = (data as { t?: unknown } | null)?.t;
+			if (!player || typeof sentAt !== "number") return;
+			const rtt = rttFrom(Date.now(), sentAt);
+			if (rtt !== null) addPingSample(player.pingSamples, rtt);
 		});
 
 		// Team switching: any player in a team room may move themselves. The
@@ -3120,6 +3154,42 @@ export class GameRoom {
 		this.broadcast("roster", this.roster());
 	}
 
+	/**
+	 * Ask every human to echo a timestamp.
+	 *
+	 * Bots and the training dummy have no channel, so they are skipped — the
+	 * scoreboard draws a dash for them instead of inventing a latency. The same
+	 * `t` goes to everybody: the server's clock is the only one involved, and a
+	 * client cannot move the number by lying about its own time.
+	 */
+	private probeLatency() {
+		const t = Date.now();
+		for (const player of this.players.values()) {
+			player.channel?.emit("ping", { t });
+		}
+	}
+
+	/**
+	 * Say the latest median round trips, once a second.
+	 *
+	 * Its own message rather than a `SnapshotPlayer` field: a ping is
+	 * presentation, it changes once a second, and sixteen of them at 20Hz would
+	 * spend twenty times the bandwidth on a number the scoreboard cannot read
+	 * that fast. Nothing simulates with it, so a dropped summary costs a stale
+	 * column for one second and no game state at all.
+	 */
+	private broadcastPings() {
+		const pings: Record<string, number> = {};
+		for (const player of this.players.values()) {
+			if (player.channel === null) continue;
+			const ping = medianPing(player.pingSamples);
+			if (ping !== null) pings[player.id] = ping;
+		}
+		if (Object.keys(pings).length === 0) return;
+		const msg: PingsMsg = { pings };
+		this.broadcast("pings", msg);
+	}
+
 	tick(time: number) {
 		if (this.lastTime === 0) this.lastTime = time;
 		const elapsed = time - this.lastTime;
@@ -3159,6 +3229,16 @@ export class GameRoom {
 			for (const player of this.players.values()) {
 				player.channel?.emit("net", player.link.report());
 			}
+		}
+
+		// Publish the last round of measurements, then start the next one. The
+		// summary goes out before the probes so a client sees the round trip the
+		// previous second actually took, never a half-filled one.
+		this.pingAccumulator += elapsed;
+		if (this.pingAccumulator >= PING_INTERVAL_MS) {
+			this.pingAccumulator = 0;
+			this.broadcastPings();
+			this.probeLatency();
 		}
 	}
 
