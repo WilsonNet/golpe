@@ -9,8 +9,8 @@
     "url": "git+https://github.com/WilsonNet/golpe.git"
   },
   "author": "Wilson Neto",
-  "license": "MIT",
-  "licenseUrl": "http://www.opensource.org/licenses/mit-license.php",
+  "license": "GPL-3.0-only",
+  "licenseUrl": "https://www.gnu.org/licenses/gpl-3.0.html",
   "bugs": {
     "url": "https://github.com/WilsonNet/golpe/issues"
   },

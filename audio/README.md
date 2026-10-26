@@ -136,8 +136,8 @@ in ms; player-vs-distant tiering via distance attenuation in `Match`).
 
 ## Licensing
 
-- The compositions are original, released under the repo's MIT license.
+- The compositions are original, released under the repo's GPL-3.0 license.
 - MuseScore_General.sf3: MIT (S. Christian Collins).
 - tinysoundfont-pybind: MIT.
-- The rendered WAVs ship under the repo's MIT license: original MIDI music
+- The rendered WAVs ship under the repo's GPL-3.0 license: original MIDI music
   played through an MIT-licensed bank.

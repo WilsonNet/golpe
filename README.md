@@ -55,3 +55,14 @@ pnpm run dev:herdr      # or: pnpm run dev:all
 Verify a change with `pnpm run verify` (typechecks the client *and* the server,
 then tests and builds), plus `pnpm run diagnose` for anything touching physics or
 netcode.
+
+## License
+
+[GPL-3.0](LICENSE) — golpe is free software: you can redistribute it and/or
+modify it under the terms of the GNU General Public License, version 3, as
+published by the Free Software Foundation. It is distributed in the hope that it
+will be useful, but **without any warranty**; see the [LICENSE](LICENSE) for the
+full terms.
+
+Bundled third-party assets keep their own licenses — the MuseScore soundfont and
+tinysoundfont-pybind are MIT (see [`audio/README.md`](audio/README.md)).
