@@ -33,7 +33,7 @@ const CAPTURE_SEC = Number(arg("capture", "90"));
 const WIDTH = Number(arg("width", "800"));
 const HEIGHT = Number(arg("height", "600"));
 const FPS = Number(arg("fps", "15"));
-const QUALITY = Number(arg("quality", "55"));
+const QUALITY = Number(arg("quality", "40"));
 /**
  * x264 quality. GitHub's blob viewer never plays a repo-committed MP4 — it
  * offers a raw download — and it scolds anything over ~2MB, so the README's
@@ -248,7 +248,7 @@ async function main() {
 		"-i",
 		webm,
 		"-vf",
-		`fps=${FPS},scale=${WIDTH}:${HEIGHT}:flags=lanczos`,
+		`fps=${FPS},scale=${WIDTH}:${HEIGHT}:flags=lanczos,format=rgb24`,
 		path.join(framesDir, "f-%05d.png"),
 	]);
 	const frames = readdirSync(framesDir)
