@@ -1,5 +1,7 @@
 # golpe
 
+<p align="center"><img src="public/assets/logo.png" alt="golpe" width="320"></p>
+
 **Play it: [golpe.quest](https://golpe.quest/)** — or read
 [`deploy/oracle/README.md`](deploy/oracle/README.md) to run your own.
 

@@ -266,7 +266,15 @@ export function MainMenu({
 			<div className={`gd-card${view === "home" ? " gd-card-home" : ""}`}>
 				<div className="gd-menu-head">
 					<div>
-						<h1 className="gd-title">golpe</h1>
+						<h1 className="gd-logo-title">
+							<img
+								className="gd-logo"
+								src="./assets/logo.png"
+								width={640}
+								height={280}
+								alt="golpe"
+							/>
+						</h1>
 						<p className="gd-sub">
 							A 2D swordfight, online first — the link is the invitation.
 						</p>
@@ -389,9 +397,7 @@ export function MainMenu({
 											</span>
 										) : null}
 									</strong>
-									<span>
-										One lesson at a time, against a live opponent.
-									</span>
+									<span>One lesson at a time, against a live opponent.</span>
 								</button>
 							</div>
 						</div>
@@ -443,8 +449,8 @@ export function MainMenu({
 										>
 											<strong>Move list</strong>
 											<span>
-												Every command for {HEROES[hero].name} — stats and a
-												live preview.
+												Every command for {HEROES[hero].name} — stats and a live
+												preview.
 											</span>
 										</button>
 									</div>
@@ -465,7 +471,9 @@ export function MainMenu({
 											onClick={() => setView("graphics")}
 										>
 											<strong>Graphics</strong>
-											<span>Skybox on or off — the low-distraction setting.</span>
+											<span>
+												Skybox on or off — the low-distraction setting.
+											</span>
 										</button>
 										<button
 											className="gd-play-item gd-play-item-compact"

@@ -70,6 +70,18 @@ export const MENU_CSS = `
 	letter-spacing: 0.14em;
 	margin-bottom: 8px;
 }
+/* The wordmark is baked pixel art, not a CSS font: 640x280 at half size is an
+   exact 2x on a Retina display and an exact 2:1 on a normal one. */
+.gd-logo-title {
+	margin: 0 0 8px;
+	line-height: 0;
+}
+.gd-logo {
+	display: block;
+	width: min(320px, 100%);
+	height: auto;
+	image-rendering: pixelated;
+}
 .gd-menu-page .gd-sub {
 	font-size: 12px;
 	margin-bottom: 18px;

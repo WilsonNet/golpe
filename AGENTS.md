@@ -417,6 +417,7 @@ pnpm map:pr <id>                                     # open a PR for maps/<id>/ 
 .venv/bin/python scripts/tilesets/themes.py          # regenerate the Castle/Meadow/Snow tilesets (recolours of the Waterfront's tiles and props) — run after generate.py
 python3 scripts/make-audio.py                        # re-render the music loops from their MIDI sources (→ public/audio/)
 python3 scripts/make-potg-art.py                       # regenerate the ceremony's sunburst and medal
+python3 scripts/make-logo.py                           # regenerate the solarpunk wordmark (public/assets/logo.png + art/logo/)
 python3 scripts/make-anands-art.py                       # cut Anands' dragon ride from her boards (--legacy: the old board-cut strips, for comparison)
 python3 scripts/make-hero-art.py lia                   # render a hero from art/<hero>/<hero>.blend → <hero>.png/.json + portrait (lia|jeffs|anands|ibiriki, needs blender)
 python3 scripts/make-smoke-grenade-art.py              # render Jeffs' smoke canister model → its tumble strip smoke-grenade.png
