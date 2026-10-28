@@ -58,7 +58,17 @@
 			}
 		},
 		{
-			"includes": ["src/game/online/room.ts"],
+			"includes": ["src/game/online/room.ts", "src/game/online/lan.ts"],
+			"linter": {
+				"rules": {
+					"style": {
+						"noMagicNumbers": "off"
+					}
+				}
+			}
+		},
+		{
+			"includes": ["lan/**"],
 			"linter": {
 				"rules": {
 					"style": {

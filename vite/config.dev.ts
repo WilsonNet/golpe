@@ -159,6 +159,11 @@ function mapMakerSave(): Plugin {
 
 export default defineConfig({
 	base: "./",
+	// Same substitution as the production build: the LAN handshake compares the
+	// client's build with the server's `/health`, and a dev server says "dev".
+	define: {
+		__GOLPE_BUILD__: JSON.stringify(process.env.GOLPE_BUILD ?? "dev"),
+	},
 	plugins: [
 		artWorkshop(),
 		mapMakerSave(),

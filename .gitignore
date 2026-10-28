@@ -45,3 +45,4 @@ art/anands/.boards/
 scripts/skybox/*/.build/
 scripts/skybox/*/review/
 *.blend1
+build/

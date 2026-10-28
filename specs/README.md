@@ -36,6 +36,7 @@ it.
 | [team-deathmatch.md](team-deathmatch.md) | Two sides, no friendly fire, wipe-out rounds, and the team colour scheme |
 | [control-points.md](control-points.md) | TF2's symmetric 5CP: five points, adjacency locks, captures, forward spawns, overtime, and the mode's own map |
 | [netcode.md](netcode.md) | Online-first model, rollback, reconciliation, the wire format, projectiles, bots |
+| [lan.md](lan.md) | The host pack: one port, mDNS discovery, the LAN badge, the build/protocol gate, and its security boundary |
 | [menu.md](menu.md) | The root menu: when it shows, how choices become URLs, hosting and joining |
 | [audio.md](audio.md) | The soundtrack and sound FX: the loops, the bank, the mixer, and what plays when |
 | [training-room.md](training-room.md) | The scriptable practice dummy, its beat format, and the agent API |

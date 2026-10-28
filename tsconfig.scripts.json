@@ -8,5 +8,5 @@
     "types": ["node"],
     "noPropertyAccessFromIndexSignature": false
   },
-  "include": ["scripts", "vite"]
+  "include": ["scripts", "vite", "vitest.config.ts"]
 }

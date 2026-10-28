@@ -4,8 +4,11 @@ import type { HeroId } from "../simulation/Heroes";
 import type { MatchMode } from "../simulation/Teams";
 import type { TilemapSpec } from "../simulation/Tilemap";
 import type { TrainingConfigMsg, TrainingStateMsg } from "../training/types";
+import { BUILD_ID } from "./build";
 import { NetSim } from "./NetSim";
+import { PROTOCOL_VERSION } from "./protocol";
 import {
+	type BuildMismatchMsg,
 	type ControlCapturedMsg,
 	type ControlOvertimeMsg,
 	type GameSnapshot,
@@ -73,6 +76,11 @@ export interface OnlineHandlers {
 	 * locked room is a new attempt with the key, not a wait.
 	 */
 	onRoomLocked: (roomId: string) => void;
+	/**
+	 * The LAN gate refused the seat: this client and the server are different
+	 * builds (or protocols). Nothing more will arrive on this connection.
+	 */
+	onBuildMismatch: (msg: BuildMismatchMsg) => void;
 	/** The server's view of this client's input stream. Diagnostics only. */
 	onNet: (msg: NetReportMsg) => void;
 	/** Round trips the server measured for everyone it can time. */
@@ -273,6 +281,11 @@ export class OnlineManager {
 					...(join.botHero === undefined ? {} : { botHero: join.botHero }),
 					...(join.password === undefined ? {} : { password: join.password }),
 					...(join.isPrivate === undefined ? {} : { private: join.isPrivate }),
+					// The LAN gate reads these; the hosted server ignores both. They
+					// are sent on every join rather than only when asked, because a
+					// stale page cannot know it is stale.
+					build: BUILD_ID,
+					protocol: PROTOCOL_VERSION,
 				},
 				RELIABLE,
 			);
@@ -315,6 +328,12 @@ export class OnlineManager {
 		channel.on("room-locked", (data: unknown) => {
 			const msg = data as { roomId?: string } | null;
 			handlers.onRoomLocked(msg?.roomId ?? "");
+		});
+
+		// The LAN gate. Refused before seating, so there is no room state and no
+		// retry on this connection; the client's job is to name the two builds.
+		channel.on("build-mismatch", (data: unknown) => {
+			handlers.onBuildMismatch(data as BuildMismatchMsg);
 		});
 
 		channel.on("state", (data: unknown) => {

@@ -5,7 +5,8 @@
 		"src/**/*.{ts,tsx}",
 		"server/**/*.ts",
 		"scripts/**/*.ts",
-		"vite/**/*.ts"
+		"vite/**/*.ts",
+		"lan/**/*.ts"
 	],
 	"vitest": true,
 	"ignoreBinaries": ["ffmpeg", "herdr", "img2webp"]

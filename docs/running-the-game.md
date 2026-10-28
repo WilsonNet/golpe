@@ -65,6 +65,38 @@ ip -4 addr show scope global | grep inet     # Linux
 
 ---
 
+## Hosting a LAN game without the dev servers
+
+The **LAN pack** is the distributable host: one process serves the built client,
+the authoritative game and discovery on port **9208 (TCP and UDP)**. Only the
+host runs it; guests open the URL it prints and install nothing.
+
+```bash
+pnpm run lan:package                 # -> build/golpe-lan/ (and a .tar.gz)
+./build/golpe-lan/golpe-lan          # prints the LAN URL, opens it
+```
+
+- The launcher opens the **LAN address**, not `127.0.0.1`, so the address bar is
+  already the invitation. Share that URL.
+- The host creates a room in the menu as usual. Guests open the URL and play.
+- Allow **9208/tcp and 9208/udp** through the host's firewall. The first run may
+  ask; on Windows, allow the private network.
+- Other packs on the same network appear in the host page's server browser,
+  pinned first with a `LAN` badge. mDNS is the search; the room list is still
+  each host's `/rooms`.
+- The pack serves its client and server from one commit and refuses a seat from
+  a different build. A cross-build LAN row offers **Open host**, which opens
+  that host's own page.
+- To re-stage after a code change, re-run `pnpm run lan:package`. It builds a
+  separate `build/lan-dist` with the commit id, so the dev server's `dist` is
+  untouched; a pack server refuses a client whose build id is `"dev"`.
+
+The pack is a host tool. There is no client pack: a guest on `golpe.quest`
+cannot discover LAN rooms, because a browser cannot scan a LAN. The host's URL
+is the whole invitation.
+
+---
+
 ## Starting the dev servers
 
 ### Recommended — visible herdr panes

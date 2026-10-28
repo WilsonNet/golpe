@@ -117,6 +117,28 @@ opened the game landed in the same match whether they meant to or not.
   one had not finished leaving, which used to report four fighters in a room that
   asked for two.
 
+### A LAN join is also a build check
+
+The hosted client and game server are deployed from one commit, so the hosted
+server does not compare identities. A LAN pack has no such deploy: a guest can
+carry a cached page, or reach another host through the merged LAN listing, and
+two builds of a deterministic simulation do not negotiate.
+
+- `PROTOCOL_VERSION` in `src/game/online/protocol.ts` is the wire/simulation
+  contract. Bump it when `wire.ts` or the message shapes change; the
+  `check:protocol` gate fails a pull request that changes one without the other.
+- The client compiles `__GOLPE_BUILD__`; the pack's server reads `build.json`.
+  `/health` and `/rooms` report both `build` and `protocol`.
+- The LAN server runs with `strictBuild`. A join whose `build` or `protocol`
+  differs is answered with a reliable `build-mismatch` and never seated. The
+  client names both sides and points at the host's own link.
+- A discovered LAN row from another build is offered as **Open host** — a
+  navigation to that host's page, whose client is its server's build — not as a
+  `?server=` join through the wrong client. The hosted server deliberately
+  ignores the fields; its clients are not gated.
+- The build id travels in the join request even on the hosted path, so a stale
+  page cannot pretend it is current.
+
 **An empty room is a supported mode, not a degenerate one** — and it is now the
 default, because bots are opt-in. It is still fully served, predicted and
 reconciled, and it is the only way to measure something about the local fighter —

@@ -763,6 +763,21 @@ export interface MatchMessage {
 	mode?: MatchMode;
 }
 
+/**
+ * The LAN gate refused this seat: the server and this client do not run the
+ * same build (or the same protocol).
+ *
+ * Reliable, like `room-locked`: it is the only answer this connection will get,
+ * and a client that missed it would sit on "Connecting…" forever. The hosted
+ * server never sends it; the LAN pack's `strictBuild` does.
+ */
+export interface BuildMismatchMsg {
+	serverBuild: string;
+	serverProtocol: number;
+	clientBuild: string | null;
+	clientProtocol: number | null;
+}
+
 /** A single fighter returning to the arena. Announced, never inferred. */
 export interface RespawnMsg {
 	id: string;

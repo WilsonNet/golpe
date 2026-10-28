@@ -125,12 +125,20 @@ src/ui/           React overlays drawn over the canvas
 
 server/           Geckos.io authoritative server
   physics.ts        re-exports src/game/simulation/Physics
+  GameServer.ts     the one server as a factory: rooms, HTTP surface, build identity
+  index.ts          the production entry: env in, startGameServer() out
   GameRoom.ts       authoritative tick, bullets, melee resolution, match lifecycle
   PlayOfTheGame.ts  the highlight reel: a ring buffer of broadcast frames, and the
                     running judgement of which slice of them was the match
   BotNames.ts       gamertags for bots, and sanitising the ones humans type
   TrainingDummy.ts  the scriptable practice dummy: an input source, like EnemyBrain
-  index.ts          matchmaking, room sizing and deferred placement
+
+lan/              the host pack: a distribution of the server, never a fork
+  main.ts           launcher: start the game + static client + discovery, print/open the LAN URL
+  static.ts         serves `dist` on the pack's own port, with the deployed cache policy
+  discovery.ts      mDNS advertise/browse and the peer-only `/lan/rooms` route
+  net.ts            the private IPv4 a guest can actually type
+  architecture.test.ts  the gate: no tickPlayer, no GameRoom, no tuning import, no server→pack edge
 
 directory/      the control plane's first process: a stateless aggregator over
                 every region's `/rooms` (`GET /rooms`, `/regions`, `/health`),

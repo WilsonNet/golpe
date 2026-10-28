@@ -1,54 +1,58 @@
 /**
- * Server browser: the discoverable face of `GET /rooms`, across regions.
+ * Server browser: the discoverable face of `GET /rooms`, across regions and
+ * across the LAN.
  *
- * Quick match is the one-click path, but a player who wants to choose
- * needs a listing — what rooms are open, how busy they are, what mode
- * they play, and how far away they feel. The browser reads the same
- * endpoint quick match does (`GameRoom.isOpen`), so discovery and the
- * game cannot disagree about what is joinable.
+ * Quick match is the one-click path, but a player who wants to choose needs a
+ * listing — what rooms are open, how busy they are, what mode they play, and
+ * how far away they feel. The browser reads the same endpoint quick match does
+ * (`GameRoom.isOpen`), so discovery and the game cannot disagree about what is
+ * joinable.
  *
- * Latency is approximated via HTTP rather than WebRTC: a `fetch` to
- * `/health` is timed and the result is shown as "ping". It is not a
- * WebRTC round-trip, but it is a useful ordering — a room on the far
- * side of the planet will still take longer to answer a health check.
- * The measurement is taken once per refresh and per game server, because
- * rooms now live on more than one host: the page's own server first, then
- * every fleet entry the operator configured in `VITE_GOLPE_SERVERS`
- * (`region=host:port,...`). Joining a room commits its server into the
- * launch URL as `?server=`, so the match boots where the room lives.
+ * **LAN rooms are the host pack's discovery, not the public site's.** A browser
+ * cannot scan a LAN or browse mDNS, so the pack's server publishes the rooms it
+ * found at `/lan/rooms` on its own origin. The page marks those rows `LAN`
+ * because the endpoint is a validated private address — never because a query
+ * parameter or a server field said so. Rows are pinned above internet rooms;
+ * the chosen sort applies inside each group.
+ *
+ * Latency is approximated via HTTP rather than WebRTC: a `fetch` to `/rooms` is
+ * timed and the result is shown as "ping". It is not a WebRTC round-trip, but it
+ * is a useful ordering. Joining a room commits its server into the launch URL as
+ * `?server=`, so the match boots where the room lives.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+	type BrowserRoom,
+	type BrowserRoomEntry,
+	canJoinBrowserBuild,
+	hostPageForBrowserRoom,
+	lanRoomToBrowserRoom,
+	mergeBrowserRooms,
+	sortBrowserRooms,
+} from "../game/online/browser";
+import {
+	isPrivateHost,
+	LAN_ROOMS_PATH,
+	type LanRoomEntry,
+} from "../game/online/lan";
 import type { LaunchParams } from "../game/online/launch";
 import {
 	buildEndpointList,
 	httpBaseFor,
 	parseRegion,
 	parseServerList,
+	resolveGameEndpoint,
 	type RegionEndpoint,
 } from "../game/online/regions";
 import { GAME_SERVER_PORT } from "../game/online/types";
 import type { HeroId } from "../game/simulation/Heroes";
 import type { MatchMode } from "../game/simulation/Teams";
 
-interface RoomEntry {
-	id: string;
-	mode: MatchMode;
-	playerCount: number;
-	humanCount: number;
-	screens: number;
-	/** The region the serving game server reported. Absent from older builds. */
-	region?: string;
-}
-
-interface RoomWithMeta extends RoomEntry {
-	region: string;
-	pingMs: number | null;
-	/**
-	 * The `?server=` value that boots this room's match — null when it lives
-	 * on the page's own server and needs no address in the URL.
-	 */
-	server: string | null;
+interface RoomsResponse {
+	rooms?: BrowserRoomEntry[] | LanRoomEntry[] | null;
+	build?: string | null;
+	protocol?: number | null;
 }
 
 type ModeFilter = "all" | MatchMode;
@@ -73,11 +77,15 @@ function configuredEndpoints(): RegionEndpoint[] {
 }
 
 function localEndpoint(): RegionEndpoint {
-	return {
-		region: "local",
-		host: window.location.hostname,
-		port: GAME_SERVER_PORT,
-	};
+	// Same question the menu's status line and quick match ask: `?server=` when
+	// the URL names one, otherwise the page's own host on the game port. A pack
+	// on a non-default port is only reachable at all because its launcher puts
+	// `?server=` in the URL, and the browser must read it too.
+	const endpoint = resolveGameEndpoint(
+		window.location.search,
+		window.location.hostname,
+	);
+	return { ...endpoint, region: "local" };
 }
 
 /** `?region=` preselects the browser's filter — a hint, never an address. */
@@ -101,10 +109,16 @@ function serverParamFor(
 		: `${endpoint.host}:${endpoint.port}`;
 }
 
+/** A room on the page's own game server, or a discovered LAN host. */
+function isLanEndpoint(endpoint: RegionEndpoint): boolean {
+	return isPrivateHost(endpoint.host);
+}
+
 async function fetchOne(
 	endpoint: RegionEndpoint,
 	server: string | null,
-): Promise<RoomWithMeta[]> {
+	source: "lan" | "internet",
+): Promise<BrowserRoom[]> {
 	const base = httpBaseFor(endpoint, window.location.protocol);
 	const start = performance.now();
 	try {
@@ -114,13 +128,49 @@ async function fetchOne(
 		const pingMs = Math.round(performance.now() - start);
 		window.clearTimeout(timer);
 		if (!res.ok) return [];
-		const data = (await res.json()) as { rooms?: RoomEntry[] | null };
+		const data = (await res.json()) as RoomsResponse;
 		return (data.rooms ?? []).map((r) => ({
 			...r,
 			region: r.region ?? endpoint.region,
 			pingMs,
 			server,
+			source,
+			build: r.build ?? data.build ?? null,
+			protocol: r.protocol ?? data.protocol ?? null,
 		}));
+	} catch {
+		return [];
+	}
+}
+
+/**
+ * The rooms the host pack discovered on this LAN.
+ *
+ * Deliberately a soft failure: a hosted page has no `/lan/rooms`, and a page
+ * served by a pack whose mDNS is blocked still has its own room in `/rooms`.
+ * Neither is a reason to show the red "no server" error.
+ */
+async function fetchLanRooms(): Promise<BrowserRoom[]> {
+	// The hosted site has no pack and Caddy's SPA fallback would answer
+	// `/lan/rooms` with index.html every five seconds. Only a page served from a
+	// private origin can have a local discovery endpoint worth asking.
+	if (!isPrivateHost(window.location.hostname)) return [];
+	try {
+		const ctrl = new AbortController();
+		const timer = window.setTimeout(() => ctrl.abort(), 1800);
+		const res = await fetch(`${window.location.origin}${LAN_ROOMS_PATH}`, {
+			signal: ctrl.signal,
+		});
+		window.clearTimeout(timer);
+		if (!res.ok) return [];
+		if (!res.headers.get("content-type")?.includes("application/json")) {
+			// A dev server's SPA fallback answers `/lan/rooms` with index.html.
+			return [];
+		}
+		const data = (await res.json()) as { rooms?: LanRoomEntry[] | null };
+		return (data.rooms ?? [])
+			.map((raw) => lanRoomToBrowserRoom(raw))
+			.filter((room): room is BrowserRoom => room !== null);
 	} catch {
 		return [];
 	}
@@ -144,9 +194,12 @@ export function ServerBrowser({
 		return buildEndpointList(local, configuredEndpoints()).map((endpoint) => ({
 			endpoint,
 			server: serverParamFor(endpoint, local),
+			source: isLanEndpoint(endpoint)
+				? ("lan" as const)
+				: ("internet" as const),
 		}));
 	}, []);
-	const [rooms, setRooms] = useState<RoomWithMeta[]>([]);
+	const [rooms, setRooms] = useState<BrowserRoom[]>([]);
 	const [reachable, setReachable] = useState(true);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
@@ -162,10 +215,20 @@ export function ServerBrowser({
 	const refresh = useCallback(async () => {
 		setLoading(true);
 		setError(null);
-		const lists = await Promise.all(
-			endpoints.map(({ endpoint, server }) => fetchOne(endpoint, server)),
+		const [internetLists, lanRooms] = await Promise.all([
+			Promise.all(
+				endpoints.map(({ endpoint, server, source }) =>
+					fetchOne(endpoint, server, source),
+				),
+			),
+			fetchLanRooms(),
+		]);
+		const fetched = mergeBrowserRooms(
+			internetLists.flat(),
+			lanRooms,
+			localEndpoint(),
 		);
-		const fetched = lists.flat();
+
 		// `GET /rooms` already filters to `isOpen`; an empty list from every
 		// server is "no rooms", but nothing answering at all is "unknown" —
 		// and worth saying out loud rather than showing an empty browser.
@@ -210,7 +273,7 @@ export function ServerBrowser({
 	}, [rooms]);
 
 	const filtered = useMemo(() => {
-		let out = rooms.filter((r) => {
+		const out = rooms.filter((r) => {
 			if (
 				search.trim() !== "" &&
 				!r.id.toLowerCase().includes(search.trim().toLowerCase())
@@ -220,20 +283,7 @@ export function ServerBrowser({
 			if (regionFilter !== "all" && r.region !== regionFilter) return false;
 			return true;
 		});
-		out = [...out].sort((a, b) => {
-			let cmp = 0;
-			if (sortKey === "ping") {
-				const ap = a.pingMs ?? 9999;
-				const bp = b.pingMs ?? 9999;
-				cmp = ap - bp;
-			} else if (sortKey === "players") {
-				cmp = a.playerCount - b.playerCount;
-			} else if (sortKey === "mode") {
-				cmp = a.mode.localeCompare(b.mode);
-			}
-			return sortDir === "asc" ? cmp : -cmp;
-		});
-		return out;
+		return sortBrowserRooms(out, sortKey, sortDir);
 	}, [rooms, search, modeFilter, regionFilter, sortKey, sortDir]);
 
 	const toggleSort = (key: SortKey) => {
@@ -249,7 +299,8 @@ export function ServerBrowser({
 			<div className="gd-section-head">Server browser</div>
 			<p className="gd-field-note">
 				Open rooms from the same servers quick match uses — private, probe and
-				full rooms never appear.
+				full rooms never appear. LAN rooms come from the host pack on this
+				network and sit first.
 				{endpoints.length > 1 ? ` ${endpoints.length} regions.` : ""}
 			</p>
 
@@ -300,7 +351,7 @@ export function ServerBrowser({
 							className={`gd-chip${regionFilter === reg ? " gd-chip-on" : ""}`}
 							onClick={() => setRegionFilter(reg)}
 						>
-							{reg === "all" ? "All regions" : reg}
+							{reg === "all" ? "All regions" : reg === "lan" ? "LAN" : reg}
 						</button>
 					))}
 				</div>
@@ -346,62 +397,91 @@ export function ServerBrowser({
 				</p>
 			) : (
 				<div className="gd-browser-list">
-					{filtered.map((r) => (
-						<div key={`${r.region}:${r.id}`} className="gd-browser-row">
-							<div className="gd-browser-main">
-								<span className="gd-browser-id" title={r.id}>
-									{r.id.slice(0, 8)}…{r.id.slice(-4)}
-								</span>
-								<span className="gd-browser-meta">
-									{formatMode(r.mode)} · {r.humanCount}/{r.playerCount} players
-									{r.humanCount !== r.playerCount
-										? ` (${r.playerCount - r.humanCount} bots)`
-										: ""}{" "}
-									· {r.screens} screen{r.screens !== 1 ? "s" : ""} · {r.region}
-								</span>
+					{filtered.map((r) => {
+						const compatible = canJoinBrowserBuild(r);
+						const hostPage = compatible ? null : hostPageForBrowserRoom(r);
+						return (
+							<div
+								key={`${r.source}:${r.server ?? "local"}:${r.id}`}
+								className="gd-browser-row"
+							>
+								<div className="gd-browser-main">
+									<span className="gd-browser-title">
+										<span className="gd-browser-id" title={r.id}>
+											{r.id.slice(0, 8)}…{r.id.slice(-4)}
+										</span>
+										{r.source === "lan" ? (
+											<span className="gd-badge gd-badge-lan">LAN</span>
+										) : null}
+									</span>
+									<span className="gd-browser-meta">
+										{formatMode(r.mode)} · {r.humanCount}/{r.playerCount}{" "}
+										players
+										{r.humanCount !== r.playerCount
+											? ` (${r.playerCount - r.humanCount} bots)`
+											: ""}{" "}
+										· {r.screens} screen{r.screens !== 1 ? "s" : ""} ·{" "}
+										{r.hostName ?? r.region}
+									</span>
+								</div>
+								<div className="gd-browser-side">
+									<span
+										className="gd-browser-ping"
+										title={
+											r.source === "lan"
+												? "LAN host — this is the host pack's own latency to the room"
+												: "HTTP latency to the game server hosting this room"
+										}
+									>
+										{r.pingMs !== null ? `${r.pingMs}ms` : "—"}
+									</span>
+									{hostPage === null ? (
+										<button
+											className="gd-btn gd-btn-primary"
+											type="button"
+											onClick={() =>
+												onJoin({
+													room: r.id,
+													server: r.server,
+													region: r.region,
+													ai: false,
+													online: false,
+													offline: false,
+													training: false,
+													tutorial: false,
+													hero,
+													botHero: null,
+													bots: undefined,
+													fill: undefined,
+													scoreLimit: undefined,
+													timeLimitSec: undefined,
+													ultCharge: undefined,
+													mode: null,
+													freezeTime: undefined,
+													capTime: undefined,
+													screens: undefined,
+													map: null,
+													password: null,
+													isPrivate: false,
+												})
+											}
+										>
+											Join
+										</button>
+									) : (
+										<button
+											className="gd-btn"
+											type="button"
+											title="This room runs a different build. Open the host's own page so its client matches its server."
+											onClick={() => window.location.assign(hostPage)}
+										>
+											Open host
+										</button>
+									)}
+								</div>
 							</div>
-							<div className="gd-browser-side">
-								<span
-									className="gd-browser-ping"
-									title="HTTP latency to the game server hosting this room"
-								>
-									{r.pingMs !== null ? `${r.pingMs}ms` : "—"}
-								</span>
-								<button
-									className="gd-btn gd-btn-primary"
-									type="button"
-									onClick={() =>
-										onJoin({
-											room: r.id,
-											server: r.server,
-											region: r.region,
-											ai: false,
-											online: false,
-											offline: false,
-											training: false,
-											tutorial: false,
-											hero,
-											botHero: null,
-											bots: undefined,
-											fill: undefined,
-											scoreLimit: undefined,
-											timeLimitSec: undefined,
-											ultCharge: undefined,
-											mode: null,
-											freezeTime: undefined,
-											capTime: undefined,
-											screens: undefined,
-											map: null,
-											password: null,
-											isPrivate: false,
-										})
-									}
-								>
-									Join
-								</button>
-							</div>
-						</div>
-					))}
+						);
+					})}
 				</div>
 			)}
 		</div>

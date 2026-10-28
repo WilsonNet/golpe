@@ -70,6 +70,7 @@ The live stack, its ports and its first-boot steps are documented in
 | What are items, and how do charges work? | [`specs/items.md`](specs/items.md) |
 | What should the menu do? | [`specs/menu.md`](specs/menu.md) — when it shows, and how choices become URLs |
 | How does a new player learn the game? | [`specs/tutorial.md`](specs/tutorial.md) — the guided course, and the campaign layer it is built on |
+| **How do I host a LAN game, and what is in the pack?** | [`specs/lan.md`](specs/lan.md) — the host pack, one port, mDNS discovery, the LAN badge, the build/protocol gate · [`docs/running-the-game.md`](docs/running-the-game.md) |
 | What happens when a match ends? | [`specs/play-of-the-game.md`](specs/play-of-the-game.md) — the reel, the camera edit, then the podium |
 | What should the game sound like, and where does the music come from? | [`specs/audio.md`](specs/audio.md) · [`audio/README.md`](audio/README.md) — MIDI sources, the soundfont per track, the mixer |
 | What is behind the arena, and how is it drawn? | [`specs/skybox.md`](specs/skybox.md) · [`art/skybox/README.md`](art/skybox/README.md) — the hand-painted Waterfront (house style) and its loop / ambient people plans |
@@ -149,6 +150,11 @@ One line each; the war story behind every one is in
 - **One simulation.** `src/game/simulation/` never imports a rendering engine,
   touches the DOM, or reads wall-clock time. Client and server run the same
   `tickPlayer`.
+- **The LAN pack is a distribution, not a fork.** `lan/` calls the one
+  `createGameServer` factory, serves the one `dist`, and owns no gameplay:
+  `lan/architecture.test.ts` fails a `tickPlayer`, a `GameRoom`, a tuning import
+  or a server→pack edge. The pack serves its client and server from one commit;
+  `strictBuild` refuses a mismatch and a cross-build row opens the host's page.
 - **The hero kit is an argument to `tickPlayer`, never state.** The hero is a
   static property of the fighter, like the name — it travels in the snapshot
   beside `team`, and both sides pass `kitFor(hero)` into every tick and every
@@ -393,6 +399,11 @@ tsx scripts/movelist-probe.ts                        # the move list: every prev
 tsx scripts/dash-probe.ts                            # double-tap dash delivery, at a forced frame rate
 tsx scripts/connection-probe.ts                      # the server dies mid-match: the lost-connection prompt, and Rejoin
 tsx scripts/ping-probe.ts                            # the scoreboard's ping: data-channel RTT, shaped vs not, zero HTTP requests
+pnpm run lan:package                                # stage the host pack (client + game + discovery + Node) into build/golpe-lan
+pnpm run lan:probe                                  # the packaged binary seats two clients through one port
+pnpm run lan:ui                                     # the host room is badged LAN and pinned first
+pnpm run lan:discovery                              # two packs: one hosts, the other discovers it over mDNS
+pnpm run check:protocol                             # fail a wire change that forgot PROTOCOL_VERSION
 tsx scripts/screens-probe.ts                         # ?screen=N room: spawn spread + follow camera
 tsx scripts/ultimate-probe.ts                        # the black hole: hold to aim, release to cast, freeze, capture
 tsx scripts/potg-probe.ts                            # play of the game: the reel, the camera edit, the podium waiting
@@ -419,16 +430,20 @@ measurement on a wide arena — the follow camera and the wide-world spawns are
 part of what they must prove.
 
 - Ports: Vite **8084**, Geckos **9208**, directory **9308** (multi-region only).
+  The LAN pack serves the client and the game on **TCP 9208** and pins ICE to
+  **UDP 9208**; guests open `http://<host>:9208/`.
 - Regions: one identical game-server image per region (`GOLPE_REGION`), picked
   client-side via `?server=`; the browser filters by `?region=`. Control plane
   stays TypeScript (`directory/`, Turso later) — no second language until a
   metric says so. Full record: [`docs/regions.md`](docs/regions.md).
-- **`pnpm run typecheck` covers two projects.** `tsconfig.json` is client-only;
-  `tsconfig.server.json` covers `server/`. Running bare `tsc` checks half the
-  game — which is how the server's bots silently lost the ability to evade.
-- **Restart the server after touching `server/`, `src/game/simulation/`,
+- **`pnpm run typecheck` covers every project.** `tsconfig.json` is client-only;
+  `tsconfig.server.json` covers `server/`; `tsconfig.lan.json` covers the host
+  pack; `tsconfig.scripts.json` and `tsconfig.directory.json` cover the tools.
+  Running bare `tsc` checks half the game — which is how the server's bots
+  silently lost the ability to evade.
+- **Restart the server after touching `server/`, `lan/`, `src/game/simulation/`,
   `src/game/characters/`, `src/game/training/` or `src/game/online/wire.ts`** —
-  all of them are inside `tsconfig.server.json` and tsx does not hot-reload. The
+  all of them are inside the server/LAN typecheck and tsx does not hot-reload. The
   wire is the nastiest: a stale server and a fresh client disagree about every
   packed field after the one you added, and it surfaces as a storm of melee
   prediction desyncs rather than as anything to do with the wire.

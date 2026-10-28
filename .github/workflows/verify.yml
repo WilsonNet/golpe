@@ -1,0 +1,63 @@
+name: Verify
+
+# The pull-request gate. The LAN pack is built and its packaged probe runs here,
+# because the binary is the thing that has to keep playing the same game — the
+# unit suite alone cannot see a redistribution that stopped serving its client
+# or lost its native WebRTC addon.
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The protocol gate diffs against the base branch, which needs history.
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.12.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: The wire did not change without a protocol bump
+        if: github.event_name == 'pull_request'
+        run: pnpm run check:protocol --base "origin/${{ github.base_ref }}"
+
+      - run: pnpm run verify
+
+      - name: Install Chromium for the packaged probe
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Stage the LAN pack
+        run: pnpm run lan:package --no-archive
+
+      - name: The packaged binary plays the game
+        run: pnpm run lan:probe
+
+      - name: The host's own room is badged LAN and pinned first
+        run: pnpm run lan:ui
+
+      - name: The host pack discovers another pack on the LAN
+        # mDNS multicast is not guaranteed on every CI network; the packaged
+        # probe and the badge probe above are the hard gates. This is the
+        # end-to-end discovery proof, run locally with the same pack.
+        continue-on-error: true
+        run: pnpm run lan:discovery

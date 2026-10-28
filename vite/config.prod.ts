@@ -4,6 +4,12 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
 	base: "./",
+	// The LAN gate compares this against the server's `/health`. The pack
+	// builder sets `GOLPE_BUILD` to the commit it staged; a plain `pnpm build`
+	// is honestly a "dev" build rather than pretending to be a release.
+	define: {
+		__GOLPE_BUILD__: JSON.stringify(process.env.GOLPE_BUILD ?? "dev"),
+	},
 	plugins: [
 		react(),
 		/**

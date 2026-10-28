@@ -1550,6 +1550,23 @@ export class Match {
 					EventBus.emit(HUD_EVENTS.status, "That room is locked.");
 					console.log(`[ONLINE] room ${roomId} is locked`);
 				},
+				onBuildMismatch: (msg) => {
+					// A LAN pack refuses a seat before it simulates anything. Say
+					// which side is which rather than "connection failed": the fix
+					// is to open the host's own page, or to update the pack.
+					const detail =
+						msg.clientBuild === null
+							? "This page has no build id."
+							: `This page: ${msg.clientBuild} (protocol ${String(msg.clientProtocol)}).`;
+					EventBus.emit(
+						HUD_EVENTS.status,
+						`Different build — server ${msg.serverBuild} (protocol ${msg.serverProtocol}). ${detail} Open the host's own link to play.`,
+					);
+					EventBus.emit("build-mismatch", msg as never);
+					console.log(
+						`[ONLINE] build mismatch — server ${msg.serverBuild}/${msg.serverProtocol}, client ${String(msg.clientBuild)}/${String(msg.clientProtocol)}`,
+					);
+				},
 			},
 			// Which game server: `?server=` or the page's own host. The browser
 			// chose it; the session just dials it.

@@ -708,6 +708,20 @@ a.gd-play-item { color: inherit; text-decoration: none; }
 	gap: 3px;
 	min-width: 0;
 }
+.gd-browser-title {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+}
+.gd-badge-lan {
+	margin-left: 0;
+	background: rgba(142, 240, 164, 0.14);
+	border-color: rgba(142, 240, 164, 0.42);
+	color: #8ef0a4;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+}
 .gd-browser-id {
 	font-size: 12px;
 	letter-spacing: 0.06em;

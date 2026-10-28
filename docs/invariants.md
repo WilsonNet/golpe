@@ -1030,6 +1030,33 @@ not made of kills.
   and a LAN game is served over plain HTTP. Reaching for either alone would leave
   every guest on `http://192.168.x.x:8084` unable to start or share a match.
   `getRandomValues` and `execCommand` are the fallbacks.
+- **The LAN pack is a distribution, not a fork.** It calls the one
+  `createGameServer` factory, serves the one `dist`, and contains no
+  `tickPlayer`, no room and no tuning constant. `lan/architecture.test.ts` is
+  the gate; a gameplay change belongs in `simulation/` or `server/`, never in
+  `lan/`.
+- **A LAN badge is derived, never claimed.** It comes from the page's own
+  private origin or from a discovered peer whose endpoint validates as private.
+  A query flag, a `lan: true` server field, or an mDNS TXT record never makes a
+  row LAN. The public site never lists LAN rooms; only a page served by the host
+  pack can ask its local discovery endpoint.
+- **The host is the LAN search, not the guest's browser.** Browsers cannot scan
+  a LAN or browse mDNS. The pack advertises, browses, and publishes the merged
+  peer rooms at `/lan/rooms`; mDNS is an address book and that host's `/rooms`
+  is the truth. A guest installs nothing and still sees the list because the
+  page came from the host.
+- **LAN is pinned, not sorted.** Every LAN row is above every internet row, and
+  the chosen sort runs inside each group. A "Players ↓" sort must not put a
+  200ms internet room above the machine on the same switch.
+- **A LAN join is a build check.** The pack serves its client and server from
+  one commit and runs `strictBuild`; `/health` and `/rooms` carry the build and
+  protocol, and a mismatch is a refused seat, not a warning. A cross-build LAN
+  row is opened on the host's own page, not joined through this page's client.
+  Bump `PROTOCOL_VERSION` when the wire changes; `check:protocol` is the CI
+  gate.
+- **One port is the LAN pack's whole firewall story.** TCP 9208 serves the
+  client, `/health`, `/rooms`, `/potg`, `/lan/rooms` and signalling; UDP 9208 is
+  ICE. Do not make a guest open a second number for a feature.
 - **Size and rules are fixed when the room is created.** Reading them from every
   arriving client let the last person through the door resize a match already in
   progress.

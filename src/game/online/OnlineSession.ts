@@ -52,6 +52,7 @@ import type {
 	AmmoPickupMsg,
 	AxeHitMsg,
 	BlockedBulletMsg,
+	BuildMismatchMsg,
 	ControlCapturedMsg,
 	ControlOvertimeMsg,
 	DenyEventMsg,
@@ -264,6 +265,11 @@ export interface OnlineCallbacks {
 	 * attempt, not a wait.
 	 */
 	onRoomLocked: (roomId: string) => void;
+	/**
+	 * The LAN gate refused the seat: this client and the server are different
+	 * builds (or protocols). Nothing more will arrive on this connection.
+	 */
+	onBuildMismatch: (msg: BuildMismatchMsg) => void;
 	/** The seat was lost mid-match. See `OnlineHandlers.onConnectionLost`. */
 	onConnectionLost: () => void;
 }
@@ -809,6 +815,7 @@ export class OnlineSession {
 					this.callbacks.onSeated(roomId, screens, mode, map),
 				onRoomFull: (roomId) => this.callbacks.onRoomFull(roomId),
 				onRoomLocked: (roomId) => this.callbacks.onRoomLocked(roomId),
+				onBuildMismatch: (msg) => this.callbacks.onBuildMismatch(msg),
 				onNet: (msg) => {
 					this.serverLink = msg;
 				},

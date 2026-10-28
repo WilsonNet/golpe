@@ -25,7 +25,8 @@ download the full-quality MP4.
 | Doc | What's in it |
 |---|---|
 | [Specs](specs/README.md) | **Source of truth for intended behaviour** — movement, sword combat, ranged combat, arena, netcode. |
-| [Running the game](docs/running-the-game.md) | Every way to launch it: player vs AI, AI vs AI, player vs player, online AI vs AI. Dev servers, controls, URL parameters, debug hooks, troubleshooting. |
+| [Running the game](docs/running-the-game.md) | Every way to launch it: player vs AI, AI vs AI, player vs player, online AI vs AI, and the LAN host pack. Dev servers, controls, URL parameters, debug hooks, troubleshooting. |
+| [LAN host pack](specs/lan.md) | One machine hosts; guests open a URL. One port, mDNS discovery, the LAN badge, and the build/protocol gate. |
 | [AGENTS.md](AGENTS.md) | The index every agent session loads: the rules that bite, commands, controls, and where to find everything else. Also loaded as `CLAUDE.md`. |
 | [Architecture](docs/architecture.md) | Module map, the client/server boundary, and the online-first model. |
 | [Invariants](docs/invariants.md) | Every rule that was written by a real bug, with the bug that motivated it. |
@@ -50,6 +51,10 @@ pnpm run dev:herdr      # or: pnpm run dev:all
 #   http://localhost:8084/?online=true            player vs player (two tabs)
 #   http://localhost:8084/?online=true&ai=true    AI vs AI, two clients
 #   http://localhost:8084/?offline=true           escape hatch, no server
+
+# host a LAN game without the dev servers (host only; guests open the URL):
+pnpm run lan:package
+./build/golpe-lan/golpe-lan
 ```
 
 Verify a change with `pnpm run verify` (typechecks the client *and* the server,

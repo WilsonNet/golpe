@@ -226,11 +226,23 @@ fetch the listing, a proxy for latency; WebRTC ping is not available via
 `fetch`). The list is the same `GameRoom.isOpen` predicate, so discovery and
 the game cannot disagree.
 
+**LAN rooms are pinned first and badged `LAN`.** They come from the host pack:
+the page's own server when it was loaded from a private address, plus the rooms
+the pack discovered on the network (`GET /lan/rooms`). The badge is derived from
+the validated private endpoint, never from a query flag or a server field. The
+chosen sort runs *inside* the LAN and internet groups, so a nearby machine
+cannot be pushed below a distant one by changing the sort column. A LAN row
+from another build offers **Open host** instead of Join; see
+[lan.md](lan.md) for the build gate.
+
+The public site never shows LAN rows: a browser cannot scan a LAN or browse
+mDNS, and only a page served by the host pack can ask its local discovery
+endpoint.
+
 Filters sit above the list: a search box (room id substring), a mode
-filter (All / Deathmatch / Team DM), a region filter (All / Local — ready
-for a future multi-host listing where each host is a region) and a sort
-control (Ping, Players, Mode, toggling asc/desc). Private, probe and full
-rooms never appear.
+filter (All / Deathmatch / Team DM / 5 CP), a region filter (All / LAN / each
+reported region) and a sort control (Ping, Players, Mode, toggling
+asc/desc). Private, probe and full rooms never appear.
 
 ## The name
 
