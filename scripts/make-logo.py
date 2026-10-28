@@ -9,7 +9,8 @@ of the aqueduct gardens. No pure black and no pure white.
     .venv/bin/python scripts/make-logo.py
 
 Outputs:
-    public/assets/logo.png                      640 x 280, the menu's asset
+    public/assets/logo.png                      640 x 280, the README / share asset
+    src/ui/assets/logo.png                      640 x 280, the menu's hashed Vite import
     art/logo/golpe-solarpunk.png                640 x 280
     art/logo/golpe-solarpunk@2x.png             1280 x 560
     art/logo/preview-waterfront.png             1280 x 720, on the skybox
@@ -464,6 +465,9 @@ art_dir.mkdir(parents=True, exist_ok=True)
 public.mkdir(parents=True, exist_ok=True)
 
 web.save(public / "logo.png")
+ui_assets = ROOT / "src" / "ui" / "assets"
+ui_assets.mkdir(parents=True, exist_ok=True)
+web.save(ui_assets / "logo.png")
 web.save(art_dir / "golpe-solarpunk.png")
 master.save(art_dir / "golpe-solarpunk@2x.png")
 

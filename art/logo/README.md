@@ -11,7 +11,8 @@ same Waterfront world: cream stone, brass sun, teal water, aqueduct gardens.
 
 | File | Use |
 |---|---|
-| `public/assets/logo.png` | the root menu's `gd-logo`, 640 x 280 at half size (exact 2x / 2:1) |
+| `src/ui/assets/logo.png` | the root menu's Vite import, content-hashed so Caddy's immutable `/assets/*` rule is safe |
+| `public/assets/logo.png` | the README / share asset, 640 x 280 |
 | `golpe-solarpunk.png` | the 640 x 280 master |
 | `golpe-solarpunk@2x.png` | the 1280 x 560 master |
 | `preview-waterfront.png` | the logo over the skybox contact sheet |

@@ -70,6 +70,7 @@ import { HUD_CSS } from "./hudStyles";
 import { MoveList } from "./MoveList";
 import { MENU_CSS } from "./menuStyles";
 import { RepoLink } from "./RepoLink";
+import logoUrl from "./assets/logo.png";
 import { ServerBrowser } from "./ServerBrowser";
 import { SoundMixer } from "./SoundMixer";
 
@@ -269,7 +270,7 @@ export function MainMenu({
 						<h1 className="gd-logo-title">
 							<img
 								className="gd-logo"
-								src="./assets/logo.png"
+								src={logoUrl}
 								width={640}
 								height={280}
 								alt="golpe"
