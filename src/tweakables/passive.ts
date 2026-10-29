@@ -1,19 +1,43 @@
 /**
  * Hero passives: Ibiriki's Bloodlust and Berserk. See specs/ibiriki.md.
  *
- * The bloodlust is the server's reading of the room's weakest hostile fighter,
- * mapped to 0..1 and carried in `PlayerPosition.bloodlust` so both sides
- * simulate the speed it buys.
+ * The bloodlust is the server's reading of the room's bleeding prey: each
+ * hostile's HP maps to a lure, and its distance scales that lure down. The
+ * strongest single lure wins, mapped to 0..1 and carried in
+ * `PlayerPosition.bloodlust` so both sides simulate the speed it buys.
  */
 
-/** The weakest foe's HP fraction at which bloodlust starts: 90%. */
+/** A foe's HP fraction at which its bloodlust lure starts: 90%. */
 export const BLOODLUST_START_FRACTION = 0.9;
 
 /**
- * The weakest foe's HP fraction at which bloodlust is full — and Ibiriki is
- * **berserk**: 30%. Below this the room is bleeding and he dual wields.
+ * The HP fraction at which a foe's lure is full — the **berserk** line: 30%.
+ * Below this a nearby foe can fill the meter and Ibiriki dual wields; a foe
+ * this hurt but far away only smells faintly.
  */
 export const BERSERK_FRACTION = 0.3;
+
+/**
+ * Inside this distance (centre to centre, world px) a foe's lure is at full
+ * strength. A screen is 800px wide and melee reach is around 50px, so 300px is
+ * a committed exchange — close enough to smell the blood.
+ */
+export const BLOODLUST_FULL_RANGE_PX = 300;
+
+/**
+ * A foe this far away contributes nothing. One and a half screens: far enough
+ * that a cross-map chase earns some speed, close enough that a bleeding
+ * stranger on the other end of a wide arena is not a permanent buff. The
+ * falloff between the two ranges is linear.
+ */
+export const BLOODLUST_ZERO_RANGE_PX = 1200;
+
+/**
+ * Once **berserk**, a low foe keeps the frenzy alive out to this distance.
+ * The 100px beyond the start range is hysteresis: a foe knocked just out of
+ * reach must not flicker the forced melee stance off and on every tick.
+ */
+export const BERSERK_HOLD_RANGE_PX = 400;
 
 /** Walk speed at full bloodlust: +35%. A predator closes the gap. */
 export const BLOODLUST_MOVE_SPEED_BONUS = 0.35;

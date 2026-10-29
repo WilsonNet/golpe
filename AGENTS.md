@@ -609,15 +609,18 @@ thrower. **Rupture**
 is a global curse (150 charge — half again the universal meter): the
 room freezes for the card, then for 6s everyone hostile bleeds per pixel
 they move while he stomps. **Bloodlust** is the first passive: the server
-writes `PlayerPosition.bloodlust` from the room's HP and `tickPlayer` reads
-it for walk speed and the melee clock; under 30% on any foe he goes
-**berserk**: forced into melee (no axes, no stance key), the dual-wield
-frenzy runs on a **held** button and **grinds through guards** (35% chip and
-a shove, never a guard break), half speed on the sword alone once every axe
-is thrown; resistant, blood-red glow and eyes; still dashes and traps. The
-HUD shows the bloodlust % and the buff it buys. A passive is state, never a
-hero check. See [specs/ibiriki.md](specs/ibiriki.md)
-and `scripts/ibiriki-probe.ts`.
+reads every hostile's HP *times its proximity* (full inside 300px, gone at
+1200px, a 400px hold once berserk), writes the strongest lure into
+`PlayerPosition.bloodlust`, and `tickPlayer` reads it for walk speed and the
+melee clock; a foe under 30% and close enough makes him **berserk**: forced into
+melee (no axes, no stance key); the dual-wield frenzy runs on a **held** button
+and **grinds through guards**
+(35% chip and a shove, never a guard break), half speed on the sword alone once
+every axe is thrown; resistant, blood-red glow and eyes; still dashes and traps.
+The HUD shows the bloodlust % and the buff it buys, plus a prey pin over every
+bleeding foe — clamped to the frame's edge, turned at it, when the foe is off
+screen. A passive is state, never a hero check. See
+[specs/ibiriki.md](specs/ibiriki.md) and `scripts/ibiriki-probe.ts`.
 
 **The guard is strong, and the Massive is a 1.6-second commitment.** Every block
 that stops a sword attack guard-breaks the attacker — a full second of the

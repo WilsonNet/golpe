@@ -19,6 +19,7 @@ const SPRITE_ANCHOR_CENTRE = 0.5;
 
 import { Container, type Renderer, Sprite } from "pixi.js";
 import { SMOKE_REVEAL_MS } from "../tweakables/items.js";
+import { BERSERK_FRACTION } from "../tweakables/passive.js";
 import { AXE_CHARGE_MS, pelletDamageAt } from "../tweakables/ranged.js";
 import { TutorialDirector, tutorialFor } from "./campaign";
 import { type AIConfig, randomBotConfig } from "./characters/AIConfig";
@@ -59,7 +60,7 @@ import {
 	type GameWorld,
 	type Queries,
 } from "./ecs/world";
-import { HUD_EVENTS, type HudState } from "./hud";
+import { HUD_EVENTS, type HudPrey, type HudState } from "./hud";
 import { assistedAim } from "./input/AimAssist";
 import { Input } from "./input/Input";
 import { inputSettings } from "./input/Scheme";
@@ -844,6 +845,34 @@ export class Match {
 	private lastHudName = "";
 	private lastHudHero: HudState["hero"] = "lia";
 
+	/**
+	 * Ibiriki's bleeding prey, in screen fractions off the same camera the HUD
+	 * is drawn against. Only a kit with the passive gets the list; a prey below
+	 * the berserk line is the one worth pointing at, and it stays in the list
+	 * when it is outside the frame so the HUD can pin the marker to the edge.
+	 */
+	private hudPrey(): HudPrey[] {
+		if (kitFor(this.hero).passive !== "bloodlust") return [];
+		const view = this.input.viewport;
+		const prey: HudPrey[] = [];
+		for (const [id, entity] of this.remotes) {
+			const hp = entity.fighter.hp;
+			if (hp <= 0) continue;
+			const fraction =
+				entity.fighter.maxHp > 0 ? hp / entity.fighter.maxHp : 0;
+			if (fraction > BERSERK_FRACTION) continue;
+			if (!hostile(this.local.fighter.team, entity.fighter.team)) continue;
+			const centre = bodyCentre(entity.body.x, entity.body.y);
+			prey.push({
+				id,
+				hp: fraction,
+				screenX: (centre.x - this.stage.cameraX) / view.width,
+				screenY: (centre.y - this.stage.cameraY) / view.height,
+			});
+		}
+		return prey;
+	}
+
 	private emitHud(force = false) {
 		const session = this.online;
 		const foeId = this.online?.primaryRemoteId ?? "";
@@ -949,6 +978,7 @@ export class Match {
 				kitFor(this.hero).passive === "bloodlust"
 					? this.local.body.bloodlust
 					: null,
+			prey: this.hudPrey(),
 			team: this.local.fighter.team,
 		};
 		const stanceChanged = state.stance !== this.lastHudStance;

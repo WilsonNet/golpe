@@ -492,10 +492,11 @@ export interface PlayerPosition extends MeleeState {
 	 */
 	reloadTimer: number;
 	/**
-	 * Ibiriki's **bloodlust**, 0..1: the server's reading of the weakest hostile
-	 * fighter's HP (see specs/ibiriki.md). It speeds the walk and the melee
-	 * clock, and at 1 the fighter is **berserk**. Written by the server every
-	 * tick from HP only it knows, read by `tickPlayer` on both sides — a speed
+	 * Ibiriki's **bloodlust**, 0..1: the server's reading of the strongest
+	 * hostile prey lure — HP share times proximity share (see
+	 * specs/ibiriki.md). It speeds the walk and the melee clock, and at 1 the
+	 * fighter is **berserk**. Written by the server every tick from HP and
+	 * positions only it knows, read by `tickPlayer` on both sides — a speed
 	 * applied on top of predicted state would be erased by the next
 	 * reconciliation. Zero for every kit without the passive.
 	 */
@@ -835,7 +836,7 @@ export function tickPlayer(
 		(s.blossomTimer > 0 ? BLOSSOM_WALK_MULTIPLIER : 1) *
 		// Planting the feet for a heavy throw: a held axe past the charge lock.
 		(s.throwChargeTimer >= CHARGE_LOCK_MS ? AXE_CHARGE_WALK_MULTIPLIER : 1) *
-		// Ibiriki's bloodlust: the weaker the room, the faster he closes.
+		// Ibiriki's bloodlust: the nearer the bleeding prey, the faster he closes.
 		(1 + Math.max(0, Math.min(1, s.bloodlust)) * BLOODLUST_MOVE_SPEED_BONUS);
 	const steerable = s.wallJumpTimer <= 0;
 	if (steerable && dir !== 0) {

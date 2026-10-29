@@ -97,8 +97,8 @@ unique (`slash` is the sword's, `stab` is the dagger's), which is what keeps
 
 **A passive is state, never a hero check.** Ibiriki's Bloodlust is a reading
 of the room the server writes into `PlayerPosition.bloodlust` every tick (only
-the server knows every HP); `tickPlayer` reads the field — the walk speed and
-the melee clock — on both sides. The kit's `passive` is what tells the server
+the server knows every fighter's HP and position); `tickPlayer` reads the field
+— the walk speed and the melee clock — on both sides. The kit's `passive` is what tells the server
 to produce it; the simulation never asks which hero it is. A **thrown** ranged
 weapon (`RangedWeaponDef.thrown`) charges on a held trigger in shared state
 (`throwChargeTimer`) and fires on the release, server-side.

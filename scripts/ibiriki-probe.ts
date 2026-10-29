@@ -6,21 +6,21 @@
  * wall, a bot walk back to pick it up, a guard crushed by the Sunder, a room
  * standing still under the rupture or a predator going berserk. This plays two
  * AI Ibirikis in one room against two server bots (so the curse has a crowd to
- * bleed, and somebody is always low enough for the bloodlust to fill), armed
- * from the start (`ultCharge=150`, the meter Rupture's cap actually asks for),
- * and asserts every part of the kit actually happened — and that nothing
- * desynced while it did.
+ * bleed, and the proximity-fed bloodlust has time to line up with a nearby low
+ * foe), armed from the start (`ultCharge=150`, the meter Rupture's cap actually
+ * asks for), and asserts every part of the kit actually happened — and that
+ * nothing desynced while it did.
  *
- * Run: `tsx scripts/ibiriki-probe.ts [--duration=45000]` with both dev servers up.
+ * Run: `tsx scripts/ibiriki-probe.ts [--duration=60000]` with both dev servers up.
  */
-import type { Page } from "playwright";
+import type { BrowserContext, Page } from "playwright";
 import { launchBrowser } from "./browser";
 
 const BASE = "http://localhost:8084";
 const arg = (name: string, fallback: string) =>
 	process.argv.find((a) => a.startsWith(`--${name}=`))?.split("=")[1] ??
 	fallback;
-const DURATION = Number(arg("duration", "45000"));
+const DURATION = Number(arg("duration", "60000"));
 const ROOM = `ibiprobe-${Date.now().toString(36)}`;
 
 type State = NonNullable<ReturnType<NonNullable<Window["__ibirikiState"]>>>;
@@ -40,6 +40,79 @@ async function boot(page: Page, url: string, errors: string[]) {
 			timeout: 20000,
 		},
 	);
+}
+
+/**
+ * Measure the two halves of the passive in the one room where distance is a
+ * controlled variable: a training dummy at 25% HP at the far edge (660px away)
+ * and then 180px away. The far dummy must feed a faded meter — not the full
+ * one — while the near one fills it. Both are in view in a one-screen practice
+ * room, so both carry a prey pin; the edge clamp itself is unit-tested by
+ * `PreyMarkers.test.ts`. See specs/ibiriki.md.
+ */
+async function measurePrey(ctx: BrowserContext) {
+	const page = await ctx.newPage();
+	await page.goto(`${BASE}/?training=true&mute=1&hero=ibiriki&ultCharge=150`);
+	await page.waitForFunction(() => !!window.__training, { timeout: 20000 });
+	const seated = await page.evaluate(() => window.__training!.ready(20000));
+	if (!seated) throw new Error("training room never seated");
+
+	const place = async (dummyX: number) => {
+		await page.evaluate(async (x) => {
+			await window.__training!.set({
+				behaviour: "idle",
+				dummyHp: 25,
+				dummyInvincible: true,
+				playerInvincible: true,
+				spawn: { player: { x: 100, y: 480 }, dummy: { x, y: 480 } },
+			});
+			await window.__training!.reset();
+		}, dummyX);
+	};
+	const read = () =>
+		page.evaluate(() => {
+			const hud = document.querySelector(".vdh-hud")?.getBoundingClientRect();
+			return {
+				bloodlust: window.__gameState?.().playerPhys?.bloodlust ?? -1,
+				pins: Array.from(document.querySelectorAll(".vdh-prey")).map((el) => {
+					const r = el.getBoundingClientRect();
+					return hud
+						? {
+								x: (r.left + r.width / 2 - hud.left) / hud.width,
+								y: (r.top + r.height / 2 - hud.top) / hud.height,
+							}
+						: { x: -1, y: -1 };
+				}),
+			};
+		});
+
+	await place(760);
+	await page.waitForFunction(
+		() => (window.__gameState?.().playerPhys?.bloodlust ?? -1) > 0.5,
+		null,
+		{ timeout: 8000 },
+	);
+	await page.waitForTimeout(500);
+	const far = await read();
+
+	await place(280);
+	await page.waitForFunction(
+		() => (window.__gameState?.().playerPhys?.bloodlust ?? -1) === 1,
+		null,
+		{ timeout: 8000 },
+	);
+	await page.waitForTimeout(500);
+	const near = await read();
+
+	await page.close();
+	return {
+		farBloodlust: far.bloodlust,
+		nearBloodlust: near.bloodlust,
+		farPins: far.pins.length,
+		nearPins: near.pins.length,
+		farPinOnPrey: far.pins.some((p) => p.x > 0.8),
+		nearPinOnPrey: near.pins.some((p) => p.x > 0.2 && p.x < 0.5),
+	};
 }
 
 async function main() {
@@ -71,6 +144,7 @@ async function main() {
 	}
 	const diagText =
 		consoleLines.find((l) => l.includes("__DIAGNOSTIC_RESULT__")) ?? "";
+	const prey = await measurePrey(ctx);
 	await ctx.close();
 	await browser.close();
 
@@ -96,6 +170,7 @@ async function main() {
 		frenzyChips: sum((s) => s.frenzyChips),
 		frenzyGuardBreaks: sum((s) => s.frenzyGuardBreaks),
 		axesInWorldAtEnd: states[0]?.axesInWorld ?? 0,
+		prey,
 		errors: errors.slice(0, 5),
 	};
 
@@ -123,6 +198,9 @@ async function main() {
 		["somebody was cursed", report.cursedFrames > 0],
 		["bloodlust rose", report.maxBloodlust > 0],
 		["berserk happened", report.berserkFrames > 0],
+		["bloodlust fades with distance", prey.farBloodlust > 0 && prey.nearBloodlust === 1 && prey.farBloodlust < prey.nearBloodlust],
+		["a bleeding prey gets a pin", prey.farPins > 0 && prey.nearPins > 0],
+		["the pin sits over the prey", prey.farPinOnPrey && prey.nearPinOnPrey],
 		["the frenzy landed", report.frenzyHits + report.frenzyChips > 0],
 		["berserk never held the ranged stance", report.berserkGunFrames === 0],
 		["berserk never wound up a throw", report.berserkThrowChargeFrames === 0],

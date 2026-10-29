@@ -13,6 +13,7 @@ here; the folder is pure data, so changing a number can never desync a match.
 | `ranged.ts` | The weapon stat cards: the rifle, the machine gun, the shotgun's pellet fan, its distance damage falloff, magazine, `magazinesPerLife` and the per-round reload times |
 | `ultimate.ts` | The charge economy, the cinematic freeze, the black hole, the dragon, the Death Blossom |
 | `items.ts` | The HE grenade, the trap, the smoke grenade, and the charges each kit grants |
+| `passive.ts` | Ibiriki's Bloodlust and Berserk: the HP and proximity curves, the speed bonuses, the empty-handed frenzy |
 | `match.ts` | Frag limits, timers, the end-of-match ceremony, MVP weights, team deathmatch's rounds |
 | `control.ts` | Control points: the per-point capture ladder, decay and overtime, respawn advantage, the cap limit, the pad's size |
 

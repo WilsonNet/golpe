@@ -1,9 +1,10 @@
 # Ibiriki, the Bloodthirsty
 
-**Intent:** a predator who gets *stronger the closer anyone is to dying*. Lia
+**Intent:** a predator who gets *stronger the closer a dying foe is*. Lia
 reads, Anands takes the initiative, Jeffs ambushes — Ibiriki **hunts**. His
-weapons are slow and heavy until the room starts bleeding, and then he is the
-fastest thing in it. Bloodseeker from Dota 2, wearing a horned helmet.
+weapons are slow and heavy until the hunt is on, and then he is the fastest
+thing in it. Bloodseeker from Dota 2, wearing a horned helmet — a predator has
+to be near the blood, not merely know it was spilled.
 
 The visual reference is his Gemini board and Tripo model: a round, chubby
 green goblin-viking — a ball of a body, short legs, a horned iron helmet,
@@ -22,19 +23,29 @@ at the player while he runs sideways. See [heroes.md](heroes.md#the-art).
 | **Ranged** (gun stance) | Throwing axes — charged ballistic throws, picked back up |
 | **Ultimate** | **Rupture** — a global curse: whoever moves, bleeds |
 | **Item** | Trap (shared with Anands) — a hunter's snare |
-| **Passive** | **Bloodlust** — faster as the room bleeds; **Berserk** below 30% |
+| **Passive** | **Bloodlust** — faster near bleeding prey; **Berserk** below 30% and in reach |
 
 ## The passive: Bloodlust
 
-Ibiriki is always tracking the **weakest hostile fighter alive**, anywhere in
-the room. Let `f` be that fighter's HP fraction.
+Ibiriki is always tracking every **living hostile**, anywhere in the room.
+Each foe is **prey**, and each contributes a lure with two parts:
 
-- **Bloodlust** is `clamp((90% − f) / (90% − 30%), 0, 1)`: nothing while every
-  foe is above 90%, full at 30% and below. It scales his **walk speed** (up to
-  **+35%**) and his **attack speed** (up to **+30%** — every melee move's clock
-  runs faster).
-- **Berserk** is full bloodlust: some foe is **below 30% HP**. Berserk Ibiriki
-  goes dumb with bloodlust:
+- **How hurt it is** — `clamp((90% − f) / (90% − 30%), 0, 1)`, where `f` is its
+  HP fraction: nothing at 90% or above, full at the 30% berserk line.
+- **How close it is** — full within **300px** (centre to centre), fading
+  linearly to **nothing at 1200px**. A screen is 800px, so a bleeding stranger
+  at the far end of a wide arena is a faint scent, not a permanent buff.
+
+The lure is the two multiplied, and **the strongest single lure wins** —
+`PlayerPosition.bloodlust` in 0..1, quantised to 0.01.
+
+- **Bloodlust** scales his **walk speed** (up to **+35%**) and his **attack
+  speed** (up to **+30%** — every melee move's clock runs faster).
+- **Berserk** is full bloodlust: a foe is **below 30% HP and close enough** for
+  its proximity share to be full. A dying foe across the arena does not make
+  him berserk; a wounded one in his face does. Once it is on, a low foe keeps
+  it out to **400px** — 100px of hysteresis, so a knockback cannot make the
+  frenzy and the forced stance blink. Berserk Ibiriki goes dumb with bloodlust:
   - **loses the ranged stance** — he is forced into melee the tick it begins
     (a throw being charged is dropped), and the stance key does nothing
     until it ends; the stance he asked for comes back with the calm;
@@ -56,11 +67,17 @@ the room. Let `f` be that fighter's HP fraction.
   which is a tiny mispredict on the tick it changes and nothing else.
 - Only a hero whose kit declares the passive (`HeroKit.passive`) ever gets a
   non-zero value — the simulation reads the field, never the hero.
-- Global by design: in a sixteen-fighter brawl somebody is always bleeding,
-  and that is exactly when Ibiriki is supposed to be a menace.
+- **Proximity is Euclidean and centre to centre**, so a vertical map's stacked
+  floors are read the same way as a flat screen.
 - **The HUD shows it.** Ibiriki's own panel carries a bloodlust meter under
   the HP bar: the percentage, the bar, and what it buys right now
   (`+22% MOVE · +19% ATK`). At full it reads **BERSERK** and burns.
+- **Prey pins.** The HUD marks every hostile below the 30% line: a red arrow
+  just above its nameplate with its HP percentage, and when the foe is outside
+  the frame the same pin is clamped to the edge and turned at it. It is
+  presentation only, built from the `hud-state` this client already has — the
+  server decides nothing about it — and it is the hunt's compass on a wide
+  arena, where the bloodlust can be fed by somebody nobody can see.
 
 ## The viking sword (melee stance)
 

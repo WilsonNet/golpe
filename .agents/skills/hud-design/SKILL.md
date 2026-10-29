@@ -68,6 +68,11 @@ both sides import) and emits `hud-state`:
   `match-status` as `status.teams`, because the *server* decides a round has been
   won. A client counting the living itself would announce a wipe on a frame where
   its own prediction had killed somebody the server had not.
+- **Ibiriki's prey pins are screen-space, not world-space.** `HudState.prey`
+  carries bleeding foes as frame fractions at snapshot cadence; `PreyMarkers`
+  puts a pin above an in-view foe and clamps an off-screen one into a safe
+  rectangle, turned at it. It is presentation from the same `hud-state` — no
+  Pixi layer, and no per-frame DOM path.
 
 ## Sizing: container units, no JS measurement
 

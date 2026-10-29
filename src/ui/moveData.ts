@@ -34,7 +34,9 @@ import {
 	BERSERK_DAMAGE_TAKEN,
 	BERSERK_FRACTION,
 	BLOODLUST_ATTACK_SPEED_BONUS,
+	BLOODLUST_FULL_RANGE_PX,
 	BLOODLUST_MOVE_SPEED_BONUS,
+	BLOODLUST_ZERO_RANGE_PX,
 } from "../tweakables/passive";
 import {
 	AXE_CHARGE_MS,
@@ -523,8 +525,8 @@ export const MOVE_LISTS: Record<HeroId, HeroMoveList> = {
 				category: "system",
 				name: "Bloodlust (passive)",
 				command: { label: "ALWAYS ON", actions: [] },
-				prose: `Ibiriki smells the weakest foe in the room. The lower their HP, the faster he walks (up to +${Math.round(BLOODLUST_MOVE_SPEED_BONUS * 100)}%) and swings (up to +${Math.round(BLOODLUST_ATTACK_SPEED_BONUS * 100)}%). Below ${Math.round(BERSERK_FRACTION * 100)}% he goes **berserk**: dumb with bloodlust, he is forced into melee (no axe throws), his eyes glow, a blood-red aura rises, he dual wields the sword and an axe, a held attack button runs the frenzy without end, and he takes ${Math.round((1 - BERSERK_DAMAGE_TAKEN) * 100)}% less damage. He still dashes and still lays his trap. The HUD meter under his HP shows the bloodlust and what it buys.`,
-				tags: "GLOBAL · BERSERK BELOW 30%",
+				prose: `Ibiriki smells the blood in the room, and the smell fades with distance. Each foe's HP sets a lure; how close they are scales it down — full within ${BLOODLUST_FULL_RANGE_PX}px, gone by ${BLOODLUST_ZERO_RANGE_PX}px — and the strongest lure wins. The lower their HP and the nearer they are, the faster he walks (up to +${Math.round(BLOODLUST_MOVE_SPEED_BONUS * 100)}%) and swings (up to +${Math.round(BLOODLUST_ATTACK_SPEED_BONUS * 100)}%). A foe below ${Math.round(BERSERK_FRACTION * 100)}% **and close enough** makes him **berserk**: dumb with bloodlust, he is forced into melee (no axe throws), his eyes glow, a blood-red aura rises, he dual wields the sword and an axe, a held attack button runs the frenzy without end, and he takes ${Math.round((1 - BERSERK_DAMAGE_TAKEN) * 100)}% less damage. He still dashes and still lays his trap. The HUD meter under his HP shows the bloodlust and what it buys, and a prey pin marks every bleeding foe — an edge arrow when they are outside the frame.`,
+				tags: "HP × PROXIMITY · BERSERK <30% IN REACH",
 			},
 			meleeEntry("hew"),
 			meleeEntry("hew2"),

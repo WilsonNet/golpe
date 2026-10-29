@@ -154,8 +154,8 @@ function isChargeMove(move: MeleeMove): boolean {
 
 /**
  * Is this fighter **berserk** — full bloodlust? Only Ibiriki's kit ever sets
- * `bloodlust` above zero (the server computes it from the room's weakest
- * foe), so for everybody else this is false by construction.
+ * `bloodlust` above zero (the server computes it from the room's bleeding prey
+ * and how near they are), so for everybody else this is false by construction.
  */
 export function isBerserk(s: { bloodlust?: number }): boolean {
 	return (s.bloodlust ?? 0) >= 1;
@@ -177,6 +177,44 @@ export function meleeHaste(s: { bloodlust?: number }): number {
  */
 function inFrenzy(s: { bloodlust?: number }, weapon: MeleeWeaponDef): boolean {
 	return isBerserk(s) && weapon.berserkChain !== undefined;
+}
+
+/**
+ * Change stance, paying the price every switch pays: a cancellable move ends,
+ * the chain drops and the charge is lost. `sword` is the slot, not the weapon.
+ */
+function switchStance(s: MeleeTickState, sword: boolean): void {
+	// GunZ's slash-shot: switching weapons cancels a slash. It is not an escape
+	// from a heavy move.
+	if (isCancellable(s)) {
+		endMove(s);
+		// A cancel is a cancel: this drops the chain for the same reason the block
+		// cancel does. Left in, the slash-shot would be the strictly better
+		// cancel — the only one that keeps the combo alive.
+		resetCombo(s);
+	}
+	// And a stance switch kills the charge in both directions. The charge is a
+	// commitment that has to survive dash, jump and block to be worth anything —
+	// those are its delivery tools — but "don't switch weapons" is where it ends.
+	s.chargeTimer = 0;
+	s.massiveReady = false;
+	s.parryMassiveTimer = 0;
+	s.stance = sword ? "sword" : "gun";
+	if (!sword) {
+		s.blocking = false;
+		s.blockTimer = 0;
+	}
+}
+
+/**
+ * The frenzy takes the ranged weapon away on every tick it holds — it is a
+ * passive, not an action, so it does not wait for a stun to end. Forcing it
+ * before the gates below is what keeps a berserk Ibiriki from holding the axes
+ * through a helpless pose.
+ */
+function forceFrenzyStance(s: MeleeTickState, weapon: MeleeWeaponDef): void {
+	if (!inFrenzy(s, weapon) || s.stance === "sword") return;
+	switchStance(s, true);
 }
 
 /**
@@ -384,8 +422,8 @@ export interface MeleeTickState extends MeleeState {
 	/** ms left of a root (trap lock). Only `PlayerPosition` ever sets it. */
 	rootTimer?: number;
 	/**
-	 * Ibiriki's bloodlust, 0..1 — the server's reading of the room's weakest
-	 * foe. Speeds the melee clock and, at 1, swaps in the berserk chain. Only
+	 * Ibiriki's bloodlust, 0..1 — the server's reading of the nearest bleeding
+	 * prey. Speeds the melee clock and, at 1, swaps in the berserk chain. Only
 	 * `PlayerPosition` ever sets it.
 	 */
 	bloodlust?: number;
@@ -774,6 +812,10 @@ export function tickMelee(
 	// checked between moves: a running link carries the chain in `meleeAction`.
 	if (s.meleeAction === "none" && s.comboTimer <= 0) s.comboStep = 0;
 
+	// A passive is not an action: the frenzy drops the axes even on a tick the
+	// stun gate is about to discard every player intent.
+	forceFrenzyStance(s, weapon);
+
 	if (isStunned(s)) {
 		// Everything is taken away, including a charge that was nearly ready.
 		// Getting hit out of a charge is meant to cost you the charge.
@@ -866,30 +908,7 @@ export function tickMelee(
 	// drops a throw's charge the way pressing the key would.
 	const frenzy = inFrenzy(s, weapon);
 	const wantSword = input.swordStance || frenzy;
-	const hasSword = s.stance === "sword";
-	if (wantSword !== hasSword) {
-		// GunZ's slash-shot: switching weapons cancels a slash. It is not an escape
-		// from a heavy move.
-		if (isCancellable(s)) {
-			endMove(s);
-			// A cancel is a cancel: this drops the chain for the same reason the block
-			// cancel below does. Left in, the slash-shot would be the strictly better
-			// cancel — the only one that keeps the combo alive.
-			resetCombo(s);
-		}
-		// And a stance switch kills the charge in both directions. The charge is a
-		// commitment that has to survive dash, jump and block to be worth anything —
-		// those are its delivery tools — but "don't switch weapons" is where it
-		// ends.
-		s.chargeTimer = 0;
-		s.massiveReady = false;
-		s.parryMassiveTimer = 0;
-		s.stance = wantSword ? "sword" : "gun";
-		if (!wantSword) {
-			s.blocking = false;
-			s.blockTimer = 0;
-		}
-	}
+	if (wantSword !== (s.stance === "sword")) switchStance(s, wantSword);
 	const sword = s.stance === "sword";
 
 	// ---- block / shift ----

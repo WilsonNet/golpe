@@ -37,6 +37,19 @@ export interface HudKillEvent {
 	mine: boolean;
 }
 
+/**
+ * One bleeding hostile on Ibiriki's hunt: enough to point at it, on screen or
+ * beyond the edge of it. Positions are fractions of the visible arena and may
+ * sit outside 0..1 — the HUD pins them to the frame's edge.
+ */
+export interface HudPrey {
+	id: string;
+	/** HP as a fraction of max, 0..1. */
+	hp: number;
+	screenX: number;
+	screenY: number;
+}
+
 /** Health values in hit points; `ult` in 0..`ultCap` like the simulation. */
 export interface HudState {
 	hp: number;
@@ -122,10 +135,18 @@ export interface HudState {
 	/** Ibiriki is berserk: the badge says so and the panel burns. */
 	berserk: boolean;
 	/**
-	 * The local fighter's bloodlust, 0..1 — the buff the room's weakest foe is
-	 * feeding him — or `null` for a kit without the passive (no meter drawn).
+	 * The local fighter's bloodlust, 0..1 — the buff the nearest bleeding prey
+	 * is feeding him — or `null` for a kit without the passive (no meter
+	 * drawn).
 	 */
 	bloodlust: number | null;
+	/**
+	 * Ibiriki's bleeding prey, empty for every other kit. The HUD marks each one
+	 * — above its nameplate in view, pinned to the frame's edge and turned at it
+	 * when outside — because the hunt should not have to search a wide arena
+	 * for the blood that is feeding it.
+	 */
+	prey: HudPrey[];
 	/**
 	 * The local fighter's side in a team deathmatch, or `null` in a free-for-all.
 	 *

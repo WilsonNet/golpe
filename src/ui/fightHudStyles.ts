@@ -224,7 +224,7 @@ export const FIGHT_HUD_CSS = `
 	white-space: nowrap;
 }
 
-/* Ibiriki's bloodlust: the buff the room's weakest foe is feeding him. */
+/* Ibiriki's bloodlust: the buff the nearest bleeding prey is feeding him. */
 .vdh-lust {
 	display: flex;
 	align-items: center;
@@ -933,6 +933,43 @@ export const FIGHT_HUD_CSS = `
 	max-width: 12cqw;
 	overflow: hidden;
 	text-overflow: ellipsis;
+}
+
+/* ---- Ibiriki's prey pins ----
+   A red triangle and the HP left: above the nameplate while the bleeding foe
+   is in view, clamped to the frame's edge and turned at it when it is not. The
+   safe rectangle keeps a pin off the panels, clock and bottom meters.
+   Presentation only — the positions come from hud-state. */
+.vdh-prey {
+	position: absolute;
+	transform: translate(-50%, -50%);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.3cqh;
+	filter: drop-shadow(0 0.25cqh 0 rgba(0, 0, 0, 0.8));
+	animation: vdh-prey-throb 1.1s ease-in-out infinite;
+}
+.vdh-prey-arrow {
+	width: 0;
+	height: 0;
+	border-left: 1.1cqw solid #ff5d5d;
+	border-top: 0.62cqw solid transparent;
+	border-bottom: 0.62cqw solid transparent;
+}
+.vdh-prey-hp {
+	padding: 0.1cqh 0.55cqw;
+	font-size: 1.15cqw;
+	letter-spacing: 0.08em;
+	color: #ffd6d6;
+	white-space: nowrap;
+	background: rgba(34, 8, 10, 0.82);
+	border: 1px solid rgba(255, 93, 93, 0.65);
+	border-radius: 2px;
+}
+@keyframes vdh-prey-throb {
+	0%, 100% { opacity: 0.55; }
+	50% { opacity: 1; }
 }
 
 /* ---- the controls hint ----

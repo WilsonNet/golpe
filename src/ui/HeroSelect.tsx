@@ -150,7 +150,7 @@ export function HeroSelect({
 						? "The storm: no guard at all — stabs, a lunge that knocks down, a dragon."
 						: current === "jeffs"
 							? "The executioner: a one-blast kill at point blank, a smoke to vanish in, a storm."
-							: "The bloodthirsty: heavy hews, axes you walk back to, faster the more the room bleeds."}
+							: "The bloodthirsty: heavy hews, axes you walk back to, faster near bleeding prey."}
 			</div>
 		</>
 	);

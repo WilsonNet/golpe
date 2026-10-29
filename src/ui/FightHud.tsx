@@ -36,6 +36,7 @@ import {
 import { FIGHT_HUD_CSS } from "./fightHudStyles";
 import { KillFeed } from "./KillFeed";
 import { useEndgameCeremony } from "./PlayOfTheGame";
+import { PreyMarkers } from "./PreyMarkers";
 import { RuptureCurse } from "./RuptureCurse";
 import { formatClock, type MatchView, useMatch } from "./useMatch";
 
@@ -487,6 +488,10 @@ export function FightHud({ training = false }: { training?: boolean }) {
 			<style>{FIGHT_HUD_CSS}</style>
 			{hud ? <FighterPanel hud={hud} foe={false} training={training} /> : null}
 			{hud && duel ? <FighterPanel hud={hud} foe training={training} /> : null}
+
+			{/* Ibiriki's bleeding prey: a pin over each one, pinned to the
+			    frame's edge when it is outside, so the hunt never loses the scent. */}
+			{hud ? <PreyMarkers prey={hud.prey} /> : null}
 
 			{/* Whoever fights in the corner of the eye: the frags nobody saw. */}
 			<KillFeed />

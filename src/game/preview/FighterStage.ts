@@ -780,14 +780,23 @@ export class FighterStage {
 			plunging: f.body.plunging,
 		};
 		const prevThrowCharge = f.body.throwChargeTimer;
-		// The bloodlust, exactly as the server reads the room: the weakest
-		// living dummy's HP. Zero for a kit without the passive.
+		// The bloodlust, exactly as the server reads the room: every living
+		// dummy's HP share faded by its distance, strongest lure wins. Zero for
+		// a kit without the passive.
 		if (this.kit.passive === "bloodlust") {
-			const alive = this.targets.filter((d) => d.entity.fighter.hp > 0);
-			const weakest = alive.length
-				? Math.min(...alive.map((d) => d.entity.fighter.hp / MAX_HP))
-				: null;
-			f.body.bloodlust = bloodlustFor(weakest);
+			const selfX = f.body.x + PLAYER_WIDTH / 2;
+			const selfY = f.body.y + PLAYER_HEIGHT / 2;
+			f.body.bloodlust = bloodlustFor(
+				this.targets
+					.filter((d) => d.entity.fighter.hp > 0)
+					.map((d) => ({
+						fraction: d.entity.fighter.hp / MAX_HP,
+						distancePx: Math.hypot(
+							d.entity.body.x + PLAYER_WIDTH / 2 - selfX,
+							d.entity.body.y + PLAYER_HEIGHT / 2 - selfY,
+						),
+					})),
+			);
 		}
 
 		f.body = tickPlayer(

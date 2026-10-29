@@ -14,8 +14,11 @@ import {
 import {
 	BERSERK_EMPTY_HANDED_HASTE,
 	BERSERK_FRACTION,
+	BERSERK_HOLD_RANGE_PX,
 	BLOODLUST_ATTACK_SPEED_BONUS,
+	BLOODLUST_FULL_RANGE_PX,
 	BLOODLUST_MOVE_SPEED_BONUS,
+	BLOODLUST_ZERO_RANGE_PX,
 } from "../../tweakables/passive.js";
 import {
 	AXE_CHARGE_MS,
@@ -49,7 +52,7 @@ import {
 	resolveMelee,
 	tickMelee,
 } from "./Melee.js";
-import { bloodlustFor } from "./Passive.js";
+import { bloodlustFor, bloodlustProximity } from "./Passive.js";
 import {
 	createPlayerState,
 	NEUTRAL_INTENT,
@@ -218,22 +221,68 @@ describe("the Sunder", () => {
 });
 
 describe("bloodlust and berserk", () => {
-	it("maps the weakest foe's HP to 0..1, full at the berserk line", () => {
-		expect(bloodlustFor(null)).toBe(0);
-		expect(bloodlustFor(1)).toBe(0);
-		expect(bloodlustFor(0.9)).toBe(0);
-		expect(bloodlustFor(0.6)).toBeCloseTo(0.5, 2);
-		expect(bloodlustFor(BERSERK_FRACTION)).toBe(1);
-		expect(bloodlustFor(0.05)).toBe(1);
+	it("maps a near foe's HP to 0..1, full at the berserk line", () => {
+		expect(bloodlustFor([])).toBe(0);
+		expect(bloodlustFor([{ fraction: 1, distancePx: 0 }])).toBe(0);
+		expect(bloodlustFor([{ fraction: 0.9, distancePx: 0 }])).toBe(0);
+		expect(bloodlustFor([{ fraction: 0.6, distancePx: 0 }])).toBeCloseTo(0.5, 2);
+		expect(bloodlustFor([{ fraction: BERSERK_FRACTION, distancePx: 0 }])).toBe(1);
+		expect(bloodlustFor([{ fraction: 0.05, distancePx: 0 }])).toBe(1);
 	});
 
 	it("is monotonic: a weaker foe never means less bloodlust", () => {
 		let last = -1;
 		for (let f = 1; f >= 0; f -= 0.01) {
-			const b = bloodlustFor(f);
+			const b = bloodlustFor([{ fraction: f, distancePx: 0 }]);
 			expect(b).toBeGreaterThanOrEqual(last);
 			last = b;
 		}
+	});
+
+	it("fades with distance: full inside the range, nothing past it", () => {
+		const at = (distancePx: number) =>
+			bloodlustFor([{ fraction: BERSERK_FRACTION, distancePx }]);
+		expect(bloodlustProximity(BLOODLUST_FULL_RANGE_PX)).toBe(1);
+		expect(bloodlustProximity(BLOODLUST_ZERO_RANGE_PX)).toBe(0);
+		expect(at(BLOODLUST_FULL_RANGE_PX)).toBe(1);
+		expect(at(BLOODLUST_ZERO_RANGE_PX)).toBe(0);
+		expect(at(BLOODLUST_ZERO_RANGE_PX + 500)).toBe(0);
+		let last = -1;
+		for (let d = 0; d <= BLOODLUST_ZERO_RANGE_PX; d += 25) {
+			const b = at(d);
+			expect(b).toBeLessThanOrEqual(last === -1 ? 1 : last + 1e-9);
+			last = b;
+		}
+	});
+
+	it("holds the frenzy a little wider once berserk", () => {
+		const beyondReach = BLOODLUST_FULL_RANGE_PX + 50;
+		expect(
+			bloodlustFor([
+				{ fraction: BERSERK_FRACTION, distancePx: beyondReach },
+			]),
+		).toBeLessThan(1);
+		expect(
+			bloodlustFor(
+				[{ fraction: BERSERK_FRACTION, distancePx: beyondReach }],
+				BERSERK_HOLD_RANGE_PX,
+			),
+		).toBe(1);
+	});
+
+	it("takes the strongest lure: a healthy foe close beats a dying one far", () => {
+		const nearHealthy = bloodlustFor([{ fraction: 0.6, distancePx: 0 }]);
+		const farDying = bloodlustFor([
+			{ fraction: BERSERK_FRACTION, distancePx: BLOODLUST_ZERO_RANGE_PX },
+		]);
+		expect(nearHealthy).toBeGreaterThan(0);
+		expect(farDying).toBe(0);
+		expect(
+			bloodlustFor([
+				{ fraction: 0.6, distancePx: 0 },
+				{ fraction: BERSERK_FRACTION, distancePx: BLOODLUST_ZERO_RANGE_PX },
+			]),
+		).toBe(nearHealthy);
 	});
 
 	it("speeds the melee clock by the attack-speed bonus", () => {
@@ -285,6 +334,13 @@ describe("bloodlust and berserk", () => {
 });
 
 describe("the berserk frenzy", () => {
+	it("forces the melee stance even while stunned", () => {
+		// A passive is not an action: a stun discards intent, not the frenzy.
+		const s = body(100, 1, { stance: "gun", bloodlust: 1, stunTimer: 200 });
+		tickMelee(s, intent({ swordStance: false }), DT, VIKING);
+		expect(s.stance).toBe("sword");
+	});
+
 	it("forces the melee stance — the axes are out of his hands", () => {
 		const s = body(100, 1, { stance: "gun", bloodlust: 1 });
 		tickMelee(s, intent({ swordStance: false }), DT, VIKING);

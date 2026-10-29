@@ -105,8 +105,10 @@ import { smokeHidesFrom } from "../src/game/simulation/Items.js";
 import { applyGuardCrush, isBerserk } from "../src/game/simulation/Melee.js";
 import {
 	BERSERK_DAMAGE_TAKEN,
+	type BloodlustPrey,
 	bloodlustFor,
 } from "../src/game/simulation/Passive.js";
+import { BERSERK_HOLD_RANGE_PX } from "../src/tweakables/passive.js";
 import {
 	aliveCounts,
 	balanceTeam,
@@ -4344,10 +4346,11 @@ export class GameRoom {
 	// =========================================================
 
 	/**
-	 * Write every fighter's bloodlust into their state: the weakest *hostile,
-	 * living* foe's HP fraction, mapped by `bloodlustFor`. Only a kit with the
-	 * passive gets a value; everybody else is pinned to zero, so the field the
-	 * simulation reads is inert for them by construction.
+	 * Write every fighter's bloodlust into their state: each living hostile is
+	 * prey, its lure is its HP share times its proximity share, and the
+	 * strongest lure in the room wins. Only a kit with the passive gets a
+	 * value; everybody else is pinned to zero, so the field the simulation
+	 * reads is inert for them by construction.
 	 */
 	private updateBloodlust() {
 		for (const player of this.players.values()) {
@@ -4355,14 +4358,24 @@ export class GameRoom {
 				player.state.bloodlust = 0;
 				continue;
 			}
-			let weakest: number | null = null;
+			const selfX = player.state.x + PLAYER_WIDTH / 2;
+			const selfY = player.state.y + PLAYER_HEIGHT / 2;
+			const prey: BloodlustPrey[] = [];
 			for (const foe of this.players.values()) {
 				if (foe === player || !foe.alive || foe.hp <= 0) continue;
 				if (!hostile(player.team, foe.team)) continue;
-				const f = foe.hp / MAX_HP;
-				if (weakest === null || f < weakest) weakest = f;
+				const dx = foe.state.x + PLAYER_WIDTH / 2 - selfX;
+				const dy = foe.state.y + PLAYER_HEIGHT / 2 - selfY;
+				prey.push({
+					fraction: foe.hp / MAX_HP,
+					distancePx: Math.hypot(dx, dy),
+				});
 			}
-			player.state.bloodlust = bloodlustFor(weakest);
+			// Already berserk: the hold range keeps a foe knocked just out of
+			// reach from flickering the frenzy (and the forced stance) off.
+			const holdRange =
+				player.state.bloodlust >= 1 ? BERSERK_HOLD_RANGE_PX : undefined;
+			player.state.bloodlust = bloodlustFor(prey, holdRange);
 		}
 	}
 

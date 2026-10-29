@@ -100,14 +100,14 @@ export const IBIRIKI_COURSE: CampaignModule = {
 					id: "ibiriki-berserk",
 					title: "Berserk",
 					brief:
-						"Ibiriki smells the weakest foe in the room: the lower their health, the faster he walks and swings. This dummy is already bleeding — below the line — so you are **berserk**: eyes burning, an axe in the off hand, and the attack button runs the frenzy. Sword, axe, both.",
+						"Ibiriki smells bleeding prey nearby: the lower a foe's health and the closer they are, the faster he walks and swings. This dummy is already bleeding and within reach, so you are **berserk**: eyes burning, an axe in the off hand, and the attack button runs the frenzy. Sword, axe, both.",
 					stage: { ...SAFE_STAGE, behaviour: "idle", dummyHp: 25 },
 					objectives: [
 						o.goBerserk(1),
 						o.land("rend3", "the frenzy's X-cut", 2),
 					],
 					outro:
-						"Berserk takes a quarter off every hit you take. The room's weakest fighter is your fuel.",
+						"Berserk takes a quarter off every hit you take. A bleeding fighter close enough to smell is your fuel.",
 				},
 				{
 					id: "ibiriki-ultimate",
