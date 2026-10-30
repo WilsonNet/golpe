@@ -107,6 +107,50 @@ async function menuContext() {
 		).length;
 	});
 	check("hero chips stay inside the card", chipOverflow === 0, `overflowing=${chipOverflow}`);
+	// The badge is 352px of plate, and the header used to be a full-width row
+	// with the plate on the left and the repo pill alone on the right — half the
+	// card spent on nothing, which read as a panel that failed to load. The
+	// masthead is a lockup now: the pitch belongs in the band *beside* the
+	// plate, near enough to read as one block, and the pill owns the far edge.
+	const masthead = await page.evaluate(() => {
+		// Anonymous callbacks only: tsx's `keep-names` wraps a *named* function
+		// expression in a `__name(...)` helper that does not exist in the page.
+		const boxes = [
+			".gd-logo",
+			".gd-menu-head .gd-sub",
+			".gd-repo",
+		].map((sel) => {
+			const el = document.querySelector(sel);
+			if (!el) return null;
+			const r = el.getBoundingClientRect();
+			return { left: r.left, right: r.right, width: r.width };
+		});
+		const card = document.querySelector(".gd-menu-page .gd-card");
+		return {
+			plate: boxes[0],
+			pitch: boxes[1],
+			repo: boxes[2],
+			contentRight: card
+				? card.getBoundingClientRect().right -
+					Number.parseFloat(getComputedStyle(card).paddingRight)
+				: 0,
+		};
+	});
+	const mastheadGap =
+		masthead.plate && masthead.pitch
+			? masthead.pitch.left - masthead.plate.right
+			: -1;
+	check(
+		"the pitch sits beside the badge, not under it",
+		mastheadGap >= 0 && mastheadGap <= 64,
+		`gap=${mastheadGap.toFixed(0)}px`,
+	);
+	const repoRight = masthead.repo?.right ?? -1;
+	check(
+		"the repo pill owns the right end of the masthead",
+		Math.abs(repoRight - masthead.contentRight) < 2,
+		`pill=${repoRight.toFixed(0)} edge=${masthead.contentRight.toFixed(0)}`,
+	);
 	// The home page is a short list by design. Five play choices are on the
 	// front (Quick match, Host, Join, Map maker, and the tutorial beside the
 	// hero picker); everything else is disclosed, and the first-time card is a

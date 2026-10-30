@@ -276,22 +276,27 @@ export function MainMenu({
 			<style>{HUD_CSS}</style>
 			<style>{MENU_CSS}</style>
 			<div className={`gd-card${view === "home" ? " gd-card-home" : ""}`}>
+				{/* The masthead is a lockup, not a title and a spare corner: the
+				    badge on the left, and the one-line pitch with the repository
+				    pill in the band beside it. A 352px badge under a full-width
+				    row left half the header empty, which read as a missing panel
+				    rather than as air. See `.gd-menu-head` in menuStyles. */}
 				<div className="gd-menu-head">
-					<div>
-						<h1 className="gd-logo-title">
-							<img
-								className="gd-logo"
-								src={logoUrl}
-								width={704}
-								height={344}
-								alt="golpe"
-							/>
-						</h1>
+					<h1 className="gd-logo-title">
+						<img
+							className="gd-logo"
+							src={logoUrl}
+							width={704}
+							height={344}
+							alt="golpe"
+						/>
+					</h1>
+					<div className="gd-masthead">
 						<p className="gd-sub">
 							A 2D swordfight, online first — the link is the invitation.
 						</p>
+						<RepoLink />
 					</div>
-					<RepoLink />
 				</div>
 
 				{view === "home" ? (

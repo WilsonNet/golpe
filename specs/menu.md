@@ -45,6 +45,18 @@ that want the sign to be the brightest thing on them (the README's dark theme).
 The `alt` is `golpe`, and its width is 352px, an exact 2x of the 176px grid.
 `tsx scripts/logo-probe.ts` measures the contrast, the letters and the stroke.
 
+**The badge is a plate, so the header is a masthead, not a title line.** A 352px
+plate left alone in a full-width row left half the card empty between it and the
+repository pill — the one place the menu read as a panel that failed to load.
+The header is therefore a lockup: the plate on the left, and in the band beside
+it the one-line pitch and, at the far edge, the pill. From 980px wide the three
+sit in a row, vertically centred on the plate; under that the card is too narrow
+to hold both and they stack (plate, pitch, pill), which is also what every other
+view does — a 600px form is not wide enough to spend 352 of its pixels on a
+sign. `scripts/menu-probe.ts` holds the measurement: the pitch must start within
+a gutter of the plate's right edge, and the pill must end at the card's content
+edge.
+
 The root is **a short list, not a catalogue**. Hick's law is the reason: the time
 to choose grows with the number of options weighed, and eleven equal-weight
 buttons made every choice look like every other choice. So the front page carries

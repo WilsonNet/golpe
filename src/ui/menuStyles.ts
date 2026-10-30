@@ -70,17 +70,22 @@ export const MENU_CSS = `
 	letter-spacing: 0.14em;
 	margin-bottom: 8px;
 }
-/* The wordmark is baked pixel art, not a CSS font. The badge is a 176 x 86
-   grid exported 4x (704 x 344), so 352px here is an exact 2x: every source
-   pixel is a whole number of device pixels at 1x and at 2x, which is what
-   keeps the hazard tape's staircase clean. */
+/* The badge is 176 x 86 art exported 4x (704 x 344), so 352px is an exact 2x:
+   every source pixel is a whole number of device pixels at 1x and at 2x, which
+   is what keeps the hazard tape's staircase clean. The width lives on the
+   heading, not the image: an <h1> flex item resolves to its image's *intrinsic*
+   704px max-content, which made the heading twice as wide as the picture and
+   squeezed the pitch beside it into a 79px ribbon. */
 .gd-logo-title {
-	margin: 0 0 8px;
+	margin: 0;
 	line-height: 0;
+	flex: 0 0 auto;
+	width: min(352px, 100%);
+	max-width: 100%;
 }
 .gd-logo {
 	display: block;
-	width: min(352px, 100%);
+	width: 100%;
 	height: auto;
 	image-rendering: pixelated;
 }
@@ -843,22 +848,43 @@ a.gd-play-item { color: inherit; text-decoration: none; }
 	}
 }
 
-/* ---- the header: the name, the line, and the repository ----
+/* ---- the header: the badge, the line, and the repository ----
    The game is open source, and this is the one page every player sees, so the
    repository sits in the header beside the title rather than in a footer. It is
-   a quiet pill — the gold is for playing — with the star count as its badge. */
+   a quiet pill — the gold is for playing — with the star count as its badge.
+
+   The badge is 176 x 86 art at 352px, so it is a *plate*, not a line of type:
+   a header row that left it alone on the left and the pill alone on the right
+   had half the card empty between them, which read as a panel that failed to
+   load. The masthead is therefore a lockup — the badge, then the pitch and the
+   pill in the band beside it — so every pixel of the row belongs to something.
+   Under 980px the card is too narrow to hold both, and the three stack. */
 .gd-menu-head {
 	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	margin-bottom: 18px;
+}
+.gd-masthead {
+	display: flex;
+	flex-direction: column;
 	align-items: flex-start;
-	justify-content: space-between;
-	gap: 16px;
+	gap: 12px;
+	min-width: 0;
+}
+/* Scoped: .gd-sub is every dialog's lead paragraph, and only the masthead's
+   copy sits inside a lockup with a plate. */
+.gd-menu-head .gd-sub {
+	margin: 0;
+	line-height: 1.55;
+	color: rgba(255, 255, 255, 0.62);
+	max-width: 44ch;
 }
 .gd-repo {
 	flex: none;
 	display: inline-flex;
 	align-items: center;
 	gap: 8px;
-	margin-top: 4px;
 	padding: 7px 10px 7px 12px;
 	border: 1px solid rgba(255, 255, 255, 0.22);
 	border-radius: 999px;
@@ -905,6 +931,35 @@ a.gd-play-item { color: inherit; text-decoration: none; }
 	.gd-menu-page .gd-card.gd-card-home {
 		max-width: 940px;
 		padding: 26px 36px;
+	}
+	/* The home card is the only one wide enough to hold the badge and the pitch
+	   side by side. The other views are a 600px form: there the masthead keeps
+	   stacking, which is what it does on a phone. */
+	.gd-card-home .gd-menu-head {
+		flex-direction: row;
+		align-items: center;
+		gap: 30px;
+	}
+	.gd-card-home .gd-masthead {
+		flex: 1;
+		flex-direction: row;
+		align-items: center;
+		gap: 22px;
+	}
+	/* The pitch is a standfirst, not a caption: it needs enough size to hold
+	   the band beside a 172px plate, and a short measure so it breaks into two
+	   deliberate lines instead of trailing off into the pill. */
+	.gd-card-home .gd-masthead .gd-sub {
+		flex: 0 1 32ch;
+		font-size: 14px;
+		line-height: 1.6;
+		text-wrap: balance;
+	}
+	/* The pill belongs to the far edge of the lockup, not to the pitch's last
+	   line — the row is the full width of the card and something must own the
+	   right end of it. */
+	.gd-card-home .gd-masthead .gd-repo {
+		margin-left: auto;
 	}
 	.gd-home {
 		display: grid;
@@ -960,14 +1015,6 @@ a.gd-play-item { color: inherit; text-decoration: none; }
 	   not four full-width rows between the player and the game. */
 	.gd-hero-pick {
 		grid-template-columns: repeat(2, 1fr);
-	}
-	/* The pill drops under the title rather than squeezing it. */
-	.gd-menu-head {
-		flex-direction: column;
-		gap: 0;
-	}
-	.gd-repo {
-		margin: 0 0 16px;
 	}
 }
 

@@ -400,7 +400,7 @@ tsx scripts/training-probe.ts --hero=anands          # ...as the dagger (its row
 tsx scripts/ibiriki-probe.ts                         # Ibiriki: hews, Sunder through a guard, axes thrown/stuck/recovered, bloodlust, Rupture
 tsx scripts/tutorial-probe.ts                        # the guided course: every lesson stages its enemy, progress persists
 tsx scripts/tutorial-probe.ts --play                 # ...and every drill is played to the end
-tsx scripts/menu-probe.ts                            # the root menu: every click a URL, boots a match
+tsx scripts/menu-probe.ts                            # the root menu: the masthead lockup, every click a URL, boots a match
 tsx scripts/movelist-probe.ts                        # the move list: every preview lands its move on the target dummies
 tsx scripts/dash-probe.ts                            # double-tap dash delivery, at a forced frame rate
 tsx scripts/connection-probe.ts                      # the server dies mid-match: the lost-connection prompt, and Rejoin
