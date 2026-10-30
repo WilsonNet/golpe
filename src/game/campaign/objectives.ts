@@ -263,7 +263,7 @@ export const bomb = (target = 1, opts: Opts = {}): Objective =>
 // ---------------------------------------------------------------------------
 
 export const shoot = (target = 1, opts: Opts = {}): Objective =>
-	build("shoot", `Fire${times(target)}`, target, (c) => c.bulletsFired, {
+	build("shoot", `Pull the trigger ${target} times`, target, (c) => c.shotsFired, {
 		keys: ["gun", "attack"],
 		...opts,
 	});
@@ -277,7 +277,7 @@ export const hitShots = (target = 1, opts: Opts = {}): Objective =>
 export const reload = (target = 1, opts: Opts = {}): Objective =>
 	build(
 		"reload",
-		`Empty the magazine and let it reload${times(target)}`,
+		`Reload the gun${times(target)}`,
 		target,
 		(c) => c.reloads,
 		{ keys: ["attack"], ...opts },
@@ -300,16 +300,6 @@ export const crushGuard = (target = 1, opts: Opts = {}): Objective =>
 		`Crush a raised guard${times(target)}`,
 		target,
 		(c) => c.guardsCrushed,
-		opts,
-	);
-
-/** Ibiriki: enter berserk — the bloodlust filling all the way. */
-export const goBerserk = (target = 1, opts: Opts = {}): Objective =>
-	build(
-		"berserk",
-		`Go berserk${times(target)}`,
-		target,
-		(c) => c.berserks,
 		opts,
 	);
 

@@ -369,6 +369,12 @@ One line each; the war story behind every one is in
 
 ## Commands
 
+**Probes are local and headless.** `scripts/browser.ts` launches Chromium on this
+machine, refuses a non-loopback `GOLPE_URL`/`GOLPE_SERVER`, and closes a page
+served from another host — a probe must never drive a personal machine's open
+game server and start a real match there. `GOLPE_ALLOW_REMOTE_PROBES=1` is the
+explicit override; never route a probe through an MCP or remote browser.
+
 ```bash
 pnpm run dev:herdr        # both servers in visible panes, waits for the ports
 pnpm run dev:herdr:logs   # read their output
@@ -417,7 +423,8 @@ pnpm map:pr <id>                                     # open a PR for maps/<id>/ 
 .venv/bin/python scripts/tilesets/themes.py          # regenerate the Castle/Meadow/Snow tilesets (recolours of the Waterfront's tiles and props) — run after generate.py
 python3 scripts/make-audio.py                        # re-render the music loops from their MIDI sources (→ public/audio/)
 python3 scripts/make-potg-art.py                       # regenerate the ceremony's sunburst and medal
-python3 scripts/make-logo.py                           # regenerate the solarpunk wordmark (public/assets/logo.png + art/logo/)
+.venv/bin/python scripts/make-logo.py                   # regenerate the solarpunk badge (public/assets/logo*.png + art/logo/)
+tsx scripts/logo-probe.ts                             # the badge: contrast, one component per letter, and the thinnest stroke at menu size
 python3 scripts/make-anands-art.py                       # cut Anands' dragon ride from her boards (--legacy: the old board-cut strips, for comparison)
 python3 scripts/make-hero-art.py lia                   # render a hero from art/<hero>/<hero>.blend → <hero>.png/.json + portrait (lia|jeffs|anands|ibiriki, needs blender)
 python3 scripts/make-smoke-grenade-art.py              # render Jeffs' smoke canister model → its tumble strip smoke-grenade.png
@@ -528,9 +535,11 @@ used by the next match. See [specs/skybox.md](specs/skybox.md) and
 menu's *More → Move list* (for the hero picked on the home screen) and the Esc menu's *Moves*
 item: one move at a time, a category rail, live-keycap commands from the
 player's *actual* bindings, a stat card, and a preview stage whose timeline
-tracks the move's real frame data. It is a presentation module
-(`src/ui/moveData.ts` + `src/ui/MoveList.tsx`) that reads the tuning constants
-and never touches the simulation. See [specs/menu.md](specs/menu.md).
+tracks the move's real frame data (it latches the named move's first tick, so a
+charge's timeline starts on the release). It is a presentation module group
+(`src/ui/moveData.ts`, `MoveList.tsx`, `MovePreview.tsx`, `src/game/preview/`)
+that reads the tuning constants and never touches the simulation. See
+[specs/menu.md](specs/menu.md).
 
 **Aiming is a scheme, and there are two.** *Mouse* points at a place. *Controller*
 is two layers: the d-pad or left stick gives Contra directions with the
@@ -894,7 +903,7 @@ playing**, so it stages, counts and reports — and never decides an outcome.
   overlay or the menu changes to add one.
 - **Lesson ids are stable and hero-prefixed**, because progress is stored by id
   in `localStorage` and never on the wire.
-- Measured by `scripts/tutorial-probe.ts`; `--play` finishes all fifty
+- Measured by `scripts/tutorial-probe.ts`; `--play` finishes all sixty-two
   drills, which is the only way to catch an objective nobody can satisfy. See
   [specs/tutorial.md](specs/tutorial.md).
 

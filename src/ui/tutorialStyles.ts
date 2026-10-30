@@ -294,9 +294,23 @@ export const TUTORIAL_CSS = `
 	left: 50%;
 	top: 50%;
 	transform: translate(-50%, -50%);
+	pointer-events: auto;
 	font-size: 1.6cqw;
 	letter-spacing: 0.2em;
 	text-transform: uppercase;
 	color: rgba(217, 244, 246, 0.6);
+	text-align: center;
+	max-width: 60cqw;
+}
+.tut-wait-error {
+	margin: 0 0 1.2em;
+	line-height: 1.6;
+	letter-spacing: 0.08em;
+	color: #ffd166;
+}
+.tut-wait-actions {
+	display: flex;
+	justify-content: center;
+	gap: 1em;
 }
 `;

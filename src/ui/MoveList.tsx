@@ -18,21 +18,21 @@
  * and never touches `tickPlayer`.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Action } from "../game/input/Bindings";
 import { bindings, codeLabel } from "../game/input/Bindings";
 import { HEROES, type HeroId } from "../game/simulation/Heroes";
-import { type MeleeMove, MOVES } from "../game/simulation/Melee";
 import { HERO_SPRITE_CSS } from "./HeroSelect";
 import { HUD_CSS } from "./hudStyles";
 import { MovePreview } from "./MovePreview";
 import {
 	CATEGORY_LABELS,
 	CATEGORY_ORDER,
-	type CommandAction,
+	commandGroups,
 	type HeroMoveList,
 	MOVE_LISTS,
 	type MoveCategory,
+	type MoveCommand,
 	type MoveEntry,
 } from "./moveData";
 
@@ -51,25 +51,48 @@ function keycapFor(action: Action, map: Record<Action, string[]>): string {
 	return first !== undefined ? codeLabel(first) : "—";
 }
 
-/** A sequence of chips for a command, e.g. HOLD LMB → RELEASE. */
+/** A sequence of chips for a command, e.g. HOLD → RELEASE. */
 function CommandChips({
-	actions,
+	command,
 	map,
 }: {
-	actions: CommandAction[];
+	command: MoveCommand;
 	map: Record<Action, string[]>;
 }) {
-	if (actions.length === 0) return null;
+	const groups = commandGroups(command);
+	if (groups.length === 0) return null;
+	const join = command.join ?? "then";
 	return (
 		<span className="ml-chips">
-			{actions.map((a, i) => (
-				<span key={a} className="ml-chip-group">
-					{i > 0 && <span className="ml-chip-sep">then</span>}
-					<span className="ml-chip">{keycapFor(a, map)}</span>
+			{groups.map((group, gi) => (
+				<span key={group.join("-")} className="ml-chip-group">
+					{gi > 0 && <span className="ml-chip-sep">{join}</span>}
+					{group.map((a, i) => (
+						<span key={`${a}-${i}`} className="ml-chip-group">
+							{i > 0 && <span className="ml-chip-sep">then</span>}
+							<span className="ml-chip">{keycapFor(a, map)}</span>
+						</span>
+					))}
 				</span>
 			))}
 		</span>
 	);
+}
+
+/**
+ * The prose is written with `**bold**` and `*italic*` for emphasis. It used to
+ * be rendered as a raw text node, so every card printed its asterisks. This
+ * renders the two emphases the content uses and nothing else — no HTML path,
+ * because lesson prose comes from the content layer, not a CMS.
+ */
+function richText(text: string) {
+	return text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g).map((part, i) => {
+		if (part.startsWith("**") && part.endsWith("**"))
+			return <strong key={i}>{part.slice(2, -2)}</strong>;
+		if (part.startsWith("*") && part.endsWith("*"))
+			return <em key={i}>{part.slice(1, -1)}</em>;
+		return <span key={i}>{part}</span>;
+	});
 }
 
 // ---------------------------------------------------------------------------
@@ -114,12 +137,23 @@ export function MoveList({
 	// which move of the set they are reading.
 	const currentCategoryCount =
 		(byCategory.get(current.category) ?? []).length || 0;
-	const currentInCategory =
-		((byCategory.get(current.category) ?? []).indexOf(index) ?? 0) + 1;
+	const categoryIndex = (byCategory.get(current.category) ?? []).indexOf(index);
+	const currentInCategory = (categoryIndex < 0 ? 0 : categoryIndex) + 1;
 
 	const moveWithin = (delta: number) => {
 		setIndex((i) => Math.max(0, Math.min(entries.length - 1, i + delta)));
 	};
+
+	const rootRef = useRef<HTMLDivElement>(null);
+
+	// Focus the panel when it opens and give it back when it closes. The root
+	// menu stays in the DOM behind an opaque panel, so without this Tab walks
+	// into controls nobody can see.
+	useEffect(() => {
+		const previous = document.activeElement as HTMLElement | null;
+		rootRef.current?.querySelector<HTMLElement>(".ml-back")?.focus();
+		return () => previous?.focus?.();
+	}, []);
 
 	const categoryStep = (dir: -1 | 1) => {
 		setIndex((i) => {
@@ -139,14 +173,41 @@ export function MoveList({
 	useEffect(() => {
 		const onKey = (e: KeyboardEvent) => {
 			const code = e.code;
+			if (code === "Tab") {
+				const focusable = Array.from(
+					rootRef.current?.querySelectorAll<HTMLElement>(
+						'button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+					) ?? [],
+				);
+				if (focusable.length === 0) return;
+				const first = focusable[0];
+				const last = focusable[focusable.length - 1];
+				if (first === undefined || last === undefined) return;
+				// Focus can be on <body> after a click on the panel's padding. Tab
+				// would then walk into the menu mounted behind the opaque panel.
+				if (!rootRef.current?.contains(document.activeElement)) {
+					e.preventDefault();
+					first.focus();
+					return;
+				}
+				if (e.shiftKey && document.activeElement === first) {
+					e.preventDefault();
+					last.focus();
+				} else if (!e.shiftKey && document.activeElement === last) {
+					e.preventDefault();
+					first.focus();
+				}
+				return;
+			}
 			if (code === "Escape") {
 				e.preventDefault();
 				e.stopPropagation();
 				onClose();
 				return;
 			}
-			// Respect the player's own bindings for Up/Down/Left/Right where
-			// possible, falling back to arrows/WASD.
+			// Arrows are the navigation language. WASD stays as a courtesy for a
+			// left-hand player, but the hint no longer claims it — a rebound
+			// movement key made that a lie.
 			const isDown = code === "ArrowDown" || code === "KeyS";
 			const isUp = code === "ArrowUp" || code === "KeyW";
 			const isLeft = code === "ArrowLeft" || code === "KeyA";
@@ -180,7 +241,13 @@ export function MoveList({
 	})).filter((g) => g.items.length > 0);
 
 	return (
-		<div className="ml-root">
+		<div
+			ref={rootRef}
+			className="ml-root"
+			role="dialog"
+			aria-modal="true"
+			aria-label="Move list"
+		>
 			<style>{HUD_CSS}</style>
 			<style>{HERO_SPRITE_CSS}</style>
 			<style>{ML_CSS}</style>
@@ -188,6 +255,24 @@ export function MoveList({
 			<div className="ml-header">
 				<span className="ml-hero-name">{heroDef.name}</span>
 				<span className="ml-title">Move List</span>
+				<div className="ml-nav">
+					<button
+						className="ml-nav-btn"
+						type="button"
+						aria-label="Previous move"
+						onClick={() => moveWithin(-1)}
+					>
+						‹
+					</button>
+					<button
+						className="ml-nav-btn"
+						type="button"
+						aria-label="Next move"
+						onClick={() => moveWithin(1)}
+					>
+						›
+					</button>
+				</div>
 				<button type="button" className="ml-back" onClick={onClose}>
 					← Back
 				</button>
@@ -215,6 +300,7 @@ export function MoveList({
 											className={`ml-dot${e.id === current.id ? " ml-dot-on" : ""}`}
 											title={e.name}
 											aria-label={e.name}
+											aria-current={e.id === current.id ? "true" : undefined}
 											onClick={() => setIndex(entries.indexOf(e))}
 										/>
 									))}
@@ -255,12 +341,12 @@ export function MoveList({
 							<div className="ml-command-row">
 								<span className="ml-command-label">COMMAND</span>
 								<CommandChips
-									actions={current.command.actions}
+									command={current.command}
 									map={bindingsMap}
 								/>
 								<span className="ml-command-text">{current.command.label}</span>
 							</div>
-							<p className="ml-prose">{current.prose}</p>
+							<p className="ml-prose">{richText(current.prose)}</p>
 							<StatCard entry={current} />
 						</div>
 					</div>
@@ -279,18 +365,19 @@ export function MoveList({
 			</div>
 
 			<div className="ml-hint">
-				<span className="ml-key">↑ ↓</span> or{" "}
-				<span className="ml-key">W/S</span> move ·{" "}
-				<span className="ml-key">← →</span> or{" "}
-				<span className="ml-key">A/D</span> category ·{" "}
-				<span className="ml-key">Esc</span> back
+				<span className="ml-hint-keys">
+					<span className="ml-key">↑ ↓</span> move ·{" "}
+					<span className="ml-key">← →</span> category ·{" "}
+					<span className="ml-key">Esc</span> back
+				</span>
+				<span className="ml-hint-touch">Tap a dot or use ‹ › to walk the list</span>
 			</div>
 		</div>
 	);
 }
 
 function StatCard({ entry }: { entry: MoveEntry }) {
-	const stats = entry.move ? meleeRows(entry.move) : entry.stats;
+	const stats = entry.stats;
 	if (!stats || stats.length === 0) return null;
 	return (
 		<div className="ml-stats">
@@ -304,7 +391,7 @@ function StatCard({ entry }: { entry: MoveEntry }) {
 							<div className="ml-stat-bar">
 								<div
 									className="ml-stat-bar-fill"
-									style={{ width: `${Math.round(s.level * 100)}%` }}
+									style={{ width: `${Math.round(Math.min(1, s.level) * 100)}%` }}
 								/>
 							</div>
 						)}
@@ -313,25 +400,6 @@ function StatCard({ entry }: { entry: MoveEntry }) {
 			</div>
 		</div>
 	);
-}
-
-function meleeRows(move: MeleeMove) {
-	const d = MOVES[move];
-	return [
-		{ label: "DMG", value: `${d.damage}`, level: Math.min(1, d.damage / 24) },
-		{
-			label: "REACH",
-			value: `${d.reachPx}px`,
-			level: Math.min(1, d.reachPx / 62),
-		},
-		{ label: "STARTUP", value: `${d.startupMs}ms`, level: d.startupMs / 160 },
-		{ label: "ACTIVE", value: `${d.activeMs}ms`, level: d.activeMs / 160 },
-		{
-			label: "RECOVERY",
-			value: `${d.recoveryMs}ms`,
-			level: d.recoveryMs / 500,
-		},
-	];
 }
 
 const ML_CSS = `
@@ -377,10 +445,30 @@ const ML_CSS = `
 	font-size: 13px;
 	font-weight: 700;
 	padding: 7px 16px;
+	min-height: 44px;
 	border-radius: 6px;
 	cursor: pointer;
 }
 .ml-back:hover { border-color: #0ec3c9; color: #7ff0f4; }
+.ml-nav {
+	display: flex;
+	gap: 6px;
+	margin-left: auto;
+}
+.ml-nav-btn {
+	min-width: 44px;
+	min-height: 44px;
+	background: rgba(255, 255, 255, 0.06);
+	border: 1px solid rgba(255, 255, 255, 0.2);
+	color: #ffe6a8;
+	font: inherit;
+	font-size: 20px;
+	line-height: 1;
+	border-radius: 6px;
+	cursor: pointer;
+}
+.ml-nav-btn:hover { border-color: #0ec3c9; color: #7ff0f4; }
+.ml-nav + .ml-back { margin-left: 0; }
 
 .ml-body {
 	flex: 1;
@@ -388,6 +476,8 @@ const ML_CSS = `
 	gap: 20px;
 	padding: 18px 22px 6px;
 	min-height: 0;
+	overflow-y: auto;
+	overscroll-behavior: contain;
 }
 .ml-main {
 	flex: 1;
@@ -395,7 +485,7 @@ const ML_CSS = `
 	flex-direction: column;
 	gap: 14px;
 	min-width: 0;
-	min-height: 0;
+	min-height: min-content;
 }
 
 /* ---- rail ---- */
@@ -669,7 +759,9 @@ const ML_CSS = `
 	display: flex;
 	align-items: center;
 	gap: 6px;
+	flex: 0 0 auto;
 }
+.ml-hint-touch { display: none; }
 .ml-key {
 	display: inline-block;
 	background: rgba(255, 255, 255, 0.1);
@@ -682,8 +774,48 @@ const ML_CSS = `
 }
 
 @media (max-width: 720px) {
-	.ml-body { flex-direction: column; }
-	.ml-rail { flex-direction: row; width: auto; border-right: none; border-bottom: 1px solid rgba(255,255,255,0.08); }
-	.ml-card { grid-template-columns: 1fr; }
+	.ml-header { flex-wrap: wrap; padding: 10px 12px; }
+	.ml-nav { margin-left: auto; }
+	.ml-body {
+		flex-direction: column;
+		gap: 12px;
+		padding: 12px 12px 6px;
+	}
+	.ml-rail {
+		flex-direction: row;
+		width: auto;
+		border-right: none;
+		border-bottom: 1px solid rgba(255,255,255,0.08);
+		overflow-x: auto;
+		overflow-y: hidden;
+		padding: 0 0 8px;
+	}
+	.ml-rail-group { flex: 0 0 auto; }
+	.ml-card { grid-template-columns: 1fr; padding: 12px; }
+	.ml-portrait { width: 96px; height: 96px; }
+	.ml-portrait .hp-sprite { transform: scale(1.5); }
+	.ml-move-name { font-size: 24px; }
+	.ml-movie-wrap { flex: 0 0 auto; }
+	.mp-stage { min-height: 220px; }
+	.ml-hint-keys { display: none; }
+	.ml-hint-touch { display: inline; }
+	.ml-hint { padding: 8px 12px 12px; }
+}
+
+@media (max-height: 700px) and (min-width: 721px) {
+	.ml-body { padding-top: 10px; }
+	.ml-card { padding: 12px 16px; }
+	.ml-movie-wrap { flex: 0 0 auto; }
+	.mp-stage { min-height: 160px; }
+}
+
+@media (pointer: coarse) {
+	.ml-dot { position: relative; width: 16px; height: 16px; }
+	.ml-dot::after { content: ""; position: absolute; inset: -14px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.ml-card { animation: none; }
+	.ml-dot { transition: none; }
 }
 `;

@@ -14,6 +14,7 @@
  */
 
 import type { AIOutput } from "../characters/types.js";
+import type { HeroId } from "../simulation/Heroes.js";
 import type { MeleeAction, MeleePhase } from "../simulation/Physics.js";
 
 /**
@@ -151,11 +152,11 @@ export interface TrainingConfig {
 	dummyStance: "sword" | "gun";
 	/**
 	 * The dummy's hero. Defaults to Lia — the sword is the reference kit every
-	 * other weapon is practised against. `dummyHero: "anands"` makes the dummy
+	 * other weapon is practised against. `hero: "anands"` makes the dummy
 	 * a dagger, which is a different drill: the thrust cannot be blocked, and
 	 * learning that against a sword dummy teaches the wrong lesson.
 	 */
-	hero: "lia" | "anands" | "jeffs";
+	hero: HeroId;
 	facing: DummyFacing;
 	timing: TrainingTiming;
 }
@@ -210,6 +211,8 @@ export interface DummyFighterState {
  */
 export interface TrainingFighterStats {
 	bulletsFired: number;
+	/** Trigger pulls, one per shot, where `bulletsFired` counts pellets. */
+	shotsFired: number;
 	bulletHits: number;
 	damageDealt: number;
 	damageTaken: number;

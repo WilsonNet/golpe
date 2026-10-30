@@ -109,11 +109,11 @@ export interface LessonCounters {
 	guardsCrushed: number;
 	/** Thrown axes of yours walked back over and picked up. */
 	axesRecovered: number;
-	/** Berserk entered: some foe fell below the line (your bloodlust filled). */
-	berserks: number;
 
 	// -- the server's own tallies, as deltas ---------------------------------
 	bulletsFired: number;
+	/** Trigger pulls: one per shot, where `bulletsFired` counts pellets. */
+	shotsFired: number;
 	bulletHits: number;
 	damageDealt: number;
 	damageTaken: number;

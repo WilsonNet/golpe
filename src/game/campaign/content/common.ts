@@ -137,8 +137,8 @@ export function swordChapter(hero: HeroId): Chapter {
 				id: `${hero}-butterfly`,
 				title: "The butterfly",
 				brief:
-					"The first two links of the chain cancel into a block. Swing, then guard before the swing finishes: you get the hitbox and the guard, and you keep the initiative. This is the loop good players open with.",
-				stage: { ...SAFE, behaviour: "slash", timing: { periodMs: 1600 } },
+					"The first two links of the chain cancel into a block. Swing, then guard before the swing finishes: you get the hitbox and the guard, and you keep the initiative. This is the loop good players open with. The dummy stands still for this one — the rhythm is the lesson.",
+				stage: idle,
 				objectives: [o.butterfly(2)],
 				outro:
 					"Cancel early and it is merely safe. Cancel as the active frames close and it is safe *and* it hurts.",
@@ -266,6 +266,9 @@ export function gunLesson(
 		// Fire first, then land: the two are different lessons. The first is
 		// "the trigger is the same button as the sword", the second is leading a
 		// target that is walking. The reload comes free once the magazine is out.
+		// "Pull the trigger" counts trigger pulls (`shotsFired`), not pellets:
+		// a shotgun spends six pellets on one pull, and the old pellet count
+		// made "fire five times" a single blast.
 		objectives: [o.shoot(5), o.hitShots(3), o.reload(1)],
 		outro: words.outro,
 	};

@@ -10,7 +10,7 @@
  *
  * So this proves four things, in the order they can break:
  *
- *   1. **The menu's top item boots the course.** The tutorial is the first
+ *   1. **The hero-picker entry boots the course.** The tutorial is the first
  *      thing on the root page; a click has to produce a `?tutorial=true` URL
  *      and a director behind it.
  *   2. **Every lesson of every hero stages.** Walked one at a time, asking the
@@ -29,7 +29,7 @@
  * end to end and reports the ones that never clear. An unreachable objective is
  * the one tutorial bug with no symptom — the lesson stages perfectly, the enemy
  * does its thing, and the player simply never gets to leave. It is opt-in only
- * because it plays fifty-odd drills at human speed.
+ * because it plays sixty-two drills at human speed.
  *
  * Run with the dev servers up (`pnpm run dev:herdr`).
  *
@@ -108,6 +108,11 @@ function dummyBehaviour(page: Page) {
 	return page.evaluate(() => window.__training!.state().config.behaviour);
 }
 
+/** The server's echoed config, for the parts of a stage TypeScript cannot see. */
+function dummyConfig(page: Page) {
+	return page.evaluate(() => window.__training!.state().config);
+}
+
 /** Boot straight into a hero's course, seated and playing lesson one. */
 async function openCourse(page: Page, hero: HeroId) {
 	await page.goto(`${BASE_URL}/?tutorial=true&hero=${hero}&mute=1`);
@@ -179,6 +184,18 @@ async function checkMenu(page: Page) {
 	// overlay never draws is a tutorial nobody can read.
 	const card = await page.locator(".tut-card").count();
 	check("the coach card is on screen", card === 1);
+
+	// Enter is "continue", not "skip": a live drill must survive a stray key.
+	const liveBefore = await state(page);
+	await page.keyboard.press("Enter");
+	await page.waitForTimeout(300);
+	const liveAfter = await state(page);
+	check(
+		"Enter does not abandon a live lesson",
+		liveAfter.lessonId === liveBefore.lessonId &&
+			liveAfter.phase === liveBefore.phase,
+		`${liveBefore.lessonId} -> ${liveAfter.lessonId} (${liveAfter.phase})`,
+	);
 }
 
 // ---------------------------------------------------------------------------
@@ -209,6 +226,34 @@ async function checkCourse(page: Page, hero: HeroId) {
 			wrong.push(
 				`${lesson.id}: dummy is "${actual}", lesson asked "${wanted}"`,
 			);
+			continue;
+		}
+		// Behaviour is not the whole stage: facing is what makes the backstab
+		// possible, dummyHp is what fills the bloodlust, and the invincibility
+		// flags are the difference between a drill and a fight. The server echoes
+		// all of them; dropping one is invisible to TypeScript.
+		const config = await dummyConfig(page);
+		for (const key of [
+			"facing",
+			"dummyHp",
+			"playerInvincible",
+			"dummyInvincible",
+			"disableRoundReset",
+		] as const) {
+			const asked = lesson.stage[key];
+			if (asked !== undefined && config[key] !== asked) {
+				wrong.push(
+					`${lesson.id}: ${key} is ${JSON.stringify(config[key])}, lesson asked ${JSON.stringify(asked)}`,
+				);
+			}
+		}
+		for (const [key, value] of Object.entries(lesson.stage.timing ?? {})) {
+			const live = (config.timing as unknown as Record<string, unknown>)[key];
+			if (live !== value) {
+				wrong.push(
+					`${lesson.id}: timing.${key} is ${JSON.stringify(live)}, lesson asked ${JSON.stringify(value)}`,
+				);
+			}
 		}
 	}
 
@@ -334,7 +379,7 @@ async function playFirstLesson(page: Page) {
 /**
  * The drills, by shape rather than by lesson.
  *
- * Two heroes share the sword, so they share its drills; three heroes share the
+ * Two heroes share the sword, so they share its drills; all four share the
  * feet. Keying on the shape is also the honest reading of what this proves —
  * "a player who does *this* clears the lesson" — and it keeps one bad drill
  * from looking like three broken lessons.
@@ -362,6 +407,7 @@ type Drill =
 	| "safeFall"
 	| "instaFall"
 	| "mash"
+	| "pressure"
 	| "hew"
 	| "sunder"
 	| "axes"
@@ -392,7 +438,7 @@ const DRILLS: [suffix: string, drill: Drill][] = [
 	["-stab", "swings"],
 	["-thrust", "thrust"],
 	["-shoryuken", "shoryuken"],
-	["-pressure", "swings"],
+	["-pressure", "pressure"],
 	// Ibiriki: the hew chain's slower rhythm, the Sunder's hold, the axes'
 	// throw-and-fetch, and the berserk frenzy.
 	["-hew", "hew"],
@@ -458,10 +504,17 @@ async function drill(page: Page, kind: Drill) {
 				break;
 			case "air":
 				for (let i = 0; i < 3; i++) {
-					await t.input({ up: true }, 110);
-					await sleep(220);
-					await t.input({ up: true }, 110);
-					await sleep(900);
+					// The jump is cut on release, and `input()` only returns after
+					// its release gap — awaiting the first jump meant the feet were
+					// already down before the second press. Overlap the holds: jump,
+					// one neutral beat (the release edge), then jump again in the air.
+					const first = t.input({ up: true }, 90);
+					await sleep(100);
+					const gap = t.input({}, 50);
+					await sleep(60);
+					const second = t.input({ up: true }, 140);
+					await Promise.all([first, gap, second]);
+					await sleep(1000);
 				}
 				break;
 			case "dash":
@@ -470,10 +523,15 @@ async function drill(page: Page, kind: Drill) {
 					await sleep(500);
 				}
 				for (let i = 0; i < 2; i++) {
-					await t.input({ up: true }, 110);
-					await sleep(160);
-					await t.input({ dash: -1 }, 120);
-					await sleep(900);
+					// Same overlap as the double jump: the dash must be pressed
+					// while the jump is still carrying the body.
+					const jump = t.input({ up: true }, 90);
+					await sleep(100);
+					const gap = t.input({}, 50);
+					await sleep(60);
+					const dash = t.input({ dash: -1 }, 120);
+					await Promise.all([jump, gap, dash]);
+					await sleep(1100);
 				}
 				break;
 			case "stance":
@@ -495,26 +553,50 @@ async function drill(page: Page, kind: Drill) {
 				}
 				break;
 			case "chain":
+				// Press each link out of the previous one's recovery, read from the
+				// body rather than guessed: a press during startup/active is
+				// ignored, and a probe that counted presses rather than the chain
+				// reported a working combo as broken.
 				for (let i = 0; i < 5; i++) {
 					await approach();
 					const angle = aim();
 					await t.input({ attack: true }, 70, angle);
-					await sleep(130);
+					const waitRecovery = async () => {
+						for (let w = 0; w < 100; w++) {
+							const p = window.__gameState!().playerPhys;
+							if (
+								(p.meleeAction === "slash" ||
+									p.meleeAction === "slash2") &&
+								p.meleeTimer >= 230
+							)
+								return;
+							await sleep(10);
+						}
+					};
+					await waitRecovery();
 					await t.input({ attack: true }, 70, angle);
-					await sleep(130);
+					await waitRecovery();
 					await t.input({ attack: true }, 70, angle);
-					await sleep(800);
+					await sleep(700);
 				}
 				break;
 			case "guard":
 				await t.input({ block: true }, 8000, aim());
 				break;
 			case "butterfly":
-				for (let i = 0; i < 6; i++) {
-					await approach();
+				for (let i = 0; i < 12; i++) {
+					// The drill arena spawns the dummy inside the slash's reach, and
+					// walking closer walks into its swings — the stun then eats the
+					// cancel. Stay put and swing from where the lesson put you.
 					const angle = aim();
-					await t.input({ attack: true }, 70, angle);
-					await t.input({ block: true }, 450, angle);
+					// The block call must NOT carry an aim angle: an aimed `input`
+					// leads with an empty hold, which releases the attack before the
+					// block and can cut the swing down to a single tick. The attack
+					// already set the facing.
+					const swing = t.input({ attack: true }, 150, angle);
+					await sleep(100);
+					await t.input({ block: true }, 450);
+					await swing;
 					await sleep(300);
 				}
 				break;
@@ -588,6 +670,22 @@ async function drill(page: Page, kind: Drill) {
 					await sleep(1000);
 				}
 				break;
+			case "pressure":
+				// The dagger's pressure drill: stab, cancel it into the thrust, and
+				// keep the counter-attacking dummy on its heels. Swinging alone into
+				// a counter-attacker loses the exchange before it starts.
+				for (let i = 0; i < 10; i++) {
+					await approach(30);
+					const angle = aim();
+					const stab = t.input({ attack: true }, 150, angle);
+					await sleep(100);
+					// No aim on the shift: an aimed input's empty lead would cut the
+					// stab short before its press edge.
+					await t.input({ block: true }, 220);
+					await stab;
+					await sleep(700);
+				}
+				break;
 			case "shoryuken":
 				for (let i = 0; i < 12; i++) {
 					await closeIn();
@@ -630,7 +728,7 @@ async function drill(page: Page, kind: Drill) {
 				// the dummy is a moving target — so the launcher waits for it to
 				// touch down first. A launch from mid-hop starts too high for the
 				// follow-up to climb into.
-				for (let i = 0; i < 24 && !done(); i++) {
+				for (let i = 0; i < 32 && !done(); i++) {
 					// Throw the launcher, then drive the follow-up to the
 					// *observed* launch: the uppercut's 340ms recovery ends while
 					// the victim is still rising, and the jump-and-slash has to
@@ -660,16 +758,28 @@ async function drill(page: Page, kind: Drill) {
 				break;
 			}
 			case "hew":
-				// The hew chain links from recovery: a press every ~240ms lands
-				// inside each link's recovery window.
+				// The hew chain links from recovery, same as the sword's: wait for
+				// the body to be in the previous link's recovery rather than guess.
 				for (let i = 0; i < 5; i++) {
 					await approach(40);
 					const angle = aim();
-					for (let k = 0; k < 3; k++) {
-						await t.input({ attack: true }, 70, angle);
-						await sleep(240);
-					}
-					await sleep(800);
+					await t.input({ attack: true }, 70, angle);
+					const waitRecovery = async () => {
+						for (let w = 0; w < 120; w++) {
+							const p = window.__gameState!().playerPhys;
+							if (
+								(p.meleeAction === "hew" || p.meleeAction === "hew2") &&
+								p.meleeTimer >= 270
+							)
+								return;
+							await sleep(10);
+						}
+					};
+					await waitRecovery();
+					await t.input({ attack: true }, 70, angle);
+					await waitRecovery();
+					await t.input({ attack: true }, 70, angle);
+					await sleep(900);
 				}
 				break;
 			case "sunder":
@@ -713,16 +823,11 @@ async function drill(page: Page, kind: Drill) {
 				break;
 			}
 			case "frenzy":
-				// The bleeding dummy fills the bloodlust: the presses are rends.
-				for (let i = 0; i < 6; i++) {
-					await approach(34);
-					const angle = aim();
-					for (let k = 0; k < 3; k++) {
-						await t.input({ attack: true }, 60, angle);
-						await sleep(150);
-					}
-					await sleep(600);
-				}
+				// The frenzy has no press edge: holding attack keeps the chain
+				// coming out of recovery. Tapping was fighting the move's own rule
+				// and never reached the X-cut; hold it, exactly as the card says.
+				await approach(34);
+				await t.input({ attack: true }, 6000, aim());
 				break;
 			case "mash":
 				for (let i = 0; i < 30; i++) {
@@ -752,8 +857,14 @@ async function playEveryLesson(page: Page, hero: HeroId) {
 			stuck.push(`${lesson.id}: no drill written for it`);
 			continue;
 		}
+		console.log(`DRILL ${hero}/${lesson.id} (${kind})`);
 		await page.evaluate((i: number) => window.__tutorial!.goto(i), index);
 		await settled(page);
+		// The director flips to `playing` after the reset echoes, but the
+		// client's prediction needs a beat to adopt the new body. Starting the
+		// drill on the same frame ate its first inputs, which read as an
+		// unreachable drill.
+		await page.waitForTimeout(350);
 		await drill(page, kind);
 
 		const done = await page
@@ -778,6 +889,7 @@ async function playEveryLesson(page: Page, hero: HeroId) {
 					.join(", ")}]`,
 			);
 		}
+		console.log(`DRILL ${hero}/${lesson.id} ${done ? "cleared" : "STUCK"}`);
 	}
 
 	check(
@@ -807,12 +919,29 @@ async function checkProgress(page: Page, lessonId: string) {
 		() => document.querySelector(".gd-badge")?.textContent ?? "",
 	);
 	check("the menu shows how far the course got", badge !== "", badge);
+
+	// And the course picks up at the first unfinished drill, not at lesson one.
+	await openCourse(page, "lia");
+	const resumed = await state(page);
+	check(
+		"a returning player resumes at the first unfinished lesson",
+		resumed.lessonIndex === indexOf("lia", "lia-basics-air"),
+		`${resumed.lessonIndex} · ${resumed.lessonId}`,
+	);
 }
 
 // ---------------------------------------------------------------------------
 
 async function main() {
 	await assertServerUp();
+	// A hung page.evaluate has no Playwright timeout of its own. The watchdog
+	// turns "the probe sat there forever" into a failing run with a timestamp.
+	// Generous: under SwiftShader a full four-course `--play` is twenty-plus
+	// minutes of real animation.
+	const watchdog = setTimeout(() => {
+		console.error("TUTORIAL PROBE: timed out after 45 minutes");
+		process.exit(2);
+	}, 45 * 60 * 1000);
 
 	const browser = await launchBrowser();
 	const ctx = await browser.newContext({
@@ -924,6 +1053,7 @@ async function main() {
 			: `\nTUTORIAL PROBE: ${failures} FAILED`,
 	);
 	if (!KEEP_OPEN) await browser.close();
+	clearTimeout(watchdog);
 	process.exit(failures === 0 ? 0 : 1);
 }
 

@@ -277,6 +277,7 @@ import { TrainingDummy } from "./TrainingDummy.js";
 function newStats(): Omit<TrainingFighterStats, "hp"> {
 	return {
 		bulletsFired: 0,
+		shotsFired: 0,
 		bulletHits: 0,
 		damageDealt: 0,
 		damageTaken: 0,
@@ -3503,6 +3504,7 @@ export class GameRoom {
 					});
 				}
 				player.stats.bulletsFired += pellets;
+				player.stats.shotsFired++;
 			}
 
 			// The auto-reload, on the same input that just fired. Server-ticked:
@@ -4418,6 +4420,7 @@ export class GameRoom {
 			),
 		);
 		player.stats.bulletsFired++;
+		player.stats.shotsFired++;
 	}
 
 	/**

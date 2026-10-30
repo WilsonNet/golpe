@@ -92,7 +92,11 @@ export const IBIRIKI_COURSE: CampaignModule = {
 					brief:
 						"Switch to the axes, hold attack to wind up, release to throw. A tap is a short lob; a full charge flies flat and far wreathed in embers, for almost a whole bar. Three a life and no reload — every axe sticks where it lands until you (or any axe-bearer) walk over it and take it back.",
 					stage: PACING_DUMMY,
-					objectives: [o.shoot(3), o.hitShots(2), o.recoverAxes(2)],
+					objectives: [
+						o.shoot(3, { text: "Throw an axe 3 times" }),
+						o.hitShots(2),
+						o.recoverAxes(2),
+					],
 					outro:
 						"An axe on the floor is an axe you are not holding. Throw where you mean to walk.",
 				},
@@ -103,7 +107,7 @@ export const IBIRIKI_COURSE: CampaignModule = {
 						"Ibiriki smells bleeding prey nearby: the lower a foe's health and the closer they are, the faster he walks and swings. This dummy is already bleeding and within reach, so you are **berserk**: eyes burning, an axe in the off hand, and the attack button runs the frenzy. Sword, axe, both.",
 					stage: { ...SAFE_STAGE, behaviour: "idle", dummyHp: 25 },
 					objectives: [
-						o.goBerserk(1),
+						o.land("rend", "the frenzy's opener", 1),
 						o.land("rend3", "the frenzy's X-cut", 2),
 					],
 					outro:

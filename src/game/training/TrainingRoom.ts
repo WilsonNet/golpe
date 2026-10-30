@@ -467,6 +467,7 @@ export class TrainingRoom {
 			stats: latest?.stats ?? {
 				player: {
 					bulletsFired: 0,
+					shotsFired: 0,
 					bulletHits: 0,
 					damageDealt: 0,
 					damageTaken: 0,
@@ -475,6 +476,7 @@ export class TrainingRoom {
 				},
 				dummy: {
 					bulletsFired: 0,
+					shotsFired: 0,
 					bulletHits: 0,
 					damageDealt: 0,
 					damageTaken: 0,

@@ -27,9 +27,9 @@ so is what makes a half-finished course feel resumable.
 A browser that has never answered the card, and has no lesson finished, is also
 offered the course **once** in a first-time dialog (Skip / Play / Don't show this
 again). It exists because the player who needs the course is exactly the one who
-would never go looking for it; the answer is stored in `localStorage`, so most
-players see it once and never again. The menu half of that model is specified in
-[menu.md](menu.md).
+would never go looking for it; the answer is stored in `localStorage` (Skip for
+today is `sessionStorage`), so most players see it once and never again. The menu
+half of that model is specified in [menu.md](menu.md).
 
 Committing it writes `?tutorial=true&hero=<id>` and boots, exactly like every
 other menu choice — the URL is still the authority (see [menu.md](menu.md)).
@@ -55,10 +55,11 @@ That choice is the whole architecture, and it is worth stating why:
 - **The director cannot decide an outcome.** A hit is the server's; a dash is
   the simulation's. It stages, counts and reports.
 
-The room runs with a **charge floor of 100** unless the URL says otherwise
-(`?ultCharge=`), because a course that teaches the ultimate cannot ask a new
-player to earn one first — the meter takes minutes and the lesson is the cast.
-That floor is the practice room's own flag, not a second way to be armed.
+The room runs with a **charge floor at the kit's own cap** unless the URL says
+otherwise (`?ultCharge=`) — 100 for the three 100-charge ultimates, 150 for
+Rupture — because a course that teaches the ultimate cannot ask a new player to
+earn one first: the meter takes minutes and the lesson is the cast. That floor
+is the practice room's own flag, not a second way to be armed.
 
 ## A lesson
 
@@ -81,7 +82,8 @@ One lesson is a **stage**, a **brief**, and **objectives**.
 A lesson closes when every objective is met, holds a `CLEARED` stamp for two
 seconds, and moves on by itself. A chapter turn puts a full-screen chapter card
 up first. Nothing blocks: **Reset** re-stages the drill and **Skip** abandons
-it, always.
+it, always. **Enter continues a card and nothing else** — it never abandons a
+live drill, ignores key auto-repeat, and stays out of a dialog's way.
 
 ## The counters, and why they are transitions
 
@@ -111,31 +113,41 @@ Two of these are deltas rather than levels, and both bit during development:
 
 ## The courses
 
-Eighteen lessons for Lia and Jeffs, fourteen for Anands. Every id is hero-prefixed
-— the basics read the same for all three, but a player picking up a new hero is
-entitled to be walked through the feet again.
+Eighteen lessons for Lia and Jeffs, fourteen for Anands, twelve for Ibiriki.
+Every id is hero-prefixed — the basics read the same for all four, but a player
+picking up a new hero is entitled to be walked through the feet again.
 
-| Chapter | Lia | Anands | Jeffs |
-|---|---|---|---|
-| First steps | walk & jump · the second jump · the dash · two stances | same | same |
-| The blade | slash · the chain · the guard · the butterfly · the uppercut vs a turtle · the safe fall · the Insta Fall · behind the guard · the Massive · the plunge bomb | stab · the thrust · the shoryuken · the safe fall · the Insta Fall · living in the gap | *(same as Lia)* |
-| The arsenal | rifle · HE grenade · black hole | machine gun · trap · dragon thrust | shotgun · smoke · Death Blossom |
-| Graduation | put down a counter-attacking dummy | same | same |
+| Chapter | Lia | Anands | Jeffs | Ibiriki |
+|---|---|---|---|---|
+| First steps | walk & jump · the second jump · the dash · two stances | same | same | same |
+| The blade | slash · the chain · the guard · the butterfly · the uppercut vs a turtle · the safe fall · the Insta Fall · behind the guard · the Massive · the plunge bomb | stab · the thrust · the shoryuken · the safe fall · the Insta Fall · living in the gap | *(same as Lia)* | hew · the guard · the uppercut · the Sunder |
+| The arsenal | rifle · HE grenade · black hole | machine gun · trap · dragon thrust | shotgun · smoke · Death Blossom | throwing axes · berserk · Rupture |
+| Graduation | put down a counter-attacking dummy | same | same | same |
 
 Anands' chapter is the one that cannot be shared: **the dagger has no guard**,
 so every lesson the sword spends on blocking and the butterfly is spent here on
 interrupting instead. Teaching the dagger against a sword's drill would teach
 the wrong reflex — which is exactly why the training room lets the dummy change
-hero.
+hero. Ibiriki's viking sword is a second unshared chapter: the hew chain is
+slower, the Sunder goes through a guard rather than around it, and the frenzy
+is a passive, not a combo.
 
 ## Progress
 
-`localStorage`, under `golpe.campaign`, as a flat set of **lesson ids**. Never
-the wire: progress is a property of this browser, not of a room, and a server
-that owned it would mean a course that could not be played before a match
+`localStorage`, under `golpe.campaign`, as `{ "completed": [lesson ids] }`.
+Never the wire: progress is a property of this browser, not of a room, and a
+server that owned it would mean a course that could not be played before a match
 exists. Lesson ids are therefore required to be stable — reordering a chapter
 must not un-finish anything, and renaming a lesson is a deliberate decision to
 make people play it again.
+
+**A returning player resumes at the first drill they have not finished.** The
+director seeds its cleared set from storage before it arms, so the in-course bar
+agrees with the menu badge, and it starts at that lesson rather than at lesson
+one. Finishing every drill is what makes the curtain say *Course complete*;
+reaching the end by pressing Skip says *Course over* and offers Resume. Changing
+hero mid-course is refused (the Esc menu hides Heroes) because the course is a
+script for the kit the player started with.
 
 ## The campaign this is the first chapter of
 
@@ -165,7 +177,7 @@ director — which is the point of keeping the stage an ordinary room descriptio
 
 ## Verification
 
-`tsx scripts/tutorial-probe.ts` — the menu's top item boots the course, every
+`tsx scripts/tutorial-probe.ts` — the hero-picker entry boots the course, every
 lesson in every hero's course stages the enemy it claims to (asked of the
 *server's* echoed config, which is the one thing TypeScript cannot check), the
 objectives tick, a finished lesson closes itself, and progress survives a
@@ -175,7 +187,7 @@ reload.
 tutorial exists for: **every drill is played to the end**, and the ones that
 never clear are reported. An unreachable objective is the one tutorial bug with
 no symptom — the lesson stages perfectly, the enemy does its thing, and the
-player simply never gets to leave. Opt-in, because it plays fifty drills at
+player simply never gets to leave. Opt-in, because it plays sixty-two drills at
 human speed.
 
 `src/game/campaign/Campaign.test.ts` covers what needs no browser: unique lesson

@@ -30,7 +30,7 @@ import { HeroSelect } from "./HeroSelect";
 import { HUD_CSS } from "./hudStyles";
 import { MoveList } from "./MoveList";
 import { SoundMixer } from "./SoundMixer";
-import { useMatch } from "./useMatch";
+import { useLocalHero, useMatch } from "./useMatch";
 
 type View =
 	| "menu"
@@ -68,9 +68,12 @@ function useRoster(): RosterEntry[] {
 
 export function PauseMenu({
 	onExitToMenu,
+	tutorial = false,
 }: {
 	/** Leave the match and return to the root menu. */
 	onExitToMenu: () => void;
+	/** The guided course owns the kit: changing hero mid-course would break it. */
+	tutorial?: boolean;
 }) {
 	const [open, setOpen] = useState(false);
 	const [view, setView] = useState<View>("menu");
@@ -82,6 +85,12 @@ export function PauseMenu({
 	const openRef = useRef(false);
 	openRef.current = open;
 	const cardRef = useRef<HTMLDivElement>(null);
+	// The kit in the match, not the stored preference: an invite can carry
+	// `?hero=` and the Esc menu must describe the fighter actually playing.
+	// `local-hero` is event-driven, so this does not subscribe the closed menu to
+	// the 20Hz snapshot stream just to draw one name.
+	const [storedHero] = useState(() => readStoredHero());
+	const liveHero = useLocalHero(storedHero);
 	const wasOpen = useRef(false);
 
 	// A dialog that does not take focus leaves a keyboard player tabbing into the
@@ -202,9 +211,13 @@ export function PauseMenu({
 						onExit={onExitToMenu}
 						confirmExit={confirmExit}
 						setConfirmExit={setConfirmExit}
+						tutorial={tutorial}
 					/>
 				) : view === "moves" ? (
-					<MoveList hero={readStoredHero()} onClose={() => setView("menu")} />
+					<MoveList
+						hero={liveHero}
+						onClose={() => setView("menu")}
+					/>
 				) : view === "sound" ? (
 					<>
 						<h2 className="gd-title">Sound</h2>
@@ -237,7 +250,7 @@ export function PauseMenu({
 							meter resets with it.
 						</p>
 						<HeroSelect
-							current={readStoredHero()}
+							current={liveHero}
 							onPick={(hero: HeroId) => {
 								storeHero(hero);
 								// The match hears the change and asks the server; the
@@ -278,6 +291,7 @@ function MainMenuView({
 	onExit,
 	confirmExit,
 	setConfirmExit,
+	tutorial,
 }: {
 	onResume: () => void;
 	onHeroes: () => void;
@@ -289,6 +303,7 @@ function MainMenuView({
 	onExit: () => void;
 	confirmExit: boolean;
 	setConfirmExit: (v: boolean) => void;
+	tutorial: boolean;
 }) {
 	const match = useMatch();
 	const isTdm = match !== null && match.status.mode !== "ffa";
@@ -303,9 +318,14 @@ function MainMenuView({
 				<button className="gd-btn" type="button" onClick={onResume}>
 					Resume
 				</button>
-				<button className="gd-btn" type="button" onClick={onHeroes}>
-					Heroes
-				</button>
+				{/* The course teaches the kit the player started with; a hero
+				    change mid-course swaps the server's weapon under a director
+				    that is still asking for the old one's moves. */}
+				{tutorial ? null : (
+					<button className="gd-btn" type="button" onClick={onHeroes}>
+						Heroes
+					</button>
+				)}
 				<button className="gd-btn" type="button" onClick={onMoves}>
 					Moves
 				</button>

@@ -37,7 +37,7 @@ import {
 	mergeTrainingConfig,
 	type TrainingStateMsg,
 } from "../training/types.js";
-import { markLessonComplete } from "./progress.js";
+import { completedLessons, markLessonComplete, resumeIndex } from "./progress.js";
 import { LessonTracker } from "./signals.js";
 import type {
 	CampaignModule,
@@ -105,6 +105,10 @@ export interface TutorialState {
 	moduleProgress: number;
 	/** True once every lesson in the module has been cleared. */
 	complete: boolean;
+	/** First lesson this browser has not finished (0 when all are done). */
+	resumeIndex: number;
+	/** The server could not seat the room. The overlay offers a retry. */
+	connectionError: boolean;
 }
 
 /** The probe surface. Everything the overlay's buttons do, callable. */
@@ -118,6 +122,8 @@ export interface TutorialApi {
 	retry: () => void;
 	/** Jump to a lesson by its index across the module. */
 	goto: (lessonIndex: number) => void;
+	/** Try the room again after a failed connection. */
+	connect: () => void;
 	/** Resolve once the room is seated and the first lesson is playing. */
 	ready: (timeoutMs?: number) => Promise<boolean>;
 }
@@ -150,8 +156,15 @@ export class TutorialDirector {
 	private armedMs = 0;
 	/** Bumped on every arm, so a late async stage cannot clobber a newer one. */
 	private token = 0;
-	/** Lessons cleared in this run — the progress bar's numerator. */
+	/**
+	 * Lessons cleared, seeded from this browser's progress so a returning
+	 * player's bar and `complete` agree with the menu badge.
+	 */
 	private readonly cleared = new Set<string>();
+	/** True after a failed room seat; a retry clears it. */
+	private connectionError = false;
+	/** A room seat is already in flight; a second Retry must not arm twice. */
+	private connecting = false;
 	private counters: LessonCounters = this.tracker.snapshot();
 	/** The last state pushed to the overlay, so it is emitted on change only. */
 	private signature = "";
@@ -160,6 +173,10 @@ export class TutorialDirector {
 		for (const [chapterIndex, chapter] of deps.module.chapters.entries()) {
 			for (const lesson of chapter.lessons)
 				this.steps.push({ lesson, chapter, chapterIndex });
+		}
+		const done = completedLessons();
+		for (const step of this.steps) {
+			if (done.has(step.lesson.id)) this.cleared.add(step.lesson.id);
 		}
 		this.subscribe();
 		this.installApi();
@@ -226,6 +243,7 @@ export class TutorialDirector {
 			skip: () => this.skip(),
 			retry: () => this.retry(),
 			goto: (i) => this.goto(i),
+			connect: () => this.connect(),
 			ready: (timeoutMs) => this.ready(timeoutMs),
 		};
 		window.__tutorial = api;
@@ -234,23 +252,47 @@ export class TutorialDirector {
 		// player exercise the same path.
 		this.unsubscribers.push(
 			EventBus.on("tutorial-command", ((cmd: {
-				action: "next" | "skip" | "retry" | "goto";
+				action: "next" | "skip" | "retry" | "goto" | "connect";
 				lessonIndex?: number;
 			}) => {
 				if (cmd.action === "next") this.next();
 				else if (cmd.action === "skip") this.skip();
 				else if (cmd.action === "retry") this.retry();
+				else if (cmd.action === "connect") this.connect();
 				else if (cmd.action === "goto") this.goto(cmd.lessonIndex ?? 0);
 			}) as never),
 		);
 	}
 
 	private async begin() {
+		if (this.connecting) return;
+		this.connecting = true;
 		this.emit(true);
 		// The room has to exist before a stage can be applied: the first config
 		// message is what teaches the server this client is listening.
-		await this.deps.training.ready();
-		await this.arm(0, true);
+		const seated = await this.deps.training.ready(8000);
+		this.connecting = false;
+		if (!seated) {
+			// The course cannot arm itself against an empty arena. Stay on the
+			// setup screen, say so, and let the player retry — a "normal" course
+			// whose dummy never arrives is the one failure with no symptom.
+			this.phase = "connecting";
+			this.connectionError = true;
+			this.emit(true);
+			return;
+		}
+		this.connectionError = false;
+		// A returning player resumes at the first drill they have not finished.
+		const start = resumeIndex(this.steps.map((step) => step.lesson.id));
+		await this.arm(start, true);
+	}
+
+	/** Retry the room seat after a failed connection. */
+	connect() {
+		if (this.phase !== "connecting") return;
+		this.connectionError = false;
+		this.emit(true);
+		void this.begin();
 	}
 
 	async ready(timeoutMs = 20000): Promise<boolean> {
@@ -293,15 +335,21 @@ export class TutorialDirector {
 		this.index = index;
 		this.phase = "arming";
 		this.holdMs = 0;
+		// Clear the counters *before* the card redraws. The card renders the new
+		// lesson immediately, and pairing it with the previous lesson's numbers
+		// showed objectives already ticked while the room was still resetting.
+		this.tracker.reset();
+		this.counters = this.tracker.snapshot();
+		this.armedMs = 0;
 		this.emit(true);
 
 		await this.deps.training.set(
 			mergeTrainingConfig(defaultTrainingConfig(), step.lesson.stage),
 		);
+		if (token !== this.token) return;
 		await this.deps.training.reset();
 		if (token !== this.token) return;
 
-		this.tracker.reset();
 		// Seed the server's tallies *now*, from the room the reset just zeroed.
 		//
 		// `training-state` is sent on change, and a lesson where nothing changes
@@ -313,7 +361,6 @@ export class TutorialDirector {
 		this.tracker.noteStats(opening.stats.player);
 		this.tracker.noteDummyHp(opening.stats.dummy.hp);
 		this.counters = this.tracker.snapshot();
-		this.armedMs = 0;
 		// The chapter card comes *after* the stage is set, so the room behind it
 		// is already the room the first lesson wants.
 		this.phase = showChapter ? "chapter" : "playing";
@@ -322,6 +369,10 @@ export class TutorialDirector {
 	}
 
 	private next() {
+		// Enter is "continue", and only a card can be continued. A live lesson
+		// advances when its objectives are met — never because a key was pressed.
+		// Falling through here from `playing` was a silent Skip on the one key a
+		// keyboard player presses most.
 		if (this.phase === "chapter") {
 			this.phase = "playing";
 			this.holdMs = 0;
@@ -329,20 +380,33 @@ export class TutorialDirector {
 			this.emit(true);
 			return;
 		}
-		if (this.phase === "finished") return;
-		this.advance();
+		if (this.phase === "cleared") {
+			this.advance();
+			return;
+		}
 	}
 
 	private skip() {
-		if (this.phase === "finished") return;
+		if (this.phase === "finished" || this.phase === "connecting") return;
+		// A chapter card is not a drill: skipping it shows its first lesson
+		// rather than abandoning that lesson before it was ever offered.
+		if (this.phase === "chapter") {
+			this.phase = "playing";
+			this.holdMs = 0;
+			this.armedMs = 0;
+			this.emit(true);
+			return;
+		}
 		this.advance();
 	}
 
 	private retry() {
+		if (this.phase === "connecting") return;
 		void this.arm(this.index, false);
 	}
 
 	private goto(lessonIndex: number) {
+		if (this.phase === "connecting") return;
 		const clamped = Math.max(0, Math.min(lessonIndex, this.steps.length - 1));
 		const next = this.steps[clamped];
 		const here = this.step;
@@ -453,7 +517,16 @@ export class TutorialDirector {
 			objectives,
 			moduleProgress:
 				this.steps.length === 0 ? 1 : this.cleared.size / this.steps.length,
-			complete: this.phase === "finished",
+			// Only a course with every drill finished is complete. Reaching the
+			// end by pressing Skip is not the promise the curtain makes.
+			complete:
+				this.steps.length > 0 &&
+				this.steps.every((step) => this.cleared.has(step.lesson.id)),
+			resumeIndex: Math.max(
+				0,
+				this.steps.findIndex((step) => !this.cleared.has(step.lesson.id)),
+			),
+			connectionError: this.connectionError,
 		};
 	}
 
@@ -472,6 +545,7 @@ export class TutorialDirector {
 			state.lessonId,
 			state.objectives.map((o) => `${o.id}:${o.count}`).join(","),
 			state.complete,
+			state.connectionError,
 		].join("|");
 		if (!force && signature === this.signature) return;
 		this.signature = signature;

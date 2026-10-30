@@ -123,6 +123,10 @@ const STORIES: Record<string, Story> = {
 	},
 
 	// ---- movement ----
+	guard: {
+		loopMs: 2600,
+		steps: [press(400, { block: true }, 1800)],
+	},
 	walk: {
 		loopMs: 2800,
 		steps: [press(300, { right: true }, 900), press(1600, { left: true }, 900)],
@@ -135,15 +139,6 @@ const STORIES: Record<string, Story> = {
 		loopMs: 3000,
 		steps: [press(400, { dash: 1 }, 80), press(1600, { dash: -1 }, 80)],
 	},
-	tumble: {
-		loopMs: 3200,
-		steps: [
-			press(300, { swordStance: false }, 2900),
-			press(700, { dash: 1 }, 80),
-			press(1900, { dash: -1 }, 80),
-		],
-	},
-
 	// ---- melee (ids are the shared MOVES table's) ----
 	// Every melee story stands a target dummy just inside the move's reach, so
 	// the swing lands and the card's damage, stun and knockback are all shown,
@@ -217,12 +212,14 @@ const STORIES: Record<string, Story> = {
 		targets: [170],
 		steps: [press(300, { attack: true }, SUNDER_HOLD_MS)],
 	},
-	// The frenzy needs the bloodlust full: the dummy is already bleeding.
+	// The frenzy needs the bloodlust full: the dummy is already bleeding. The
+	// press is shorter than one link, or the held button runs straight into the
+	// axe link and the sword's card shows damage it does not deal.
 	rend: {
 		loopMs: 1800,
 		targets: [156],
 		targetHp: 28,
-		steps: [press(500, { attack: true })],
+		steps: [press(500, { attack: true }, 40)],
 	},
 	rend2: {
 		loopMs: 2200,
@@ -296,7 +293,7 @@ const STORIES: Record<string, Story> = {
 	},
 	trap: {
 		loopMs: 4600,
-		targets: [260],
+		targets: [236],
 		steps: [{ at: 300, input: { item: true }, cue: "throw-item" }],
 	},
 	smoke: {
@@ -343,6 +340,11 @@ const STORIES: Record<string, Story> = {
 /** Look a story up by id, tolerating an id no story answers yet. */
 export function storyFor(id: string): Story | undefined {
 	return STORIES[id];
+}
+
+/** Every registered story id. Tests use it to prove nothing is orphaned. */
+export function storyIds(): string[] {
+	return Object.keys(STORIES);
 }
 
 /** What a stage plays when no story answers: a standing fighter, breathing. */

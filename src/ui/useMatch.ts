@@ -11,6 +11,7 @@
 import { useEffect, useState } from "react";
 import { EventBus } from "../game/EventBus";
 import type { MatchOverMsg, MatchStatus } from "../game/online/types";
+import type { HeroId } from "../game/simulation/Heroes";
 import type { Standing } from "../game/simulation/Deathmatch";
 
 export interface MatchView {
@@ -18,6 +19,41 @@ export interface MatchView {
 	standings: Standing[];
 	/** The id the server scores this client under. */
 	myId: string;
+	/** The kit this client is actually playing — not the stored preference. */
+	hero: HeroId;
+}
+
+/**
+ * A cache of the live kit, so a menu opened after the event still knows it.
+ *
+ * `match-status` is online-only, and the Esc menu exists in offline practice
+ * too. `Match` announces the kit it is playing (`local-hero`) at construction
+ * and on every accepted hero echo; this module listens from load, so the value
+ * is there even if no component was mounted at the moment it was announced.
+ */
+let cachedHero: HeroId | null = null;
+let heroListenerInstalled = false;
+function installHeroCache() {
+	if (heroListenerInstalled) return;
+	heroListenerInstalled = true;
+	EventBus.on("local-hero", ((hero: HeroId) => {
+		cachedHero = hero;
+	}) as never);
+}
+installHeroCache();
+
+/** The kit actually playing, or `fallback` before the match has said. */
+export function useLocalHero(fallback: HeroId): HeroId {
+	const [hero, setHero] = useState<HeroId>(() => cachedHero ?? fallback);
+	useEffect(
+		() =>
+			EventBus.on("local-hero", ((next: HeroId) => {
+				cachedHero = next;
+				setHero(next);
+			}) as never),
+		[],
+	);
+	return hero;
 }
 
 /**

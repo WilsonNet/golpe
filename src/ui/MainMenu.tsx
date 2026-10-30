@@ -60,7 +60,9 @@ import type { MatchMode } from "../game/simulation/Teams";
 import { mapScreens } from "../game/simulation/Tilemap";
 import {
 	dismissTutorialPromptForever,
+	skipTutorialPromptForSession,
 	tutorialPromptDismissed,
+	tutorialPromptSkippedThisSession,
 } from "../game/tutorialPrompt";
 import { CP_SCREENS } from "../tweakables/control";
 import { ULT_MAX_CAP } from "../tweakables/ultimate";
@@ -205,7 +207,10 @@ export function MainMenu({
 	// the large target — the player who needs it is the one who would not look
 	// for it — and Skip waits one click beneath.
 	const [promptOpen, setPromptOpen] = useState(
-		() => !tutorialPromptDismissed() && tutorialProgress.done === 0,
+		() =>
+			!tutorialPromptDismissed() &&
+			!tutorialPromptSkippedThisSession() &&
+			tutorialProgress.done === 0,
 	);
 	useEffect(() => {
 		setTutorialProgress(
@@ -222,6 +227,12 @@ export function MainMenu({
 
 	const answerPromptForever = () => {
 		dismissTutorialPromptForever();
+		setPromptOpen(false);
+	};
+
+	/** Skip is this tab's answer: it must not return on the next menu mount. */
+	const skipPromptForNow = () => {
+		skipTutorialPromptForSession();
 		setPromptOpen(false);
 	};
 
@@ -251,7 +262,7 @@ export function MainMenu({
 		const onKey = (e: KeyboardEvent) => {
 			if (e.code !== "Escape") return;
 			if (promptOpen) {
-				setPromptOpen(false);
+				skipPromptForNow();
 				return;
 			}
 			setView((v) => (v === "home" ? v : "home"));
@@ -271,8 +282,8 @@ export function MainMenu({
 							<img
 								className="gd-logo"
 								src={logoUrl}
-								width={640}
-								height={280}
+								width={704}
+								height={344}
 								alt="golpe"
 							/>
 						</h1>
@@ -388,7 +399,7 @@ export function MainMenu({
 								<button
 									className="gd-play-item gd-play-item-tutorial gd-play-item-compact"
 									type="button"
-									onClick={() => onLaunch({ ...NOTHING, tutorial: true, hero })}
+									onClick={startTutorial}
 								>
 									<strong>
 										Play {HEROES[hero].name} Tutorial
@@ -559,7 +570,7 @@ export function MainMenu({
 					className="gd-prompt-backdrop"
 					role="presentation"
 					onClick={(e) => {
-						if (e.target === e.currentTarget) setPromptOpen(false);
+						if (e.target === e.currentTarget) skipPromptForNow();
 					}}
 				>
 					<div
@@ -589,7 +600,7 @@ export function MainMenu({
 							<button
 								className="gd-btn gd-prompt-skip"
 								type="button"
-								onClick={() => setPromptOpen(false)}
+								onClick={skipPromptForNow}
 							>
 								Skip for now
 							</button>

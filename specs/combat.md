@@ -176,7 +176,8 @@ bullets.
 ## Damage and death
 
 - Fighters start at **100 HP**. Bullet damage **10**, so ten clean hits is a KO;
-  melee damage ranges from 7 (slash) to 24 (Massive Strike).
+  melee damage ranges from 7 (slash) to 28 (Sunder), with the thrown axe outside
+  that table.
 - HP is clamped at 0; a dead fighter is drawn at **0.3 alpha**.
 - Damage is applied server-side and is **not** logged as `[FIGHT]` — read HP from
   `window.__gameState()` to confirm an online fight is happening.

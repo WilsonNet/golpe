@@ -529,6 +529,8 @@ export class Match {
 		// `?hero=` picks who this client plays before the room exists. Invalid
 		// values fall back to the default rather than failing to boot.
 		this.hero = isHeroId(launch.hero) ? launch.hero : DEFAULT_HERO;
+		// The Esc menu and the move list ask this, not the stored preference.
+		EventBus.emit("local-hero", this.hero);
 		this.botHero = launch.botHero;
 		// The hero picked the moment the match boots owns the music — each
 		// fighter has a theme. The menu's title theme hands off under the
@@ -1102,6 +1104,7 @@ export class Match {
 					// hero has their own theme (see audio/README.md).
 					if (hero === this.hero) return;
 					this.hero = hero;
+					EventBus.emit("local-hero", hero);
 					this.local.fighter.hero = hero;
 					this.local.anim = { clip: "right-idle", frame: 0, elapsedMs: 0 };
 					const idleTex = idleTexture(hero, this.local.body.facing);
@@ -1396,6 +1399,10 @@ export class Match {
 						status,
 						standings,
 						myId: this.online?.manager.myId ?? "",
+						// The live kit, not the stored preference: an invite can
+						// carry `?hero=` and the Esc menu's move list must describe
+						// the fighter actually in the match.
+						hero: this.hero,
 					});
 				},
 				onRoundWon: (msg) => {

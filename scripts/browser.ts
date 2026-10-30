@@ -2,8 +2,56 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
 import { type Browser, type BrowserContext, chromium } from "playwright";
 
+/** Is this host this machine? The only targets a probe may drive by default. */
+function isLoopbackHost(host: string): boolean {
+	const h = host.replace(/^\[|\]$/g, "").toLowerCase();
+	return (
+		h === "localhost" ||
+		h === "::1" ||
+		h === "0.0.0.0" ||
+		h.startsWith("127.")
+	);
+}
+
+/** Extract the host from `host:port`, `http://host:port` or `https://host`. */
+function hostOf(value: string): string {
+	try {
+		const url = value.includes("://") ? new URL(value) : new URL(`http://${value}`);
+		return url.hostname;
+	} catch {
+		return value.split(/[:/]/)[0] ?? value;
+	}
+}
+
+/**
+ * Refuse to point a probe at somebody else's machine.
+ *
+ * `GOLPE_URL` and `GOLPE_SERVER` exist so a probe can measure a built client or
+ * a second server — but a stray value in an agent shell is enough to send a
+ * Playwright run at a developer's *personal* open game server, which starts a
+ * real match there. Localhost is the default and the only target a probe may
+ * choose implicitly; a remote target requires the explicit opt-in below.
+ */
+function assertLocalProbeTarget(): void {
+	if (process.env.GOLPE_ALLOW_REMOTE_PROBES === "1") return;
+	for (const key of ["GOLPE_URL", "GOLPE_SERVER"] as const) {
+		const value = process.env[key];
+		if (!value) continue;
+		if (!isLoopbackHost(hostOf(value))) {
+			throw new Error(
+				`${key}=${value} is not this machine. Probes are local-only: ` +
+					"set GOLPE_ALLOW_REMOTE_PROBES=1 only when you mean to drive that host.",
+			);
+		}
+	}
+}
+
 /**
  * Chromium for every probe — on the GPU when the machine has one.
+ *
+ * Headless and launched here, never through a remote browser: a probe exists to
+ * measure *this* checkout, and a browser on another display or machine would
+ * talk to whatever server happens to be listening there.
  *
  * Headless Chromium's default WebGL is SwiftShader, a CPU rasteriser, and the
  * game drew at 10-16fps under it. A client below 12fps hits the fixed step's
@@ -23,13 +71,54 @@ export const GPU_ARGS = [
 export async function launchBrowser(
 	options: Parameters<typeof chromium.launch>[0] = {},
 ): Promise<Browser> {
+	assertLocalProbeTarget();
 	const browser = await chromium.launch({
 		...options,
+		// Headless is the default and the contract: a probe must never drive a
+		// visible browser on somebody's desktop, let alone another display.
+		headless: options.headless ?? true,
 		args: [...GPU_ARGS, ...(options.args ?? [])],
 	});
 	const server = process.env.GOLPE_SERVER;
 	if (server) redirectGameServer(browser, server);
+	guardForeignPages(browser);
 	return browser;
+}
+
+/**
+ * Close any page that is not this machine.
+ *
+ * The last line of defence after the env check: a probe that reaches a page
+ * served from another host would otherwise drive that host's game server and
+ * start a match on somebody else's computer. It fails loudly instead.
+ */
+function guardForeignPages(browser: Browser) {
+	if (process.env.GOLPE_ALLOW_REMOTE_PROBES === "1") return;
+	const watch = (page: import("playwright").Page) => {
+		page.on("framenavigated", (frame) => {
+			if (frame !== page.mainFrame()) return;
+			const url = frame.url();
+			if (!url.startsWith("http")) return;
+			if (!isLoopbackHost(hostOf(url))) {
+				console.error(
+					`[probe] refusing a page from ${hostOf(url)} — probes are local-only`,
+				);
+				void page.close();
+			}
+		});
+	};
+	const newContext = browser.newContext.bind(browser);
+	browser.newContext = async (...args) => {
+		const ctx = await newContext(...args);
+		ctx.on("page", watch);
+		return ctx;
+	};
+	const newPage = browser.newPage.bind(browser);
+	browser.newPage = async (...args) => {
+		const page = await newPage(...args);
+		watch(page);
+		return page;
+	};
 }
 
 /**

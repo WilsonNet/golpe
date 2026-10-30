@@ -21,12 +21,15 @@
  */
 
 import type { HeroId } from "../game/simulation/Heroes";
+import { kitFor } from "../game/simulation/Heroes";
 import { ROOT_MS, TRAP_DAMAGE, TRAP_RADIUS } from "../game/simulation/Items";
 import { type MeleeMove, MOVES, moveDuration } from "../game/simulation/Melee";
+import { reserveRoundsFor } from "../game/simulation/Physics";
 import { HE_GRENADE_MAX_DAMAGE, HE_GRENADE_RADIUS } from "../tweakables/items";
 import {
 	GUARD_CRUSH_DAMAGE_FRACTION,
 	GUARD_CRUSH_STUN_MS,
+	KNOCKDOWN_MS,
 	SUNDER_CHARGE_MS,
 } from "../tweakables/melee";
 import { TUMBLE_SPEED } from "../tweakables/movement";
@@ -62,6 +65,7 @@ import {
 	SINGULARITY_RADIUS,
 	SINGULARITY_REACH,
 	SINGULARITY_TICK_DAMAGE,
+	ULT_CAP,
 } from "../tweakables/ultimate";
 
 export type MoveCategory =
@@ -73,7 +77,7 @@ export type MoveCategory =
 	| "ultimate";
 
 /** A named slot in the bindings table that a move's command references. */
-export type CommandAction =
+type CommandAction =
 	| "left"
 	| "right"
 	| "jump"
@@ -86,9 +90,20 @@ export type CommandAction =
 	| "gun";
 
 /** A single gesture: some actions pressed together, in display order. */
-interface MoveCommand {
+export interface MoveCommand {
 	label: string;
 	actions: CommandAction[];
+	/**
+	 * How the chips join: `then` for a sequence (stance, then fire), `or` for
+	 * alternatives (left or right; sword or gun). The old renderer always said
+	 * "then", which taught `A then D` as a dash.
+	 */
+	join?: "then" | "or";
+	/**
+	 * Alternatives that are each a short sequence, e.g. a double-tap is
+	 * `[left, left]` or `[right, right]`. Wins over `actions` when present.
+	 */
+	groups?: CommandAction[][];
 }
 
 interface MoveStat {
@@ -97,6 +112,18 @@ interface MoveStat {
 	value: string;
 	/** 0..1, drives a mini-bar. Absent means a text-only stat. */
 	level?: number;
+}
+
+/**
+ * The chip groups a command renders: each inner array is a short sequence, and
+ * `join` says how the groups read. A pure function so the grouping can be
+ * tested without a browser.
+ */
+export function commandGroups(command: MoveCommand): CommandAction[][] {
+	if (command.groups) return command.groups;
+	if (command.actions.length === 0) return [];
+	if (command.join === "or") return command.actions.map((a) => [a]);
+	return [command.actions];
 }
 
 /**
@@ -145,12 +172,20 @@ function frameData(move: MeleeMove): MoveStat[] {
 	const d = MOVES[move];
 	const total = moveDuration(move);
 	return [
-		{ label: "STARTUP", value: `${d.startupMs}ms`, level: d.startupMs / 160 },
-		{ label: "ACTIVE", value: `${d.activeMs}ms`, level: d.activeMs / 160 },
+		{
+			label: "STARTUP",
+			value: `${d.startupMs}ms`,
+			level: Math.min(1, d.startupMs / 160),
+		},
+		{
+			label: "ACTIVE",
+			value: `${d.activeMs}ms`,
+			level: Math.min(1, d.activeMs / 160),
+		},
 		{
 			label: "RECOVERY",
 			value: `${d.recoveryMs}ms`,
-			level: d.recoveryMs / 500,
+			level: Math.min(1, d.recoveryMs / 500),
 		},
 		{ label: "TOTAL", value: `${total}ms`, level: Math.min(1, total / 700) },
 	];
@@ -170,12 +205,17 @@ function meleeStats(move: MeleeMove): MoveStat[] {
 	];
 	if (d.hitstunMs > 0)
 		rows.push({ label: "HITSTUN", value: `${d.hitstunMs}ms` });
+	if (d.selfVx || d.selfVy)
+		rows.push({
+			label: "CARRY",
+			value: `${Math.round(Math.hypot(d.selfVx ?? 0, d.selfVy ?? 0))} px/s`,
+		});
 	if (d.knockdown)
 		rows.push({
 			label: "KNOCKDOWN",
 			value: d.knockdownOnLanding
-				? `${d.knockdownMs ?? "—"}ms ON LANDING`
-				: `${d.knockdownMs ?? "—"}ms`,
+				? `${d.knockdownMs ?? KNOCKDOWN_MS}ms ON LANDING`
+				: `${d.knockdownMs ?? KNOCKDOWN_MS}ms`,
 		});
 	return rows;
 }
@@ -189,44 +229,96 @@ const SYSTEM_ENTRIES: MoveEntry[] = [
 		id: "stance",
 		category: "system",
 		name: "Stance",
-		command: { label: "SWORD / GUN", actions: ["sword", "gun"] },
+		command: {
+			label: "SWORD or GUN",
+			actions: ["sword", "gun"],
+			join: "or",
+		},
 		prose:
-			"You carry one weapon at a time. Q raises the melee weapon, E the ranged one. Switching is instant and cancels a cancellable melee move (the slash-shot); it can never rescue you from a heavy move's recovery. Sword is home — this is a sword game first.",
+			"You carry one weapon at a time. One key raises the melee weapon, another the ranged one. Switching is instant and cancels a cancellable melee move (the slash-shot); it can never rescue you from a heavy move's recovery. Sword is home — this is a sword game first.",
 		tags: "SWORD IS THE DEFAULT STANCE",
 	},
 ];
 
-const MOVEMENT_ENTRIES: MoveEntry[] = [
-	{
-		id: "walk",
-		category: "movement",
-		name: "Walk",
-		command: { label: "MOVE", actions: ["left", "right"] },
-		prose:
-			"Hold left or right to walk. The arena is made of ledges and gaps, and most of the fight is choosing where to stand — the sword's reach is 48px, so position decides which swings can land at all.",
-	},
-	{
-		id: "jump",
-		category: "movement",
-		name: "Jump / Double Jump",
-		command: { label: "JUMP", actions: ["jump"] },
-		prose:
-			"Press jump to leave the ground, and again in the air for a second, weaker hop. The airborne jump refills only on landing. A jump clears the trap's patch entirely and is the read that beats a lunging thrust. **Launched by an anti-air?** Press jump **on the way down** for the **safe fall**: the knockdown is dropped and you land on your feet. Press it too early and the launch owns the rise; leave it too late and an airborne swing can cut the arc into the **Insta Fall**.",
-		tags: "TWO JUMPS · AIR JUMP REFILLS ON LANDING · SAFE FALL",
-	},
-	{
-		id: "dash",
-		category: "movement",
-		name: "Dash / Tumble",
-		command: { label: "TAP TWICE", actions: ["left", "right"] },
-		prose:
-			"Double-tap left or right for a burst of speed. In the sword stance it is a dash — a flat, gravity-free line you can cross a gap with. In the gun stance the same gesture is a tumble: slower, harder to chain, and a shorter target while it rolls.",
-		stats: [
-			{ label: "DASH", value: "1000 px/s" },
-			{ label: "TUMBLE", value: `${TUMBLE_SPEED} px/s` },
-		],
-	},
-];
+/** The guard, for the weapons that have one. The dagger's block key is a lunge. */
+function guardEntry(hero: HeroId): MoveEntry[] {
+	const weapon = kitFor(hero).melee;
+	if (!weapon.blockable) return [];
+	return [
+		{
+			id: "guard",
+			category: "system",
+			name: "Guard",
+			command: { label: "HOLD to guard", actions: ["block"] },
+			prose:
+				"Hold block and face the swing. The guard covers the side you are facing and nothing else. A sword attack that hits it guard-breaks the **attacker** for a full second — and hands **you** the free heavy: a Massive for Lia and Jeffs, a Sunder for Ibiriki. Walk around a held guard and the same swing goes through its back.",
+			tags: "FACING ONLY · A BLOCKED SWING BREAKS THE ATTACKER",
+		},
+	];
+}
+
+/**
+ * The feet. The dash's speed is the hero's own — the dagger bursts at 1100
+ * px/s where the swords manage 900 — so this cannot be one shared card with a
+ * hardcoded number.
+ */
+function movementEntries(hero: HeroId): MoveEntry[] {
+	const weapon = kitFor(hero).melee;
+	const opener = weapon.chain?.[0] ?? weapon.moves[0];
+	const reach = opener ? MOVES[opener].reachPx : 0;
+	const dash = weapon.burst.speed;
+	return [
+		{
+			id: "walk",
+			category: "movement",
+			name: "Walk",
+			command: {
+				label: "HOLD A DIRECTION",
+				actions: ["left", "right"],
+				join: "or",
+			},
+			prose: `Hold left or right to walk. The arena is made of ledges and gaps, and most of the fight is choosing where to stand — your opener reaches ${reach}px, so position decides which swings can land at all.`,
+		},
+		{
+			id: "jump",
+			category: "movement",
+			name: "Jump / Double Jump",
+			command: { label: "JUMP", actions: ["jump"] },
+			prose:
+				"Press jump to leave the ground, and again in the air for a second, weaker hop. The airborne jump refills only on landing. A jump clears the trap's patch entirely and is the read that beats a lunging thrust. **Launched by an anti-air?** Press jump **on the way down** for the **safe fall**: the knockdown is dropped and you land on your feet. Press it too early and the launch owns the rise; leave it too late and an airborne swing can cut the arc into the **Insta Fall**.",
+			tags: "TWO JUMPS · AIR JUMP REFILLS ON LANDING · SAFE FALL",
+		},
+		{
+			id: "dash",
+			category: "movement",
+			name: "Dash / Tumble",
+			command: {
+				label: "DOUBLE-TAP a direction",
+				actions: ["left", "right"],
+				groups: [
+					["left", "left"],
+					["right", "right"],
+				],
+				join: "or",
+			},
+			prose:
+				"Double-tap left or right for a burst of speed. In the sword stance it is a dash — a flat, gravity-free line you can cross a gap with. In the gun stance the same gesture is a tumble: slower, harder to chain, and a shorter target while it rolls.",
+			stats: [
+				{ label: "DASH", value: `${dash} px/s` },
+				{ label: "TUMBLE", value: `${TUMBLE_SPEED} px/s` },
+			],
+		},
+	];
+}
+
+/** The rows every hero carries, in rail order: system, then movement. */
+function sharedEntries(hero: HeroId): MoveEntry[] {
+	return [
+		...SYSTEM_ENTRIES,
+		...guardEntry(hero),
+		...movementEntries(hero),
+	];
+}
 
 // ---------------------------------------------------------------------------
 // Melee move prose, per move id
@@ -240,18 +332,18 @@ const MELEE_PROSE: Partial<Record<MeleeMove, string>> = {
 	slash3:
 		"The finisher — a straight overhead that knocks the target down for 520ms. It cannot be cancelled: this is the commitment that ends the chain, and what it commits to is neutral, not a punish. The whole chain is 7 + 7 + 11 = 25, a shade more than a Massive, for three hits that each have to connect on the ground.",
 	uppercut:
-		"The answer to a turtle. An unblockable upward thrust that launches its target **higher than a jump** — but only 34px of reach, so it has to be walked into, and 340ms of recovery you cannot cancel. The foe goes up **horizontal** and comes down on the floor: the knockdown is paid when their feet return. Unless they press jump on the way down — the **safe fall** cancels it. Follow them into the air and land a swing instead and the arc is **cut short**: the **Insta Fall**, a spike no jump can cancel. A whiffed uppercut loses you the exchange.",
+		"The answer to a turtle. An unblockable upward thrust that launches its target a jump's own height — but only 34px of reach, so it has to be walked into, and 340ms of recovery you cannot cancel. The foe goes up **horizontal** and comes down on the floor: the knockdown is paid when their feet return. Unless they press jump on the way down — the **safe fall** cancels it. Follow them into the air and land a swing instead and the arc is **cut short**: the **Insta Fall**, a spike no jump can cancel. A whiffed uppercut loses you the exchange.",
 	massive:
 		"The payoff for a 1.6s charge or a guard break. Held, it slams the sword into the floor 56px ahead; the swing itself is blockable, and the blast that follows is front *and* back of the slam point, stunning through a guard. Released in the air it becomes the plunge bomb instead.",
 	stab: "The dagger's bread and butter — fast, weak, and cancellable into the thrust. Where the slash is 330ms the stab is 190; where the slash deals 7 the stab deals 5. A dagger in range interrupts the gap between a sword wielder's swings, and trading with the sword still loses.",
 	thrust:
-		"The dagger's whole identity and its Shift move: a committed lunge that knocks down everyone in its path for 1.5s. It is the answer to having no guard — the 260ms wind-up is the tell, and a jump clears the flat line entirely. The dash is unblockable once committed.",
+		`The dagger's whole identity and its lunge: a committed dash that knocks down everyone in its path for ${MOVES.thrust.knockdownMs ?? 1500}ms. It is the answer to having no guard — the ${MOVES.thrust.startupMs}ms wind-up is the tell, and a jump clears the flat line entirely. The dash is unblockable once committed.`,
 	shoryuken:
 		"The dagger's anti-air, on the uppercut button. A rising stab with a wide reach that **launches like the sword's uppercut** — the same arc, the same horizontal body, the same 700ms floor time, and the same safe fall and Insta Fall to escape or punish it. It only fires while the second jump is still in hand, so it can never be a third jump — and unlike the sword's uppercut it is blockable, so a read guard stops it.",
 	hew: "The viking sword's opener — heavier than a slash in every way. Slower to start (120ms), 10 damage, and a 300ms stagger instead of a flinch, so a landed hew holds its victim for the next one. Cancellable into the guard, and the first link of the hew chain.",
 	hew2: "The backhand — the second link, the same rhythm as the opener. It pierces the opener's invulnerability, so a landed chain keeps landing.",
 	hew3: "The finisher — an overhead chop that knocks down. It cannot be cancelled; the whole hew chain is 10 + 10 + 15 = 35, heavier than the katana's 25, for three slower swings that each have to land on the ground.",
-	sunder: `Hold the attack button and the sword goes up over his head while blood-red motes stream into it; after ${SUNDER_CHARGE_MS / 1000}s it is armed, and the release brings it down top to bottom. **It goes through blocks**: a front guard is crushed — the blocker takes ${Math.round(GUARD_CRUSH_DAMAGE_FRACTION * 100)}% and a ${GUARD_CRUSH_STUN_MS}ms mini stun — instead of guard breaking you. A guard break you land also arms a free Sunder.`,
+	sunder: `Hold the attack button and the sword goes up over his head while blood-red motes stream into it; after ${SUNDER_CHARGE_MS / 1000}s it is armed, and the release brings it down top to bottom. **It goes through blocks**: a front guard is crushed — the blocker takes ${Math.round(GUARD_CRUSH_DAMAGE_FRACTION * 100)}% and a ${GUARD_CRUSH_STUN_MS}ms mini stun — instead of guard breaking you. Stop an attacker's swing with **your** guard and the free heavy it earns you is a Sunder.`,
 	rend: "**Berserk only** — some foe is below the berserk line: Ibiriki drops the axes' throw, dual wields, and the attack button runs the frenzy: sword, axe, both. **Hold it down and it never stops.** Every hit is a mini stun, and a guard cannot stop it — the blocker takes chip and is walked backwards. Out of axes, the sword swings alone at half speed.",
 	rend2:
 		"**Berserk only** — the second link of the frenzy: the axe in the off hand.",
@@ -299,30 +391,33 @@ function meleeCommand(move: MeleeMove): MoveCommand {
 	switch (move) {
 		case "slash":
 		case "slash2":
-			return { label: "LMB — and again for the chain", actions: ["attack"] };
+			return { label: "and again for the chain", actions: ["attack"] };
 		case "slash3":
-			return { label: "LMB × 3 on the ground", actions: ["attack"] };
+			return { label: "three on the ground", actions: ["attack"] };
 		case "uppercut":
 		case "shoryuken":
 			return { label: "UPPERCUT", actions: ["uppercut"] };
 		case "massive":
-			return { label: "HOLD LMB, then release", actions: ["attack"] };
+			return { label: "hold, then release", actions: ["attack"] };
 		case "stab":
-			return { label: "LMB (dagger)", actions: ["attack"] };
+			return { label: "(dagger)", actions: ["attack"] };
 		case "thrust":
-			return { label: "SHIFT (dagger)", actions: ["block"] };
+			return { label: "(dagger)", actions: ["block"] };
 		case "hew":
 		case "hew2":
-			return { label: "LMB — and again for the chain", actions: ["attack"] };
+			return { label: "and again for the chain", actions: ["attack"] };
 		case "hew3":
-			return { label: "LMB × 3 on the ground", actions: ["attack"] };
+			return { label: "three on the ground", actions: ["attack"] };
 		case "sunder":
-			return { label: "HOLD LMB 1s, then release", actions: ["attack"] };
+			return {
+				label: `hold ${SUNDER_CHARGE_MS / 1000}s, then release`,
+				actions: ["attack"],
+			};
 		case "rend":
 		case "rend2":
-			return { label: "LMB while BERSERK", actions: ["attack"] };
+			return { label: "while BERSERK", actions: ["attack"] };
 		case "rend3":
-			return { label: "LMB × 3 while BERSERK", actions: ["attack"] };
+			return { label: "hold while BERSERK", actions: ["attack"] };
 		default:
 			return { label: moveName(move), actions: ["attack"] };
 	}
@@ -349,8 +444,7 @@ export const MOVE_LISTS: Record<HeroId, HeroMoveList> = {
 	lia: {
 		hero: "lia",
 		entries: [
-			...SYSTEM_ENTRIES,
-			...MOVEMENT_ENTRIES,
+			...sharedEntries("lia"),
 			meleeEntry("slash"),
 			meleeEntry("slash2"),
 			meleeEntry("slash3"),
@@ -360,20 +454,22 @@ export const MOVE_LISTS: Record<HeroId, HeroMoveList> = {
 				id: "rifle",
 				category: "ranged",
 				name: "Rifle",
-				command: { label: "E, then LMB", actions: ["gun", "attack"] },
-				prose:
-					"A clean single shot per press — 10 damage, no falloff, at any range. The rifle's character is that its pause is short: a small magazine and the fastest reload in the game. The gun stance answers a range problem; it is not the starting point.",
+				command: { label: "then attack", actions: ["gun", "attack"] },
+				prose: `A clean single shot per press — ${RANGED_WEAPONS.rifle.damage} damage, no falloff, at any range. The rifle's character is that its pause is short: a small magazine and the fastest reload in the game. The gun stance answers a range problem; it is not the starting point.`,
 				stats: [
-					{ label: "DMG", value: "10" },
-					{ label: "SPEED", value: "600 px/s" },
-					{ label: "MAG", value: "12 / 36" },
+					{ label: "DMG", value: `${RANGED_WEAPONS.rifle.damage}` },
+					{ label: "SPEED", value: `${RANGED_WEAPONS.rifle.speed} px/s` },
+					{
+						label: "MAG",
+						value: `${RANGED_WEAPONS.rifle.magazine} / ${reserveRoundsFor(RANGED_WEAPONS.rifle)}`,
+					},
 				],
 			},
 			{
 				id: "grenade",
 				category: "item",
 				name: "HE Grenade",
-				command: { label: "F — 2 uses per life", actions: ["item"] },
+				command: { label: "2 uses per life", actions: ["item"] },
 				prose:
 					"A thrown grenade that bounces and detonates. It is a positioning weapon, not a delete button: 45 damage at the point of detonation falling to zero at the edge of a 130px radius. Bounced off a wall it is a real option — learn the bounces.",
 				stats: [
@@ -389,11 +485,12 @@ export const MOVE_LISTS: Record<HeroId, HeroMoveList> = {
 				id: "black-hole",
 				category: "ultimate",
 				name: "Black Hole",
-				command: { label: "HOLD R, release to cast", actions: ["ultimate"] },
+				command: { label: "hold, release to cast", actions: ["ultimate"] },
 				prose:
-					"Your ultimate. Hold R to trace the grenade's arc, release to throw. It freezes the room for 1.1s, then the hole opens where it lands: a 168px event horizon that catches fighters (no gravity, no steering, stunned), a 260px outer reach that tugs, and 7 damage every 250ms. The caster is immune to their own hole.",
+					"Your ultimate. Hold to trace the grenade's arc, release to throw. It freezes the room for 1.1s, then the hole opens where it lands: a 168px event horizon that catches fighters (no gravity, no steering, stunned), a 260px outer reach that tugs, and 7 damage every 250ms. The caster is immune to their own hole.",
 				tags: "EARNED BY HITS · DENIABLE BY A GUARD",
 				stats: [
+					{ label: "COST", value: `${ULT_CAP["black-hole"]}` },
 					{ label: "HOLD", value: `${SINGULARITY_DURATION_MS}ms`, level: 1 },
 					{ label: "HORIZON", value: `${SINGULARITY_RADIUS}px` },
 					{ label: "REACH", value: `${SINGULARITY_REACH}px` },
@@ -408,8 +505,7 @@ export const MOVE_LISTS: Record<HeroId, HeroMoveList> = {
 	anands: {
 		hero: "anands",
 		entries: [
-			...SYSTEM_ENTRIES,
-			...MOVEMENT_ENTRIES,
+			...sharedEntries("anands"),
 			meleeEntry("stab"),
 			meleeEntry("thrust"),
 			meleeEntry("shoryuken"),
@@ -417,20 +513,28 @@ export const MOVE_LISTS: Record<HeroId, HeroMoveList> = {
 				id: "machinegun",
 				category: "ranged",
 				name: "Machine Gun",
-				command: { label: "E, then LMB", actions: ["gun", "attack"] },
-				prose:
-					"Four shots where the rifle fires one. Lower per-shot damage so the stream does not out-kill the rifle by double, faster bullets so a stream can actually be landed, and a decent magazine with a whole-magazine rack. The dagger is the lightest weapon in the game; this is its stream.",
+				command: { label: "then attack", actions: ["gun", "attack"] },
+				prose: `About ${Math.round(RANGED_WEAPONS.rifle.cooldownMs / RANGED_WEAPONS.machinegun.cooldownMs * 10) / 10}× the rifle's rate, at ${RANGED_WEAPONS.machinegun.damage} damage a round. Lower per-shot damage so the stream does not out-kill the rifle by double, faster bullets so a stream can actually be landed, and a decent magazine with a whole-magazine rack. The dagger is the lightest weapon in the game; this is its stream.`,
 				stats: [
-					{ label: "DMG", value: "5 / shot" },
-					{ label: "SPEED", value: "780 px/s" },
-					{ label: "MAG", value: "30 / 120" },
+					{
+						label: "DMG",
+						value: `${RANGED_WEAPONS.machinegun.damage} / shot`,
+					},
+					{
+						label: "SPEED",
+						value: `${RANGED_WEAPONS.machinegun.speed} px/s`,
+					},
+					{
+						label: "MAG",
+						value: `${RANGED_WEAPONS.machinegun.magazine} / ${reserveRoundsFor(RANGED_WEAPONS.machinegun)}`,
+					},
 				],
 			},
 			{
 				id: "trap",
 				category: "item",
 				name: "Trap",
-				command: { label: "F — 3 uses per life", actions: ["item"] },
+				command: { label: "3 uses per life", actions: ["item"] },
 				prose:
 					"A thrown canister that plants into an armed mine where it lands. It is a *delay*: a caught fighter is rooted for 3s — no feet at all, though they can still attack, block and cast. Jumping over it clears the patch entirely.",
 				stats: [
@@ -447,11 +551,12 @@ export const MOVE_LISTS: Record<HeroId, HeroMoveList> = {
 				id: "dragon-thrust",
 				category: "ultimate",
 				name: "Dragon Thrust",
-				command: { label: "HOLD R, release to cast", actions: ["ultimate"] },
+				command: { label: "hold, release to cast", actions: ["ultimate"] },
 				prose:
 					"Your ultimate — a ride, not a throw. After the 1.1s freeze you launch along the release angle at 1500 px/s, gravity suppressed, until an obstacle or a hostile black hole stops you. Everyone in the path is knocked back and damaged: a line of fighters feels like a line being swept. No sword guard can stop it.",
-				tags: "SWEEPS THE PATH · THE ONE ULT THAT STOPS A DIVE",
+				tags: "SWEEPS THE PATH · STOPS A DIVE",
 				stats: [
+					{ label: "COST", value: `${ULT_CAP["dragon-thrust"]}` },
 					{ label: "SPEED", value: `${DRAGON_SPEED} px/s`, level: 1 },
 					{ label: "RIDE", value: `${DRAGON_RIDE_MS}ms` },
 					{ label: "DMG", value: `${DRAGON_DAMAGE}` },
@@ -463,8 +568,7 @@ export const MOVE_LISTS: Record<HeroId, HeroMoveList> = {
 	jeffs: {
 		hero: "jeffs",
 		entries: [
-			...SYSTEM_ENTRIES,
-			...MOVEMENT_ENTRIES,
+			...sharedEntries("jeffs"),
 			meleeEntry("slash"),
 			meleeEntry("slash2"),
 			meleeEntry("slash3"),
@@ -474,33 +578,39 @@ export const MOVE_LISTS: Record<HeroId, HeroMoveList> = {
 				id: "shotgun",
 				category: "ranged",
 				name: "Shotgun",
-				command: { label: "E, then LMB", actions: ["gun", "attack"] },
-				prose:
-					"A fan of six pellets at point blank — 17 each, 102 if all land, a full bar in one blast. And then the range: the cone widens and each pellet's damage falls off past 80px, so by a hundred px it is most of a bar and by 200 a warning shot. A shotgun that killed at range was the rifle with a cone.",
+				command: { label: "then attack", actions: ["gun", "attack"] },
+				prose: `A fan of ${RANGED_WEAPONS.shotgun.pellets} pellets at point blank — ${RANGED_WEAPONS.shotgun.damage} each, ${(RANGED_WEAPONS.shotgun.pellets ?? 1) * RANGED_WEAPONS.shotgun.damage} if all land, a full bar in one blast. And then the range: the cone widens and each pellet's damage falls off past ${RANGED_WEAPONS.shotgun.falloffStartPx}px, so by a hundred px it is most of a bar and by 200 a warning shot. A shotgun that killed at range was the rifle with a cone.`,
 				stats: [
-					{ label: "DMG", value: "17 / pellet" },
-					{ label: "PELLETS", value: "6" },
-					{ label: "MAG", value: "5 / 20" },
+					{
+						label: "DMG",
+						value: `${RANGED_WEAPONS.shotgun.damage} / pellet`,
+					},
+					{ label: "PELLETS", value: `${RANGED_WEAPONS.shotgun.pellets}` },
+					{
+						label: "MAG",
+						value: `${RANGED_WEAPONS.shotgun.magazine} / ${reserveRoundsFor(RANGED_WEAPONS.shotgun)}`,
+					},
 				],
 			},
 			{
 				id: "smoke",
 				category: "item",
 				name: "Smoke Grenade",
-				command: { label: "F — 2 uses per life", actions: ["item"] },
+				command: { label: "2 uses per life", actions: ["item"] },
 				prose:
-					"A thrown canister that blooms into a vision cloud — no damage, no collision, no bullet block. It changes what the enemy is allowed to know: a 200px patch you can cross in a dash and hide a whole team behind. Your own side sees ghosts through it; the enemy reads nothing.",
+					"A thrown canister that blooms into a vision cloud — no damage, no collision, no bullet block. It changes what the enemy is allowed to know: a 200px patch you can cross in a dash and hide a whole team behind. You can see through your own cloud; the enemy reads nothing.",
 				stats: [{ label: "RADIUS", value: "200px", level: 1 }],
 			},
 			{
 				id: "death-blossom",
 				category: "ultimate",
 				name: "Death Blossom",
-				command: { label: "HOLD R, release to cast", actions: ["ultimate"] },
+				command: { label: "hold, release to cast", actions: ["ultimate"] },
 				prose:
-					"Your ultimate — a storm, not a throw. After the 1.1s freeze you stand (and walk, slowly) and the world around you takes gunfire: 13 damage every 250ms inside a 260px radius for 2s — a full bar over the whole channel. The counterplay is distance, and a knockdown ends the storm early.",
+					"Your ultimate — a storm, not a throw. After the 1.1s freeze you stand (and walk, slowly) and the ground where you cast it takes gunfire: 13 damage every 250ms inside a 260px radius for 2s — a full bar over the whole channel. The counterplay is distance, and a knockdown ends the storm early.",
 				tags: "HOLDS A CIRCLE · A KNOCKDOWN ENDS IT",
 				stats: [
+					{ label: "COST", value: `${ULT_CAP["death-blossom"]}` },
 					{ label: "DURATION", value: `${BLOSSOM_DURATION_MS}ms`, level: 1 },
 					{
 						label: "RADIUS",
@@ -519,7 +629,7 @@ export const MOVE_LISTS: Record<HeroId, HeroMoveList> = {
 		hero: "ibiriki",
 		entries: [
 			...SYSTEM_ENTRIES,
-			...MOVEMENT_ENTRIES,
+			...guardEntry("ibiriki"),
 			{
 				id: "bloodlust",
 				category: "system",
@@ -528,6 +638,7 @@ export const MOVE_LISTS: Record<HeroId, HeroMoveList> = {
 				prose: `Ibiriki smells the blood in the room, and the smell fades with distance. Each foe's HP sets a lure; how close they are scales it down — full within ${BLOODLUST_FULL_RANGE_PX}px, gone by ${BLOODLUST_ZERO_RANGE_PX}px — and the strongest lure wins. The lower their HP and the nearer they are, the faster he walks (up to +${Math.round(BLOODLUST_MOVE_SPEED_BONUS * 100)}%) and swings (up to +${Math.round(BLOODLUST_ATTACK_SPEED_BONUS * 100)}%). A foe below ${Math.round(BERSERK_FRACTION * 100)}% **and close enough** makes him **berserk**: dumb with bloodlust, he is forced into melee (no axe throws), his eyes glow, a blood-red aura rises, he dual wields the sword and an axe, a held attack button runs the frenzy without end, and he takes ${Math.round((1 - BERSERK_DAMAGE_TAKEN) * 100)}% less damage. He still dashes and still lays his trap. The HUD meter under his HP shows the bloodlust and what it buys, and a prey pin marks every bleeding foe — an edge arrow when they are outside the frame.`,
 				tags: "HP × PROXIMITY · BERSERK <30% IN REACH",
 			},
+			...movementEntries("ibiriki"),
 			meleeEntry("hew"),
 			meleeEntry("hew2"),
 			meleeEntry("hew3"),
@@ -541,7 +652,7 @@ export const MOVE_LISTS: Record<HeroId, HeroMoveList> = {
 				category: "ranged",
 				name: "Throwing Axe",
 				command: {
-					label: "E, then HOLD LMB and release",
+					label: "hold, then release",
 					actions: ["gun", "attack"],
 				},
 				prose: `Hold to charge, release to throw. A tap is a ${AXE_MIN_SPEED} px/s lob for ${AXE_MIN_DAMAGE}; a full ${AXE_CHARGE_MS / 1000}s charge flies flat and far at ${RANGED_WEAPONS.axe.speed} px/s for ${RANGED_WEAPONS.axe.damage} — almost a whole bar — wreathed in embers, and it **crushes a guard**, still going through for half its damage and a mini stun. Three axes a life and no reload: every axe sticks where it lands until **an axe-bearer walks over it** and takes it back — anyone carrying axes can claim any resting axe, and they stay when you die.`,
@@ -564,7 +675,7 @@ export const MOVE_LISTS: Record<HeroId, HeroMoveList> = {
 				id: "trap",
 				category: "item",
 				name: "Trap",
-				command: { label: "F — 3 uses per life", actions: ["item"] },
+				command: { label: "3 uses per life", actions: ["item"] },
 				prose:
 					"The hunter's snare: a thrown canister that plants into an armed mine. A caught fighter is rooted for 3s — no feet, but they can still swing and block — which is exactly long enough to walk a Sunder into them.",
 				stats: [
@@ -581,10 +692,11 @@ export const MOVE_LISTS: Record<HeroId, HeroMoveList> = {
 				id: "rupture",
 				category: "ultimate",
 				name: "Rupture",
-				command: { label: "HOLD R, release to cast", actions: ["ultimate"] },
+				command: { label: "hold, release to cast", actions: ["ultimate"] },
 				prose: `Your ultimate — a curse on the whole room. After the freeze Ibiriki stomps with both weapons drawn, and every enemy alive is ruptured for ${RUPTURE_DURATION_MS / 1000}s: **every pixel they move costs blood** (${RUPTURE_DAMAGE_PER_PX} HP per px — a second of walking is ~20). Standing still costs nothing. Knockback and falls count — it is the body that moved. Global: no aim, no dodge but patience.`,
 				tags: "GLOBAL · MOVING HURTS · CANNOT BE GUARDED",
 				stats: [
+					{ label: "COST", value: `${ULT_CAP["rupture"]}` },
 					{ label: "DURATION", value: `${RUPTURE_DURATION_MS}ms`, level: 1 },
 					{ label: "BLEED", value: `${RUPTURE_DAMAGE_PER_PX} / px` },
 					{ label: "CAST", value: `${RUPTURE_CAST_DAMAGE}` },

@@ -214,6 +214,20 @@ describe("LessonTracker", () => {
 		body.blocking = true;
 		tracker.observe(body, 16);
 		expect(tracker.snapshot().butterflies).toBe(1);
+
+		// A guard that comes up after the swing has ended is not the cancel:
+		// the block must be up on the frame the move ends. Otherwise a hit-ended
+		// swing plus a late block would count as a butterfly for free.
+		body.blocking = false;
+		body.meleeAction = "slash";
+		tracker.observe(body, 16);
+		tracker.observe(body, 16);
+		body.meleeAction = "none";
+		tracker.observe(body, 16);
+		expect(tracker.snapshot().butterflies).toBe(1);
+		body.blocking = true;
+		tracker.observe(body, 16);
+		expect(tracker.snapshot().butterflies).toBe(1);
 	});
 
 	it("reads a spent item charge as a fall, never a refill", () => {
@@ -230,6 +244,7 @@ describe("LessonTracker", () => {
 		const tracker = new LessonTracker();
 		const stats = {
 			bulletsFired: 10,
+			shotsFired: 4,
 			bulletHits: 4,
 			damageDealt: 50,
 			damageTaken: 12,

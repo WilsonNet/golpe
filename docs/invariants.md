@@ -1150,6 +1150,19 @@ are the ones that are its own.
   `Campaign.test.ts` asserts every objective reads below its target against an
   empty counter set, and the director gives every lesson a settle window before
   it may complete at all.
+- **A butterfly is a swing that ends early with the guard already up.** The
+  block press ends the move and `blocking` reads true on the same tick
+  (`BLOCK_STARTUP_MS` is 0), so the tracker asks the question on that frame.
+  A late block after a hit-ended swing is not a cancel and must not count.
+- **Enter continues a card and nothing else.** A global Enter handler that fell
+  through to `advance()` abandoned a live drill on a stray keypress, on a held
+  key's auto-repeat, and on Enter aimed at the Esc menu's Resume.
+- **A returning player resumes, and Skip does not count as finishing.** The
+  cleared set is seeded from storage before the first arm; the curtain says
+  *Course complete* only when every id is there, and *Course over* otherwise.
+- **A course owns its kit.** Changing hero mid-course would swap the server's
+  weapon under a director still asking for the old one's moves; the Esc menu
+  hides Heroes while the tutorial is running.
 - **The drill must be reachable, and only playing it proves that.** Everything
   else about a broken lesson looks perfect: it stages, the enemy acts, the card
   draws — and the player can never leave. `tutorial-probe.ts --play` finishes
@@ -1158,8 +1171,8 @@ are the ones that are its own.
 - **The player never dies in a drill.** `playerInvincible` and
   `disableRoundReset` on every stage — a respawn resets the counters under
   somebody who was halfway through. Only the graduation fight lets the dummy die.
-- **Lesson ids are stable and hero-prefixed.** Progress is a set of ids in
-  `localStorage`; reordering a chapter must not un-finish anything, and a
+- **Lesson ids are stable and hero-prefixed.** Progress is a `completed` list of
+  ids in `localStorage`; reordering a chapter must not un-finish anything, and a
   collision would mark the wrong lesson complete in another hero's course.
 
 ## The AI

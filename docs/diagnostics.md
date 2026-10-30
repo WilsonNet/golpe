@@ -25,6 +25,13 @@ the full workflow** — this file is the reference for the tool itself.
 
 ## Harness (preferred)
 
+**Probes are local and headless.** `scripts/browser.ts` launches Chromium on this
+machine, refuses a `GOLPE_URL`/`GOLPE_SERVER` that is not loopback, and closes a
+page served from another host — a probe must never drive a personal machine's
+open game server and start a real match there. `GOLPE_ALLOW_REMOTE_PROBES=1` is
+the explicit override for a measurement that really means to drive another host.
+Never route a probe through a remote or MCP browser.
+
 ```bash
 pnpm run dev:herdr                               # both servers in visible panes
 node scripts/diagnose.ts                       # offline + online, 8s each
@@ -43,6 +50,7 @@ tsx scripts/pad-probe.ts                      # controller aim and a gamepad
 tsx scripts/deck-probe.ts                     # the two-thumb deck: layout gates and real sequences
 node scripts/sky-probe.ts                      # the Waterfront: loaded, animated, parallax, movers and loops
 node scripts/readability-probe.ts              # fighter vs background: value, silhouette and detail
+node scripts/logo-probe.ts                     # the wordmark badge: contrast, five letters, stroke, crispness
 node scripts/tiles-probe.ts                    # platform atlas, Art/Flat live switch, skybox independence
 ```
 
@@ -59,6 +67,21 @@ is the control: the painted Waterfront must not make the fighter more dark, more
 lost or less vivid than the old look. The method and literature are in
 [specs/skybox.md](../specs/skybox.md#readability-contract); the screenshots land
 in `.playwright-mcp/readability/`.
+
+## The logo probe
+
+`logo-probe.ts` answers "is the wordmark readable where it is drawn" with the
+same principle: measure the shipped pixels, not the drawing. It reads
+`art/logo/badge.json` — the generator's own glyph boxes, written from the
+lettering mask's connected components, so a letter that merged with its
+neighbour changes the file and generation fails first — and then, in the page,
+decodes both exported sheets and measures the lettering against the plate
+(WCAG, AAA large text), each glyph box for ink, the `l`'s stem for its width,
+and the frame's brightest band against every page the variant ships on. It
+finishes on the live menu: the rendered box, the `o`'s x-height in CSS pixels,
+the frame against the real card colour, and the share of rendered pixels that
+are exactly a sheet colour (a smooth resample shows up as thousands that are
+not). Screenshots land in `.playwright-mcp/logo/`.
 
 ## The tiles probe
 

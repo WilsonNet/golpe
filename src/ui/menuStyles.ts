@@ -70,15 +70,17 @@ export const MENU_CSS = `
 	letter-spacing: 0.14em;
 	margin-bottom: 8px;
 }
-/* The wordmark is baked pixel art, not a CSS font: 640x280 at half size is an
-   exact 2x on a Retina display and an exact 2:1 on a normal one. */
+/* The wordmark is baked pixel art, not a CSS font. The badge is a 176 x 86
+   grid exported 4x (704 x 344), so 352px here is an exact 2x: every source
+   pixel is a whole number of device pixels at 1x and at 2x, which is what
+   keeps the hazard tape's staircase clean. */
 .gd-logo-title {
 	margin: 0 0 8px;
 	line-height: 0;
 }
 .gd-logo {
 	display: block;
-	width: min(320px, 100%);
+	width: min(352px, 100%);
 	height: auto;
 	image-rendering: pixelated;
 }

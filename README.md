@@ -1,6 +1,6 @@
 # golpe
 
-<p align="center"><a href="https://golpe.quest/"><img src="public/assets/logo.png" alt="golpe" width="320"></a></p>
+<p align="center"><a href="https://golpe.quest/"><picture><source media="(prefers-color-scheme: dark)" srcset="public/assets/logo-cream.png"><img src="public/assets/logo.png" alt="golpe" width="352"></picture></a></p>
 
 **Play it: [golpe.quest](https://golpe.quest/)** — or read
 [`deploy/oracle/README.md`](deploy/oracle/README.md) to run your own.

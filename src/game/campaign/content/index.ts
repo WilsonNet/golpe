@@ -1,7 +1,8 @@
 /**
  * The campaign registry.
  *
- * One place that says what content exists. The tutorial is three modules —
+ * One place that says what content exists. The tutorial is one module per hero
+ * — four of them — and each is composed from the shared chapters plus its own.
  * one per hero — and a future campaign act is another entry in `MODULES` with
  * `kind: "mission"` chapters inside it. Nothing else in the codebase needs to
  * change to add one: the director runs whatever module it is handed, the

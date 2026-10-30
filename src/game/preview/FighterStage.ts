@@ -84,6 +84,7 @@ import { IbirikiFx } from "../render/IbirikiFx";
 import { ItemFx } from "../render/ItemFx";
 import { type ImpactEvent, MeleeFx } from "../render/MeleeFx";
 import { Nameplates } from "../render/Nameplates";
+import type { MeleeMove } from "../simulation/Melee";
 import { Skybox } from "../render/Skybox";
 import { Stage } from "../render/Stage";
 import {
@@ -255,11 +256,19 @@ interface StageFrame {
 	body: PlayerPosition;
 	/** The intent the last fixed tick applied. */
 	intent: PlayerIntent;
+	/**
+	 * When the entry's named melee move actually started in this loop, ms —
+	 * null until it begins. A charge move starts on its release and a chain
+	 * link on its own press, so the first attack press is not the origin.
+	 */
+	moveStartedAt: number | null;
 }
 
 export interface FighterStageOptions {
 	hero: HeroId;
 	story: Story;
+	/** The melee move the timeline follows, if this entry is one. */
+	move?: MeleeMove | null;
 	/** Called once per rendered frame, after the systems have run. */
 	onFrame?: (frame: StageFrame) => void;
 	/** Playback rate. 1 is real time; 0.25 studies a swing frame by frame. */
@@ -320,6 +329,10 @@ export class FighterStage {
 
 	private kit: HeroKit;
 	private story: Story = EMPTY_STORY;
+	/** The entry's melee move, watched for the timeline's true origin. */
+	private watchedMove: MeleeMove | null = null;
+	/** When that move started in the current loop, or null before it does. */
+	private moveStartedAt: number | null = null;
 	/** Playback rate — 1 in the UI, lower when a probe studies frames. */
 	private speed = 1;
 
@@ -327,7 +340,6 @@ export class FighterStage {
 	private t = 0;
 	private accMs = 0;
 	private firedCues = new Set<number>();
-	private prevAttack = false;
 	private holdingUlt = false;
 	/** Monotonic render clock for the effects that dead-reckon (`ItemFx`). */
 	private clockMs = 0;
@@ -374,6 +386,7 @@ export class FighterStage {
 		this.opts = options;
 		this.kit = kitFor(options.hero);
 		this.speed = options.speed ?? 1;
+		this.watchedMove = options.move ?? null;
 		if (options.story) this.story = options.story;
 	}
 
@@ -391,7 +404,10 @@ export class FighterStage {
 			autoDensity: true,
 		});
 		if (this.destroyed) {
-			app.destroy(true, { children: true });
+			app.destroy(
+				{ removeView: true, releaseGlobalResources: false },
+				{ children: true },
+			);
 			return;
 		}
 		this.parent.appendChild(app.canvas);
@@ -536,7 +552,7 @@ export class FighterStage {
 				local: true,
 				hp: MAX_HP,
 				maxHp: MAX_HP,
-				name: "",
+				name: "YOU",
 				team: null,
 				hero,
 			},
@@ -628,6 +644,16 @@ export class FighterStage {
 			fx.update(dtMs);
 		}
 		if (this.plates) nameplateSystem(this.queries, this.plates);
+		// A target taken to zero fades where it stood; its nameplate already
+		// hides itself. The loop resets the body and the sprite together.
+		for (const d of this.targets) {
+			if (d.entity.fighter.hp <= 0 && d.entity.sprite.alpha > 0) {
+				d.entity.sprite.alpha = Math.max(
+					0,
+					d.entity.sprite.alpha - dtMs / 300,
+				);
+			}
+		}
 		stage.update(dtMs);
 
 		// The scripted server's objects, drawn by the modules a match feeds.
@@ -735,7 +761,12 @@ export class FighterStage {
 			);
 		}
 
-		this.opts.onFrame?.({ t: this.t, body: f.body, intent: this.lastIntent });
+		this.opts.onFrame?.({
+			t: this.t,
+			body: f.body,
+			intent: this.lastIntent,
+			moveStartedAt: this.moveStartedAt,
+		});
 	};
 
 	private lastIntent: PlayerIntent = { ...NEUTRAL_INTENT };
@@ -812,6 +843,16 @@ export class FighterStage {
 			trapFor(this.traps, f.fighter.id, f.fighter.team),
 		);
 		const blasts = this.noteBlasts(f, prev);
+		// Latch the named move's true first tick. The timeline used to start at
+		// the first attack *press*, which is 1.6s early for a charge and one
+		// chain link early for the finisher.
+		if (
+			this.watchedMove !== null &&
+			this.moveStartedAt === null &&
+			f.body.meleeAction === this.watchedMove
+		) {
+			this.moveStartedAt = this.t;
+		}
 
 		// The dummies simulate too — neutral intent, but the real physics: a
 		// knocked-back dummy flies, a held dummy orbits the hole, a rooted one
@@ -843,21 +884,12 @@ export class FighterStage {
 		this.springTraps();
 
 		// Ammo is server-ticked in a match; the preview stands in for that
-		// server the same way the `?offline=true` hatch does — a spent round
-		// per firing edge, and the *shared* `tickReload` for the reload rhythm.
-		// This exists so the gun-fire clip plays: the animation system reads an
-		// ammo drop as firing, exactly as it does on the wire.
-		const attackEdge = intent.attack && !this.prevAttack;
-		if (
-			attackEdge &&
-			f.body.stance === "gun" &&
-			f.body.ammo > 0 &&
-			this.kit.ranged.thrown !== true
-		) {
-			f.body.ammo--;
-		}
+		// server the same way the `?offline=true` hatch does — one spent round
+		// per shot `fireBullet` actually spawns, and the *shared* `tickReload`
+		// for the reload rhythm. One round per press was the old bug: a
+		// machine-gun burst fired five bullets against a magazine that moved
+		// by one, and the gun-fire clip played once for the whole stream.
 		tickReload(f.body, intent, this.kit, DT);
-		this.prevAttack = intent.attack;
 		this.holdingUlt = intent.ultimate;
 		this.lastIntent = intent;
 
@@ -1137,6 +1169,7 @@ export class FighterStage {
 			return;
 		}
 		this.lastShotAt = this.t;
+		f.body.ammo--;
 		const muzzleX = f.body.x + PLAYER_WIDTH / 2;
 		const muzzleY = f.body.y + PLAYER_HEIGHT / 2;
 		const facing = f.body.facing >= 0 ? 1 : -1;
@@ -1393,13 +1426,17 @@ export class FighterStage {
 		y?: number,
 		tint = 0xffe6a8,
 	): void {
-		if (damage <= 0) return;
-		d.entity.fighter.hp = Math.max(0, d.entity.fighter.hp - damage);
-		this.score.damageDealt += damage;
+		// Never count damage the victim did not have. Clamping after the fact
+		// made a 100 HP dummy absorb 105 from a black hole, and the probe trusts
+		// this number.
+		const dealt = Math.min(damage, d.entity.fighter.hp);
+		if (dealt <= 0) return;
+		d.entity.fighter.hp = Math.max(0, d.entity.fighter.hp - dealt);
+		this.score.damageDealt += dealt;
 		this.numbers?.pop(
 			x ?? d.entity.body.x + PLAYER_WIDTH / 2,
 			y ?? d.entity.body.y,
-			`${Math.round(damage)}`,
+			`${Math.round(dealt)}`,
 			tint,
 		);
 	}
@@ -1634,8 +1671,8 @@ export class FighterStage {
 	private resetLoop(): void {
 		this.t = 0;
 		this.accMs = 0;
+		this.moveStartedAt = null;
 		this.firedCues.clear();
-		this.prevAttack = false;
 		this.holdingUlt = false;
 		this.lastIntent = { ...NEUTRAL_INTENT };
 		this.lastShotAt = Number.NEGATIVE_INFINITY;
@@ -1728,10 +1765,15 @@ export class FighterStage {
 	}
 
 	/** Swap the story (and optionally the hero) without tearing the stage down. */
-	setStory(options: { hero?: HeroId; story: Story }): void {
+	setStory(options: {
+		hero?: HeroId;
+		story: Story;
+		move?: MeleeMove | null;
+	}): void {
 		this.opts.hero = options.hero ?? this.opts.hero;
 		this.kit = kitFor(this.opts.hero);
 		this.story = options.story;
+		if (options.move !== undefined) this.watchedMove = options.move;
 		const f = this.fighter;
 		if (f && options.hero && f.fighter.hero !== options.hero) {
 			f.fighter.hero = options.hero;

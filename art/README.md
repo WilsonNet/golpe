@@ -7,8 +7,9 @@ save, run one command:
 
 The arena's parallax backdrop is art too, and lives beside the heroes in
 [`art/skybox/`](skybox/README.md): the hand-painted Waterfront, generated from
-code. The wordmark is [`art/logo/`](logo/README.md), a 160 x 70 pixel grid in the
-same palette. The standable surfaces are a separate tile art set in
+code. The wordmark is [`art/logo/`](logo/README.md): a construction badge on a
+176 x 86 pixel grid in the same palette, in an ink or a cream plate. The
+standable surfaces are a separate tile art set in
 [`scripts/tilesets/`](../scripts/tilesets/CONTRACT.md), also generated from the
 shared Waterfront palette — the map format and the two skins are specified in
 [`specs/tilemap.md`](../specs/tilemap.md).

@@ -95,7 +95,8 @@ On hit:
 The gun stance's weapon is the machine gun: **110ms** between shots, **5**
 damage per round, **780** px/s bullet speed — against the rifle's 250ms / 10 /
 600. The dagger is the lightest weapon in the game and its ranged answer is a
-stream, not a poke: four shots where the rifle fires one, each worth half. It
+stream, not a poke: more than twice the rifle's rate (110ms against 250ms), each
+shot worth half. It
 carries a **30-round magazine** whose whole-magazine **clip reload** takes
 **1860ms** — a burst long enough to matter, a pause long enough to punish (see
 [combat.md](combat.md)

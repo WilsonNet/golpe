@@ -105,7 +105,7 @@ export const ANANDS_COURSE: CampaignModule = {
 						behaviour: "counterAttack",
 						timing: { delayMs: 140, periodMs: 1000 },
 					},
-					objectives: [o.land("stab", "a stab", 5), o.dealDamage(30)],
+					objectives: [o.land("stab", "a stab", 5), o.dealDamage(25)],
 					outro:
 						"Pressure is not damage. It is the other fighter never getting a turn.",
 				},

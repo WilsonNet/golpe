@@ -12,21 +12,12 @@
  * whole panel sixty times a second to move one 3px div.
  */
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FighterStage } from "../game/preview/FighterStage";
-import { EMPTY_STORY, type Story, storyFor } from "../game/preview/stories";
+import { EMPTY_STORY, storyFor } from "../game/preview/stories";
 import type { HeroId } from "../game/simulation/Heroes";
 import { MOVES } from "../game/simulation/Melee";
 import type { MoveEntry } from "./moveData";
-
-/** The first step that presses an attack-shaped button, for the timeline. */
-function attackAtOf(story: Story | undefined): number | null {
-	for (const step of story?.steps ?? []) {
-		const i = step.input;
-		if (i && (i.attack || i.uppercut || i.block)) return step.at;
-	}
-	return null;
-}
 
 export function MovePreview({
 	entry,
@@ -40,12 +31,13 @@ export function MovePreview({
 	const cursorRef = useRef<HTMLDivElement>(null);
 	const phaseRef = useRef<HTMLSpanElement>(null);
 	const progressRef = useRef<HTMLDivElement>(null);
+	const [failed, setFailed] = useState(false);
 
 	// The entry id *is* the story id; `preview` is an override for the melee
 	// entries, which project the shared MOVES id instead of `melee-<move>`.
 	const story = storyFor(entry.preview ?? entry.id);
 	const frame = entry.move ? MOVES[entry.move] : null;
-	const attackAt = attackAtOf(story);
+	const move = entry.move ?? null;
 	const totalMs = frame
 		? frame.startupMs + frame.activeMs + frame.recoveryMs
 		: 0;
@@ -54,18 +46,18 @@ export function MovePreview({
 	// it is bound once at mount while the entry walks the list.
 	const timelineRef = useRef({
 		frame,
-		attackAt,
+		move,
 		totalMs,
 		loopMs: story?.loopMs ?? 0,
 	});
 	timelineRef.current = {
 		frame,
-		attackAt,
+		move,
 		totalMs,
 		loopMs: story?.loopMs ?? 0,
 	};
-	const propsRef = useRef({ hero, story });
-	propsRef.current = { hero, story };
+	const propsRef = useRef({ hero, story, move });
+	propsRef.current = { hero, story, move };
 
 	// One stage for the panel's lifetime; walking the list swaps the story on
 	// it (`setStory`) instead of tearing the renderer down per move.
@@ -85,18 +77,22 @@ export function MovePreview({
 		FighterStage.create(host, {
 			hero: propsRef.current.hero,
 			story: propsRef.current.story ?? EMPTY_STORY,
-			onFrame: ({ t }) => {
-				const { frame, attackAt, totalMs, loopMs } = timelineRef.current;
-				if (frame && attackAt !== null && totalMs > 0) {
-					const p = Math.min(1, Math.max(0, (t - attackAt) / totalMs));
+			move: propsRef.current.move,
+			onFrame: ({ t, moveStartedAt, body }) => {
+				const { frame, move, totalMs, loopMs } = timelineRef.current;
+				if (frame && totalMs > 0) {
+					const started = moveStartedAt !== null && t >= moveStartedAt;
+					const inMove = move !== null && body.meleeAction === move;
+					const elapsed = started ? t - (moveStartedAt ?? t) : 0;
+					const p = Math.min(1, Math.max(0, elapsed / totalMs));
 					const cursor = cursorRef.current;
-					if (cursor) cursor.style.left = `${p * 100}%`;
+					if (cursor) cursor.style.left = `${Math.min(99.5, p * 100)}%`;
 					const chip = phaseRef.current;
 					if (chip) {
 						const s = frame.startupMs / totalMs;
 						const a = (frame.startupMs + frame.activeMs) / totalMs;
 						const next =
-							t < attackAt
+							!started || !inMove
 								? "READY"
 								: p < s
 									? "STARTUP"
@@ -111,26 +107,35 @@ export function MovePreview({
 						bar.style.width = `${Math.min(100, (t / loopMs) * 100)}%`;
 				}
 			},
-		}).then((s) => {
-			if (cancelled) {
-				s.destroy();
-				return;
-			}
-			stage = s;
-			stageRef.current = s;
-			// The probes' window into the preview, like `window.__physicsDiagnostic`
-			// is the match's. Only the kept stage publishes, so the globals always
-			// answer for the renderer that is actually running.
-			stateHandle = s.probeState;
-			speedHandle = (speed: number) => s.setSpeed(speed);
-			window.__previewState = stateHandle;
-			window.__previewSpeed = speedHandle;
-			// Props may have changed while the renderer was booting.
-			s.setStory({
-				hero: propsRef.current.hero,
-				story: propsRef.current.story ?? EMPTY_STORY,
+		})
+			.then((s) => {
+				if (cancelled) {
+					s.destroy();
+					return;
+				}
+				stage = s;
+				stageRef.current = s;
+				// The probes' window into the preview, like `window.__physicsDiagnostic`
+				// is the match's. Only the kept stage publishes, so the globals always
+				// answer for the renderer that is actually running.
+				stateHandle = s.probeState;
+				speedHandle = (speed: number) => s.setSpeed(speed);
+				window.__previewState = stateHandle;
+				window.__previewSpeed = speedHandle;
+				setFailed(false);
+				// Props may have changed while the renderer was booting.
+				s.setStory({
+					hero: propsRef.current.hero,
+					story: propsRef.current.story ?? EMPTY_STORY,
+					move: propsRef.current.move,
+				});
+			})
+			.catch((error: unknown) => {
+				// A failed WebGL boot or a missing sheet used to leave a blank
+				// rectangle with no message and a probe waiting to time out.
+				console.error("[preview] stage failed to boot", error);
+				if (!cancelled) setFailed(true);
 			});
-		});
 		return () => {
 			cancelled = true;
 			// Only strip the globals if they are still ours — a later mount owns
@@ -147,16 +152,25 @@ export function MovePreview({
 	}, []);
 
 	useEffect(() => {
-		stageRef.current?.setStory({ hero, story: story ?? EMPTY_STORY });
-	}, [hero, story]);
+		stageRef.current?.setStory({
+			hero,
+			story: story ?? EMPTY_STORY,
+			move,
+		});
+	}, [hero, story, move]);
 
 	return (
 		<div className="mp-root">
 			<style>{MP_CSS}</style>
 			<div className="mp-stage">
 				<div ref={hostRef} className="mp-host" />
+				{failed ? (
+					<div className="mp-error">
+						The preview could not start. Try another move, or reopen the list.
+					</div>
+				) : null}
 			</div>
-			{frame && attackAt !== null ? (
+			{frame ? (
 				<div className="mp-tl-wrap">
 					<div className="mp-tl-head">
 						<span ref={phaseRef} className="mp-phase">
@@ -216,6 +230,19 @@ const MP_CSS = `
 	inset: 0;
 }
 .mp-host canvas { display: block; }
+.mp-error {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 24px;
+	text-align: center;
+	font-size: 12px;
+	line-height: 1.6;
+	color: #ffd166;
+	background: rgba(6, 7, 12, 0.88);
+}
 
 /* ---- frame-data timeline (melee) ---- */
 .mp-tl-wrap {

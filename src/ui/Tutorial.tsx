@@ -25,7 +25,7 @@ import { TUTORIAL_CSS } from "./tutorialStyles";
 
 /** Send a command to the director. The overlay never mutates course state. */
 function command(
-	action: "next" | "skip" | "retry" | "goto",
+	action: "next" | "skip" | "retry" | "goto" | "connect",
 	lessonIndex?: number,
 ) {
 	EventBus.emit("tutorial-command", {
@@ -126,17 +126,28 @@ export function Tutorial({ onExitToMenu }: { onExitToMenu: () => void }) {
 	const [map, setMap] = useState(() => bindings.snapshot());
 	useEffect(() => bindings.subscribe(() => setMap(bindings.snapshot())), []);
 
-	// Enter is "continue" everywhere it means anything. Deliberately not Space:
-	// Space is jump, and a chapter card that ate the jump key would teach the
-	// player that jumping does nothing.
+	// Enter is "continue" everywhere it *means* continue: a chapter card or a
+	// CLEARED stamp. It must never abandon a live lesson — a stray Enter, a held
+	// key's auto-repeat, or Enter on the Esc menu's Resume button was silently
+	// skipping drills. Deliberately not Space: Space is jump, and a chapter card
+	// that ate the jump key would teach the player that jumping does nothing.
+	const phase = state?.phase;
 	useEffect(() => {
+		if (phase !== "chapter" && phase !== "cleared") return;
 		const onKey = (e: KeyboardEvent) => {
 			if (e.code !== "Enter" && e.code !== "NumpadEnter") return;
+			if (e.repeat || e.defaultPrevented) return;
+			// A focused button handles its own Enter; the global shortcut must
+			// not also fire underneath it.
+			if (e.target instanceof HTMLElement && e.target.closest("button"))
+				return;
+			// The Esc menu is a dialog and owns the keyboard while it is open.
+			if (document.querySelector('[role="dialog"]')) return;
 			command("next");
 		};
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
-	}, []);
+	}, [phase]);
 
 	if (!state) return null;
 
@@ -144,21 +155,53 @@ export function Tutorial({ onExitToMenu }: { onExitToMenu: () => void }) {
 		return (
 			<div className="tut-root">
 				<style>{TUTORIAL_CSS}</style>
-				<div className="tut-wait">Setting up the lesson…</div>
+				<div className="tut-wait">
+					{state.connectionError ? (
+						<>
+							<p className="tut-wait-error">
+								The game server could not be reached, so no lesson could be
+								staged.
+							</p>
+							<div className="tut-wait-actions">
+								<button
+									className="tut-btn tut-btn-primary"
+									type="button"
+									onClick={() => command("connect")}
+								>
+									Try again
+								</button>
+								<button
+									className="tut-btn"
+									type="button"
+									onClick={onExitToMenu}
+								>
+									Back to the menu
+								</button>
+							</div>
+						</>
+					) : (
+						"Setting up the lesson…"
+					)}
+				</div>
 			</div>
 		);
 	}
 
 	if (state.phase === "finished") {
+		const cleared = Math.round(state.moduleProgress * state.lessonCount);
+		const completed = state.complete;
 		return (
 			<div className="tut-root" data-phase="finished">
 				<style>{TUTORIAL_CSS}</style>
 				<div className="tut-curtain">
-					<div className="tut-curtain-eyebrow">Course complete</div>
+					<div className="tut-curtain-eyebrow">
+						{completed ? "Course complete" : "Course over"}
+					</div>
 					<div className="tut-curtain-title">{state.moduleTitle}</div>
 					<p className="tut-curtain-sub">
-						Every move, every command. The rest of this game is other people —
-						the link is the invitation.
+						{completed
+							? "Every move, every command. The rest of this game is other people — the link is the invitation."
+							: `${cleared} of ${state.lessonCount} drills finished. The course only counts as complete when every one is — pick it back up, or run it again.`}
 					</p>
 					<div className="tut-curtain-actions">
 						<button
@@ -168,6 +211,15 @@ export function Tutorial({ onExitToMenu }: { onExitToMenu: () => void }) {
 						>
 							Back to the menu
 						</button>
+						{!completed ? (
+							<button
+								className="tut-btn"
+								type="button"
+								onClick={() => command("goto", state.resumeIndex)}
+							>
+								Resume the course
+							</button>
+						) : null}
 						<button
 							className="tut-btn"
 							type="button"

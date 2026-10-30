@@ -56,8 +56,8 @@ export function zeroCounters(): LessonCounters {
 		reloads: 0,
 		guardsCrushed: 0,
 		axesRecovered: 0,
-		berserks: 0,
 		bulletsFired: 0,
+		shotsFired: 0,
 		bulletHits: 0,
 		damageDealt: 0,
 		damageTaken: 0,
@@ -81,8 +81,6 @@ interface BodySample {
 	massiveReady: boolean;
 	plunging: boolean;
 	reloadTimer: number;
-	/** Ibiriki's bloodlust: 1 is berserk. */
-	bloodlust: number;
 	/** The launch debt and the floor it becomes — the safe fall's two halves. */
 	knockdownPendingTimer: number;
 	knockdownTimer: number;
@@ -103,7 +101,6 @@ function sample(body: PlayerPosition): BodySample {
 		massiveReady: body.massiveReady,
 		plunging: body.plunging,
 		reloadTimer: body.reloadTimer,
-		bloodlust: body.bloodlust,
 		knockdownPendingTimer: body.knockdownPendingTimer,
 		knockdownTimer: body.knockdownTimer,
 	};
@@ -141,8 +138,6 @@ export class LessonTracker {
 	private itemCharges: number | null = null;
 	/** True while the dummy is up, so a knockout is counted once per fall. */
 	private dummyUp = true;
-	/** True for the stretch of frames the fighter has been berserk, counted once. */
-	private berserkCounted = false;
 
 	/** Arm a fresh lesson: everything back to zero, nothing carried over. */
 	reset() {
@@ -152,7 +147,6 @@ export class LessonTracker {
 		this.statBase = null;
 		this.itemCharges = null;
 		this.dummyUp = true;
-		this.berserkCounted = false;
 	}
 
 	/** The counters as they stand. A copy: nothing outside here may mutate them. */
@@ -177,15 +171,6 @@ export class LessonTracker {
 		const now = sample(body);
 		const before = this.prev;
 		this.prev = now;
-		// Berserk is a *state* the lesson may begin in — its bleeding dummy is
-		// staged before the first frame, so there is no edge to see. The first
-		// berserk frame of a stretch counts, whichever frame that is.
-		if (now.bloodlust >= 1 && !this.berserkCounted) {
-			this.counters.berserks++;
-			this.berserkCounted = true;
-		} else if (now.bloodlust < 1) {
-			this.berserkCounted = false;
-		}
 		if (!before) return;
 
 		// -- melee moves, and the cancel that makes the butterfly ---------------
@@ -341,6 +326,7 @@ export class LessonTracker {
 			0,
 			stats.bulletsFired - base.bulletsFired,
 		);
+		this.counters.shotsFired = Math.max(0, stats.shotsFired - base.shotsFired);
 		this.counters.bulletHits = Math.max(0, stats.bulletHits - base.bulletHits);
 		this.counters.damageDealt = Math.max(
 			0,
