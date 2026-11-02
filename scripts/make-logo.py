@@ -10,7 +10,7 @@ what makes the word readable, because a sign carries its own background.
 Two variants, one geometry, so the wordmark never competes with the page it
 stands on:
 
-    ink     ink enamel plate, cream lettering, teal hazard   — the menu, and
+    ink     ink enamel plate, cream lettering, amber hazard — the menu, and
             every light page
     cream   cream enamel plate, ink lettering, yellow hazard — a dark page that
             wants the sign to be the brightest thing on it
@@ -98,15 +98,18 @@ def rgba(color: str) -> tuple[int, int, int, int]:
 
 
 # ---------------------------------------------------------------------------
-# Variants. The plate and the lettering swap; the frame's hazard changes too, so
-# the badge's edge is a bright band on a dark page and a dark band on a light one.
+# Variants. The plate and the lettering swap; the frame stays the same
+# construction, so the ink keyline is the dark band on a light page and the
+# hazard tape is the bright band on a dark one.
 
 VARIANTS = {
 	"ink": {
 		# The default mark: the plate is the darkest ink, the lettering cream,
-		# and the hazard tape in the game's own teal. It sits inside a dark menu
-		# without out-shouting the buttons, and on a white page the ink plate is
-		# what makes it a badge rather than floating text.
+		# and the hazard tape in the menu's own amber. On the gold-bordered menu
+		# card a cyan hazard read as a second accent — the tutorial's colour, at
+		# four times the area — so the frame is brass and the teal stays in the
+		# scene's water. It still sits on a white page without out-shouting the
+		# text, because the ink plate is what makes it a badge.
 		"plate": INK,
 		"plate_edge_dark": INK_SOFT,
 		"plate_edge_light": INK_SOFT,
@@ -116,7 +119,7 @@ VARIANTS = {
 		"sun_ring": SUN_EDGE,
 		"sun_rays": GOLD_EDGE,
 		"planet_ring": STONE,
-		"hazard": TEAL,
+		"hazard": GOLD_DARK,
 		"rail": GOLD_DARK,
 		"rail_top": GOLD_LIGHT,
 		"rail_bottom": GOLD_SHADOW,

@@ -26,9 +26,16 @@ enamel, with a dark lip above and a lit edge below.
 
 | File | Plate | Hazard | Use |
 |---|---|---|---|
-| `src/ui/assets/logo.png` | ink | teal | the root menu's Vite import, content-hashed so Caddy's immutable `/assets/*` rule is safe |
-| `public/assets/logo.png` | ink | teal | light pages — the README's default |
+| `src/ui/assets/logo.png` | ink | amber | the root menu's Vite import, content-hashed so Caddy's immutable `/assets/*` rule is safe |
+| `public/assets/logo.png` | ink | amber | light pages — the README's default |
 | `public/assets/logo-cream.png` | cream | gold | dark pages — the README's `prefers-color-scheme: dark` |
+
+**The ink badge's hazard is brass, not the Waterfront's teal.** On the root
+menu's gold-bordered card the cyan band read as a second accent — the same
+colour the tutorial button uses, at four times the area — so the frame competed
+with the one thing the screen wants you to find. The frame is now the card's
+metal; the teal stays where it belongs, in the scene's water. A dark plate with
+amber hazard tape is also the more literal hoarding sign.
 
 The ink plate is the default because it is the one that works on both: on a dark
 menu it doesn't out-shout the gold *Quick match* button, and on a white page the
