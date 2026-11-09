@@ -75,9 +75,10 @@ The lure is the two multiplied, and **the strongest single lure wins** —
 - **Prey pins.** The HUD marks every hostile below the 30% line: a red arrow
   just above its nameplate with its HP percentage, and when the foe is outside
   the frame the same pin is clamped to the edge and turned at it. It is
-  presentation only, built from the `hud-state` this client already has — the
-  server decides nothing about it — and it is the hunt's compass on a wide
-  arena, where the bloodlust can be fed by somebody nobody can see.
+  presentation only, updated at frame cadence (`hud-prey`) using smoothed
+  drawn positions (`renderPos`) and camera offsets — the server decides nothing
+  about it — and it is the hunt's compass on a wide arena, where the bloodlust
+  can be fed by somebody nobody can see.
 
 ## The viking sword (melee stance)
 

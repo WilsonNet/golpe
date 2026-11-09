@@ -55,6 +55,18 @@ describe("inJumpBand", () => {
 		expect(inJumpBand(-58, 204)).toBe(true);
 		expect(inJumpBand(-57, 204)).toBe(false);
 	});
+
+	it("holds the band 8px past its edge, so a thumb on the line cannot flutter", () => {
+		// Press edge at -46 on a 180px pad; the release edge is 8px lower (-38).
+		expect(inJumpBand(-38, 180, true)).toBe(true);
+		expect(inJumpBand(-37, 180, true)).toBe(false);
+		// And the wider band only exists while the thumb is already in it: the
+		// same position is outside the band when the thumb arrives from below.
+		expect(inJumpBand(-42, 180, false)).toBe(false);
+		// A thumb deep in the band still reads as in it, whichever way it came.
+		expect(inJumpBand(-70, 180, true)).toBe(true);
+		expect(inJumpBand(-70, 180, false)).toBe(true);
+	});
 });
 
 describe("dragVector", () => {

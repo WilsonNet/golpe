@@ -614,6 +614,18 @@ export class Input {
 		return this.pad.available;
 	}
 
+	/**
+	 * True while a pad is connected **now** — the aim assist's gate.
+	 *
+	 * Deliberately not `padAvailable`: that one is latched for the session so a
+	 * controller unplugged at rest does not un-suggest itself in Controls. A
+	 * latched answer here turned the assist off for good the first time a phone
+	 * ever saw a pad.
+	 */
+	get padConnected(): boolean {
+		return this.pad.connected;
+	}
+
 	/** What the two aim layers are doing, for the HUD and for `scripts/pad-probe.ts`. */
 	aimReport(): AimReport {
 		return this.aim.report();

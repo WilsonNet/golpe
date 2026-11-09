@@ -576,9 +576,16 @@ spends nothing. A narrow **sword-only aim assist** (a held attack or a guard tur
 a standing fighter within an 80° cone; 240px, switchable in Controls) turns a
 thumb-only fighter toward a nearby foe — including the retreat-slash;
 it changes only the aim angle handed to the simulation and never applies to the
-gun, a live drag, a mouse client or a paired gamepad. The deck **emits actions,
-not pad codes** — a painted control is already a binding, and rebinding a pad
-button must not silently change what the button labelled Guard does. It is a
+gun, a live drag, a mouse client or a pad connected **now** (the dialog's
+"ever paired" latch must not decide it). The jump cap carries the same 8px
+release hysteresis as the rocker, or a thumb parked on its line hops and spends
+the air jump. The item is press-drag-release; the ultimate is too, and it arms on
+a 260ms hold **or a deliberate drag** — a dwell alone taxed the player who
+already knew where the hole goes. The deck **emits actions, not pad codes** — a
+painted control is already a binding, and rebinding a pad button must not
+silently change what the button labelled Guard does. Every control has **one
+owner pointer**: a second contact cannot stop a walk, re-anchor an aim drag, or
+release a charge. It is a
 **separate setting** so a phone with a Bluetooth keyboard can turn it off; it
 carries its own menu button (opened on `pointerup` and a tick later, never
 `pointerdown` — `click` is not synthesised while another thumb holds a button,

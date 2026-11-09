@@ -68,11 +68,12 @@ both sides import) and emits `hud-state`:
   `match-status` as `status.teams`, because the *server* decides a round has been
   won. A client counting the living itself would announce a wipe on a frame where
   its own prediction had killed somebody the server had not.
-- **Ibiriki's prey pins are screen-space, not world-space.** `HudState.prey`
-  carries bleeding foes as frame fractions at snapshot cadence; `PreyMarkers`
-  puts a pin above an in-view foe and clamps an off-screen one into a safe
-  rectangle, turned at it. It is presentation from the same `hud-state` — no
-  Pixi layer, and no per-frame DOM path.
+- **Ibiriki's prey pins are screen-space, not world-space.** `Match` emits
+  `hud-prey` each frame with smoothed positions (`renderPos`); `PreyMarkers`
+  syncs them directly to the DOM overlay at display refresh rate (60/120/144Hz)
+  so pins float above in-view foes and smoothly ray-cast to safe edge borders
+  when off-screen, with zero lag behind camera scroll. Snapshots also carry
+  `HudState.prey` as a fallback.
 
 ## Sizing: container units, no JS measurement
 

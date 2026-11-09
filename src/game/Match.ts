@@ -846,6 +846,7 @@ export class Match {
 	private lastHudStance: HudState["stance"] = "sword";
 	private lastHudName = "";
 	private lastHudHero: HudState["hero"] = "lia";
+	private lastPreyCount = 0;
 
 	/**
 	 * Ibiriki's bleeding prey, in screen fractions off the same camera the HUD
@@ -857,16 +858,18 @@ export class Match {
 		if (kitFor(this.hero).passive !== "bloodlust") return [];
 		const view = this.input.viewport;
 		const prey: HudPrey[] = [];
-		for (const [id, entity] of this.remotes) {
+		for (const entity of this.queries.drawnFighters) {
+			if (entity.fighter.local) continue;
 			const hp = entity.fighter.hp;
 			if (hp <= 0) continue;
 			const fraction =
 				entity.fighter.maxHp > 0 ? hp / entity.fighter.maxHp : 0;
 			if (fraction > BERSERK_FRACTION) continue;
 			if (!hostile(this.local.fighter.team, entity.fighter.team)) continue;
-			const centre = bodyCentre(entity.body.x, entity.body.y);
+			const at = entity.renderPos ?? entity.body;
+			const centre = bodyCentre(at.x, at.y);
 			prey.push({
-				id,
+				id: entity.fighter.id,
 				hp: fraction,
 				screenX: (centre.x - this.stage.cameraX) / view.width,
 				screenY: (centre.y - this.stage.cameraY) / view.height,
@@ -2109,6 +2112,15 @@ export class Match {
 		this.training?.update(dtMs);
 		this.tutorial?.update(dtMs);
 		this.record(dtMs);
+
+		if (kitFor(this.hero).passive === "bloodlust") {
+			const prey = this.hudPrey();
+			if (prey.length > 0 || this.lastPreyCount > 0) {
+				EventBus.emit(HUD_EVENTS.prey, prey);
+			}
+			this.lastPreyCount = prey.length;
+		}
+
 		this.emitHud();
 	}
 
@@ -4217,7 +4229,7 @@ export class Match {
 		if (inputSettings.scheme !== "controller" || !inputSettings.touchPrimary) {
 			return raw;
 		}
-		if (this.input.padAvailable) return raw;
+		if (this.input.padConnected) return raw;
 		if (!inputSettings.deckVisible()) return raw;
 		if (inputSettings.assist === "off") return raw;
 		const foe = this.nearestHostileBody();

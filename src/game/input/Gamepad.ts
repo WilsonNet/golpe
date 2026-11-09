@@ -204,4 +204,19 @@ export class GamepadSource {
 	get available(): boolean {
 		return this.everConnected;
 	}
+
+	/**
+	 * Is a pad connected *right now*?
+	 *
+	 * `available` is latched so the Controls dialog can keep suggesting
+	 * controller mode after a pad is unplugged at rest. That latch must never
+	 * decide whether the deck's aim assist applies: a phone that paired a
+	 * controller once — to try it, or because it was in the bag — would
+	 * otherwise lose its assist for the rest of the session, with the dialog
+	 * still saying "On". The two questions are different and now are two
+	 * getters.
+	 */
+	get connected(): boolean {
+		return this.frame.connected;
+	}
 }

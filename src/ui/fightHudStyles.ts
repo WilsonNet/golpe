@@ -939,7 +939,13 @@ export const FIGHT_HUD_CSS = `
    A red triangle and the HP left: above the nameplate while the bleeding foe
    is in view, clamped to the frame's edge and turned at it when it is not. The
    safe rectangle keeps a pin off the panels, clock and bottom meters.
-   Presentation only — the positions come from hud-state. */
+   Presentation only — high-frequency positions come from hud-prey. */
+.vdh-prey-layer {
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	overflow: hidden;
+}
 .vdh-prey {
 	position: absolute;
 	transform: translate(-50%, -50%);
@@ -947,15 +953,18 @@ export const FIGHT_HUD_CSS = `
 	flex-direction: column;
 	align-items: center;
 	gap: 0.3cqh;
+	pointer-events: none;
+	will-change: left, top;
 	filter: drop-shadow(0 0.25cqh 0 rgba(0, 0, 0, 0.8));
 	animation: vdh-prey-throb 1.1s ease-in-out infinite;
 }
 .vdh-prey-arrow {
-	width: 0;
-	height: 0;
-	border-left: 1.1cqw solid #ff5d5d;
-	border-top: 0.62cqw solid transparent;
-	border-bottom: 0.62cqw solid transparent;
+	width: 1.1cqw;
+	height: 1.1cqw;
+	display: block;
+	transform-origin: 50% 50%;
+	background: #ff5d5d;
+	clip-path: polygon(15% 15%, 85% 50%, 15% 85%);
 }
 .vdh-prey-hp {
 	padding: 0.1cqh 0.55cqw;
@@ -968,7 +977,7 @@ export const FIGHT_HUD_CSS = `
 	border-radius: 2px;
 }
 @keyframes vdh-prey-throb {
-	0%, 100% { opacity: 0.55; }
+	0%, 100% { opacity: 0.75; }
 	50% { opacity: 1; }
 }
 

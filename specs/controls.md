@@ -263,7 +263,10 @@ and aims.**
   position still steers while the thumb is in it: a running jump is one thumb
   movement. The cap is the same 44px the maths uses (`JUMP_BAND_PX`), and the
   boundary is computed from the pad's real height, so the cap a player sees is
-  the cap that jumps on every screen.
+  the cap that jumps on every screen. It has **8px of release hysteresis**, like
+  the rocker: without it a thumb resting exactly on the line crossed it on every
+  `pointermove`, and the deck emitted jump on/off/on — a hop that spent the air
+  jump, from a thumb that never moved.
 - **A tap jump is a full jump.** The simulation cuts a jump on release, and a
   70-100ms phone tap produced a 76px hop out of a 136px jump. The deck holds the
   jump action for **320ms** after the thumb leaves — just short of the jump's
@@ -301,13 +304,22 @@ and aims.**
 - **Aim belongs to the action that needs it.** The sword consumes only the
   *sign* of the aim, so its facing comes from the feet. The gun aims from the
   button that fires it. The item and the ultimate are **press-drag-release** on
-  their own buttons. The ultimate arms after a **260ms** hold, so a brush spends
-  nothing; while it is armed the left thumb is free to reposition. The item is
+  their own buttons. The ultimate arms on a **260ms** hold **or a deliberate
+  drag** (0.4 of the 48px drag radius, deliberately past the 0.25 aim deadzone),
+  so a brush spends nothing while a player who already knows where the black
+  hole goes is not taxed a quarter of a second for it; while it is armed the
+  left thumb is free to reposition. The item is
   used on the press edge server-side, so the deck withholds its press until the
   thumb comes up and holds it for 90ms — the angle the player released on is the
   angle that is used. A **cancelled touch** (`pointercancel`, an OS gesture) does
   not cast the ultimate: the server's hold is kept and the next press/release can
   cast, so a 60-second resource is never spent by an interrupted finger.
+  **But a suspension is not a cancel** — `Input` clears every held action on
+  `blur` and on `input-suspended`, and the server cannot tell that release from
+  a deliberate one. Backgrounding the app or opening the Esc menu with the
+  thumb still on an armed ultimate therefore casts it. Fixing that needs an
+  explicit cancel on the wire (or a suspension flag in the input batch); it is
+  a known gap, not a deck bug, and `UltButton.cancel` says so.
 - **Uppercut and Item** sit in the column beside the weapon; **stance** is the
   two-segment switch above them. A control that the stance makes unavailable is
   drawn disabled and releases anything it was holding, so a thumb never leaves
@@ -322,8 +334,11 @@ and aims.**
   the gun is never assisted. It changes only the **aim angle** handed to the
   simulation — read as `face` in sword stance — and the server never learns a
   thumb was helped. It is gated to a coarse-pointer device in controller mode
-  with no paired pad, so a mouse or a gamepad never gains it, and the setting
-  can turn it off.
+  with **no pad connected right now**, so a mouse or a gamepad never gains it,
+  and the setting can turn it off. "Right now", not "ever": a phone that paired a
+  controller once should not lose its assist for the rest of the session, which
+  is why `Input.padConnected` exists beside the latched `padAvailable` the
+  Controls dialog uses to keep suggesting controller mode.
 
 **The deck is an overlay, not a handheld.** The 4:3 canvas keeps the page. The
 hands float over the bottom corners inside the safe area, translucent enough to
@@ -426,6 +441,17 @@ it is answered.
 - **Nothing in the AI vs AI loop presses anything.** The brains hand the
   simulation an intent and an angle directly, so a broken binding, a broken pad
   mapping and a broken aim layer are all invisible to `diagnose.ts`.
+- **One finger owns a control.** Every deck control captures its pointer, and a
+  second contact on the *same* control is ignored until the owner lifts: a
+  second thumb on the move pad must not stop the walk the first one is holding,
+  and a second contact on the trigger must not re-anchor the drag the aim is
+  measured from. The release is still delivered when the control went disabled
+  mid-press (holstering the blade disables Guard and Uppercut), because that
+  release is the only event that can bring the action back up.
+- **A lost window flushes the deck's own latches.** `Input` clears the held
+  actions on `blur`, but the jump latch and the latched guard-walk direction
+  live in the deck. A `jumpRef` left true with no release timer pending made the
+  next tap a no-op: a dead jump, with the pad still drawn as jumping.
 
 ## Measuring it
 
@@ -462,3 +488,46 @@ bomb, a tap jump near full height, a fast double jump, retreat-fire, item and
 ultimate drag-aim (and an off-centre tap that must use the facing), no stuck
 holds, the menu's click-through, turning the deck Off without losing the menu,
 and press-to-simulation latency.
+
+### Measured baseline — the numbers a layout change has to beat
+
+Taken at six phone viewports with the deck on, portrait and landscape, which is
+the only ground truth the deck's ergonomics have. Re-measure before defending a
+layout on taste; these are the numbers the current CSS actually produces.
+
+| viewport | attack button | guard / dash | kit column | stance segment | move pad |
+|---|---|---|---|---|---|
+| 390×844 P | 117px (31mm) | 63px (17mm) | 66×59 (17×16mm) | 91×47 (24×**12mm**) | 125×172 |
+| 430×932 P | 128px (34mm) | 70px (19mm) | 72×64 (19×17mm) | 99×47 | 138×189 |
+| 360×640 P | 108px (29mm) | 61px (16mm) | 61×54 (16×14mm) | 84×47 | 120×158 |
+| 844×390 L | 109px (29mm) | 63px | 62×57 | 85×47 | 125×172 |
+
+Every target clears 44px, and the smallest combat dimension is 47px. **Spacing
+is the weak gate, not size**: the tightest pair is the two stance segments at
+**4px (1.1mm)**, every other neighbour 7–8px, and *nothing* is the 10mm apart
+that thumb-target guidance asks for. Nothing overlaps, nothing leaves the
+viewport, and the page never scrolls.
+
+Four measured defects, none of them the deck's *logic* and all of them layout:
+
+1. **Portrait spends a third of the screen on nothing.** At 390×844 the arena
+   ends at y=293 and the hands start at y=579: **286px (76mm, 34%) of empty
+   shell** between the fight and the thumbs. The arena is 34.7% of the screen.
+2. **Landscape draws the kit column over the arena.** At 844×390 the canvas is
+   162–682 and the right hand is 651–831, so stance/ult/item/upper sit **31px
+   inside the fight** — 3.3% of the arena's area, over the column's full height,
+   and the rival can stand behind them. With a notch inset both hands move in,
+   the left hand overlaps too, and it gets worse.
+3. **The coach hides the player's own health.** Portrait: the card is
+   `8,4 374×65` over a canvas starting at 0, and the local health panel is
+   `5,4 94×25` — fully underneath. Landscape: the card is 81% of the arena width
+   and covers 83 of the panel's 125px.
+4. **The menu pill is outside thumb reach in portrait** — 131mm from the resting
+   thumb at 390×844, 146mm at 430×932 (the short 360×640 phone gets it inside the
+   zone, so reach changes with screen height).
+
+Two behaviours worth knowing, measured rather than assumed: the ultimate's
+button is always in the grid, so becoming ready shifts **nothing** (rects
+identical to 0.1px); and a same-finger slide from Guard to Gun does **not** switch
+stance, because pointer capture keeps the press on Guard — switching needs the
+other thumb.

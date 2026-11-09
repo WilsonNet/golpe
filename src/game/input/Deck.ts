@@ -73,13 +73,28 @@ const JUMP_BAND_PX = 44;
 export const JUMP_MIN_HOLD_MS = 320;
 
 /**
- * How long the ultimate button must be held before it arms.
+ * How far the ultimate button must be held before it arms.
  *
  * The ultimate is a 60-second resource and the press is also the start of its
  * aim phase. 260ms is long enough that a brush of the thumb does nothing, and
  * short enough that it is not a second gesture to learn.
  */
 export const ULT_ARM_MS = 260;
+
+/**
+ * How far the thumb must *drag* to arm the ultimate without waiting.
+ *
+ * **Arming is a disjunction, not a delay.** A dwell alone taxes the player who
+ * already knows where the black hole goes: they hold, drag, and then sit on
+ * their thumb for a quarter of a second for no reason. A deliberate drag is
+ * already a commitment — it is the same act as aiming — so it arms immediately,
+ * and the dwell stays as the route for a player who casts on the facing.
+ *
+ * Deliberately larger than `DRAG_DEADZONE` (0.25 ≈ 12px): a contact patch that
+ * rolls 12px while the thumb settles is not a decision, and spending a
+ * minute's charge on it is the one misfire the dwell exists to prevent.
+ */
+export const ULT_ARM_DRAG = 0.4;
 
 /**
  * How long the item's press is held on release.
@@ -126,6 +141,19 @@ export function moveDirection(dx: number, current: -1 | 0 | 1 = 0): -1 | 0 | 1 {
 }
 
 /**
+ * How far the thumb must come back down before the jump cap lets go.
+ *
+ * **The cap needs hysteresis as much as the rocker does.** Without it a thumb
+ * resting on the boundary crossed it on every `pointermove` — `pointermove`
+ * fires at the display rate, which is 120Hz on a modern phone — so the deck
+ * emitted jump on, jump off, jump on: the fighter hopped, spent its air jump on
+ * the second press, and the player never moved their thumb. Eight px is the same
+ * margin `MOVE_RELEASE_PX` uses, and for the same reason: a control has to have
+ * a *place* it is, not a line it is on.
+ */
+const JUMP_BAND_RELEASE_PX = 8;
+
+/**
  * True while a thumb is on the painted jump cap.
  *
  * `dy` is measured from the pad's centre, and the cap is the top
@@ -133,9 +161,18 @@ export function moveDirection(dx: number, current: -1 | 0 | 1 = 0): -1 | 0 | 1 {
  * Getting this from the pad's real height is what makes the thing a player
  * sees the thing that jumps; a fixed centre offset drifted a few pixels into
  * the move lane on one screen and stopped short of the cap on another.
+ *
+ * `wasIn` is the state the pad read last frame, and it widens the band
+ * downwards by `JUMP_BAND_RELEASE_PX` — the release edge, exactly like
+ * `moveDirection`'s two thresholds.
  */
-export function inJumpBand(dy: number, padHeight: number): boolean {
-	return dy <= JUMP_BAND_PX - padHeight / 2;
+export function inJumpBand(
+	dy: number,
+	padHeight: number,
+	wasIn = false,
+): boolean {
+	const edge = JUMP_BAND_PX - padHeight / 2;
+	return wasIn ? dy <= edge + JUMP_BAND_RELEASE_PX : dy <= edge;
 }
 
 /**

@@ -65,6 +65,7 @@ import {
 	inJumpBand,
 	JUMP_MIN_HOLD_MS,
 	moveDirection,
+	ULT_ARM_DRAG,
 	ULT_ARM_MS,
 } from "../game/input/Deck";
 import {
@@ -242,18 +243,37 @@ function ButtonFace({
 	onUp: (e: ReactPointerEvent<HTMLButtonElement>) => void;
 }) {
 	const [held, setHeld] = useState(false);
+	/**
+	 * **The pointer that owns this control**, not merely "is it held".
+	 *
+	 * Two contacts can land on one control — a thumb rolling, a palm brushing
+	 * the edge of the deck in a two-handed grip — and `held` is a render late, so
+	 * a second press would re-capture and re-emit an action that is already
+	 * down. Worse, the second finger's *release* would release the first one's
+	 * action. The owner id makes "one finger owns a control" true, and it is the
+	 * same id React hands back on every event for that finger.
+	 */
+	const owner = useRef<number | null>(null);
 	const down = (e: ReactPointerEvent<HTMLButtonElement>) => {
 		if (disabled) return;
+		if (owner.current !== null) return;
 		e.preventDefault();
 		e.stopPropagation();
 		e.currentTarget.setPointerCapture(e.pointerId);
+		owner.current = e.pointerId;
 		setHeld(true);
 		onDown(e);
 	};
 	const up = (e: ReactPointerEvent<HTMLButtonElement>) => {
-		if (disabled) return;
+		// **The release is delivered even when the control went disabled
+		// mid-press.** A sword action is disabled the moment the other hand
+		// holsters the blade, and a browser will not deliver a pointerup to a
+		// disabled button — so a release that also checked `disabled` would
+		// swallow the only event that could bring the action back up.
 		e.preventDefault();
-		if (held) setHeld(false);
+		if (owner.current !== e.pointerId) return;
+		owner.current = null;
+		setHeld(false);
 		onUp(e);
 	};
 	return (
@@ -268,8 +288,10 @@ function ButtonFace({
 			onPointerDown={down}
 			onPointerUp={up}
 			onPointerCancel={up}
-			onLostPointerCapture={() => {
+			onLostPointerCapture={(e) => {
 				setHeld(false);
+				if (owner.current !== e.pointerId) return;
+				owner.current = null;
 				// A lost capture is not a completed press, but the release still
 				// has to be delivered or the code stays down forever.
 				const fake = {
@@ -329,6 +351,10 @@ function MovePad({
 	const jumpRepress = useRef<number | null>(null);
 	/** Is the thumb in the band right now? The repress timer needs to know. */
 	const inBandRef = useRef(false);
+	/** The one pointer that owns this pad. A second thumb is not a second stick. */
+	const owner = useRef<number | null>(null);
+	const onMoveRef = useRef(onMove);
+	onMoveRef.current = onMove;
 
 	const jumpUp = () => {
 		if (!jumpRef.current) return;
@@ -415,7 +441,7 @@ function MovePad({
 			setDir(next);
 			onMove(next);
 		}
-		setJump(inJumpBand(dy, rect.height));
+		setJump(inJumpBand(dy, rect.height, inBandRef.current));
 		setNub({
 			x: Math.max(-1, Math.min(1, dx / (rect.width / 2))),
 			y: Math.max(-1, Math.min(1, dy / (rect.height / 2))),
@@ -423,16 +449,24 @@ function MovePad({
 	};
 
 	const down = (e: ReactPointerEvent) => {
+		if (owner.current !== null) return;
 		e.preventDefault();
 		e.stopPropagation();
 		e.currentTarget.setPointerCapture(e.pointerId);
+		owner.current = e.pointerId;
 		track(e);
 	};
 	const move = (e: ReactPointerEvent) => {
+		if (owner.current !== e.pointerId) return;
 		if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
 		track(e);
 	};
 	const release = (e: ReactPointerEvent) => {
+		// Only the finger that owns the pad can let go of it. Without this a
+		// stray second contact (a palm, the other thumb reaching across) ended
+		// the walk of a thumb that was still holding a direction.
+		if (owner.current !== null && owner.current !== e.pointerId) return;
+		owner.current = null;
 		e.preventDefault();
 		inBandRef.current = false;
 		if (dirRef.current !== 0) {
@@ -443,6 +477,44 @@ function MovePad({
 		setNub(null);
 		requestJumpUp();
 	};
+
+	/**
+	 * A lost window is not a released thumb.
+	 *
+	 * `Input` clears every held action on `blur`, but the jump latch lives here:
+	 * a `jumpRef` left true with no release timer pending makes the *next* tap
+	 * a no-op (`setJump` sees `next && jumpRef.current` and returns), which is a
+	 * dead jump with the pad still drawn as jumping. Flushing here also clears
+	 * the latched direction, so a fighter does not keep walking out of a
+	 * backgrounded tab.
+	 */
+	useEffect(() => {
+		const flush = () => {
+			if (jumpRelease.current !== null) {
+				window.clearTimeout(jumpRelease.current);
+				jumpRelease.current = null;
+			}
+			if (jumpRepress.current !== null) {
+				window.clearTimeout(jumpRepress.current);
+				jumpRepress.current = null;
+			}
+			owner.current = null;
+			inBandRef.current = false;
+			if (jumpRef.current) {
+				jumpRef.current = false;
+				setJumping(false);
+				onJumpRef.current(false);
+			}
+			if (dirRef.current !== 0) {
+				dirRef.current = 0;
+				setDir(0);
+				onMoveRef.current(0);
+			}
+			setNub(null);
+		};
+		window.addEventListener("blur", flush);
+		return () => window.removeEventListener("blur", flush);
+	}, []);
 
 	useEffect(() => {
 		return () => {
@@ -534,6 +606,8 @@ function WeaponButton({
 	/** The aim is a drag from where the thumb landed, not from the button's centre. */
 	const origin = useRef<{ x: number; y: number } | null>(null);
 	const aimOwner = useRef<object>({});
+	/** The pointer that owns this trigger — see `ButtonFace`'s `owner`. */
+	const owner = useRef<number | null>(null);
 	const gun = stance === "gun";
 	const thrown = kit.ranged.thrown === true;
 
@@ -569,9 +643,15 @@ function WeaponButton({
 	};
 
 	const down = (e: ReactPointerEvent<HTMLButtonElement>) => {
+		// **The finger that started the swing owns it.** A second contact on the
+		// trigger — the left thumb reaching across, a palm edge — would
+		// re-anchor `origin`, and the aim is measured from `origin`, so the shot
+		// would jump by however far apart the two thumbs landed.
+		if (heldRef.current) return;
 		e.preventDefault();
 		e.stopPropagation();
 		e.currentTarget.setPointerCapture(e.pointerId);
+		owner.current = e.pointerId;
 		origin.current = { x: e.clientX, y: e.clientY };
 		aimOwner.current = {};
 		heldRef.current = true;
@@ -580,12 +660,14 @@ function WeaponButton({
 		aim(e);
 	};
 	const move = (e: ReactPointerEvent<HTMLButtonElement>) => {
+		if (owner.current !== e.pointerId) return;
 		if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
 		aim(e);
 	};
 	const release = () => {
 		if (!heldRef.current) return;
 		heldRef.current = false;
+		owner.current = null;
 		setHeld(false);
 		action("attack", false);
 		origin.current = null;
@@ -594,6 +676,7 @@ function WeaponButton({
 	};
 	const up = (e: ReactPointerEvent<HTMLButtonElement>) => {
 		e.preventDefault();
+		if (owner.current !== null && owner.current !== e.pointerId) return;
 		release();
 	};
 
@@ -645,7 +728,13 @@ function WeaponButton({
 			onPointerMove={move}
 			onPointerUp={up}
 			onPointerCancel={up}
-			onLostPointerCapture={release}
+			onLostPointerCapture={(e) => {
+				// Implicit capture means a second finger landing on this button
+				// reports its own lost capture *here*. Only the owner's release
+				// may end the owner's swing.
+				if (owner.current !== e.pointerId) return;
+				release();
+			}}
 			onContextMenu={(e) => e.preventDefault()}
 		>
 			<span className="gg-ring" style={{ "--v": ring } as CSSProperties} />
@@ -705,6 +794,8 @@ function ItemButton({
 	const timer = useRef<number | null>(null);
 	const origin = useRef<{ x: number; y: number } | null>(null);
 	const aimOwner = useRef<object>({});
+	/** The pointer that owns this throw — see `ButtonFace`'s `owner`. */
+	const pointer = useRef<number | null>(null);
 
 	const aim = (e: ReactPointerEvent<HTMLButtonElement>) => {
 		const from = origin.current;
@@ -725,9 +816,13 @@ function ItemButton({
 
 	const down = (e: ReactPointerEvent<HTMLButtonElement>) => {
 		if (!enabled) return;
+		// One finger owns the throw: a second contact must not re-anchor the drag
+		// of a grenade that is already being aimed.
+		if (heldRef.current) return;
 		e.preventDefault();
 		e.stopPropagation();
 		e.currentTarget.setPointerCapture(e.pointerId);
+		pointer.current = e.pointerId;
 		origin.current = { x: e.clientX, y: e.clientY };
 		aimOwner.current = {};
 		heldRef.current = true;
@@ -735,26 +830,39 @@ function ItemButton({
 		aim(e);
 	};
 	const move = (e: ReactPointerEvent<HTMLButtonElement>) => {
+		if (pointer.current !== e.pointerId) return;
 		if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
 		aim(e);
 	};
 	const up = (e: ReactPointerEvent<HTMLButtonElement>) => {
 		e.preventDefault();
-		if (!heldRef.current || !enabled) return;
+		if (pointer.current !== null && pointer.current !== e.pointerId) return;
+		if (!heldRef.current) return;
+		// **The button must let go even when it ran out of charges mid-drag.**
+		// `enabled` goes false the moment the last charge is spent, and a release
+		// that returned before clearing `heldRef` left the control permanently
+		// "held": the next press was ignored, and the item was unreachable until
+		// the deck remounted.
 		heldRef.current = false;
+		pointer.current = null;
 		setHeld(false);
 		setNub(null);
+		if (!enabled) {
+			origin.current = null;
+			emitAim(aimOwner.current, null);
+			return;
+		}
 		// The aim at this instant is the throw; the press is delivered now and
 		// held for a few frames so the server cannot miss it. The fine aim
 		// survives the release for 900ms, so the angle is still there when the
 		// server samples it.
 		action("item", true);
 		if (timer.current !== null) window.clearTimeout(timer.current);
-		const owner = aimOwner.current;
+		const token = aimOwner.current;
 		timer.current = window.setTimeout(() => {
 			timer.current = null;
 			action("item", false);
-			emitAim(owner, null);
+			emitAim(token, null);
 		}, ITEM_PULSE_MS);
 	};
 
@@ -762,6 +870,7 @@ function ItemButton({
 	const cancel = () => {
 		if (!heldRef.current) return;
 		heldRef.current = false;
+		pointer.current = null;
 		setHeld(false);
 		setNub(null);
 		origin.current = null;
@@ -792,8 +901,14 @@ function ItemButton({
 			onPointerDown={down}
 			onPointerMove={move}
 			onPointerUp={up}
-			onPointerCancel={cancel}
-			onLostPointerCapture={cancel}
+			onPointerCancel={(e) => {
+				if (pointer.current !== null && pointer.current !== e.pointerId) return;
+				cancel();
+			}}
+			onLostPointerCapture={(e) => {
+				if (pointer.current !== null && pointer.current !== e.pointerId) return;
+				cancel();
+			}}
 			onContextMenu={(e) => e.preventDefault()}
 		>
 			<span className="gg-item-count">{charges}</span>
@@ -839,6 +954,8 @@ function UltButton({
 	const lastAim = useRef<{ x: number; y: number } | null>(null);
 	const origin = useRef<{ x: number; y: number } | null>(null);
 	const aimOwner = useRef<object>({});
+	/** The pointer that owns this cast — see `ButtonFace`'s `owner`. */
+	const pointer = useRef<number | null>(null);
 
 	/**
 	 * Let the release angle live through the cast tick.
@@ -859,6 +976,29 @@ function UltButton({
 		}, 140);
 	};
 
+	/**
+	 * Arm the ultimate, once.
+	 *
+	 * Two routes reach it — a dwell, and a deliberate drag — because a delay
+	 * alone taxes the player who already knows where the black hole goes. Both
+	 * routes are still a *commitment*: a tap that never moves and never waits
+	 * spends nothing.
+	 */
+	const armNow = () => {
+		if (armedRef.current) return;
+		if (armTimer.current !== null) {
+			window.clearTimeout(armTimer.current);
+			armTimer.current = null;
+		}
+		armedRef.current = true;
+		setArmed(true);
+		action("ultimate", true);
+		if (lastAim.current) {
+			emitAim(aimOwner.current, lastAim.current);
+		}
+		haptic(12);
+	};
+
 	const aim = (e: ReactPointerEvent<HTMLButtonElement>) => {
 		const from = origin.current;
 		if (!from) return;
@@ -875,6 +1015,9 @@ function UltButton({
 		}
 		lastAim.current = { x: v.x, y: v.y };
 		setNub({ x: v.x, y: v.y });
+		// A drag past the arm threshold is a decision, not a brush: arm on it
+		// rather than making the thumb wait out the dwell it has already beaten.
+		if (!armedRef.current && v.magnitude >= ULT_ARM_DRAG) armNow();
 		if (armedRef.current) {
 			emitAim(aimOwner.current, { x: v.x, y: v.y });
 		}
@@ -882,6 +1025,9 @@ function UltButton({
 
 	const down = (e: ReactPointerEvent<HTMLButtonElement>) => {
 		if (!ready) return;
+		// One finger owns the ultimate. A second contact re-anchoring the drag
+		// would swing a spell that is already being aimed.
+		if (heldRef.current) return;
 		e.preventDefault();
 		e.stopPropagation();
 		e.currentTarget.setPointerCapture(e.pointerId);
@@ -889,30 +1035,25 @@ function UltButton({
 			window.clearTimeout(aimReleaseTimer.current);
 			aimReleaseTimer.current = null;
 		}
+		pointer.current = e.pointerId;
 		origin.current = { x: e.clientX, y: e.clientY };
 		aimOwner.current = {};
 		heldRef.current = true;
 		setHeld(true);
 		aim(e);
-		armTimer.current = window.setTimeout(() => {
-			armTimer.current = null;
-			armedRef.current = true;
-			setArmed(true);
-			action("ultimate", true);
-			if (lastAim.current) {
-				emitAim(aimOwner.current, lastAim.current);
-			}
-			haptic(12);
-		}, ULT_ARM_MS);
+		armTimer.current = window.setTimeout(armNow, ULT_ARM_MS);
 	};
 	const move = (e: ReactPointerEvent<HTMLButtonElement>) => {
+		if (pointer.current !== e.pointerId) return;
 		if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
 		aim(e);
 	};
 	const up = (e: ReactPointerEvent<HTMLButtonElement>) => {
 		e.preventDefault();
+		if (pointer.current !== null && pointer.current !== e.pointerId) return;
 		if (!heldRef.current) return;
 		heldRef.current = false;
+		pointer.current = null;
 		setHeld(false);
 		if (armTimer.current !== null) {
 			window.clearTimeout(armTimer.current);
@@ -939,12 +1080,24 @@ function UltButton({
 	 * The ultimate casts on the server's release edge, so emitting `ultimate`
 	 * false here would spend a minute of charge on an OS gesture. Keep the
 	 * server's hold and the button armed: the next press can re-aim and release
-	 * to cast. (There is no cancel gesture on the wire; this is the least
-	 * destructive one.)
+	 * to cast.
+	 *
+	 * **Known gap, and it is not fixable in the deck.** Any *other* thing that
+	 * clears input — `Input`'s `blur` handler, `input-suspended` when the Esc
+	 * menu opens, unmounting the deck — drops the `ultimate` action, and the
+	 * server cannot tell that release from a deliberate one: the wire carries a
+	 * boolean, not an intent. So backgrounding the app mid-aim, or opening the
+	 * menu with the thumb still on this button, currently casts at the angle the
+	 * fighter is facing. The fix is an explicit cancel on the wire (or a
+	 * suspension flag on the input batch the server can skip a release for) —
+	 * see `specs/controls.md`. Do not paper over it by holding the action here:
+	 * a stuck hold with no owner to deliver the release is worse than a wasted
+	 * cast.
 	 */
 	const cancel = () => {
 		if (!heldRef.current) return;
 		heldRef.current = false;
+		pointer.current = null;
 		setHeld(false);
 		if (armTimer.current !== null) {
 			window.clearTimeout(armTimer.current);
@@ -987,8 +1140,12 @@ function UltButton({
 			onPointerDown={down}
 			onPointerMove={move}
 			onPointerUp={up}
-			onPointerCancel={cancel}
-			onLostPointerCapture={() => {
+			onPointerCancel={(e) => {
+				if (pointer.current !== null && pointer.current !== e.pointerId) return;
+				cancel();
+			}}
+			onLostPointerCapture={(e) => {
+				if (pointer.current !== null && pointer.current !== e.pointerId) return;
 				if (heldRef.current) cancel();
 			}}
 			onContextMenu={(e) => e.preventDefault()}

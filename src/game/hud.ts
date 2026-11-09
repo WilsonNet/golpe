@@ -168,4 +168,6 @@ export const HUD_EVENTS = {
 	status: "hud-status",
 	/** A frag, for the turn-away kill feed. Effects only. */
 	kill: "hud-kill",
+	/** High-frequency (per-frame) prey tracking for Ibiriki's prey pins. */
+	prey: "hud-prey",
 } as const;
