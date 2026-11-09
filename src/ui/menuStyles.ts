@@ -29,7 +29,7 @@ export const MENU_CSS = `
 	position: fixed;
 	inset: 0;
 	display: flex;
-	align-items: center;
+	align-items: safe center;
 	justify-content: center;
 	z-index: 50;
 	font-family: monospace;
@@ -40,8 +40,10 @@ export const MENU_CSS = `
 	/* A phone in portrait is shorter than the menu; margin:auto on the card
 	   centres it when it fits and lets the page scroll when it does not — the
 	   flexbox trick that keeps the top of a too-tall card reachable, which plain
-	   align-items:center clips off. */
+	   align-items:center clips off. safe center ensures overflow starts at top. */
 	overflow-y: auto;
+	padding: 24px 0;
+	box-sizing: border-box;
 }
 /* The menu card is the page's furniture, so it earns a slightly larger box and
    a golden codex border — the interruption tier, exactly like the podium. A
@@ -543,12 +545,89 @@ a.gd-play-item { color: inherit; text-decoration: none; }
 	outline: none;
 	border-color: #0ec3c9;
 }
+.gd-stepper {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+}
+.gd-stepper-btn {
+	width: 28px;
+	height: 32px;
+	background: #000;
+	color: rgba(255, 255, 255, 0.85);
+	border: 1px solid rgba(255, 255, 255, 0.3);
+	border-radius: 6px;
+	font: inherit;
+	font-size: 15px;
+	font-weight: 700;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	user-select: none;
+	transition: border-color 0.15s, color 0.15s, background-color 0.15s;
+}
+.gd-stepper-btn:hover:not(:disabled) {
+	border-color: #0ec3c9;
+	color: #0ec3c9;
+	background: rgba(14, 195, 201, 0.12);
+}
+.gd-stepper-btn:disabled {
+	opacity: 0.25;
+	cursor: not-allowed;
+	border-color: rgba(255, 255, 255, 0.15);
+}
+.gd-stepper input[type="number"] {
+	width: 58px;
+	height: 32px;
+	box-sizing: border-box;
+	background: #000;
+	color: inherit;
+	font: inherit;
+	font-size: 14px;
+	padding: 4px 6px;
+	border: 1px solid rgba(255, 255, 255, 0.3);
+	border-radius: 6px;
+	text-align: center;
+	-moz-appearance: textfield;
+}
+.gd-stepper input[type="number"]::-webkit-outer-spin-button,
+.gd-stepper input[type="number"]::-webkit-inner-spin-button {
+	-webkit-appearance: none;
+	margin: 0;
+}
+.gd-stepper input[type="number"]:focus {
+	outline: none;
+	border-color: #0ec3c9;
+}
 .gd-field-note {
 	font-size: 11px;
 	opacity: 0.5;
 	line-height: 1.5;
 	margin: -4px 0 10px;
 	text-align: right;
+}
+.gd-field-warn {
+	color: #ffaa55;
+	opacity: 0.95;
+	text-align: right;
+	font-size: 12px;
+	line-height: 1.4;
+	margin: -2px 0 10px;
+}
+.gd-link-btn {
+	background: none;
+	border: none;
+	color: #ffd166;
+	text-decoration: underline;
+	cursor: pointer;
+	font: inherit;
+	font-size: inherit;
+	padding: 0;
+	margin-left: 4px;
+}
+.gd-link-btn:hover {
+	color: #ffe6a8;
 }
 /* ---- the password field ----
    The host form is label-left / control-right rows, so the password sits in

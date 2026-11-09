@@ -628,6 +628,60 @@ export function MainMenu({
 	);
 }
 
+function NumberStepper({
+	value,
+	min,
+	max,
+	step = 1,
+	onChange,
+	id,
+	"aria-label": ariaLabel,
+}: {
+	value: number;
+	min: number;
+	max: number;
+	step?: number;
+	onChange: (val: number) => void;
+	id?: string;
+	"aria-label"?: string;
+}) {
+	return (
+		<div className="gd-stepper">
+			<button
+				type="button"
+				className="gd-stepper-btn"
+				disabled={value <= min}
+				aria-label={`Decrease ${ariaLabel ?? "value"}`}
+				onClick={() => onChange(Math.max(min, value - step))}
+			>
+				−
+			</button>
+			<input
+				id={id}
+				type="number"
+				min={min}
+				max={max}
+				step={step}
+				value={value}
+				aria-label={ariaLabel}
+				onChange={(e) => {
+					const n = Number.parseInt(e.target.value, 10);
+					onChange(Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : min);
+				}}
+			/>
+			<button
+				type="button"
+				className="gd-stepper-btn"
+				disabled={value >= max}
+				aria-label={`Increase ${ariaLabel ?? "value"}`}
+				onClick={() => onChange(Math.min(max, value + step))}
+			>
+				+
+			</button>
+		</div>
+	);
+}
+
 /**
  * The host form: every choice a room's creator can make, defaults first.
  *
@@ -648,6 +702,10 @@ function HostForm({
 	const [settings, setSettings] = useState(DEFAULT_SETTINGS);
 	const [showAdvanced, setShowAdvanced] = useState(false);
 	const [showPassword, setShowPassword] = useState(false);
+	const [arenaNotice, setArenaNotice] = useState<{
+		text: string;
+		switchToMap: string | null;
+	} | null>(null);
 
 	const set = (patch: Partial<HostSettings>) =>
 		setSettings((s) => ({ ...s, ...patch }));
@@ -715,8 +773,10 @@ function HostForm({
 				<div className="gd-choice">
 					<button
 						type="button"
+						aria-pressed={settings.mode === "ffa"}
 						className={`gd-chip${settings.mode === "ffa" ? " gd-chip-on" : ""}`}
 						onClick={() => {
+							setArenaNotice(null);
 							set({ mode: "ffa", scoreLimit: SCORE_LIMIT_FFA });
 						}}
 					>
@@ -724,22 +784,39 @@ function HostForm({
 					</button>
 					<button
 						type="button"
+						aria-pressed={settings.mode === "tdm"}
 						className={`gd-chip${settings.mode === "tdm" ? " gd-chip-on" : ""}`}
 						onClick={() => {
+							const mapTooNarrow =
+								settings.map !== null &&
+								LIBRARY.some(
+									(m) => m.id === settings.map && mapScreens(m.spec) < 3,
+								);
 							set({
 								mode: "tdm",
 								scoreLimit: SCORE_LIMIT_TDM,
 								screens: Math.max(3, settings.screens),
+								map: mapTooNarrow ? null : settings.map,
 							});
+							if (mapTooNarrow) {
+								setArenaNotice({
+									text: "Team deathmatch requires at least 3 screens — switched back to Classic.",
+									switchToMap: null,
+								});
+							} else {
+								setArenaNotice(null);
+							}
 						}}
 					>
 						Team deathmatch
 					</button>
 					<button
 						type="button"
+						aria-pressed={isControl}
 						className={`gd-chip${isControl ? " gd-chip-on" : ""}`}
 						onClick={() => {
-							set({ mode: "5cp", scoreLimit: SCORE_LIMIT_CP });
+							setArenaNotice(null);
+							set({ mode: "5cp", scoreLimit: SCORE_LIMIT_CP, map: null });
 						}}
 					>
 						5 Control Points
@@ -760,34 +837,75 @@ function HostForm({
 					<div className="gd-choice">
 						<button
 							type="button"
+							aria-pressed={libraryMap === null}
 							className={`gd-chip${libraryMap ? "" : " gd-chip-on"}`}
-							onClick={() => set({ map: null })}
+							onClick={() => {
+								setArenaNotice(null);
+								set({ map: null });
+							}}
 						>
 							Classic
 						</button>
 						{LIBRARY.map((m) => {
+							const mapS = mapScreens(m.spec);
 							const tooNarrow =
-								settings.mode === "tdm" && mapScreens(m.spec) < minScreens;
+								settings.mode === "tdm" && mapS < minScreens;
 							return (
 								<button
 									key={m.id}
 									type="button"
-									disabled={tooNarrow}
+									aria-pressed={libraryMap?.id === m.id}
+									aria-disabled={tooNarrow}
 									title={
 										tooNarrow
-											? "Too narrow for team deathmatch"
+											? `${m.spec.meta?.name ?? m.id} is ${mapS} ${mapS === 1 ? "screen" : "screens"} wide — Team deathmatch requires at least 3 screens`
 											: (m.spec.meta?.description ?? "")
 									}
-									className={`gd-chip${libraryMap?.id === m.id ? " gd-chip-on" : ""}`}
-									onClick={() => set({ map: m.id })}
+									className={`gd-chip${libraryMap?.id === m.id ? " gd-chip-on" : ""}${tooNarrow ? " gd-chip-disabled" : ""}`}
+									onClick={() => {
+										if (tooNarrow) {
+											setArenaNotice({
+												text: `${m.spec.meta?.name ?? m.id} is ${mapS} ${mapS === 1 ? "screen" : "screens"} wide — Team deathmatch requires at least 3 screens.`,
+												switchToMap: m.id,
+											});
+											return;
+										}
+										setArenaNotice(null);
+										set({ map: m.id });
+									}}
 								>
 									{m.spec.meta?.name ?? m.id}
+									{tooNarrow ? ` (${mapS}s)` : ""}
 								</button>
 							);
 						})}
 					</div>
 				</div>
 			)}
+			{arenaNotice ? (
+				<p className="gd-field-note gd-field-warn">
+					{arenaNotice.text}
+					{arenaNotice.switchToMap ? (
+						<button
+							type="button"
+							className="gd-link-btn"
+							onClick={() => {
+								const mapId = arenaNotice.switchToMap;
+								setArenaNotice(null);
+								set({ mode: "ffa", scoreLimit: SCORE_LIMIT_FFA, map: mapId });
+							}}
+						>
+							Switch to Deathmatch to play it
+						</button>
+					) : null}
+				</p>
+			) : settings.mode === "tdm" &&
+			  LIBRARY.some((m) => mapScreens(m.spec) < minScreens) ? (
+				<p className="gd-field-note">
+					Team deathmatch requires at least 3 screens — 1- and 2-screen maps are
+					disabled.
+				</p>
+			) : null}
 
 			{isControl ? (
 				<p className="gd-field-note">
@@ -805,66 +923,60 @@ function HostForm({
 				</p>
 			) : (
 				<div className="gd-field">
-					<span className="gd-field-label">
+					<label className="gd-field-label" htmlFor="gd-screens">
 						Arena width {settings.mode === "tdm" ? "(min 3 for teams)" : ""}
-					</span>
-					<input
-						type="number"
+					</label>
+					<NumberStepper
+						id="gd-screens"
 						min={minScreens}
 						max={8}
 						value={screens}
-						onChange={(e) => {
-							const n = Number.parseInt(e.target.value, 10);
-							set({ screens: Number.isFinite(n) ? n : minScreens });
-						}}
+						aria-label="Arena width"
+						onChange={(val) => set({ screens: val })}
 					/>
 				</div>
 			)}
 			<div className="gd-field">
-				<span className="gd-field-label">Bots to fight</span>
-				<input
-					type="number"
+				<label className="gd-field-label" htmlFor="gd-bots">
+					Bots to fight
+				</label>
+				<NumberStepper
+					id="gd-bots"
 					min={0}
 					max={15}
 					value={settings.bots}
-					onChange={(e) => {
-						const n = Number.parseInt(e.target.value, 10);
-						set({ bots: Number.isFinite(n) ? Math.max(0, n) : 0 });
-					}}
+					aria-label="Bots to fight"
+					onChange={(val) => set({ bots: val })}
 				/>
 			</div>
 			<div className="gd-field">
-				<span className="gd-field-label">
+				<label className="gd-field-label" htmlFor="gd-score-limit">
 					{isControl
 						? "Captures to win"
 						: settings.mode === "tdm"
 							? "Rounds to win"
 							: "Frags to win"}
-				</span>
-				<input
-					type="number"
+				</label>
+				<NumberStepper
+					id="gd-score-limit"
 					min={1}
 					max={999}
 					value={settings.scoreLimit}
-					onChange={(e) => {
-						const n = Number.parseInt(e.target.value, 10);
-						set({ scoreLimit: Number.isFinite(n) ? Math.max(1, n) : 1 });
-					}}
+					aria-label="Score limit"
+					onChange={(val) => set({ scoreLimit: val })}
 				/>
 			</div>
 			<div className="gd-field">
-				<span className="gd-field-label">Match length (minutes)</span>
-				<input
-					type="number"
+				<label className="gd-field-label" htmlFor="gd-time-limit">
+					Match length (minutes)
+				</label>
+				<NumberStepper
+					id="gd-time-limit"
 					min={1}
 					max={60}
 					value={Math.round(settings.timeLimitSec / 60)}
-					onChange={(e) => {
-						const n = Number.parseInt(e.target.value, 10);
-						set({
-							timeLimitSec: Number.isFinite(n) ? Math.max(1, n) * 60 : 60,
-						});
-					}}
+					aria-label="Match length in minutes"
+					onChange={(val) => set({ timeLimitSec: val * 60 })}
 				/>
 			</div>
 
@@ -897,16 +1009,16 @@ function HostForm({
 							type={showPassword ? "text" : "password"}
 							value={settings.password}
 							maxLength={MAX_PASSWORD_LENGTH}
-							placeholder={
-								isPrivate ? "set a password" : "make the room private first"
-							}
+							placeholder="set a password"
 							autoComplete="new-password"
 							spellCheck={false}
-							disabled={!isPrivate}
-							title={
-								isPrivate ? undefined : "Only a private room takes a password"
+							onChange={(e) =>
+								set({
+									password: e.target.value,
+									isPrivate:
+										e.target.value.trim() !== "" ? true : settings.isPrivate,
+								})
 							}
-							onChange={(e) => set({ password: e.target.value })}
 						/>
 						{settings.password !== "" ? (
 							<button
@@ -946,11 +1058,10 @@ function HostForm({
 							</>
 						)
 					) : isPrivate ? (
-						<>A passworded room is always private.</>
+						<>Unlisted room: anyone with the link can join.</>
 					) : (
 						<>
-							Only a private room takes a password — turn on Private room above
-							to set one.
+							Optional — setting a password automatically makes the room private.
 						</>
 					)}
 				</p>
@@ -960,6 +1071,7 @@ function HostForm({
 				<button
 					className="gd-advanced-toggle"
 					type="button"
+					aria-expanded={showAdvanced}
 					onClick={() => setShowAdvanced(!showAdvanced)}
 				>
 					{showAdvanced ? "▾ Advanced" : "▸ Advanced"} — for practice and probes
@@ -967,56 +1079,45 @@ function HostForm({
 				{showAdvanced ? (
 					<>
 						<div className="gd-field">
-							<span className="gd-field-label">
+							<label className="gd-field-label" htmlFor="gd-fill">
 								Keep room filled to (0 = off)
-							</span>
-							<input
-								type="number"
+							</label>
+							<NumberStepper
+								id="gd-fill"
 								min={0}
 								max={16}
 								value={settings.fill}
-								onChange={(e) => {
-									const n = Number.parseInt(e.target.value, 10);
-									set({
-										fill: Number.isFinite(n) ? Math.max(0, n) : 0,
-									});
-								}}
+								aria-label="Keep room filled to"
+								onChange={(val) => set({ fill: val })}
 							/>
 						</div>
 						{settings.mode !== "ffa" ? (
 							<div className="gd-field">
-								<span className="gd-field-label">Freezetime (seconds)</span>
-								<input
-									type="number"
+								<label className="gd-field-label" htmlFor="gd-freeze-time">
+									Freezetime (seconds)
+								</label>
+								<NumberStepper
+									id="gd-freeze-time"
 									min={0}
 									max={60}
 									value={settings.freezeTime}
-									onChange={(e) => {
-										const n = Number.parseInt(e.target.value, 10);
-										set({
-											freezeTime: Number.isFinite(n) ? Math.max(0, n) : 0,
-										});
-									}}
+									aria-label="Freezetime in seconds"
+									onChange={(val) => set({ freezeTime: val })}
 								/>
 							</div>
 						) : null}
 						<div className="gd-field">
-							<span className="gd-field-label">
+							<label className="gd-field-label" htmlFor="gd-ult-charge">
 								Ultimate charge floor (0–{ULT_MAX_CAP})
-							</span>
-							<input
-								type="number"
+							</label>
+							<NumberStepper
+								id="gd-ult-charge"
 								min={0}
 								max={ULT_MAX_CAP}
+								step={5}
 								value={settings.ultCharge}
-								onChange={(e) => {
-									const n = Number.parseInt(e.target.value, 10);
-									set({
-										ultCharge: Number.isFinite(n)
-											? Math.max(0, Math.min(ULT_MAX_CAP, n))
-											: 0,
-									});
-								}}
+								aria-label="Ultimate charge floor"
+								onChange={(val) => set({ ultCharge: val })}
 							/>
 						</div>
 					</>

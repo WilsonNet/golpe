@@ -433,6 +433,7 @@ export const HUD_CSS = `
 .gd-choice {
 	display: flex;
 	gap: 6px;
+	flex-wrap: wrap;
 }
 .gd-chip {
 	background: #000;
@@ -444,13 +445,22 @@ export const HUD_CSS = `
 	border-radius: 999px;
 	cursor: pointer;
 	white-space: nowrap;
+	transition: border-color 0.15s, color 0.15s, background-color 0.15s, opacity 0.15s;
 }
-.gd-chip:hover {
+.gd-chip:hover:not(:disabled):not(.gd-chip-disabled) {
 	border-color: #0ec3c9;
 	color: #0ec3c9;
 }
+.gd-chip:disabled,
+.gd-chip.gd-chip-disabled {
+	opacity: 0.38;
+	cursor: not-allowed;
+	border-color: rgba(255, 255, 255, 0.15);
+	color: rgba(255, 255, 255, 0.45);
+	background: rgba(0, 0, 0, 0.4);
+}
 .gd-chip-on,
-.gd-chip-on:hover {
+.gd-chip-on:hover:not(:disabled):not(.gd-chip-disabled) {
 	border-color: #ffd166;
 	color: #ffd166;
 	background: rgba(255, 209, 102, 0.12);
