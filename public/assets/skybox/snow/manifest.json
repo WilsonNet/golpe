@@ -1,0 +1,351 @@
+{
+	"name": "snow",
+	"title": "Frostpeak \u2014 Alpine Noon",
+	"width": 1600,
+	"height": 600,
+	"haze": 0.9,
+	"ambient": {
+		"loopMs": 140000,
+		"groups": [
+			{
+				"layer": "helicopter",
+				"actors": [
+					{
+						"u": 300,
+						"v": 82,
+						"speedX": 9.0,
+						"bobAmp": 2.2,
+						"bobFreq": 0.35,
+						"phase": 0.0,
+						"depth": 2
+					},
+					{
+						"u": 1180,
+						"v": 62,
+						"speedX": 7.0,
+						"bobAmp": 1.8,
+						"bobFreq": 0.3,
+						"phase": 2.2,
+						"depth": 2
+					},
+					{
+						"u": 930,
+						"v": 172,
+						"speedX": 3.5,
+						"bobAmp": 1.2,
+						"bobFreq": 0.22,
+						"phase": 4.1,
+						"depth": 1
+					}
+				]
+			}
+		]
+	},
+	"loops": {
+		"clockMs": 14000,
+		"groups": [
+			{
+				"layer": "slope-skiers",
+				"actors": [
+					{
+						"u": 135,
+						"v": 350,
+						"frameOffset": 0,
+						"scale": 0.85,
+						"depth": 2
+					},
+					{
+						"u": 282,
+						"v": 390,
+						"frameOffset": 1,
+						"scale": 1.0,
+						"depth": 1
+					},
+					{
+						"u": 382,
+						"v": 408,
+						"frameOffset": 2,
+						"scale": 1.0,
+						"depth": 1
+					},
+					{
+						"u": 480,
+						"v": 422,
+						"frameOffset": 3,
+						"scale": 1.1,
+						"depth": 1
+					},
+					{
+						"u": 540,
+						"v": 454,
+						"frameOffset": 4,
+						"scale": 1.1,
+						"depth": 0
+					},
+					{
+						"u": 628,
+						"v": 495,
+						"frameOffset": 5,
+						"scale": 1.2,
+						"depth": 0
+					},
+					{
+						"u": 700,
+						"v": 476,
+						"frameOffset": 2,
+						"scale": 1.1,
+						"depth": 0
+					},
+					{
+						"u": 882,
+						"v": 458,
+						"frameOffset": 4,
+						"scale": 1.0,
+						"depth": 1
+					}
+				]
+			},
+			{
+				"layer": "boarders",
+				"actors": [
+					{
+						"u": 365,
+						"v": 404,
+						"frameOffset": 0,
+						"scale": 1.0,
+						"depth": 1
+					},
+					{
+						"u": 788,
+						"v": 420,
+						"frameOffset": 3
+					}
+				]
+			},
+			{
+				"layer": "sherpas",
+				"actors": [
+					{
+						"u": 260,
+						"v": 518,
+						"frameOffset": 0,
+						"scale": 1.0,
+						"depth": 0
+					}
+				]
+			},
+			{
+				"layer": "climbers",
+				"actors": [
+					{
+						"u": 450,
+						"v": 87,
+						"frameOffset": 0,
+						"scale": 0.8,
+						"depth": 2
+					}
+				]
+			},
+			{
+				"layer": "rescue",
+				"actors": [
+					{
+						"u": 630,
+						"v": 516,
+						"frameOffset": 1,
+						"scale": 1.0,
+						"depth": 0
+					}
+				]
+			},
+			{
+				"layer": "campers",
+				"actors": [
+					{
+						"u": 460,
+						"v": 518,
+						"frameOffset": 2,
+						"scale": 1.0,
+						"depth": 0
+					}
+				]
+			},
+			{
+				"layer": "gondola",
+				"actors": [
+					{
+						"u": 560,
+						"v": 258,
+						"frameOffset": 0,
+						"depth": 1
+					},
+					{
+						"u": 820,
+						"v": 247,
+						"frameOffset": 1,
+						"depth": 1
+					},
+					{
+						"u": 1080,
+						"v": 241,
+						"frameOffset": 2,
+						"depth": 1
+					}
+				]
+			}
+		]
+	},
+	"timed": {
+		"events": [
+			{
+				"id": "avalanche",
+				"layer": "avalanche",
+				"u": 540,
+				"v": 140,
+				"firstMs": 40000,
+				"repeatMs": 75000,
+				"durationMs": 9000
+			}
+		]
+	},
+	"layers": [
+		{
+			"id": "sky",
+			"type": "image",
+			"src": "assets/skybox/snow/sky.png",
+			"version": "b0cc198984c4",
+			"factor": 0.015,
+			"driftX": 0.6,
+			"alpha": 1
+		},
+		{
+			"id": "far",
+			"type": "image",
+			"src": "assets/skybox/snow/far.png",
+			"version": "8e9ad7eeb0fc",
+			"factor": 0.06
+		},
+		{
+			"id": "mid",
+			"type": "image",
+			"src": "assets/skybox/snow/mid.png",
+			"version": "e046c1459c40",
+			"factor": 0.18
+		},
+		{
+			"id": "slope-skiers",
+			"type": "strip",
+			"src": "assets/skybox/snow/slope-skiers.png",
+			"version": "a603d46851ac",
+			"factor": 0.3,
+			"align": "mid",
+			"filtered": true,
+			"frameW": 36,
+			"frameH": 44,
+			"frames": 6,
+			"fps": 7
+		},
+		{
+			"id": "near",
+			"type": "image",
+			"src": "assets/skybox/snow/near.png",
+			"version": "096d569c8849",
+			"factor": 0.5,
+			"alpha": 0.55
+		},
+		{
+			"id": "boarders",
+			"type": "strip",
+			"src": "assets/skybox/snow/boarders.png",
+			"version": "84c56708556e",
+			"factor": 0.3,
+			"align": "mid",
+			"frameW": 52,
+			"frameH": 44,
+			"frames": 6,
+			"fps": 8
+		},
+		{
+			"id": "sherpas",
+			"type": "strip",
+			"src": "assets/skybox/snow/sherpas.png",
+			"version": "db8efc7b5aec",
+			"factor": 0.3,
+			"align": "mid",
+			"frameW": 54,
+			"frameH": 28,
+			"frames": 4,
+			"fps": 5
+		},
+		{
+			"id": "climbers",
+			"type": "strip",
+			"src": "assets/skybox/snow/climbers.png",
+			"version": "0163ac381eb5",
+			"factor": 0.12,
+			"align": "far",
+			"frameW": 48,
+			"frameH": 36,
+			"frames": 4,
+			"fps": 4
+		},
+		{
+			"id": "rescue",
+			"type": "strip",
+			"src": "assets/skybox/snow/rescue.png",
+			"version": "331a5469ba21",
+			"factor": 0.3,
+			"align": "mid",
+			"frameW": 54,
+			"frameH": 30,
+			"frames": 4,
+			"fps": 5
+		},
+		{
+			"id": "campers",
+			"type": "strip",
+			"src": "assets/skybox/snow/campers.png",
+			"version": "d8c6167be689",
+			"factor": 0.3,
+			"align": "mid",
+			"frameW": 48,
+			"frameH": 28,
+			"frames": 4,
+			"fps": 4
+		},
+		{
+			"id": "gondola",
+			"type": "strip",
+			"src": "assets/skybox/snow/gondola.png",
+			"version": "f96119fe038a",
+			"factor": 0.18,
+			"frameW": 40,
+			"frameH": 26,
+			"frames": 4,
+			"fps": 4
+		},
+		{
+			"id": "helicopter",
+			"type": "strip",
+			"src": "assets/skybox/snow/helicopter.png",
+			"version": "0d744fa55542",
+			"factor": 0.05,
+			"frameW": 96,
+			"frameH": 48,
+			"frames": 4,
+			"fps": 12
+		},
+		{
+			"id": "avalanche",
+			"type": "strip",
+			"src": "assets/skybox/snow/avalanche.png",
+			"version": "1c41ed64b576",
+			"factor": 0.12,
+			"align": "far",
+			"frameW": 128,
+			"frameH": 128,
+			"frames": 6,
+			"fps": 3
+		}
+	]
+}

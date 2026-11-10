@@ -12,17 +12,19 @@ presentation only. Nothing in `src/game/simulation/` knows it exists, and
 | `?sky=hand` (default) | Pillow/numpy | the **house style**: the hand-painted solarpunk waterfront — tree, aqueduct, canal, quay, low conservatory, people, birds/airship/boats |
 | `?sky=off` | the original gradient | the readability fallback |
 | Castle theme | Pillow/numpy | `assets/skybox/castle/`: the dusk siege at the keep — sky, far town, keep and walls, foreground parapet, plus flags, the princess, the trebuchet, the wall fights, archers and torches |
+| Snow theme | Pillow/numpy | `assets/skybox/snow/`: the alpine bowl at noon — peaks, summit climbers, skiers, snowboarders, Sherpas, camp, rescue hut, chairlift, helicopters, and a timed avalanche |
 
 The Waterfront is the style the game is pointed at for the global backdrop. The
 pipeline is a folder under `public/assets/skybox/hand/`; the runtime contract is
-`SKY_VARIANTS` and the manifest below. The **Castle** theme owns a second
-panorama under the same contract (`THEME_SKY_VARIANTS`), worn by every map whose
-theme is `castle`. It loads beside the global choice, so a player who chose
-**Off** still gets the plain gradient on a Castle map. Meadow and Snow remain
-procedural `ThemeSky` silhouettes; a missing Castle manifest falls back to the
-old procedural castle sky, never to a boot failure. See
-[`scripts/skybox/castle/NOTES.md`](../scripts/skybox/castle/NOTES.md) for its
-layer map and anchors.
+`SKY_VARIANTS` and the manifest below. The **Castle** and **Snow** themes own
+their own panoramas under the same contract (`THEME_SKY_VARIANTS`), worn by
+every map whose theme is `castle` or `snow`. They load beside the global choice,
+so a player who chose **Off** still gets the plain gradient on either map.
+Meadow remains a procedural `ThemeSky` silhouette; a missing theme manifest
+falls back to the old procedural sky, never to a boot failure. See
+[`scripts/skybox/castle/NOTES.md`](../scripts/skybox/castle/NOTES.md) and
+[`scripts/skybox/snow/NOTES.md`](../scripts/skybox/snow/NOTES.md) for their
+layer maps and anchors.
 
 The **Graphics** submenu (root menu and Esc menu) shows a side-by-side
 Waterfront/Off comparison, writes the choice to `localStorage`, and applies it
@@ -59,7 +61,9 @@ image never repeats vertically (a city repeated above the sky reads as a bug).
 The Castle panorama uses the same table with its own story: `near` is a low
 foreground parapet at 0.50, and its vignettes (flags, princess, trebuchet,
 battle, archers, torches) align to `mid` at 0.18 while the crows are ambient at
-0.04. The actors are still crisp above the graded scenery.
+0.04. The Snow panorama keeps the same four factors; its summit climbers and
+avalanche align to `far` (0.06), its bowl life to `mid`, and its helicopters
+are the ambient movers. The actors are still crisp above the graded scenery.
 
 - **A waterfall follows the layer it falls out of.** An `align` on the strip
   resolves its factor through that layer; a strip with its own factor peels
@@ -163,8 +167,46 @@ force a reset that teleports a walker whose speed does not divide the panorama.
 
 A strip layer supplies frames, fps and parallax; the plan supplies the actors'
 positions and, for the moving layer, travel speed, bob, phase and flip. A
-waterfall has no speed and is not part of either plan. If a plan is absent, the
-runtime falls back to the strip's own items for compatibility.
+`scale` on an actor is perspective: the Snow panorama draws a far skier at
+0.85 and a near one at 1.2. The sprite's top-left is the anchor, so a smaller
+actor keeps its feet on the same line when its `v` is moved down by
+`frameH * (1 - scale)`. A `depth` on an actor (0 near, 1 middle, 2 far) puts
+it in a shared filtered container: the runtime adds more blur and less
+saturation with distance, so the far skiers read as part of the hazy peak
+instead of pasted on it. A strip layer with `"filtered": true` stays under the
+background's grade even when it has a loop plan; use it for motion that is
+part of the painted surface, not for crisp people.
+
+A waterfall has no speed and is not part of either plan. If a plan is absent,
+the runtime falls back to the strip's own items for compatibility.
+
+## The timed layer
+
+Some scenery should not be on a loop: the Frostpeak avalanche is a surprise
+that happens *after* the fight has been going for a while. The manifest's
+`timed` plan names a strip layer and the event's texture position:
+
+```json
+"timed": {
+  "events": [
+    { "id": "avalanche", "layer": "avalanche", "u": 540, "v": 140,
+      "firstMs": 40000, "repeatMs": 75000, "durationMs": 9000 }
+  ]
+}
+```
+
+The runtime creates two `Sprite`s for the event (the panorama wrap), samples
+the strip's frames across `durationMs`, and shows the event only while
+`elapsed % repeatMs` is inside the window. The first occurrence is `firstMs`
+(40 s), the period 75 s, so a five-minute match sees it several times and a
+short one does not see it at all. A timed event is scenery, not a people
+vignette: it keeps the strip's `align` factor, so the avalanche rides the far
+peak it falls out of. `__skyboxDebug().timed` reports the event count and which
+ids are active, which is how the probe can prove the timing without watching a
+video.
+
+A timed strip is not added to the ordinary `strips` list (its sprites are the
+event's own), so it has no `items` and no frame loop of its own.
 
 ## Readability contract
 

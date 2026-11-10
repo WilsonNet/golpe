@@ -406,6 +406,7 @@ class ThemeSky {
 			ambient: { loopMs: 0, groups: 1, actors: this.motes.length },
 			loops: null,
 			loopFrame: 0,
+			timed: null,
 		};
 	}
 
@@ -446,12 +447,13 @@ export function createBackdrop(
 	theme: MapTheme,
 ): Backdrop {
 	if (theme !== "waterfront" && skyboxChoice() !== "off") {
-		// The Castle has a painted panorama of its own, with the same layers
-		// and programs the Waterfront uses. If it did not load (a probe with no
-		// asset server), the procedural sky below is still a playable backdrop.
-		if (theme === "castle") {
-			const castle = loadedThemeSkybox("castle");
-			if (castle) return new Skybox(parent, view, castle);
+		// The Castle and Snow have painted panoramas of their own, with the
+		// same layers and programs the Waterfront uses. If one did not load (a
+		// probe with no asset server), the procedural sky below is still a
+		// playable backdrop.
+		if (theme === "castle" || theme === "snow") {
+			const panorama = loadedThemeSkybox(theme);
+			if (panorama) return new Skybox(parent, view, panorama);
 		}
 		return new ThemeSky(parent, theme, view);
 	}

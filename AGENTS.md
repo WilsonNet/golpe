@@ -73,7 +73,7 @@ The live stack, its ports and its first-boot steps are documented in
 | **How do I host a LAN game, and what is in the pack?** | [`specs/lan.md`](specs/lan.md) — the host pack, one port, mDNS discovery, the LAN badge, the build/protocol gate · [`docs/running-the-game.md`](docs/running-the-game.md) |
 | What happens when a match ends? | [`specs/play-of-the-game.md`](specs/play-of-the-game.md) — the reel, the camera edit, then the podium |
 | What should the game sound like, and where does the music come from? | [`specs/audio.md`](specs/audio.md) · [`audio/README.md`](audio/README.md) — MIDI sources, the soundfont per track, the mixer |
-| What is behind the arena, and how is it drawn? | [`specs/skybox.md`](specs/skybox.md) · [`art/skybox/README.md`](art/skybox/README.md) — the hand-painted Waterfront (house style), the Castle's own dusk-siege panorama, and their loop / ambient people plans |
+| What is behind the arena, and how is it drawn? | [`specs/skybox.md`](specs/skybox.md) · [`art/skybox/README.md`](art/skybox/README.md) — the hand-painted Waterfront (house style), the Castle and Snow panoramas, and their loop / ambient / timed plans |
 | What does the arena stand on? | [`specs/tilemap.md`](specs/tilemap.md) — the map format, the two platform skins, 9-slice autotiling and the props |
 | **How do players build maps and send them as PRs?** | [`specs/map-maker.md`](specs/map-maker.md) — `?mapmaker=true`: the editor, the four themes, 125 decorations (the drawer, brushes, ✨ Prettify), vertical maps, the play-test against bots, the checks, and Publish (screenshots + a clip) · [`maps/`](maps/README.md) is the library |
 | How do I regenerate the platform art? | `.venv/bin/python scripts/tilesets/generate.py` → `public/assets/tilesets/`; see [`scripts/tilesets/CONTRACT.md`](scripts/tilesets/CONTRACT.md) |
@@ -531,17 +531,36 @@ simulation, camera and fighters keep running — and from the root menu it is
 used by the next match. See [specs/skybox.md](specs/skybox.md) and
 [specs/tilemap.md](specs/tilemap.md).
 
-**A theme may own a panorama.** The Castle loads
-`assets/skybox/castle/manifest.json` through the same `Skybox`/manifest code as
-the Waterfront (`preloadThemeSkybox`, `loadedThemeSkybox`, passed as the
-`Skybox` constructor's third argument). It is preloaded beside the global
-choice and is independent of it: `?sky=off` still wins, and a missing manifest
+**A theme may own a panorama.** The Castle and Snow themes load
+`assets/skybox/<theme>/manifest.json` through the same `Skybox`/manifest code
+as the Waterfront (`preloadThemeSkybox`, `loadedThemeSkybox`, passed as the
+`Skybox` constructor's third argument). They are preloaded beside the global
+choice and are independent of it: `?sky=off` still wins, and a missing manifest
 falls back to the procedural `ThemeSky` silhouette instead of a boot failure.
 The Castle's fourth image layer (`near`) is a low parapet above the arena
-floor, and its vignettes align to `mid`; see
-[`scripts/skybox/castle/NOTES.md`](scripts/skybox/castle/NOTES.md). Never put a
+floor; the Snow one is a low snowbank. Their vignettes align to `mid` (the
+summit climbers and avalanche to `far`); see
+[`scripts/skybox/castle/NOTES.md`](scripts/skybox/castle/NOTES.md) and
+[`scripts/skybox/snow/NOTES.md`](scripts/skybox/snow/NOTES.md). Never put a
 fixed foreground mass in a parallax layer: the wrap moves it through the fight
 band.
+
+**Atmospheric perspective is a container filter, not a per-sprite blur.**
+`SkyboxItemDef.depth` (0 near, 1 middle, 2 far) batches actors into one
+filtered container per bucket (`Skybox.depthParent`): each step adds a
+`BlurFilter` and pulls saturation/brightness down. Use it for Snow's far
+skiers, the summit climbers and high helicopters. A strip with
+`"filtered": true` stays in the background container even with a loop plan, so
+the slope skiers get the same grade as the piste they carry under their skis;
+do not use `filtered` for the rescue team, campers or any actor that must stay
+crisp.
+
+**A timed event is not a loop.** The Frostpeak avalanche is in
+`manifest.timed.events`: `firstMs` 40000, `repeatMs` 75000, `durationMs` 9000.
+`Skybox` gives it two sprites (the panorama wrap), samples the strip across
+the duration, and hides it outside the window. `__skyboxDebug().timed` reports
+the count and active ids. A timed strip has no `items` and is skipped by the
+ordinary strip loop; do not add it to `loops`/`ambient` as well.
 
 **The *Move list* is a Guilty Gear-style command list** — opened by the root
 menu's *More → Move list* (for the hero picked on the home screen) and the Esc menu's *Moves*

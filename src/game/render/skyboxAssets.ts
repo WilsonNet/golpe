@@ -2,7 +2,8 @@
  * Loading the parallax skybox candidates.
  *
  * The hand-painted Waterfront is the player's global panorama. A theme may
- * own a second one beside it (the Castle's dusk siege), loaded under the same
+ * own one beside it (the Castle's dusk siege, Snow's alpine bowl), loaded
+ * under the same
  * manifest contract; the runtime draws either without knowing how the art was
  * made. The global swap is a URL, not a setting store, for the same reason the
  * arena size is: a link can carry the look, and a probe can measure it.
@@ -25,7 +26,7 @@ type SkyVariant = (typeof SKY_VARIANTS)[number];
  * the global backdrop, and a themed map wears its own art. They use exactly
  * the same manifest and layer contract as `hand`.
  */
-const THEME_SKY_VARIANTS = ["castle"] as const;
+const THEME_SKY_VARIANTS = ["castle", "snow"] as const;
 export type ThemeSkyVariant = (typeof THEME_SKY_VARIANTS)[number];
 
 /** What `?sky=off` means. */
@@ -52,6 +53,18 @@ interface SkyboxItemDef {
 	flip?: boolean;
 	/** Start this actor's frame cycle this many frames later; for a varied crowd. */
 	frameOffset?: number;
+	/**
+	 * Draw scale for perspective. The strip's top-left is the anchor, so a
+	 * smaller actor keeps its feet on the same line by moving `v` down by
+	 * `frameH * (1 - scale)`.
+	 */
+	scale?: number;
+	/**
+	 * Atmospheric depth: 0 is the near plane, 1 the middle distance, 2 the far
+	 * plane. Actors are batched into one blurred/desaturated container per
+	 * depth, so a far skier is softer and less vivid than a near one.
+	 */
+	depth?: number;
 }
 
 /**
@@ -112,6 +125,37 @@ export interface SkyboxLayerDef {
 	 * moves; the runtime resolves the factor through this, not `factor`.
 	 */
 	align?: string;
+	/**
+	 * Strip only: keep the loop under the background's blur/grade. Use for
+	 * motion that is part of the painted surface (the Snow slope skiers), not
+	 * for crisp people or actors.
+	 */
+	filtered?: boolean;
+}
+
+/**
+ * A scenery event that is not on screen all the time — the avalanche that
+ * runs down Frostpeak after the match has been playing for a while. The strip
+ * supplies the frames; the event supplies when it is shown and where it sits.
+ */
+export interface SkyboxTimedEventDef {
+	id: string;
+	/** The id of a `type: "strip"` layer whose frames draw the event. */
+	layer: string;
+	/** Texture position of the event's top-left. */
+	u: number;
+	v: number;
+	/** First occurrence, ms after the background clock starts. */
+	firstMs: number;
+	/** Repeat period. 0 or omitted means once per match. */
+	repeatMs?: number;
+	/** How long the event stays visible, in ms. */
+	durationMs: number;
+	alpha?: number;
+}
+
+interface SkyboxTimedDef {
+	events: SkyboxTimedEventDef[];
 }
 
 export interface SkyboxManifest {
@@ -125,6 +169,8 @@ export interface SkyboxManifest {
 	ambient?: SkyboxAmbientDef;
 	/** One programme for every fixed-position looping vignette. */
 	loops?: SkyboxLoopsDef;
+	/** Occasional scenery events, such as the avalanche. */
+	timed?: SkyboxTimedDef;
 	layers: SkyboxLayerDef[];
 }
 

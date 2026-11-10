@@ -1,9 +1,10 @@
 # Skybox asset contract
 
 The hand-painted **Waterfront** is the player's global style. The **Castle**
-theme owns a second panorama under the same contract — a dusk siege at the
-keep. This contract describes both: the layers, the two people plans, and the
-theme-owned rules so the runtime does not need to know what the art depicts.
+and **Snow** themes own panoramas under the same contract — a dusk siege at the
+keep and an alpine bowl with a timed avalanche. This contract describes them:
+the layers, the two people plans, the timed events, and the theme-owned rules
+so the runtime does not need to know what the art depicts.
 
 ## The world it has to sit in
 
@@ -112,8 +113,12 @@ Moving actors are declared once in the manifest's `ambient` object:
   Do not force a reset that teleports an actor whose speed does not divide the
   panorama.
 - Actor fields: `u`, `v`, `speedX` (texture px/s), `bobAmp` (px), `bobFreq`
-  (Hz), `phase` (radians), `flip` (mirror art drawn facing right), and
-  `frameOffset` for loop actors.
+  (Hz), `phase` (radians), `flip` (mirror art drawn facing right), `scale`
+  (perspective; the top-left anchor means `v` must be moved down by
+  `frameH * (1 - scale)` to keep the feet on the same line), and
+  `frameOffset` for loop actors, and `depth` (0 near, 1 middle, 2 far) for
+  atmospheric perspective. The runtime batches actors into one filtered
+  container per depth; a far actor gets more blur and less saturation.
 - A waterfall is not an ambient actor: it has no speed and no group.
 - If a plan is absent, the runtime falls back to the strip's own `items` for
   backward compatibility, but the Waterfront ships both plans.
@@ -125,19 +130,43 @@ layer contract; the only difference is how the runtime finds it:
 
 - The **Waterfront** is the player's global choice (`?sky=hand|off`,
   `Graphics → Skybox`). It is `public/assets/skybox/hand/`.
-- The **Castle** is `public/assets/skybox/castle/`. It loads beside the global
-  choice and is worn by every map whose `theme` is `castle`, including
-  authored maps. **Off still wins**: a player who chose the plain gradient
-  sees the plain gradient on a Castle map too.
-- `meadow` and `snow` remain procedural `ThemeSky` silhouettes; they have no
-  panorama folder. `skyboxAssets.loadedThemeSkybox` returns `null` for a
+- The **Castle** is `public/assets/skybox/castle/`, and the **Snow** theme is
+  `public/assets/skybox/snow/`. They load beside the global choice and are
+  worn by every map whose `theme` is `castle` or `snow`, including authored
+  maps. **Off still wins**: a player who chose the plain gradient sees the
+  plain gradient on those maps too.
+- `meadow` remains a procedural `ThemeSky` silhouette; it has no panorama
+  folder. `skyboxAssets.loadedThemeSkybox` returns `null` for a
   missing theme and `createBackdrop` falls back to the procedural sky, so a
   probe boot or a partial asset deploy still plays.
 
 The Castle panorama's own files and anchors are in
-[`castle/NOTES.md`](castle/NOTES.md). It has no waterfall; its strips are the
-waving flags, the princess, the trebuchet, the wall fights, the archers, the
-torches and the crows. The same `loops`/`ambient` rules apply.
+[`castle/NOTES.md`](castle/NOTES.md); the Snow panorama's are in
+[`snow/NOTES.md`](snow/NOTES.md). Neither has a waterfall. The Castle strips
+are the flags, princess, trebuchet, wall fights, archers, torches and crows;
+the Snow strips are skiers, snowboarders, Sherpas, summit climbers, a rescue
+team, campers, a chairlift, helicopters and the timed avalanche. The same
+`loops`/`ambient` rules apply, plus `timed` below.
+
+### Timed events
+
+A strip that should be a surprise rather than a loop goes in `timed.events`
+instead of `loops`/`ambient`:
+
+```json
+"timed": {
+  "events": [
+    { "id": "avalanche", "layer": "avalanche", "u": 540, "v": 140,
+      "firstMs": 40000, "repeatMs": 75000, "durationMs": 9000 }
+  ]
+}
+```
+
+`layer` names a strip layer; `u`/`v` place it in texture space; `firstMs` is
+the first occurrence, `repeatMs` the period (0/omitted = once), and
+`durationMs` how long its frames are sampled. The runtime gives it the strip's
+resolved `align` factor. A timed strip has no `items` and is not added to the
+ordinary strip list.
 
 ## Texture contract
 
@@ -267,3 +296,24 @@ The Waterfront adds the falls and the quay people below.
 - A `NOTES.md` in the variant directory describing how to regenerate, the
   palette, and the iteration history.
 - A `contact.png` so a human can judge the result without booting the game.
+
+## The Castle must include
+
+- A focal keep with a gatehouse, curtain walls and towers, a camp outside the
+  wall, a breach and a siege engine.
+- The princess at her lit window, flags and banners, wall fights and archers.
+- Both people plans: the flags, princess, trebuchet, battles, archers and
+  torches as `loops`; the crows as `ambient`. No waterfall.
+- A `NOTES.md` and a `contact.png`, like the Waterfront.
+
+## The Snow must include
+
+- A bright alpine bowl with a jagged summit, a piste, a base lodge, a rescue
+  hut, a camp and a snowpark.
+- People: skiers (a `filtered` slope loop), snowboarders on the kicker,
+  Sherpas, summit climbers, a rescue team and campers; the helicopters are the
+  `ambient` movers. Far actors use `depth` so atmosphere does the perspective
+  work.
+- The avalanche is a **timed event**, not a loop: `firstMs` 40000,
+  `repeatMs` 75000, `durationMs` 9000, aligned to the far peak it falls out of.
+- A `NOTES.md` and a `contact.png`, like the Waterfront.

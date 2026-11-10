@@ -365,13 +365,30 @@ bigger one, out of step with the hand. `sheetDrawsBlade` (a packed sheet with a
 `slash` clip) hides it; the trail stays, because the trail is the hitbox's read.
 
 **A theme-owned panorama must fall back to its procedural sky, not to a boot
-failure.** The Castle loads `assets/skybox/castle/manifest.json` beside the
-player's global Waterfront choice; `loadedThemeSkybox` returning `null` means
-`createBackdrop` draws the old `ThemeSky` silhouette, and `?sky=off` still wins.
-The same applies to a probe boot with no asset server: a missing art package
-costs the parallax, not the match. The four image layers keep the Waterfront
-factors (0.015 / 0.06 / 0.18 / 0.5); a fixed foreground mass must never live
-in a parallax layer, because the wrap carries it through the fight band.
+failure.** The Castle and Snow themes load
+`assets/skybox/<theme>/manifest.json` beside the player's global Waterfront
+choice; `loadedThemeSkybox` returning `null` means `createBackdrop` draws the
+old `ThemeSky` silhouette, and `?sky=off` still wins. The same applies to a
+probe boot with no asset server: a missing art package costs the parallax, not
+the match. The four image layers keep the Waterfront factors (0.015 / 0.06 /
+0.18 / 0.5); a fixed foreground mass must never live in a parallax layer,
+because the wrap carries it through the fight band.
+
+**Atmospheric perspective is a container filter, not a per-sprite blur.**
+`SkyboxItemDef.depth` (0/1/2) batches actors into one filtered container per
+distance bucket, so each step gets more blur and less saturation without a
+render target per actor. `SkyboxItemDef.filtered` keeps a loop in the
+background container even when it has a `loops` group; the Snow slope skiers
+use it so they receive the same grade as the piste patch each frame carries.
+Do not mark crisp people (rescue, campers) as `filtered`.
+
+**A timed background event is not a loop.** The Frostpeak avalanche lives in
+`manifest.timed.events` (`firstMs` 40000, `repeatMs` 75000, `durationMs`
+9000): `Skybox` owns two sprites for it, samples the strip frames across the
+duration and hides it outside the window. It is skipped by the ordinary strip
+list, so it has no `items` and no permanent `loops`/`ambient` actor. The debug
+hook reports `timed: { events, active }`; the manifest test pins the late
+first occurrence and the repeat period.
 
 ## Input and aim
 

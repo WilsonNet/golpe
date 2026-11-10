@@ -1,8 +1,9 @@
 # Skybox art
 
 The contract is [`scripts/skybox/CONTRACT.md`](../scripts/skybox/CONTRACT.md);
-the palettes are [`palette.json`](palette.json) (Waterfront) and
-[`castle/palette.json`](castle/palette.json) (Castle); the runtime decision and
+the palettes are [`palette.json`](palette.json) (Waterfront),
+[`castle/palette.json`](castle/palette.json) (Castle) and
+[`snow/palette.json`](snow/palette.json) (Snow); the runtime decision and
 measurements are in [`specs/skybox.md`](../specs/skybox.md).
 
 ## The styles
@@ -19,12 +20,18 @@ measurements are in [`specs/skybox.md`](../specs/skybox.md).
   breach, flags, the princess, the trebuchet, wall fights, archers and torches.
   `.venv/bin/python scripts/skybox/castle/generate.py`
   Its layer map and anchors are in `scripts/skybox/castle/NOTES.md`.
+- **`public/assets/skybox/snow/`** — `scripts/skybox/snow/generate.py`.
+  The Snow theme's alpine noon: jagged peaks, summit climbers, skiers,
+  snowboarders, Sherpas, a camp, a rescue hut and team, a chairlift,
+  helicopters, and a timed avalanche.
+  `.venv/bin/python scripts/skybox/snow/generate.py`
+  Its layer map and anchors are in `scripts/skybox/snow/NOTES.md`.
 
 The generator writes a `manifest.json` with a content hash per PNG, a
 `contact.png` (the flattened review image) and a `NOTES.md`. The game loads the
-Waterfront under `?sky=hand|off`; a Castle map loads the Castle manifest beside
-the global choice. The hash is what keeps a regenerated layer from being paired
-with a cached old one.
+Waterfront under `?sky=hand|off`; a Castle or Snow map loads that theme's
+manifest beside the global choice. The hash is what keeps a regenerated layer
+from being paired with a cached old one.
 
 ## The shape
 

@@ -34,6 +34,7 @@ import {
 	loadedSkybox,
 	type SkyboxAmbientDef,
 	type SkyboxLoopsDef,
+	type SkyboxTimedEventDef,
 	type SkyChoice,
 	skyboxChoice,
 	type ThemeSkyVariant,
@@ -76,6 +77,8 @@ export interface SkyboxDebugState {
 	loops: { clockMs: number; groups: number; actors: number } | null;
 	/** The first loop strip's current frame, for the probe. */
 	loopFrame: number;
+	/** Occasional scenery events (the Frostpeak avalanche), if any. */
+	timed: { events: number; active: string[] } | null;
 }
 
 interface ImageView {
@@ -102,6 +105,14 @@ interface StripItem {
 	/** Last drawn screen position, for the probe. */
 	lastX: number;
 	lastY: number;
+}
+
+interface TimedView {
+	def: SkyboxTimedEventDef;
+	frames: Texture[];
+	factor: number;
+	copies: [Sprite, Sprite];
+	lastFrame: number;
 }
 
 interface StripView {
@@ -161,6 +172,9 @@ export class Skybox {
 	private readonly inhabitants = new Container();
 	private readonly images: ImageView[] = [];
 	private readonly strips: StripView[] = [];
+	private readonly timedViews: TimedView[] = [];
+	/** One filtered container per (parent, depth) bucket. */
+	private readonly depthContainers = new Map<string, Container>();
 	private readonly fallback: Sprite | null = null;
 	private readonly scrim: Graphics | null = null;
 	/** A static, screen-locked film grain over the scenery, under the people. */
@@ -177,7 +191,30 @@ export class Skybox {
 	private cameraX = 0;
 
 	/**
-	 * `candidate` is the theme-owned panorama (the Castle's dusk siege) when a
+	 * The container an actor at `depth` belongs in: near actors stay on the
+	 * parent, mid/far actors share a container with a blur and a colour grade.
+	 * One filter per bucket keeps atmospheric perspective cheap; a filter per
+	 * sprite would be dozens of render targets.
+	 */
+	private depthParent(parent: Container, depth: number): Container {
+		const bucket = Math.max(0, Math.min(2, Math.round(depth)));
+		if (bucket === 0) return parent;
+		const key = `${parent === this.art ? "art" : "life"}:${bucket}`;
+		const existing = this.depthContainers.get(key);
+		if (existing) return existing;
+		const container = new Container();
+		const blur = new BlurFilter({ strength: 0.8 * bucket, quality: 1 });
+		const grade = new ColorMatrixFilter();
+		grade.saturate(1 - 0.14 * bucket, false);
+		grade.brightness(1 - 0.025 * bucket, false);
+		container.filters = [blur, grade];
+		parent.addChild(container);
+		this.depthContainers.set(key, container);
+		return container;
+	}
+
+	/**
+	 * `candidate` is the theme-owned panorama (the Castle or Snow art) when a
 	 * map has one; omitted means the player's global Waterfront choice. `null`
 	 * is the plain-gradient fallback.
 	 */
@@ -221,6 +258,14 @@ export class Skybox {
 				if (!frames?.length) continue;
 				const group = this.ambient?.groups.find((g) => g.layer === def.id);
 				const loopGroup = this.loops?.groups.find((g) => g.layer === def.id);
+				if (
+					loaded.manifest.timed?.events.some((e) => e.layer === def.id) &&
+					!group &&
+					!loopGroup
+				) {
+					// A timed event owns its own sprites; no empty strip view.
+					continue;
+				}
 				const strip: StripView = {
 					def,
 					order: this.images.length + this.strips.length,
@@ -234,12 +279,14 @@ export class Skybox {
 					[]) {
 					const a = new Sprite(frames[0]);
 					const b = new Sprite(frames[0]);
+					const scale = item.scale ?? 1;
+					const parent = (group || loopGroup) && !def.filtered ? this.inhabitants : this.art;
+					const atDepth = this.depthParent(parent, item.depth ?? 0);
 					for (const s of [a, b]) {
 						s.anchor.set(0);
 						s.alpha = def.alpha ?? 1;
-						if (item.flip) s.scale.x = -1;
-						if (group || loopGroup) this.inhabitants.addChild(s);
-						else this.art.addChild(s);
+						s.scale.set(item.flip ? -scale : scale, scale);
+						atDepth.addChild(s);
 					}
 					strip.items.push({
 						u: item.u,
@@ -281,6 +328,28 @@ export class Skybox {
 				layer.copies.push(sprite);
 			}
 			this.images.push(layer);
+		}
+
+		for (const event of loaded.manifest.timed?.events ?? []) {
+			const layer = loaded.layers.find((l) => l.id === event.layer);
+			if (!layer) continue;
+			const frames = layer.slices;
+			if (!frames?.length) continue;
+			const a = new Sprite(frames[0]);
+			const b = new Sprite(frames[0]);
+			for (const sprite of [a, b]) {
+				sprite.anchor.set(0);
+				sprite.alpha = event.alpha ?? 1;
+				sprite.visible = false;
+				this.inhabitants.addChild(sprite);
+			}
+			this.timedViews.push({
+				def: event,
+				frames,
+				factor: layerFactor(loaded.manifest, layer),
+				copies: [a, b],
+				lastFrame: -1,
+			});
 		}
 
 		// A screen-locked film grain sits above the blurred scenery and below
@@ -434,6 +503,40 @@ export class Skybox {
 				item.lastY = item.v + bob;
 			}
 		}
+
+		for (const event of this.timedViews) {
+			const { def } = event;
+			const local = this.elapsedMs - def.firstMs;
+			const period = def.repeatMs ?? 0;
+			const phase = period > 0 ? wrap(local, period) : local;
+			const active = local >= 0 && phase < def.durationMs;
+			if (!active) {
+				for (const sprite of event.copies) sprite.visible = false;
+				continue;
+			}
+			const frameIndex = Math.min(
+				event.frames.length - 1,
+				Math.floor((phase / def.durationMs) * event.frames.length),
+			);
+			const frame = event.frames[frameIndex];
+			if (!frame) continue;
+			if (frameIndex !== event.lastFrame) {
+				event.lastFrame = frameIndex;
+				for (const sprite of event.copies) sprite.texture = frame;
+			}
+			const shift = wrap(cameraX * event.factor, W);
+			const screenX = wrap(def.u - shift, W);
+			const w = frame.width;
+			const x0 = cameraX + screenX;
+			const x1 = x0 - W;
+			const [a, b] = event.copies;
+			a.x = x0;
+			b.x = x1;
+			a.y = lockY + overY * (1 - event.factor) + def.v;
+			b.y = a.y;
+			a.visible = screenX + w > 0 && screenX < viewW;
+			b.visible = screenX - W + w > 0 && screenX - W < viewW;
+		}
 	}
 
 	debugState(): SkyboxDebugState {
@@ -513,6 +616,15 @@ export class Skybox {
 			ambient,
 			loops,
 			loopFrame: this.loopFrame,
+			timed:
+				this.timedViews.length > 0
+					? {
+							events: this.timedViews.length,
+							active: this.timedViews
+								.filter((v) => v.copies[0]?.visible)
+								.map((v) => v.def.id),
+						}
+					: null,
 			order,
 		};
 	}
@@ -526,6 +638,10 @@ export class Skybox {
 		this.art.filters = [];
 		for (const filter of this.inhabitants.filters ?? []) filter.destroy();
 		this.inhabitants.filters = [];
+		for (const container of this.depthContainers.values()) {
+			for (const filter of container.filters ?? []) filter.destroy();
+			container.filters = [];
+		}
 		this.parent.removeChild(this.root);
 		// Textures are shared, loaded once and reused by the next arena build;
 		// the sprites are the only per-stage cost.

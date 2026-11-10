@@ -240,13 +240,13 @@ A theme is a palette over the same hand-set 9-slice tiles
 | Waterfront | mossy stone quay | the hand-painted panorama (`assets/skybox/hand/`) |
 | Castle | grey flagstone, crimson banner band | the painted dusk siege (`assets/skybox/castle/`): keep, walls, camp, breach, flags, princess, trebuchet, wall fights |
 | Meadow | grass over packed earth | `ThemeSky` procedural: blue sky, rolling hills and trees, drifting clouds |
-| Snow | packed snow on blue-grey rock, ice band | `ThemeSky` procedural: pale sky, snow-capped peaks, pines, falling snow |
+| Snow | packed snow on blue-grey rock, ice band | the painted alpine bowl (`assets/skybox/snow/`): peaks, summit climbers, skiers, snowboarders, Sherpas, camp, rescue hut, chairlift, helicopters and a timed avalanche |
 
 The painted backdrops are blurred and desaturated like the Waterfront, so
 the platforms and fighters stay the high-contrast band. **Graphics → Off still
 wins**: a themed map shows the plain gradient for a player who chose it, and
-**Flat** still draws the competitive blocks. A missing Castle asset falls back
-to its old procedural `ThemeSky` silhouette.
+**Flat** still draws the competitive blocks. A missing theme panorama falls
+back to its old procedural `ThemeSky` silhouette.
 
 ## Not implemented
 

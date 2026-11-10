@@ -410,10 +410,11 @@ export async function loadAssets(): Promise<void> {
 	// The parallax skybox is optional art: a missing candidate falls back to
 	// the gradient sky, so this await must never be allowed to fail the boot.
 	// Themed panoramas load beside the player's Waterfront choice; the Castle
-	// swaps in its own painted layers when the match's theme asks for them.
+	// and Snow swap in their own painted layers when the match's theme asks.
 	await Promise.all([
 		preloadSkyboxAssets(),
 		preloadThemeSkybox("castle"),
+		preloadThemeSkybox("snow"),
 	]);
 
 	// The platform tileset is optional too: a missing atlas draws the original

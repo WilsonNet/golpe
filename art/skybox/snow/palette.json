@@ -1,0 +1,33 @@
+{
+  "name": "alpine-noon",
+  "note": "A bright alpine noon at Frostpeak: deep blue sky, pale snow and blue-grey rock, with warm chalet windows, red/blue ski gear and rescue markings as the saturated notes. No pure black and no pure white; the brightest snow is #f4f8ff and the deepest shadow is #22213a.",
+  "groups": {
+    "sky": ["#2f6b98", "#3f88ad", "#5aa6bd", "#78c2c7", "#9ad8cd", "#c6ebdc", "#eaf3df"],
+    "sun": ["#fff3c9", "#ffe6a1", "#ffd37a", "#f6b45b"],
+    "clouds": ["#f4f8ff", "#e8f0fb", "#d2dfec", "#b4c7dc", "#96aecb"],
+    "snow": ["#f4f8ff", "#e8f0fb", "#d2dfec", "#b4c7dc", "#96aecb", "#7b93b8", "#5a7194"],
+    "rock": ["#6b7088", "#565b73", "#43475e", "#33364a"],
+    "ice": ["#c8f7ec", "#9ad8cd", "#78c2c7", "#5aa6bd", "#42b2c2", "#2f8ba8"],
+    "wood": ["#7f5a45", "#6b4a3e", "#553a32", "#3f2b26"],
+    "gold": ["#ffe08a", "#f7c85f", "#e4a73f", "#c9852f"],
+    "red": ["#f26a4f", "#e45a4a", "#d24f4a", "#a83a55", "#7d2b44"],
+    "blue": ["#8e6bc0", "#6e54a8", "#4c7fc0", "#2f5f9e", "#3b395e", "#4c4a72"],
+    "green": ["#8dc46f", "#478a58", "#2f6c4d", "#235342"],
+    "skin": ["#f2c9a0", "#d9a77f"],
+    "shadow": ["#2d2b4b", "#22213a"]
+  },
+  "all": [
+    "#2f6b98", "#3f88ad", "#5aa6bd", "#78c2c7", "#9ad8cd", "#c6ebdc", "#eaf3df",
+    "#fff3c9", "#ffe6a1", "#ffd37a", "#f6b45b",
+    "#f4f8ff", "#e8f0fb", "#d2dfec", "#b4c7dc", "#96aecb", "#7b93b8", "#5a7194",
+    "#6b7088", "#565b73", "#43475e", "#33364a",
+    "#c8f7ec", "#42b2c2", "#2f8ba8",
+    "#7f5a45", "#6b4a3e", "#553a32", "#3f2b26",
+    "#ffe08a", "#f7c85f", "#e4a73f", "#c9852f",
+    "#f26a4f", "#e45a4a", "#d24f4a", "#a83a55", "#7d2b44",
+    "#8e6bc0", "#6e54a8", "#4c7fc0", "#2f5f9e", "#3b395e", "#4c4a72",
+    "#8dc46f", "#478a58", "#2f6c4d", "#235342",
+    "#f2c9a0", "#d9a77f",
+    "#2d2b4b", "#22213a"
+  ]
+}
