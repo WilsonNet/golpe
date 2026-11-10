@@ -1,11 +1,11 @@
 /**
  * Loading the parallax skybox candidates.
  *
- * Two independently authored panoramas ship beside each other — a pre-rendered
- * voxel city and a hand-drawn pixel-art city — and the runtime picks one from
- * `?sky=` without knowing how it was made. The swap is a URL, not a setting
- * store, for the same reason the arena size is: a link can carry the look, and
- * a probe can measure it.
+ * The hand-painted Waterfront is the player's global panorama. A theme may
+ * own a second one beside it (the Castle's dusk siege), loaded under the same
+ * manifest contract; the runtime draws either without knowing how the art was
+ * made. The global swap is a URL, not a setting store, for the same reason the
+ * arena size is: a link can carry the look, and a probe can measure it.
  *
  * The manifest is fetched uncached and names every PNG by a content hash, so a
  * re-render can never be paired with a browser-cached older layer. This is the
@@ -19,6 +19,14 @@ import { EventBus } from "../EventBus";
 /** The style. `off` is the plain-gradient escape hatch. */
 const SKY_VARIANTS = ["hand"] as const;
 type SkyVariant = (typeof SKY_VARIANTS)[number];
+
+/**
+ * A theme-owned panorama. These are not player choices: the Waterfront stays
+ * the global backdrop, and a themed map wears its own art. They use exactly
+ * the same manifest and layer contract as `hand`.
+ */
+const THEME_SKY_VARIANTS = ["castle"] as const;
+export type ThemeSkyVariant = (typeof THEME_SKY_VARIANTS)[number];
 
 /** What `?sky=off` means. */
 export type SkyChoice = SkyVariant | "off";
@@ -128,7 +136,7 @@ export interface LoadedSkyboxLayer extends SkyboxLayerDef {
 }
 
 export interface LoadedSkybox {
-	variant: SkyVariant;
+	variant: SkyVariant | ThemeSkyVariant;
 	manifest: SkyboxManifest;
 	layers: LoadedSkyboxLayer[];
 }
@@ -137,6 +145,10 @@ let choice: SkyChoice | null = null;
 let loadPromise: Promise<LoadedSkybox | null> | null = null;
 let loaded: LoadedSkybox | null = null;
 let pendingChoice = false;
+
+/** Theme panoramas load once, independently of the player's global choice. */
+const themeLoads = new Map<ThemeSkyVariant, Promise<LoadedSkybox | null>>();
+const themeLoaded = new Map<ThemeSkyVariant, LoadedSkybox | null>();
 
 /** The player's own choice, kept beside the bindings and the mixer. */
 const STORAGE_KEY = "golpe:skybox";
@@ -224,36 +236,74 @@ export function preloadSkyboxAssets(): Promise<LoadedSkybox | null> {
 			if (variant === skyboxChoice()) loaded = null;
 			return null;
 		}
-		try {
-			const res = await fetch(`assets/skybox/${variant}/manifest.json`, {
-				cache: "no-cache",
-			});
-			if (!res.ok) throw new Error(`missing manifest (${res.status})`);
-			const manifest = (await res.json()) as SkyboxManifest;
-			if (!manifest.layers?.length) throw new Error("manifest has no layers");
-
-			const layers = await Promise.all(
-				manifest.layers.map((def) => loadLayer(variant, def)),
-			);
-			const result = { variant, manifest, layers };
-			// A second change while the fetch was in flight wins; never let an
-			// older response overwrite the choice the player is looking at.
-			if (variant === skyboxChoice()) loaded = result;
-			return result;
-		} catch (err) {
-			console.warn(
-				`[skybox] ${variant} unavailable — drawing the gradient fallback`,
-				err,
-			);
-			if (variant === skyboxChoice()) loaded = null;
-			return null;
-		}
+		const result = await loadCandidate(
+			variant,
+			`assets/skybox/${variant}/manifest.json`,
+		);
+		// A second change while the fetch was in flight wins; never let an
+		// older response overwrite the choice the player is looking at.
+		if (variant === skyboxChoice()) loaded = result;
+		return result;
 	})();
 	return loadPromise;
 }
 
+/**
+ * The theme's own panorama, if it loaded. `null` keeps the procedural
+ * `ThemeSky` fallback — a themed map must still play without the art package.
+ */
+export function loadedThemeSkybox(
+	theme: ThemeSkyVariant,
+): LoadedSkybox | null {
+	return themeLoaded.get(theme) ?? null;
+}
+
+/** Load a themed panorama once, independently of the graphics setting. */
+export function preloadThemeSkybox(
+	theme: ThemeSkyVariant,
+): Promise<LoadedSkybox | null> {
+	const existing = themeLoads.get(theme);
+	if (existing) return existing;
+	const promise = loadCandidate(
+		theme,
+		`assets/skybox/${theme}/manifest.json`,
+	).then((result) => {
+		themeLoaded.set(theme, result);
+		return result;
+	});
+	themeLoads.set(theme, promise);
+	return promise;
+}
+
+/**
+ * Fetch one manifest and its layers. The manifest names every PNG by content
+ * hash, so a re-render can never be paired with a browser-cached older layer.
+ */
+async function loadCandidate(
+	variant: SkyVariant | ThemeSkyVariant,
+	manifestUrl: string,
+): Promise<LoadedSkybox | null> {
+	try {
+		const res = await fetch(manifestUrl, { cache: "no-cache" });
+		if (!res.ok) throw new Error(`missing manifest (${res.status})`);
+		const manifest = (await res.json()) as SkyboxManifest;
+		if (!manifest.layers?.length) throw new Error("manifest has no layers");
+
+		const layers = await Promise.all(
+			manifest.layers.map((def) => loadLayer(variant, def)),
+		);
+		return { variant, manifest, layers };
+	} catch (err) {
+		console.warn(
+			`[skybox] ${variant} unavailable — using the fallback backdrop`,
+			err,
+		);
+		return null;
+	}
+}
+
 async function loadLayer(
-	variant: SkyVariant,
+	variant: SkyVariant | ThemeSkyVariant,
 	def: SkyboxLayerDef,
 ): Promise<LoadedSkyboxLayer> {
 	const alias = `skybox:${variant}:${def.id}`;

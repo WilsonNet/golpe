@@ -1,0 +1,334 @@
+{
+	"name": "castle",
+	"title": "Castle Keep \u2014 Dusk Siege",
+	"width": 1600,
+	"height": 600,
+	"haze": 0.9,
+	"ambient": {
+		"loopMs": 120000,
+		"groups": [
+			{
+				"layer": "crows",
+				"actors": [
+					{
+						"u": 120,
+						"v": 104,
+						"speedX": 7.5,
+						"bobAmp": 3.0,
+						"bobFreq": 0.7,
+						"phase": 0.0
+					},
+					{
+						"u": 420,
+						"v": 150,
+						"speedX": -9.0,
+						"bobAmp": 2.4,
+						"bobFreq": 0.9,
+						"phase": 1.1,
+						"flip": true
+					},
+					{
+						"u": 760,
+						"v": 82,
+						"speedX": 6.0,
+						"bobAmp": 3.6,
+						"bobFreq": 0.6,
+						"phase": 2.2
+					},
+					{
+						"u": 1020,
+						"v": 176,
+						"speedX": -11.0,
+						"bobAmp": 2.0,
+						"bobFreq": 1.0,
+						"phase": 3.3,
+						"flip": true
+					},
+					{
+						"u": 1320,
+						"v": 120,
+						"speedX": 8.0,
+						"bobAmp": 2.8,
+						"bobFreq": 0.8,
+						"phase": 4.4
+					},
+					{
+						"u": 1500,
+						"v": 60,
+						"speedX": -7.0,
+						"bobAmp": 2.2,
+						"bobFreq": 0.75,
+						"phase": 5.5,
+						"flip": true
+					}
+				]
+			}
+		]
+	},
+	"loops": {
+		"clockMs": 12000,
+		"groups": [
+			{
+				"layer": "flags",
+				"actors": [
+					{
+						"u": 678,
+						"v": 6,
+						"frameOffset": 0
+					},
+					{
+						"u": 558,
+						"v": 116,
+						"frameOffset": 1
+					},
+					{
+						"u": 802,
+						"v": 116,
+						"frameOffset": 2
+					},
+					{
+						"u": 610,
+						"v": 288,
+						"frameOffset": 3
+					},
+					{
+						"u": 766,
+						"v": 288,
+						"frameOffset": 1
+					},
+					{
+						"u": 124,
+						"v": 246,
+						"frameOffset": 2
+					},
+					{
+						"u": 454,
+						"v": 328,
+						"frameOffset": 3
+					},
+					{
+						"u": 980,
+						"v": 318,
+						"frameOffset": 1
+					},
+					{
+						"u": 1149,
+						"v": 240,
+						"frameOffset": 2
+					},
+					{
+						"u": 1451,
+						"v": 342,
+						"frameOffset": 3
+					},
+					{
+						"u": 1268,
+						"v": 316,
+						"frameOffset": 0
+					},
+					{
+						"u": 1356,
+						"v": 192,
+						"frameOffset": 2
+					}
+				]
+			},
+			{
+				"layer": "princess",
+				"actors": [
+					{
+						"u": 680,
+						"v": 226,
+						"frameOffset": 0
+					}
+				]
+			},
+			{
+				"layer": "trebuchet",
+				"actors": [
+					{
+						"u": 278,
+						"v": 504,
+						"frameOffset": 0
+					}
+				]
+			},
+			{
+				"layer": "battle",
+				"actors": [
+					{
+						"u": 196,
+						"v": 380,
+						"frameOffset": 0
+					},
+					{
+						"u": 1128,
+						"v": 282,
+						"frameOffset": 2
+					},
+					{
+						"u": 990,
+						"v": 318,
+						"frameOffset": 1
+					}
+				]
+			},
+			{
+				"layer": "archers",
+				"actors": [
+					{
+						"u": 512,
+						"v": 386,
+						"frameOffset": 0
+					},
+					{
+						"u": 1200,
+						"v": 386,
+						"frameOffset": 2
+					}
+				]
+			},
+			{
+				"layer": "torches",
+				"actors": [
+					{
+						"u": 300,
+						"v": 386,
+						"frameOffset": 0
+					},
+					{
+						"u": 560,
+						"v": 386,
+						"frameOffset": 2
+					},
+					{
+						"u": 880,
+						"v": 386,
+						"frameOffset": 1
+					},
+					{
+						"u": 1230,
+						"v": 386,
+						"frameOffset": 3
+					}
+				]
+			}
+		]
+	},
+	"layers": [
+		{
+			"id": "sky",
+			"type": "image",
+			"src": "assets/skybox/castle/sky.png",
+			"version": "2c9b5f53bee6",
+			"factor": 0.015,
+			"driftX": 0.5,
+			"alpha": 1
+		},
+		{
+			"id": "far",
+			"type": "image",
+			"src": "assets/skybox/castle/far.png",
+			"version": "42e7f6d29ee1",
+			"factor": 0.06
+		},
+		{
+			"id": "mid",
+			"type": "image",
+			"src": "assets/skybox/castle/mid.png",
+			"version": "c25bb276650a",
+			"factor": 0.18
+		},
+		{
+			"id": "near",
+			"type": "image",
+			"src": "assets/skybox/castle/near.png",
+			"version": "6795c854f273",
+			"factor": 0.5,
+			"alpha": 0.62
+		},
+		{
+			"id": "flags",
+			"type": "strip",
+			"src": "assets/skybox/castle/flags.png",
+			"version": "be1f7261ecce",
+			"factor": 0.3,
+			"align": "mid",
+			"frameW": 32,
+			"frameH": 24,
+			"frames": 4,
+			"fps": 6
+		},
+		{
+			"id": "princess",
+			"type": "strip",
+			"src": "assets/skybox/castle/princess.png",
+			"version": "0ad23ce7bb80",
+			"factor": 0.3,
+			"align": "mid",
+			"frameW": 24,
+			"frameH": 34,
+			"frames": 4,
+			"fps": 4
+		},
+		{
+			"id": "trebuchet",
+			"type": "strip",
+			"src": "assets/skybox/castle/trebuchet.png",
+			"version": "72e326c0a21c",
+			"factor": 0.3,
+			"align": "mid",
+			"frameW": 72,
+			"frameH": 52,
+			"frames": 4,
+			"fps": 3
+		},
+		{
+			"id": "battle",
+			"type": "strip",
+			"src": "assets/skybox/castle/battle.png",
+			"version": "ee84dfbd67e7",
+			"factor": 0.3,
+			"align": "mid",
+			"frameW": 40,
+			"frameH": 24,
+			"frames": 4,
+			"fps": 6
+		},
+		{
+			"id": "archers",
+			"type": "strip",
+			"src": "assets/skybox/castle/archers.png",
+			"version": "c8a243f4c50e",
+			"factor": 0.3,
+			"align": "mid",
+			"frameW": 28,
+			"frameH": 18,
+			"frames": 4,
+			"fps": 5
+		},
+		{
+			"id": "torches",
+			"type": "strip",
+			"src": "assets/skybox/castle/torches.png",
+			"version": "a54454107e96",
+			"factor": 0.3,
+			"align": "mid",
+			"frameW": 10,
+			"frameH": 18,
+			"frames": 4,
+			"fps": 8
+		},
+		{
+			"id": "crows",
+			"type": "strip",
+			"src": "assets/skybox/castle/crows.png",
+			"version": "129965b92d8d",
+			"factor": 0.04,
+			"frameW": 10,
+			"frameH": 5,
+			"frames": 4,
+			"fps": 10
+		}
+	]
+}

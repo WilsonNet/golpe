@@ -18,7 +18,7 @@
 import { BlurFilter, ColorMatrixFilter, Container, Graphics } from "pixi.js";
 import type { MapTheme } from "../simulation/Tilemap";
 import { Skybox, type SkyboxDebugState } from "./Skybox";
-import { skyboxChoice } from "./skyboxAssets";
+import { loadedThemeSkybox, skyboxChoice } from "./skyboxAssets";
 
 /** One silhouette tile's width. Two copies wrap it, like the panorama. */
 const TILE_W = 1600;
@@ -446,6 +446,13 @@ export function createBackdrop(
 	theme: MapTheme,
 ): Backdrop {
 	if (theme !== "waterfront" && skyboxChoice() !== "off") {
+		// The Castle has a painted panorama of its own, with the same layers
+		// and programs the Waterfront uses. If it did not load (a probe with no
+		// asset server), the procedural sky below is still a playable backdrop.
+		if (theme === "castle") {
+			const castle = loadedThemeSkybox("castle");
+			if (castle) return new Skybox(parent, view, castle);
+		}
 		return new ThemeSky(parent, theme, view);
 	}
 	return new Skybox(parent, view);

@@ -73,7 +73,7 @@ The live stack, its ports and its first-boot steps are documented in
 | **How do I host a LAN game, and what is in the pack?** | [`specs/lan.md`](specs/lan.md) — the host pack, one port, mDNS discovery, the LAN badge, the build/protocol gate · [`docs/running-the-game.md`](docs/running-the-game.md) |
 | What happens when a match ends? | [`specs/play-of-the-game.md`](specs/play-of-the-game.md) — the reel, the camera edit, then the podium |
 | What should the game sound like, and where does the music come from? | [`specs/audio.md`](specs/audio.md) · [`audio/README.md`](audio/README.md) — MIDI sources, the soundfont per track, the mixer |
-| What is behind the arena, and how is it drawn? | [`specs/skybox.md`](specs/skybox.md) · [`art/skybox/README.md`](art/skybox/README.md) — the hand-painted Waterfront (house style) and its loop / ambient people plans |
+| What is behind the arena, and how is it drawn? | [`specs/skybox.md`](specs/skybox.md) · [`art/skybox/README.md`](art/skybox/README.md) — the hand-painted Waterfront (house style), the Castle's own dusk-siege panorama, and their loop / ambient people plans |
 | What does the arena stand on? | [`specs/tilemap.md`](specs/tilemap.md) — the map format, the two platform skins, 9-slice autotiling and the props |
 | **How do players build maps and send them as PRs?** | [`specs/map-maker.md`](specs/map-maker.md) — `?mapmaker=true`: the editor, the four themes, 125 decorations (the drawer, brushes, ✨ Prettify), vertical maps, the play-test against bots, the checks, and Publish (screenshots + a clip) · [`maps/`](maps/README.md) is the library |
 | How do I regenerate the platform art? | `.venv/bin/python scripts/tilesets/generate.py` → `public/assets/tilesets/`; see [`scripts/tilesets/CONTRACT.md`](scripts/tilesets/CONTRACT.md) |
@@ -531,6 +531,18 @@ simulation, camera and fighters keep running — and from the root menu it is
 used by the next match. See [specs/skybox.md](specs/skybox.md) and
 [specs/tilemap.md](specs/tilemap.md).
 
+**A theme may own a panorama.** The Castle loads
+`assets/skybox/castle/manifest.json` through the same `Skybox`/manifest code as
+the Waterfront (`preloadThemeSkybox`, `loadedThemeSkybox`, passed as the
+`Skybox` constructor's third argument). It is preloaded beside the global
+choice and is independent of it: `?sky=off` still wins, and a missing manifest
+falls back to the procedural `ThemeSky` silhouette instead of a boot failure.
+The Castle's fourth image layer (`near`) is a low parapet above the arena
+floor, and its vignettes align to `mid`; see
+[`scripts/skybox/castle/NOTES.md`](scripts/skybox/castle/NOTES.md). Never put a
+fixed foreground mass in a parallax layer: the wrap moves it through the fight
+band.
+
 **The *Move list* is a Guilty Gear-style command list** — opened by the root
 menu's *More → Move list* (for the hero picked on the home screen) and the Esc menu's *Moves*
 item: one move at a time, a category rail, live-keycap commands from the
@@ -861,7 +873,7 @@ nameplate, not just the scoreboard; a room with no humans in it is reaped.
 
 **`?mapmaker=true` is the map maker** (root menu → Map maker): draw platforms,
 drop spawns and decor, pick one of four themes (Waterfront, Castle, Meadow,
-Snow — a palette over the same tiles plus a procedural backdrop), check it
+Snow — a palette over the same tiles plus a painted or procedural backdrop), check it
 live, **Test vs bots** in the real game in a frame, then **Publish** a pull
 request with an overview, play-test screenshots and a 20s clip (GitHub device
 sign-in via the server relay when `GOLPE_GITHUB_CLIENT_ID` is set, a pasted

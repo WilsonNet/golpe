@@ -235,17 +235,18 @@ A theme is a palette over the same hand-set 9-slice tiles
 (`scripts/tilesets/themes.py` recolours the Waterfront's pixel maps, so the
 3×3 joint gate passes by construction) plus a backdrop:
 
-| Theme | Platforms | Backdrop (`render/ThemeSky.ts`) |
+| Theme | Platforms | Backdrop |
 |---|---|---|
-| Waterfront | mossy stone quay | the hand-painted panorama |
-| Castle | grey flagstone, crimson banner band | dusk sky, towers and ramparts, twinkling stars |
-| Meadow | grass over packed earth | blue sky, rolling hills and trees, drifting clouds |
-| Snow | packed snow on blue-grey rock, ice band | pale sky, snow-capped peaks, pines, falling snow |
+| Waterfront | mossy stone quay | the hand-painted panorama (`assets/skybox/hand/`) |
+| Castle | grey flagstone, crimson banner band | the painted dusk siege (`assets/skybox/castle/`): keep, walls, camp, breach, flags, princess, trebuchet, wall fights |
+| Meadow | grass over packed earth | `ThemeSky` procedural: blue sky, rolling hills and trees, drifting clouds |
+| Snow | packed snow on blue-grey rock, ice band | `ThemeSky` procedural: pale sky, snow-capped peaks, pines, falling snow |
 
-The procedural backdrops are blurred and desaturated like the Waterfront, so
+The painted backdrops are blurred and desaturated like the Waterfront, so
 the platforms and fighters stay the high-contrast band. **Graphics → Off still
 wins**: a themed map shows the plain gradient for a player who chose it, and
-**Flat** still draws the competitive blocks.
+**Flat** still draws the competitive blocks. A missing Castle asset falls back
+to its old procedural `ThemeSky` silhouette.
 
 ## Not implemented
 

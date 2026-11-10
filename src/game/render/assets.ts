@@ -18,7 +18,7 @@ import {
 	Texture,
 } from "pixi.js";
 import { PLAYER_HEIGHT, PLAYER_WIDTH } from "../simulation/Arena";
-import { preloadSkyboxAssets } from "./skyboxAssets";
+import { preloadSkyboxAssets, preloadThemeSkybox } from "./skyboxAssets";
 import { loadTileArt } from "./tilesets";
 
 export const TEX = {
@@ -409,7 +409,12 @@ export async function loadAssets(): Promise<void> {
 
 	// The parallax skybox is optional art: a missing candidate falls back to
 	// the gradient sky, so this await must never be allowed to fail the boot.
-	await preloadSkyboxAssets();
+	// Themed panoramas load beside the player's Waterfront choice; the Castle
+	// swaps in its own painted layers when the match's theme asks for them.
+	await Promise.all([
+		preloadSkyboxAssets(),
+		preloadThemeSkybox("castle"),
+	]);
 
 	// The platform tileset is optional too: a missing atlas draws the original
 	// flat blocks. A broken art asset must never stop the fight.

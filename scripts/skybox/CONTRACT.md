@@ -1,8 +1,9 @@
 # Skybox asset contract
 
-The hand-painted **Waterfront** is the only shipped style. This contract
-describes its layers and its two people plans so the runtime does not need to
-know what the art depicts.
+The hand-painted **Waterfront** is the player's global style. The **Castle**
+theme owns a second panorama under the same contract — a dusk siege at the
+keep. This contract describes both: the layers, the two people plans, and the
+theme-owned rules so the runtime does not need to know what the art depicts.
 
 ## The world it has to sit in
 
@@ -117,6 +118,27 @@ Moving actors are declared once in the manifest's `ambient` object:
 - If a plan is absent, the runtime falls back to the strip's own `items` for
   backward compatibility, but the Waterfront ships both plans.
 
+## Theme-owned panoramas
+
+A themed map may own a panorama of its own. It uses this same manifest and
+layer contract; the only difference is how the runtime finds it:
+
+- The **Waterfront** is the player's global choice (`?sky=hand|off`,
+  `Graphics → Skybox`). It is `public/assets/skybox/hand/`.
+- The **Castle** is `public/assets/skybox/castle/`. It loads beside the global
+  choice and is worn by every map whose `theme` is `castle`, including
+  authored maps. **Off still wins**: a player who chose the plain gradient
+  sees the plain gradient on a Castle map too.
+- `meadow` and `snow` remain procedural `ThemeSky` silhouettes; they have no
+  panorama folder. `skyboxAssets.loadedThemeSkybox` returns `null` for a
+  missing theme and `createBackdrop` falls back to the procedural sky, so a
+  probe boot or a partial asset deploy still plays.
+
+The Castle panorama's own files and anchors are in
+[`castle/NOTES.md`](castle/NOTES.md). It has no waterfall; its strips are the
+waving flags, the princess, the trebuchet, the wall fights, the archers, the
+torches and the crows. The same `loops`/`ambient` rules apply.
+
 ## Texture contract
 
 - Every panorama is **1600 x 600 px**, one texture pixel = one world pixel.
@@ -125,7 +147,9 @@ Moving actors are declared once in the manifest's `ambient` object:
 - The sky is opaque. Every other layer is transparent where there is no art.
 - No anti-aliasing. Hard pixel edges, a shared limited palette, ordered
   dithering is welcome in gradients. Do not use pure black or pure white.
-- Use the palette in `art/skybox/palette.json`.
+- Use the palette in `art/skybox/palette.json` (Waterfront) or
+  `art/skybox/castle/palette.json` (Castle). No colour outside the variant's
+  palette.
 - The camera is a **side view**, slightly above the horizon. Read it as a
   side-scrolling platformer backdrop, not a first-person sky dome.
 
@@ -151,7 +175,10 @@ public/assets/skybox/<variant>/
   manifest.json
 ```
 
-`<variant>` is `hand`.
+`<variant>` is `hand` or `castle`. Both use the four image layers
+(`sky`, `far`, `mid`, `near`); the strip names and frame sizes are the
+variant's own. The Castle's are listed in [`castle/NOTES.md`](castle/NOTES.md).
+The Waterfront adds the falls and the quay people below.
 
 ### Falls strip
 

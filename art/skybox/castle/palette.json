@@ -1,0 +1,157 @@
+{
+  "name": "castle-dusk",
+  "note": "A dusk siege at the keep: indigo night above, rose and gold on the horizon, cold violet stone in shadow, warm lamplight and banners the only saturated colours. Shared by every PNG in assets/skybox/castle. No pure black and no pure white.",
+  "groups": {
+    "sky": [
+      "#191733",
+      "#232045",
+      "#302a55",
+      "#453764",
+      "#5f4370",
+      "#845674",
+      "#b06f7c",
+      "#d98c78",
+      "#f2b98a"
+    ],
+    "moon": [
+      "#fff3c9",
+      "#ffe6a1",
+      "#f6d6a8",
+      "#d3b79a"
+    ],
+    "far": [
+      "#4a3f63",
+      "#574a72",
+      "#65557f",
+      "#736286"
+    ],
+    "stone": [
+      "#8a7aa1",
+      "#7d6d94",
+      "#66567d",
+      "#6b5c83",
+      "#5b4d73",
+      "#54476b",
+      "#4c4064",
+      "#3e3454",
+      "#302945"
+    ],
+    "stoneDeep": [
+      "#2a2340",
+      "#221c35"
+    ],
+    "wood": [
+      "#7f5a45",
+      "#6b4a3e",
+      "#553a32",
+      "#3f2b26"
+    ],
+    "metal": [
+      "#d7d4e6",
+      "#b9b6cc",
+      "#8d8aa8",
+      "#6a6880"
+    ],
+    "gold": [
+      "#ffe08a",
+      "#f7c85f",
+      "#e4a73f",
+      "#c9852f"
+    ],
+    "window": [
+      "#fff3c9",
+      "#ffe08a",
+      "#ffd37a",
+      "#f6b45b"
+    ],
+    "banner": [
+      "#d24f4a",
+      "#c94d6a",
+      "#a83a55",
+      "#7d2b44",
+      "#8e6bc0",
+      "#6e54a8",
+      "#4c4a72",
+      "#3b395e"
+    ],
+    "fire": [
+      "#fff3c9",
+      "#ffe08a",
+      "#ff8a4c",
+      "#f26a4f",
+      "#d24f4a"
+    ],
+    "green": [
+      "#478a58",
+      "#2f6c4d"
+    ],
+    "skin": [
+      "#f2c9a0",
+      "#d9a77f"
+    ],
+    "shadow": [
+      "#2d2b4b",
+      "#22213a"
+    ]
+  },
+  "all": [
+    "#191733",
+    "#232045",
+    "#302a55",
+    "#453764",
+    "#5f4370",
+    "#845674",
+    "#b06f7c",
+    "#d98c78",
+    "#f2b98a",
+    "#fff3c9",
+    "#ffe6a1",
+    "#f6d6a8",
+    "#d3b79a",
+    "#4a3f63",
+    "#574a72",
+    "#65557f",
+    "#736286",
+    "#7d6d94",
+    "#6b5c83",
+    "#5b4d73",
+    "#4c4064",
+    "#3e3454",
+    "#302945",
+    "#2a2340",
+    "#221c35",
+    "#7f5a45",
+    "#6b4a3e",
+    "#553a32",
+    "#3f2b26",
+    "#d7d4e6",
+    "#b9b6cc",
+    "#8d8aa8",
+    "#6a6880",
+    "#ffe08a",
+    "#f7c85f",
+    "#e4a73f",
+    "#c9852f",
+    "#ffd37a",
+    "#f6b45b",
+    "#d24f4a",
+    "#c94d6a",
+    "#a83a55",
+    "#7d2b44",
+    "#8e6bc0",
+    "#6e54a8",
+    "#4c4a72",
+    "#3b395e",
+    "#ff8a4c",
+    "#f26a4f",
+    "#478a58",
+    "#2f6c4d",
+    "#f2c9a0",
+    "#d9a77f",
+    "#2d2b4b",
+    "#22213a",
+    "#66567d",
+    "#8a7aa1",
+    "#54476b"
+  ]
+}

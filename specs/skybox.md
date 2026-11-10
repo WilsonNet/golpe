@@ -11,10 +11,18 @@ presentation only. Nothing in `src/game/simulation/` knows it exists, and
 |---|---|---|
 | `?sky=hand` (default) | Pillow/numpy | the **house style**: the hand-painted solarpunk waterfront — tree, aqueduct, canal, quay, low conservatory, people, birds/airship/boats |
 | `?sky=off` | the original gradient | the readability fallback |
+| Castle theme | Pillow/numpy | `assets/skybox/castle/`: the dusk siege at the keep — sky, far town, keep and walls, foreground parapet, plus flags, the princess, the trebuchet, the wall fights, archers and torches |
 
-The Waterfront is the style the game is now pointed at. The pipeline is a folder
-under `public/assets/skybox/hand/`; the runtime contract is `SKY_VARIANTS` and
-the manifest below. There is deliberately no second style to maintain.
+The Waterfront is the style the game is pointed at for the global backdrop. The
+pipeline is a folder under `public/assets/skybox/hand/`; the runtime contract is
+`SKY_VARIANTS` and the manifest below. The **Castle** theme owns a second
+panorama under the same contract (`THEME_SKY_VARIANTS`), worn by every map whose
+theme is `castle`. It loads beside the global choice, so a player who chose
+**Off** still gets the plain gradient on a Castle map. Meadow and Snow remain
+procedural `ThemeSky` silhouettes; a missing Castle manifest falls back to the
+old procedural castle sky, never to a boot failure. See
+[`scripts/skybox/castle/NOTES.md`](../scripts/skybox/castle/NOTES.md) for its
+layer map and anchors.
 
 The **Graphics** submenu (root menu and Esc menu) shows a side-by-side
 Waterfront/Off comparison, writes the choice to `localStorage`, and applies it
@@ -47,6 +55,11 @@ image never repeats vertically (a city repeated above the sky reads as a bug).
 | `near` | 0.50 | canal, stone quay, pier and reflections |
 | `loops` | 0.50 | fixed people vignettes: cheer, picnic, date, spar, sport |
 | `ambient` | 0.03–0.50 | walkers, birds, zeppelin and boats |
+
+The Castle panorama uses the same table with its own story: `near` is a low
+foreground parapet at 0.50, and its vignettes (flags, princess, trebuchet,
+battle, archers, torches) align to `mid` at 0.18 while the crows are ambient at
+0.04. The actors are still crisp above the graded scenery.
 
 - **A waterfall follows the layer it falls out of.** An `align` on the strip
   resolves its factor through that layer; a strip with its own factor peels
@@ -265,4 +278,7 @@ three screens and checks:
   depth is real rather than a static painting.
 
 It writes one- and three-screen screenshots to `.playwright-mcp/skybox/` for a
-human to judge. The game is the gallery: `?sky=hand` / `?sky=off`.
+human to judge. The game is the gallery: `?sky=hand` / `?sky=off`, and
+`?map=castle-keep` for the theme-owned panorama (`__skyboxDebug().variant ===
+"castle"`). A theme panorama uses the same `order` shifts and `movers`, so the
+same delta check proves its layers are separate.

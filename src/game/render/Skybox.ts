@@ -28,6 +28,7 @@ import {
 import type { MapTheme } from "../simulation/Tilemap";
 import { TEX, tex } from "./assets";
 import {
+	type LoadedSkybox,
 	type LoadedSkyboxLayer,
 	layerFactor,
 	loadedSkybox,
@@ -35,11 +36,12 @@ import {
 	type SkyboxLoopsDef,
 	type SkyChoice,
 	skyboxChoice,
+	type ThemeSkyVariant,
 } from "./skyboxAssets";
 
 /** What the probe reads. */
 export interface SkyboxDebugState {
-	variant: SkyChoice;
+	variant: SkyChoice | ThemeSkyVariant;
 	/** Set when a themed map's procedural backdrop is drawn instead (`ThemeSky`). */
 	theme?: MapTheme;
 	loaded: boolean;
@@ -168,16 +170,24 @@ export class Skybox {
 	private readonly haze: number;
 	private readonly ambient: SkyboxAmbientDef | null;
 	private readonly loops: SkyboxLoopsDef | null;
+	private readonly loadedVariant: LoadedSkybox["variant"] | null = null;
 	private loopFrame = 0;
 	private elapsedMs = 0;
 	private fallFrame = 0;
 	private cameraX = 0;
 
+	/**
+	 * `candidate` is the theme-owned panorama (the Castle's dusk siege) when a
+	 * map has one; omitted means the player's global Waterfront choice. `null`
+	 * is the plain-gradient fallback.
+	 */
 	constructor(
 		private readonly parent: Container,
 		view: { width: number; height: number },
+		candidate?: LoadedSkybox | null,
 	) {
-		const loaded = loadedSkybox();
+		const loaded = candidate === undefined ? loadedSkybox() : candidate;
+		this.loadedVariant = loaded?.variant ?? null;
 		this.panoramaW = loaded?.manifest.width ?? view.width;
 		this.panoramaH = loaded?.manifest.height ?? view.height;
 		this.haze = Math.max(0, Math.min(2, loaded?.manifest.haze ?? 1));
@@ -485,7 +495,7 @@ export class Skybox {
 				}
 			: null;
 		return {
-			variant: loadedSkybox()?.variant ?? skyboxChoice(),
+			variant: this.loadedVariant ?? skyboxChoice(),
 			loaded: this.images.length > 0 || this.strips.length > 0,
 			layers: this.images.length + this.strips.length,
 			animatedFalls: this.strips

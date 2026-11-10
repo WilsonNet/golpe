@@ -364,6 +364,15 @@ placeholder sword for strip heroes; over Lia's rendered sword it was a second,
 bigger one, out of step with the hand. `sheetDrawsBlade` (a packed sheet with a
 `slash` clip) hides it; the trail stays, because the trail is the hitbox's read.
 
+**A theme-owned panorama must fall back to its procedural sky, not to a boot
+failure.** The Castle loads `assets/skybox/castle/manifest.json` beside the
+player's global Waterfront choice; `loadedThemeSkybox` returning `null` means
+`createBackdrop` draws the old `ThemeSky` silhouette, and `?sky=off` still wins.
+The same applies to a probe boot with no asset server: a missing art package
+costs the parallax, not the match. The four image layers keep the Waterfront
+factors (0.015 / 0.06 / 0.18 / 0.5); a fixed foreground mass must never live
+in a parallax layer, because the wrap carries it through the fight band.
+
 ## Input and aim
 
 - **Convert the cursor against the logical view, never `canvas.width`.** Under
