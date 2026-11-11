@@ -504,11 +504,19 @@ async function loadAtlasSheet(
  * a 2D canvas makes it a `CanvasSource`, which every renderer uploads
  * independently; the one-time copy buys a page that can run two apps.
  */
-function bakeShared(renderer: Renderer, node: Container): Texture {
+export function bakeShared(renderer: Renderer, node: Container): Texture {
 	const rendered = renderer.generateTexture(node);
 	const canvas = renderer.extract.canvas(rendered);
+	// `extract.canvas` hands back **device** pixels — frame x the renderer's
+	// resolution — and a `CanvasSource` defaults to resolution 1. Without the
+	// resolution below, every baked effect is drawn `devicePixelRatio` times
+	// too large on a phone: the grenade, the swing arcs and every spark grew
+	// while the fighters (PNGs, which carry their own resolution) did not.
 	const texture = new Texture({
-		source: new CanvasSource({ resource: canvas }),
+		source: new CanvasSource({
+			resource: canvas,
+			resolution: rendered.source.resolution,
+		}),
 	});
 	rendered.destroy(true);
 	return texture;

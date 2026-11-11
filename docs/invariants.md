@@ -364,6 +364,15 @@ placeholder sword for strip heroes; over Lia's rendered sword it was a second,
 bigger one, out of step with the hand. `sheetDrawsBlade` (a packed sheet with a
 `slash` clip) hides it; the trail stays, because the trail is the hitbox's read.
 
+**A baked effect texture must carry the renderer's resolution, not 1.**
+`renderer.extract.canvas` returns **device** pixels (frame x resolution), while
+a `CanvasSource` defaults to resolution 1 — so on a 2x/3x display every
+generated effect was drawn `devicePixelRatio` times its world size. The HE
+grenade became a beach ball and the sword's arc a white slab on a phone, while
+the PNG sheets, which carry their own resolution, stayed correct. `bakeShared`
+passes `rendered.source.resolution` into the `CanvasSource`;
+`render/bakedTexture.test.ts` pins the 1x and 3x bakes to one logical size.
+
 **A theme-owned panorama must fall back to its procedural sky, not to a boot
 failure.** The Castle and Snow themes load
 `assets/skybox/<theme>/manifest.json` beside the player's global Waterfront
