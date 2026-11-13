@@ -308,6 +308,13 @@ stops the butterfly being the only option.
   move as specified. The victim is **drawn horizontal from the hit tick** — the
   debt *is* "on your back in the air" — because a state nobody can see is a state
   that does not exist.
+- **The horizontal half of a launch is helpless, not free air control.** While
+  `knockdownPendingTimer > 0` the fighter is rooted: no walking, air steering,
+  dashing, wall jumping or air jumping. The safe fall is the one input that gets
+  through, and only on the way down (`vy >= 0`). The anti-air's hitstun covers
+  just the first 260ms of the rise, so this root is what keeps the rest of the
+  arc the punish the move paid for — without it a held direction steered the
+  horizontal body out of the knockdown it was owed.
 - **A landed hit must be visible on the fighter that took it.** Hitstun with no
   sprite for it read as nothing happening for a whole LAN playtest. The disabled
   and knocked-down poses are generated from the character strip at boot, so they

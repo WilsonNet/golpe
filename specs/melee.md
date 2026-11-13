@@ -281,7 +281,10 @@ erased by the next reconciliation.
 **A fighter who owes the debt is horizontal**, drawn that way from the tick of
 the hit rather than from the tick they land — the state *is* "on your back in the
 air", so waiting for the floor to draw it would be the picture disagreeing with
-the simulation. The dagger's shoryuken launches too, and owes the same debt: both
+the simulation. It is **helpless** in that state: the debt roots the fighter
+against walking, air steering, dashing and every jump but the safe fall, because
+otherwise the arc is a free air turn out of the punish the anti-air was paid for.
+The dagger's shoryuken launches too, and owes the same debt: both
 anti-airs are the same answer wearing different weapons.
 
 `tickPlayer` collects the debt on the tick the feet are next found on the floor,
@@ -643,7 +646,9 @@ then puts them on the floor.
   be walked into.
 - It cannot be cancelled and recovers for 340ms.
 - A launched fighter is airborne *and* stunned for 260ms, then **horizontal** for
-  the rest of the arc, which is a combo opening rather than a kill on its own.
+  the rest of the arc — rooted and helpless: no walking, air steering, dash or
+  air jump, with the safe fall as its one action. That horizontal half is a
+  combo opening rather than a kill on its own.
 - It launches **a jump's own height, and hangs longer** (−700 px/s against
   `JUMP_VELOCITY = -700`; up from the old −620): the space is the move, and it
   stops there because the arena's central platform sits exactly one jump above

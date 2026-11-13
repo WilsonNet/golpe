@@ -1055,6 +1055,53 @@ describe("the knockdown a launch owes the floor", () => {
 	});
 
 	/**
+	 * The horizontal half of the arc is a root, not a free air turn.
+	 *
+	 * The hitstun covers the first beat of the rise; the rest is the debt, and a
+	 * launched fighter is drawn on their back for it. If held input steered that
+	 * state, the anti-air's space would be walked out of in midair — the victim
+	 * could fly themselves out of the punish the move was paid for, and the
+	 * safe fall would not be their only way down.
+	 */
+	it("is helpless in the air — no steering, dash or air jump", () => {
+		let s = launched();
+		let guard = 0;
+		while (s.stunTimer > 0 && guard++ < 600) s = tickPlayer(s, intent(), DT);
+		expect(s.knockdownPendingTimer).toBeGreaterThan(0);
+		expect(s.grounded).toBe(false);
+		// Still rising, so a jump press here must not become an air jump.
+		expect(s.vy).toBeLessThan(0);
+
+		const drifting = tickPlayer(s, intent(), DT);
+		const steered = tickPlayer(s, intent({ right: true, dash: 1 }), DT);
+		expect(steered.x).toBe(drifting.x);
+		expect(steered.vx).toBe(drifting.vx);
+		expect(steered.dashActiveTimer).toBe(0);
+
+		const jumped = tickPlayer(s, intent({ up: true }), DT);
+		expect(jumped.airJumps).toBe(drifting.airJumps);
+		expect(jumped.vy).toBe(drifting.vy);
+		expect(jumped.knockdownPendingTimer).toBeGreaterThan(0);
+
+		// Held for the rest of the arc, the direction still changes nothing:
+		// the whole way down is the root, not just the first tick of it.
+		let steeredArc = s;
+		let driftArc = s;
+		let airborne = 0;
+		while (!driftArc.grounded && airborne++ < 600) {
+			steeredArc = tickPlayer(
+				steeredArc,
+				intent({ right: true, dash: 1 }),
+				DT,
+			);
+			driftArc = tickPlayer(driftArc, intent(), DT);
+		}
+		expect(driftArc.grounded).toBe(true);
+		expect(steeredArc.x).toBe(driftArc.x);
+		expect(steeredArc.vx).toBe(driftArc.vx);
+	});
+
+	/**
 	 * The debt is collected at the *top* of the tick after the feet come back —
 	 * exactly where a stun that arrived between ticks is handled — so the stun
 	 * gate is the one thing that decides what a knockdown takes away.

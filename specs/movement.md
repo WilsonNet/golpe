@@ -276,6 +276,12 @@ disagree about who can move.
   cancels the knockdown debt the launch armed. A press during the rise does
   nothing, which is what leaves the window for an airborne attacker to cut the
   arc (the **Insta Fall**). See [melee.md](melee.md).
+- **A launched fighter is helpless until the floor.** While the launch owes a
+  knockdown (`knockdownPendingTimer > 0`) the fighter is horizontal and rooted:
+  no walking, air steering, dash, wall jump or air jump. The safe fall is the
+  only input that gets through, and only once `vy >= 0`. The anti-air's hitstun
+  covers just the first beat of the rise, so this root is what keeps the rest of
+  the arc the punish the move was paid for.
 - **Knockback is also just an impulse** on `vx`.
 
 Because all three live in the replayed simulation state, prediction reconciles

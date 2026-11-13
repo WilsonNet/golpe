@@ -731,8 +731,17 @@ export function tickPlayer(
 	// and nothing else, so the rooted fighter still attacks, blocks and casts.
 	// A carried fighter is cargo of somebody else's dive — same root as the
 	// dive's own.
+	//
+	// A fighter who owes the floor a knockdown is **horizontal in the air**:
+	// the anti-air's hitstun covers only the first beat of the rise, and the
+	// rest of the arc is the debt. That state is helpless — walking, air
+	// steering, dashing and every jump but the safe fall are taken away, or a
+	// launched victim simply flies themselves out of the punish. The safe fall
+	// is its one action, so the jump press below is allowed through the root.
+	const launched = s.knockdownPendingTimer > 0;
 	const rooted =
 		stunned ||
+		launched ||
 		isCommitted(s) ||
 		s.plunging ||
 		s.plungeStuckTimer > 0 ||
@@ -799,7 +808,13 @@ export function tickPlayer(
 		s.throwChargeTimer = 0;
 	}
 
-	const wantsJump = input.up && !rooted && s.blossomTimer <= 0;
+	// The launched fighter's one action is the safe fall. Its press has to reach
+	// the jump buffer through the root, but only a *fresh* press counts — the
+	// buffer is still read below, where the fall gate decides whether it is a
+	// recovery or a wasted press during the rise.
+	const canSafeFall = launched && !stunned;
+	const wantsJump =
+		input.up && (!rooted || canSafeFall) && s.blossomTimer <= 0;
 	if (wantsJump && !s.jumpHeld) {
 		s.jumpBufferTimer = JUMP_BUFFER_MS;
 	}
@@ -899,8 +914,37 @@ export function tickPlayer(
 	// through it. The fighter must press again — the same rule the latch at the
 	// bottom applies to a held button. Without the gate, a jump buffered one
 	// tick before a trap caught the fighter hopped them out of the lock.
-	if (!rooted && s.jumpBufferTimer > 0) {
-		if (s.grounded || s.coyoteTimer > 0) {
+	//
+	// The launched fighter is the one root the press gets through, and only into
+	// the safe fall: the debt takes every other jump away because being
+	// horizontal in the air is the punish the anti-air bought.
+	if (s.jumpBufferTimer > 0 && (!rooted || canSafeFall)) {
+		if (canSafeFall) {
+			if (s.knockdownPendingTimer > 0 && s.vy >= 0) {
+				// **The safe fall.** A fighter the anti-air launched is horizontal
+				// in the air, and a jump pressed *on the way down* catches them
+				// instead of spending the air jump on another hop: the knockdown
+				// the launch armed is simply dropped and they land on their feet.
+				//
+				// Gated on `vy >= 0` — GunZ's safe fall is a timed press, and the
+				// timing is the counterplay to the Insta Fall: press early and the
+				// press is wasted (the launch owns the rise), press late and an
+				// airborne attacker cuts the arc first. The press spends the air
+				// jump when one is in hand, because catching yourself is using it;
+				// when the budget is already spent the flip still works, so the
+				// escape is never withheld from a fighter who chose to jump into
+				// the uppercut in the first place.
+				s.knockdownPendingTimer = 0;
+				s.jumpBufferTimer = 0;
+				s.jumping = true;
+				s.dashActiveTimer = 0;
+				s.tumbleActiveTimer = 0;
+				if (s.airJumps > 0) {
+					s.airJumps--;
+					s.vy = AIR_JUMP_VELOCITY;
+				}
+			}
+		} else if (s.grounded || s.coyoteTimer > 0) {
 			s.vy = JUMP_VELOCITY;
 			s.grounded = false;
 			s.coyoteTimer = 0;
@@ -912,29 +956,6 @@ export function tickPlayer(
 			// and its reduced hitbox must not ride a jump into the air.
 			s.dashActiveTimer = 0;
 			s.tumbleActiveTimer = 0;
-		} else if (s.knockdownPendingTimer > 0 && s.vy >= 0) {
-			// **The safe fall.** A fighter the anti-air launched is horizontal
-			// in the air, and a jump pressed *on the way down* catches them
-			// instead of spending the air jump on another hop: the knockdown
-			// the launch armed is simply dropped and they land on their feet.
-			//
-			// Gated on `vy >= 0` — GunZ's safe fall is a timed press, and the
-			// timing is the counterplay to the Insta Fall: press early and the
-			// press is wasted (the launch owns the rise), press late and an
-			// airborne attacker cuts the arc first. The press spends the air
-			// jump when one is in hand, because catching yourself is using it;
-			// when the budget is already spent the flip still works, so the
-			// escape is never withheld from a fighter who chose to jump into
-			// the uppercut in the first place.
-			s.knockdownPendingTimer = 0;
-			s.jumpBufferTimer = 0;
-			s.jumping = true;
-			s.dashActiveTimer = 0;
-			s.tumbleActiveTimer = 0;
-			if (s.airJumps > 0) {
-				s.airJumps--;
-				s.vy = AIR_JUMP_VELOCITY;
-			}
 		} else if (s.wallTouch !== "none" && s.wallJumpTimer <= 0) {
 			const away = s.wallTouch === "left" ? 1 : -1;
 			s.vx = away * WALL_JUMP_HORIZONTAL;
