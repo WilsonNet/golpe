@@ -6,7 +6,8 @@ guard but the **thrust**, a dash that knocks down everyone in its path, and her
 F is a rising **shoryuken** that reaches into the air. The kit is the mirror of
 the weapon: the dagger is light, so everything it does is faster than the
 sword's answer and weaker per hit; the lack of a block is paid for by the
-thrust being unblockable; and the ultimate is the thrust's full expression — a
+thrust and the shoryuken being unblockable; and the ultimate is the thrust's
+full expression — a
 **dragon thrust** in any direction that nothing stops but an obstacle or a
 black hole.
 
@@ -27,7 +28,7 @@ ultimate — is simply absent here, and the dagger's answer is to hit first.
 |---|---|---|---|---|---|---|---|---|
 | **Stab** | 45ms | 55ms | 90ms | 190ms | 5 | 30px | **yes** | **yes** |
 | **Thrust** | 260ms | 140ms | 480ms | 880ms | 16 | sweep, ~109px | **no** | **no** |
-| **Shoryuken** | 90ms | 140ms | 320ms | 550ms | 8 | 62px, tall | **yes** | **no** |
+| **Shoryuken** | 90ms | 140ms | 320ms | 550ms | 8 | 62px, tall | **no** | **no** |
 
 On hit:
 
@@ -73,13 +74,15 @@ On hit:
   reach is the widest of any melee box in the game. It is **not a third
   jump**: it only fires while the second jump is still in hand
   (`airJumps > 0`), so a fighter who double-jumped has spent its vertical
-  options. And it is **blockable** — unlike the sword's uppercut — and it
+  options. It is **unblockable**, like the sword's uppercut, and it
   **launches like it**: the same −700 px/s arc, the same horizontal body, the
   same floor debt paid on the landing, and the same safe fall and Insta Fall to
   answer it. Two anti-airs, one launch and one number: they are the same
   *answer* — a foe who chose the air — wearing different weapons, and one being
-  a harder knockdown than the other would be an accident of the kit table. The
-  trade for a launch that lands is that a read guard stops it. **The one
+  a harder knockdown than the other would be an accident of the kit table. A
+  guard does not stop it; the read that does is the **safe fall**, a jump
+  pressed on the way down, and an attacker who follows into the air gets the
+  **Insta Fall** instead. **The one
   thing the anti-air loses to is the plunge bomb**: the dive is immune to melee,
   and the shoryuken's own launch puts its user in the dive's column — a
   shoryuken into a dive is a shoryuken into a ride down (see
@@ -89,6 +92,13 @@ On hit:
   sword's (1100 vs 900 px/s), a little shorter, ready a little sooner. The
   difference is a feel, not a gap the sword cannot close — the thrust is where
   the dagger's real speed lives.
+- **The back is the dagger's biggest hit.** Every dagger strike that lands on a
+  fighter's unfaced side pays **1.5× damage** — the stab 8, the thrust 24, the
+  shoryuken 12 — on top of the shared 500ms backstab stun, and the thrust's
+  sweep reads each victim's facing separately. The dagger is the lightest
+  weapon in the game; getting behind somebody is the deliberate walk that lets
+  it hit like a heavy. The sword and the viking sword get the shared stun, not
+  the multiplier. See [melee.md](melee.md#backstab--the-reward-for-getting-behind).
 
 ## The machine gun (gun stance)
 

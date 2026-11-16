@@ -17,6 +17,7 @@ import {
 	ANTIAIR_KNOCKDOWN_MS,
 	ANTIAIR_LAUNCH_VY,
 	BACKSTAB_BONUS_STUN_MS,
+	BACKSTAB_DAMAGE_MULTIPLIER,
 	BLOCK_PUSHBACK,
 	BLOCK_STARTUP_MS,
 	CHAINS,
@@ -82,6 +83,7 @@ export {
 	ANTIAIR_KNOCKDOWN_MS,
 	ANTIAIR_LAUNCH_VY,
 	BACKSTAB_BONUS_STUN_MS,
+	BACKSTAB_DAMAGE_MULTIPLIER,
 	BLOCK_STARTUP_MS,
 	CHARGE_LOCK_MS,
 	COMBO_CHAIN,
@@ -1238,6 +1240,21 @@ export function isBehind(attacker: MeleeBody, defender: MeleeBody): boolean {
 }
 
 /**
+ * What a move is worth when it lands on a fighter's unfaced side.
+ *
+ * Every weapon gets the backstab's opening — the guard ignores the wrong side
+ * and the stun gets longer. Only a move carrying `backstabBonus` also gets the
+ * dagger's damage multiplier; the sword and the viking sword hit for exactly
+ * what they always hit for. The sweep resolvers call this directly, because
+ * they judge their own hitbox and would otherwise reconstruct the rule.
+ */
+export function backstabDamage(move: MeleeMove, behind: boolean): number {
+	const def = MOVES[move];
+	if (!behind || !def.backstabBonus) return def.damage;
+	return Math.round(def.damage * BACKSTAB_DAMAGE_MULTIPLIER);
+}
+
+/**
  * Test one attacker's live hitbox against one defender and decide the outcome.
  * Pure: it does not mutate anything. `applyMeleeResult` does that.
  */
@@ -1317,7 +1334,7 @@ export function resolveMelee(
 	return {
 		move,
 		outcome: behind ? "backstab" : "hit",
-		damage: def.damage,
+		damage: backstabDamage(move, behind),
 		x,
 		y,
 		dir,
@@ -1491,7 +1508,9 @@ export function applyHitToDefender(
 	defender.comboStep = 0;
 	defender.comboTimer = 0;
 	defender.plungeStuckTimer = 0;
-	return def.damage;
+	// The resolved damage, not the table's: a backstab pays a multiplier on the
+	// dagger's strikes, and the sweep resolvers build their own result.
+	return result.damage;
 }
 
 /**

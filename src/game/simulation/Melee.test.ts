@@ -866,6 +866,9 @@ describe("backstab", () => {
 		});
 		const result = resolveMelee(attacker, defender);
 		expect(result?.outcome).toBe("backstab");
+		// The sword gets the opening and the stun, not the dagger's damage
+		// multiplier: 7 from behind is still 7.
+		expect(result?.damage).toBe(MOVES.slash.damage);
 
 		applyMeleeResult(attacker, defender, connects(result));
 		expect(defender.stunTimer).toBe(

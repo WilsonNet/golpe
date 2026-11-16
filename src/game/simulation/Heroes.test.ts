@@ -13,6 +13,8 @@ import { ANTIAIR_KNOCKDOWN_MS, type MeleeBody } from "./Melee.js";
 import {
 	applyHitToDefender,
 	applyMeleeResult,
+	BACKSTAB_DAMAGE_MULTIPLIER,
+	backstabDamage,
 	bodyRect,
 	createPlayerState,
 	DAGGER_DASH_DURATION_MS,
@@ -349,6 +351,53 @@ describe("the thrust", () => {
 	});
 });
 
+describe("the dagger's backstab", () => {
+	it("pays 1.5x on every dagger move, and the sword pays none", () => {
+		for (const move of ["stab", "thrust", "shoryuken"] as const) {
+			expect(MOVES[move].backstabBonus).toBe(true);
+			expect(backstabDamage(move, true)).toBe(
+				Math.round(MOVES[move].damage * BACKSTAB_DAMAGE_MULTIPLIER),
+			);
+			expect(backstabDamage(move, false)).toBe(MOVES[move].damage);
+		}
+		// The shared backstab rule is stun; the damage multiplier is the
+		// dagger's alone. A sword in the back is still a sword.
+		expect(MOVES.slash.backstabBonus).toBeUndefined();
+		expect(backstabDamage("slash", true)).toBe(MOVES.slash.damage);
+	});
+
+	/** A dagger planted at x=100, mid-stab, facing right. */
+	const midStab = () =>
+		body(
+			dagger({
+				meleeAction: "stab",
+				meleeTimer: MOVES.stab.startupMs + MOVES.stab.activeMs / 2,
+				facing: 1,
+			}),
+		);
+
+	it("lands the bonus on an unfaced side, through the whole resolution", () => {
+		const attacker = midStab();
+		const rear = body(state({ x: 150, y: 400, facing: 1 }));
+		const result = resolveMelee(attacker, rear);
+		expect(result).not.toBeNull();
+		if (!result) return;
+		expect(result.outcome).toBe("backstab");
+		expect(result.damage).toBe(8);
+		// The server subtracts what the resolver hands back, not the table's
+		// number: the bonus must survive `applyHitToDefender`.
+		expect(applyMeleeResult(attacker, rear, result)).toBe(8);
+	});
+
+	it("pays the table's damage when the defender faces the blade", () => {
+		const attacker = midStab();
+		const front = body(state({ x: 150, y: 400, facing: -1 }));
+		const result = resolveMelee(attacker, front);
+		expect(result?.outcome).toBe("hit");
+		expect(result?.damage).toBe(MOVES.stab.damage);
+	});
+});
+
 describe("the shoryuken", () => {
 	it("is the dagger's F move and gives the short anti-air knockdown", () => {
 		const def = MOVES.shoryuken;
@@ -356,7 +405,7 @@ describe("the shoryuken", () => {
 		expect(def.knockdownMs).toBeLessThan(MOVES.thrust.knockdownMs ?? 0);
 	});
 
-	it("is blockable, unlike the sword's uppercut", () => {
+	it("is unblockable, like the sword's uppercut", () => {
 		const attacker = dagger({
 			meleeAction: "shoryuken",
 			meleeTimer: MOVES.shoryuken.startupMs + 10,
@@ -365,7 +414,32 @@ describe("the shoryuken", () => {
 			state({ x: 140, y: 400, facing: -1, blocking: true }),
 		);
 		const result = resolveMelee(attacker, defender);
-		expect(result?.outcome).toBe("parried");
+		expect(result?.outcome).toBe("hit");
+		expect(result?.damage).toBe(MOVES.shoryuken.damage);
+	});
+
+	it("still lets a launched victim safe-fall out of the knockdown", () => {
+		const attacker = dagger({
+			meleeAction: "shoryuken",
+			meleeTimer: MOVES.shoryuken.startupMs + 10,
+		});
+		let victim = state({ x: 140, y: 400, facing: -1, blocking: true });
+		const result = resolveMelee(attacker, victim);
+		expect(result).not.toBeNull();
+		if (!result) return;
+		applyMeleeResult(attacker, victim, result);
+		expect(victim.knockdownPendingTimer).toBe(ANTIAIR_KNOCKDOWN_MS);
+
+		// Rise first: the safe fall is a press on the way *down*.
+		let guard = 0;
+		while (victim.vy < 0 && guard++ < 600) victim = tick(victim, {});
+		expect(victim.knockdownPendingTimer).toBeGreaterThan(0);
+		victim = tick(victim, { up: true });
+		expect(victim.knockdownPendingTimer).toBe(0);
+		// The debt was dropped, so the landing pays no knockdown.
+		guard = 0;
+		while (!victim.grounded && guard++ < 600) victim = tick(victim, {});
+		expect(victim.knockdownTimer).toBe(0);
 	});
 
 	it("fires on F while the second jump is in hand", () => {

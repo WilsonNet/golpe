@@ -531,6 +531,11 @@ const BATTERY: BatteryRow[] = [
 			while (attempts < 5) {
 				attempts++;
 				await page.evaluate(() => window.__training!.reset());
+				// The previous attempt freezes the dummy to stop it arming new
+				// debts, so each attempt asks for the uppercut again.
+				await page.evaluate(() =>
+					window.__training!.set({ behaviour: "uppercut" }),
+				);
 				// The dummy's first uppercut lands a couple of hundred ms after
 				// the reset, so the wait is armed for the *hit* first — waiting
 				// straight for the fall raced the launch and arrived after the
@@ -560,7 +565,25 @@ const BATTERY: BatteryRow[] = [
 					.catch(() => false);
 				if (!falling) continue;
 				await page.evaluate(() => window.__training!.input({ up: true }, 100));
-				await page.waitForTimeout(500);
+				// Freeze the dummy before reading the report. An uppercut's
+				// debt is counted on the tick it is armed and closed only when
+				// it ends, so a second launch landing during the settle wait
+				// leaves `armed 3, paid+recovered 2` — not an accounting
+				// defect, a measurement taken mid-arc. With the dummy idle no
+				// new debt can open, and the wait below lets the one that is
+				// open land or be cancelled.
+				await page.evaluate(() => window.__training!.set({ behaviour: "idle" }));
+				await page
+					.waitForFunction(
+						() => {
+							const p = window.__gameState!().playerPhys;
+							return p.knockdownPendingTimer === 0 && p.knockdownTimer === 0;
+						},
+						undefined,
+						{ timeout: 3000, polling: 16 },
+					)
+					.catch(() => undefined);
+				await page.waitForTimeout(100);
 				report = await page.evaluate(() => window.__training!.report());
 				if ((report.melee?.knockdownsRecovered ?? 0) > 0) break;
 			}
@@ -1578,6 +1601,54 @@ const BATTERY: BatteryRow[] = [
 	},
 
 	{
+		name: "a dagger backstab pays bonus damage",
+		dagger: true,
+		scenario: {
+			name: "dagger backstab",
+			config: {
+				behaviour: "blockAll",
+				facing: "away",
+				// Close enough for the stab's 30px reach, far enough apart that
+				// `isBehind` counts it: 50px of centre separation against the
+				// 32px body-width floor.
+				spawn: { player: { x: 360, y: 480 }, dummy: { x: 410, y: 480 } },
+			},
+			steps: [{ ...STAB, restMs: 600 }],
+			settleMs: 900,
+		},
+		verify(report) {
+			const c = checks(report);
+			c.swung("stab");
+			c.outcome("backstab", "stab");
+			// 5 x 1.5, restated rather than imported: the probe must not share
+			// arithmetic with the code it is testing.
+			c.damage(8);
+			return c.fails;
+		},
+	},
+
+	{
+		name: "a thrust backstab pays bonus damage and still knocks down",
+		dagger: true,
+		scenario: {
+			name: "thrust backstab",
+			config: { behaviour: "blockAll", facing: "away" },
+			steps: [{ ...THRUST, restMs: 900 }],
+			settleMs: 2200,
+		},
+		verify(report) {
+			const c = checks(report);
+			c.swung("thrust");
+			c.outcome("backstab", "thrust");
+			// 16 x 1.5. The sweep judges each victim, so the bonus has to
+			// survive the resolver that does not go through `resolveMelee`.
+			c.damage(24);
+			c.atLeast("knockdowns", report.melee?.knockdowns ?? 0, 1);
+			return c.fails;
+		},
+	},
+
+	{
 		name: "the thrust knocks the dummy down for a full second and a half",
 		dagger: true,
 		scenario: {
@@ -1615,11 +1686,11 @@ const BATTERY: BatteryRow[] = [
 	},
 
 	{
-		name: "the shoryuken knocks down but is blockable",
+		name: "the shoryuken knocks down and a guard cannot stop it",
 		dagger: true,
 		scenario: {
-			name: "shoryuken",
-			config: { behaviour: "idle" },
+			name: "shoryuken vs guard",
+			config: { behaviour: "blockAll", dummyStance: "sword" },
 			steps: [{ ...SHORYUKEN, restMs: 900 }],
 			settleMs: 1600,
 		},

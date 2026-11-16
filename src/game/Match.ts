@@ -144,6 +144,7 @@ import { smokeHidesFrom } from "./simulation/Items";
 import {
 	applyHitToDefender,
 	applyMeleeResult,
+	backstabDamage,
 	bodyRect,
 	bulletDistanceFromMuzzle,
 	canFire,
@@ -151,12 +152,12 @@ import {
 	fieldAffects,
 	fieldFor,
 	hasLineOfSight,
+	isBehind,
 	isFrozen,
 	isKnockedDown,
 	isStunned,
 	MAX_HP,
 	type MeleeAction,
-	MOVES,
 	MS_PER_SECOND,
 	meleePhase,
 	NEUTRAL_INTENT,
@@ -4329,10 +4330,11 @@ export class Match {
 				!defender.body.plunging &&
 				rectsOverlap(box, bodyRect(defender.body.x, defender.body.y))
 			) {
+				const behind = isBehind(attacker.body, defender.body);
 				const damage = applyHitToDefender(defender.body, {
 					move: "thrust",
-					outcome: "hit",
-					damage: MOVES.thrust.damage,
+					outcome: behind ? "backstab" : "hit",
+					damage: backstabDamage("thrust", behind),
 					x: box.x + box.w / 2,
 					y: box.y + box.h / 2,
 					dir: attacker.body.facing >= 0 ? 1 : -1,
@@ -4340,7 +4342,7 @@ export class Match {
 				this.fx.impact(
 					{
 						move: "thrust",
-						outcome: "hit",
+						outcome: behind ? "backstab" : "hit",
 						x: box.x + box.w / 2,
 						y: box.y + box.h / 2,
 						dir: attacker.body.facing >= 0 ? 1 : -1,

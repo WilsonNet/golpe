@@ -452,6 +452,15 @@ applies an extra **500ms** of stun on top of the move's own hitstun. Circling
 behind a blocking opponent is therefore a complete opening, at the cost of the
 time it takes to get there.
 
+**The dagger also gets bonus damage from the back.** Its three strikes carry
+`backstabBonus`, so a backstab pays **1.5× damage**: the stab's 5 becomes 8,
+the thrust's 16 becomes 24, and the shoryuken's 8 becomes 12. The thrust's
+sweep judges each victim separately — a fighter facing away from the line pays
+the bonus, a fighter facing into it does not. The sword and the viking sword
+keep the opening and the stun, not the damage: a back is the one place the
+lightest weapon in the game hits like a heavy, and that is the dagger's kit,
+not a universal rule.
+
 **Behind means a full body width past their centre (32px).** Fighters do not
 collide with each other, so in any close exchange the two bodies are literally
 standing inside one another — and facing is locked through a swing's active
@@ -552,6 +561,12 @@ Two things happen on the way down:
    It is the only boom in the game that throws rocks, which is the point: a
    four-second commitment earns the loudest, most distinctive effect on the
    floor.
+
+   **The backstab's feedback is its own tier too.** Beyond the clean ring, it
+   throws a larger violet spark burst, spinning shards, a slower cloud of halo
+   motes and a second white core ring, with a harder shake than a clean hit —
+   bonus damage must *read* as bonus damage, not arrive silently in the health
+   bar.
 
 ### The back massive
 
@@ -739,7 +754,7 @@ fire illegally**:
 |---|---|
 | `illegalActions` | **0** — nobody acts while stunned, nobody is down without being stunned |
 | `airborneChainLinks` | **0** — the chain is a ground technique |
-| `blockedUnblockables` | **0** — a block never stops an uppercut |
+| `blockedUnblockables` | **0** — a block never stops an uppercut or a shoryuken |
 | `frameDataViolations` | **0** — every phase lasts what the table says |
 | `stuckActionFrames` | **0** — no move outlives its own duration |
 | `meleeDesyncFrames` | **0** — predicted move matches the authoritative one |

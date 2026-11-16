@@ -1181,12 +1181,31 @@ export class MeleeFx {
 				sparks(6, COLOR[move], 300);
 				break;
 
-			case "backstab":
-				sparks(20, COLOR.backstab);
-				shards(10, COLOR.backstab);
-				this.ring(x, y, teamTint(COLOR.backstab, team, TINT.medium), 0.9, 320);
-				this.stage.startShake(150, 5);
+			case "backstab": {
+				// The dagger's pay-off, and the loudest single-swing tell after
+				// the Massive: a violet explosion is not enough on its own to
+				// say *why* this hit was worth more, so the burst carries a
+				// second, slower cloud of motes and a white core ring inside
+				// the violet one. The shards are what a knife leaves; the
+				// halo is what the opening buys.
+				const tint = teamTint(COLOR.backstab, team, TINT.medium);
+				sparks(34, COLOR.backstab, 460);
+				shards(20, COLOR.backstab);
+				this.particles.burst({
+					texture: TEX.halo,
+					count: 10,
+					x,
+					y,
+					tint,
+					speed: [30, 140],
+					lifeMs: 520,
+					scale: [1.4, 0],
+				});
+				this.ring(x, y, tint, 1.6, 460);
+				this.ring(x, y, 0xffffff, 0.8, 240);
+				this.stage.startShake(220, 8);
 				break;
+			}
 
 			case "instaFall": {
 				// The arc is cut: the spike is a downward read, so the impact

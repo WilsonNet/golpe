@@ -154,9 +154,10 @@ export class DaggerBrain {
 		ctx: { aggressiveness: number; skill: number },
 	): MeleeBeat[] | null {
 		// The foe is turtling. Stabbing a guard is how the dagger gets guard-
-		// broken; the thrust is the one dagger move a guard cannot stop. It has
-		// an anticipation the foe can jump, which is why this is a *read* (the
-		// foe must be grounded) and not the default answer.
+		// broken; the thrust is the dagger move a guard cannot stop (the
+		// shoryuken is the other, but it is an anti-air, not a way inside a
+		// guard). The thrust has an anticipation the foe can jump, which is why
+		// this is a *read* (the foe must be grounded) and not the default answer.
 		if (
 			input.enemyBlocking &&
 			input.enemyGrounded &&

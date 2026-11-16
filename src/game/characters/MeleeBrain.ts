@@ -461,13 +461,12 @@ export class MeleeBrain {
 				// turtle can read the wind-up and turn the heaviest move in the
 				// game into their own free Massive.
 				input.enemyAction === "massive" ||
-				// A dagger's blockable moves: the stab's spam is exactly what a
-				// guard answers — every one stopped is a guard break — and the
-				// shoryuken is blockable by design. The thrust is *not* here: a
-				// guard cannot stop it, and the read against it is the jump,
-				// which EnemyBrain owns.
-				input.enemyAction === "stab" ||
-				input.enemyAction === "shoryuken") &&
+				// A dagger's one blockable move: the stab's spam is exactly what
+				// a guard answers — every one stopped is a guard break. The
+				// thrust and the shoryuken are *not* here: a guard cannot stop
+				// them, and the read against each is the jump, which EnemyBrain
+				// owns.
+				input.enemyAction === "stab") &&
 			(input.enemyPhase === "startup" || input.enemyPhase === "active") &&
 			distance < STRIKE_RANGE_PX + GUARD_READ_GRACE_PX
 		);

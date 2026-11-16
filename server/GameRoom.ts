@@ -167,6 +167,7 @@ import {
 	applyHitToDefender,
 	applyKnockdown,
 	applyMeleeResult,
+	backstabDamage,
 	BLOSSOM_DURATION_MS,
 	BLOSSOM_TICK_DAMAGE,
 	BLOSSOM_TICK_MS,
@@ -207,6 +208,7 @@ import {
 	heGrenadeEnd,
 	heGrenadeTouches,
 	isBulletOutOfBounds,
+	isBehind,
 	isFrozen,
 	isHeroId,
 	isKnockedDown,
@@ -3928,10 +3930,15 @@ export class GameRoom {
 				// the ultimate. Effects only — the channel already ended in
 				// state — the splash, the counter and the reel note.
 				const hadBlossom = defender.state.blossomTimer > 0;
+				// The sweep judges each victim's side separately: a thrust that
+				// passes *through* a fighter catches them from wherever it came
+				// from, so a victim facing the other way pays the dagger's
+				// backstab price too. One `isBehind` per victim, never per cast.
+				const behind = isBehind(attacker.state, defender.state);
 				const damage = applyHitToDefender(defender.state, {
 					move: "thrust",
-					outcome: "hit",
-					damage: MOVES.thrust.damage,
+					outcome: behind ? "backstab" : "hit",
+					damage: backstabDamage("thrust", behind),
 					x: box.x + box.w / 2,
 					y: box.y + box.h / 2,
 					dir: attacker.state.facing >= 0 ? 1 : -1,
@@ -3944,7 +3951,7 @@ export class GameRoom {
 					attackerId: attacker.id,
 					victimId: defender.id,
 					move: "thrust",
-					outcome: "hit",
+					outcome: behind ? "backstab" : "hit",
 					x: box.x + box.w / 2,
 					y: box.y + box.h / 2,
 					dir: attacker.state.facing >= 0 ? 1 : -1,

@@ -49,6 +49,16 @@ export interface MoveDef {
 	/** The commitment. For heavy moves this is the punish window. */
 	recoveryMs: number;
 	damage: number;
+	/**
+	 * Does this move pay the **dagger's backstab damage bonus**?
+	 *
+	 * Every weapon's backstab ignores the guard and adds stun (the shared rule).
+	 * The damage multiplier is the dagger's own: a knife between the shoulder
+	 * blades is the one place the lightest weapon in the game hits like a heavy.
+	 * Set on the dagger's three strikes; a sword landed from behind is still a
+	 * sword, not an execution.
+	 */
+	backstabBonus?: boolean;
 	/** How far in front of the body the hitbox extends. */
 	reachPx: number;
 	/** Hitbox top, relative to the body's top edge (negative reaches overhead). */
@@ -433,6 +443,7 @@ export const MOVES: Record<MeleeMove, MoveDef> = {
 		activeMs: 55,
 		recoveryMs: 90,
 		damage: 5,
+		backstabBonus: true,
 		/** Shorter than the slash's 42: the dagger has to be walked in. */
 		reachPx: 30,
 		boxTopOffset: 8,
@@ -480,6 +491,7 @@ export const MOVES: Record<MeleeMove, MoveDef> = {
 		 * committal.
 		 */
 		damage: 16,
+		backstabBonus: true,
 		reachPx: 40,
 		boxTopOffset: 10,
 		boxHeight: 28,
@@ -502,15 +514,17 @@ export const MOVES: Record<MeleeMove, MoveDef> = {
 	 * The dagger's anti-air on the uppercut button. A rising stab that hits
 	 * into the air and **launches** — the same arc, the same horizontal state
 	 * and the same floor time as the sword's uppercut, paid on the landing
-	 * instead of on the hit — and unlike the sword's uppercut it is blockable.
-	 * The trade for a launch: a read guard stops it, and it only fires while
-	 * the second jump is still in hand, so it can never be a third jump.
+	 * instead of on the hit — and like the sword's uppercut it is
+	 * **unblockable**. The one gate is that it only fires while the second jump
+	 * is still in hand, so it can never be a third jump; the answer to a launch
+	 * that lands is the safe fall, not a guard.
 	 */
 	shoryuken: {
 		startupMs: 90,
 		activeMs: 140,
 		recoveryMs: 320,
 		damage: 8,
+		backstabBonus: true,
 		/**
 		 * A wide anti-air reach — nearly double the stab's 30 and the sword
 		 * uppercut's 34. The anti-air must connect with a foe who is *above*,
@@ -521,8 +535,8 @@ export const MOVES: Record<MeleeMove, MoveDef> = {
 		/** The box reaches 60px above the head — the anti-air. */
 		boxTopOffset: -60,
 		boxHeight: 112,
-		/** Blockable, unlike the sword's uppercut. */
-		blockable: true,
+		/** Unblockable, like the sword's uppercut: the safe fall is the answer. */
+		blockable: false,
 		cancellable: false,
 		piercesIframes: false,
 		/** The same first beat of the rise as the sword's uppercut. */
@@ -928,6 +942,18 @@ export const GUARD_BREAK_STUN_MS = 1000;
 
 /** Extra stun on top of the move's own, for landing on someone's unfaced side. */
 export const BACKSTAB_BONUS_STUN_MS = 500;
+
+/**
+ * What the dagger's strikes multiply their damage by on an unfaced side.
+ *
+ * The dagger is the lightest weapon in the game, so this is the one place it
+ * gets to hit like a heavy: 1.5x turns the stab's 5 into 8, the thrust's 16
+ * into 24 and the shoryuken's 8 into 12. Only moves flagged `backstabBonus`
+ * read it — the sword and the viking sword keep the shared stun and nothing
+ * more. Getting a full body width behind somebody is a deliberate walk, and
+ * this is what the walk buys.
+ */
+export const BACKSTAB_DAMAGE_MULTIPLIER = 1.5;
 
 /**
  * Melee damage immunity after being hit.
