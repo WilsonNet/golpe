@@ -1794,22 +1794,39 @@ const BATTERY: BatteryRow[] = [
 		// left through the lock, so its x staying put for 3s and then moving is
 		// the lock doing its job, sampled at 2.2s (still rooted) and 3.7s (free).
 		async run(page) {
+			await page.evaluate(() =>
+				window.__training!.set({
+					behaviour: "idle",
+					facing: "foe",
+					// The dummy starts to the right of the patch, inside the same
+					// pocket between the pillars. A trap thrown at its feet springs
+					// while it is still idle, and the samples then start mid-root —
+					// the walk-in is the thing under test.
+					spawn: { player: { x: 320, y: 480 }, dummy: { x: 460, y: 480 } },
+				}),
+			);
 			return await page.evaluate(async () => {
 				// `reset` clears the counters after its own settle, so it has to
 				// be awaited before the trap is laid — otherwise the trap's spring
 				// can race the counter reset.
 				await window.__training!.reset();
 				await new Promise((r) => setTimeout(r, 300));
-				// Throw the trap at the dummy's feet: the canister arcs under its
-				// own gravity and plants a step short of the aim, right in the
-				// path the dummy walks left across.
+				// Throw the trap into the path, not under the dummy. The dummy
+				// starts well to the right and walks left across the patch, which
+				// is what makes this a *walk-in*: a trap planted at the dummy's
+				// feet springs while it is still idle, and the 2.2s sample then
+				// lands after the 3s root has already ended.
 				const s = window.__training!.state();
+				const trapX = 350;
 				const angle = Math.atan2(
 					s.dummy.y + 48 - (s.local.y + 24),
-					Math.max(1, s.dummy.x - s.local.x),
+					Math.max(1, trapX - s.local.x),
 				);
 				await window.__training!.input({ item: true }, 60, angle);
 				await new Promise((r) => setTimeout(r, 400));
+				if (window.__training!.report().rooted > 0) {
+					throw new Error("the trap sprang before the dummy began walking");
+				}
 				// Walk the dummy left for a long beat: long enough that the 3s
 				// lock visibly ends before the script does, so the *resume* is
 				// observable rather than an idle coincidence.
@@ -1832,27 +1849,39 @@ const BATTERY: BatteryRow[] = [
 					}
 				}
 				if (sprungX === null) {
-					throw new Error("the dummy never walked onto the trap");
+					throw new Error(
+						`the dummy never walked onto the trap (dummy x ${window.__training!.state().dummy.x})`,
+					);
 				}
+				const rootAtSpring =
+					window.__gameState!().enemyPhys?.rootTimer ?? null;
 				// 2.2s into the 3s lock: still rooted, the held walk moves nobody.
 				await new Promise((r) => setTimeout(r, 2200));
 				const lockedX = window.__training!.state().dummy.x;
+				const rootAtLocked =
+					window.__gameState!().enemyPhys?.rootTimer ?? null;
 				// 1.5s later (3.7s after the spring): the lock has lifted and the
 				// walk has resumed.
 				await new Promise((r) => setTimeout(r, 1500));
 				const freeX = window.__training!.state().dummy.x;
 				return {
 					report: window.__training!.report(),
-					extra: { sprungX, lockedX, freeX },
+					extra: { sprungX, lockedX, freeX, rootAtSpring, rootAtLocked },
 				};
 			});
 		},
-		verify(report, { sprungX, lockedX, freeX }) {
+		verify(report, { sprungX, lockedX, freeX, rootAtSpring, rootAtLocked }) {
 			const c = checks(report);
 			c.atLeast("trap roots", report.rooted, 1);
 			// The little bit of damage that makes a sprung trap read as having
 			// done something.
 			c.atLeast("trap damage", report.player.damageDealt, 10);
+			// The samples must start at the *spring*, not a second into the
+			// lock: the old row read the dummy's x after the rooted event had
+			// already been alive for 1.2s, and the 2.2s sample landed after the
+			// 3s lock had ended.
+			c.atLeast("root timer at the spring", rootAtSpring ?? 0, 2500);
+			c.atLeast("root timer at 2.2s", rootAtLocked ?? 0, 1);
 			// The root is a *root*: 2.2s into a 3s lock the dummy has not moved
 			// a pixel despite holding left the whole time.
 			// The root is a *root*: 2.2s into a 3s lock the dummy has not walked —
@@ -1864,7 +1893,7 @@ const BATTERY: BatteryRow[] = [
 			// The samples themselves, so a failure says what the lock actually did.
 			if (c.fails.length) {
 				c.fails.push(
-					`root samples: sprung ${sprungX} → locked ${lockedX} → free ${freeX}`,
+					`root samples: sprung ${sprungX} (timer ${rootAtSpring}) → locked ${lockedX} (timer ${rootAtLocked}) → free ${freeX}`,
 				);
 			}
 			return c.fails;
@@ -1890,6 +1919,11 @@ function digest(report: TrainingReport) {
 			massives: report.melee.massives,
 			blocks: report.melee.blocks,
 			parries: report.melee.parries,
+			knockdowns: report.melee.knockdowns,
+			knockdownsArmed: report.melee.knockdownsArmed,
+			knockdownsPaidOnLanding: report.melee.knockdownsPaidOnLanding,
+			knockdownsRecovered: report.melee.knockdownsRecovered,
+			instaFalls: report.melee.instaFalls,
 			illegalActions: report.melee.illegalActions,
 			blockedUnblockables: report.melee.blockedUnblockables,
 			frameDataViolations: report.melee.frameDataViolations,
