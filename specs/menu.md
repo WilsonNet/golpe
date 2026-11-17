@@ -287,6 +287,13 @@ the keyboard away via `input-suspended` so rebinding does not walk the fighter.
 
 Beyond Heroes and Controls it now holds the live room panel:
 
+- **Copy invite link** — copies the current room's link to the clipboard,
+  room id and the launch params already in the address bar included. It is the
+  in-match counterpart to the name prompt's share box: a player who named
+  themselves through the root menu never sees that box, and hunting through the
+  address bar is not an invitation. A status line says whether the copy landed;
+  the fallback also works on the LAN's plain-HTTP origin, where
+  `navigator.clipboard` may be unavailable.
 - **Teams & Bots** (TDM) or **Room & Bots** (FFA) — the only place a match is
   reconfigured without leaving it.
 - **Your team** (TDM only) — two chips, AZURE / EMBER, showing the live side.

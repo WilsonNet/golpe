@@ -20,6 +20,7 @@ import {
 } from "react";
 import { EventBus } from "../game/EventBus";
 import { readStoredHero, storeHero } from "../game/heroPref";
+import { roomLink } from "../game/online/room";
 import type { RosterEntry } from "../game/online/types";
 import type { HeroId } from "../game/simulation/Heroes";
 import { TEAM_NAMES, type TeamId } from "../game/simulation/Teams";
@@ -30,7 +31,12 @@ import { HeroSelect } from "./HeroSelect";
 import { HUD_CSS } from "./hudStyles";
 import { MoveList } from "./MoveList";
 import { SoundMixer } from "./SoundMixer";
-import { useLocalHero, useMatch } from "./useMatch";
+import {
+	copyText,
+	useLocalHero,
+	useMatch,
+	useRoomId,
+} from "./useMatch";
 
 type View =
 	| "menu"
@@ -307,6 +313,18 @@ function MainMenuView({
 }) {
 	const match = useMatch();
 	const isTdm = match !== null && match.status.mode !== "ffa";
+	const roomId = useRoomId();
+	const [inviteNote, setInviteNote] = useState("");
+
+	const copyInvite = async () => {
+		const ok = await copyText(roomLink(roomId));
+		setInviteNote(
+			ok
+				? "Invite link copied to the clipboard."
+				: "Clipboard blocked — copy the room link from the address bar.",
+		);
+	};
+
 	return (
 		<>
 			<h2 className="gd-title">Menu</h2>
@@ -318,6 +336,20 @@ function MainMenuView({
 				<button className="gd-btn" type="button" onClick={onResume}>
 					Resume
 				</button>
+				{roomId ? (
+					<button
+						className="gd-btn"
+						type="button"
+						onClick={() => void copyInvite()}
+					>
+						Copy invite link
+					</button>
+				) : null}
+				{inviteNote ? (
+					<p className="gd-share-note" role="status" aria-live="polite">
+						{inviteNote}
+					</p>
+				) : null}
 				{/* The course teaches the kit the player started with; a hero
 				    change mid-course swaps the server's weapon under a director
 				    that is still asking for the old one's moves. */}

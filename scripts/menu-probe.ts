@@ -302,6 +302,8 @@ async function menuContext() {
 	// (or another probe's) may still be open, so the assertion accepts either a
 	// fresh duel or a join; both are valid answers and both boot the game.
 	const ctx = await menuContext();
+	// The Esc menu's invite button writes the clipboard; the probe reads it back.
+	await ctx.grantPermissions(["clipboard-read", "clipboard-write"]);
 	const page = await ctx.newPage();
 	await page.goto(`${BASE}/?mute=1`);
 	await page.waitForSelector(".gd-menu-page", { timeout: 10000 });
@@ -331,6 +333,27 @@ async function menuContext() {
 		{ timeout: 10000 },
 	);
 	check("room link is announced once", true);
+
+	// The in-match menu owns the room link too: a player who dismissed the
+	// name prompt must not have to hunt through the address bar to invite a
+	// friend. The button copies the *current* room, and says so.
+	await page.keyboard.press("Escape");
+	await page.waitForSelector(".gd-menu-card", { timeout: 5000 });
+	await page.getByRole("button", { name: "Copy invite link" }).click();
+	await page.waitForFunction(
+		() =>
+			document.body.textContent?.includes(
+				"Invite link copied to the clipboard.",
+			) ?? false,
+		{ timeout: 5000 },
+	);
+	const copied = await page.evaluate(() => navigator.clipboard.readText());
+	const liveRoom = new URL(page.url()).searchParams.get("room");
+	check(
+		"Esc menu copies the invite link",
+		liveRoom !== null && copied.includes(`room=${liveRoom}`),
+		`room=${liveRoom} copied=${copied}`,
+	);
 	await ctx.close();
 }
 

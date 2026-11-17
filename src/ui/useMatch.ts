@@ -165,11 +165,29 @@ export function useKeyHeld(code: string): boolean {
  *
  * Emitted before the name prompt appears and again if the server chose a
  * different id, so a host can copy the link before anything has connected.
+ * Cached module-side because the Esc menu mounts after the event: a room's id
+ * is a fact about the session, not something the menu has to have been open
+ * for.
  */
+let cachedRoomId = "";
+let roomListenerInstalled = false;
+function installRoomCache() {
+	if (roomListenerInstalled) return;
+	roomListenerInstalled = true;
+	EventBus.on("room-id", ((next: string) => {
+		cachedRoomId = next;
+	}) as never);
+}
+installRoomCache();
+
 export function useRoomId(): string {
-	const [id, setId] = useState("");
+	const [id, setId] = useState(() => cachedRoomId);
 	useEffect(
-		() => EventBus.on("room-id", ((next: string) => setId(next)) as never),
+		() =>
+			EventBus.on("room-id", ((next: string) => {
+				cachedRoomId = next;
+				setId(next);
+			}) as never),
 		[],
 	);
 	return id;
@@ -207,7 +225,26 @@ export async function copyText(
 			return false;
 		}
 	}
-	return false;
+
+	// No field was handed in — a menu button has none. Make a throwaway one, so
+	// the button still copies on the LAN's plain-HTTP origin instead of telling
+	// the player to select text that is not on screen.
+	const scratch = document.createElement("textarea");
+	scratch.value = text;
+	scratch.setAttribute("readonly", "");
+	scratch.style.position = "fixed";
+	scratch.style.left = "-9999px";
+	scratch.style.top = "0";
+	document.body.appendChild(scratch);
+	try {
+		scratch.select();
+		scratch.setSelectionRange(0, text.length);
+		return document.execCommand("copy");
+	} catch {
+		return false;
+	} finally {
+		scratch.remove();
+	}
 }
 
 import { MS_PER_SECOND, SECONDS_PER_MINUTE } from "../game/simulation/units";
